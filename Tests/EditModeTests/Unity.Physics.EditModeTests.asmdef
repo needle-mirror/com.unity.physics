@@ -1,0 +1,21 @@
+{
+    "name": "Unity.Physics.EditModeTests",
+    "references": [
+        "Unity.Mathematics",
+        "Unity.Physics",
+        "Unity.Physics.Editor"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": []
+}

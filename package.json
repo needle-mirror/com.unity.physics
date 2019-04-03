@@ -1,0 +1,22 @@
+{
+  "displayName": "Unity Physics",
+  "category": "Unity",
+  "description": "Unity's C# stateless physics library. This package is still in experimental phase.",
+  "dependencies": {
+    "com.unity.burst": "1.0.0-preview.6",
+    "com.unity.entities": "0.0.12-preview.29",
+    "com.unity.test-framework.performance": "1.0.6-preview"
+  },
+  "keywords": [
+    "unity",
+    "physics"
+  ],
+  "name": "com.unity.physics",
+  "unity": "2019.1",
+  "version": "0.0.1-preview.1",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:Unity-Technologies/Unity.Physics.git",
+    "revision": "a2c3c11a0e2292b084fe133eef90a30c8f41af7d"
+  }
+}

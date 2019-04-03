@@ -1,0 +1,27 @@
+{
+    "name": "Unity.Physics.PlayModeTests",
+    "references": [
+        "Unity.Burst",
+        "Unity.Collections",
+        "Unity.Entities",
+        "Unity.Entities.Hybrid",
+        "Unity.Entities.Tests",
+        "Unity.Mathematics",
+        "Unity.PerformanceTesting",
+        "Unity.Physics",
+        "Unity.Physics.Authoring",
+        "Unity.Physics.Editor",
+        "Unity.Transforms"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": []
+}
