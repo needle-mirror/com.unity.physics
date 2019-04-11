@@ -23,7 +23,7 @@ namespace Unity.Physics.Tests.Authoring
 
             var world = new World("Test world");
             GameObjectConversionUtility.ConvertGameObjectHierarchy(Root, world);
-            using (var group = world.EntityManager.CreateComponentGroup(typeof(PhysicsCollider)))
+            using (var group = world.EntityManager.CreateEntityQuery(typeof(PhysicsCollider)))
             {
                 using (var colliders = group.ToComponentDataArray<PhysicsCollider>(Allocator.Persistent))
                 {
@@ -47,7 +47,7 @@ namespace Unity.Physics.Tests.Authoring
 
             var world = new World("Test world");
             GameObjectConversionUtility.ConvertGameObjectHierarchy(Root, world);
-            using (var group = world.EntityManager.CreateComponentGroup(typeof(PhysicsCollider)))
+            using (var group = world.EntityManager.CreateEntityQuery(typeof(PhysicsCollider)))
             {
                 using (var colliders = group.ToComponentDataArray<PhysicsCollider>(Allocator.Persistent))
                 {
@@ -78,7 +78,7 @@ namespace Unity.Physics.Tests.Authoring
 
             var world = new World("Test world");
             GameObjectConversionUtility.ConvertGameObjectHierarchy(Root, world);
-            using (var group = world.EntityManager.CreateComponentGroup(typeof(PhysicsCollider)))
+            using (var group = world.EntityManager.CreateEntityQuery(typeof(PhysicsCollider)))
             {
                 using (var colliders = group.ToComponentDataArray<PhysicsCollider>(Allocator.Persistent))
                 {
@@ -117,7 +117,7 @@ namespace Unity.Physics.Tests.Authoring
 
             var world = new World("Test world");
             GameObjectConversionUtility.ConvertGameObjectHierarchy(Root, world);
-            using (var group = world.EntityManager.CreateComponentGroup(typeof(PhysicsCollider)))
+            using (var group = world.EntityManager.CreateEntityQuery(typeof(PhysicsCollider)))
             {
                 using (var colliders = group.ToComponentDataArray<PhysicsCollider>(Allocator.Persistent))
                 {

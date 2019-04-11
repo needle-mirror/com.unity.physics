@@ -61,7 +61,7 @@ namespace Unity.Physics.Authoring
                     blob = BoxCollider.Create(
                         center * linearScalar,
                         orientation,
-                        size * linearScalar,
+                        math.abs(size * linearScalar),
                         shape.ConvexRadius * radiusScalar,
                         collisionFilter,
                         material);
@@ -85,13 +85,13 @@ namespace Unity.Physics.Authoring
                     break;
                 case ShapeType.Cylinder:
                     shape.GetCylinderProperties(out center, out var height, out radius, out orientation);
+                    var s = math.abs(math.mul(math.inverse(orientation), linearScalar));
                     blob = CylinderCollider.Create(
-                        center,
-                        height,
-                        radius,
+                        center * linearScalar,
+                        height * s.z,
+                        radius * math.cmax(s.xy),
                         orientation,
                         shape.ConvexRadius * radiusScalar,
-                        linearScalar,
                         collisionFilter,
                         material);
                     break;
@@ -138,7 +138,7 @@ namespace Unity.Physics.Authoring
                     }
                     break;
                 default:
-                    break;
+                    throw new UnimplementedShapeException(shape.ShapeType);
             }
             return blob;
         }

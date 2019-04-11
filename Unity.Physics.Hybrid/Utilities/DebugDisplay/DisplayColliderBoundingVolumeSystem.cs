@@ -42,11 +42,11 @@ namespace Unity.Physics.Authoring
         StepPhysicsWorld m_StepPhysicsWorld;
         DebugStream m_DebugStreamSystem;
 
-        protected override void OnCreateManager()
+        protected override void OnCreate()
         {
-            m_BuildPhysicsWorldSystem = World.GetOrCreateManager<BuildPhysicsWorld>();
-            m_StepPhysicsWorld = World.GetOrCreateManager<StepPhysicsWorld>();
-            m_DebugStreamSystem = World.GetOrCreateManager<DebugStream>();
+            m_BuildPhysicsWorldSystem = World.GetOrCreateSystem<BuildPhysicsWorld>();
+            m_StepPhysicsWorld = World.GetOrCreateSystem<StepPhysicsWorld>();
+            m_DebugStreamSystem = World.GetOrCreateSystem<DebugStream>();
         }
 
         protected override JobHandle OnUpdate(JobHandle inputDeps)

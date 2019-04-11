@@ -18,15 +18,15 @@ namespace Unity.Physics.Systems
         public JobHandle FinalJobHandle { get; private set; }
 
         // Entity group queries
-        public ComponentGroup DynamicEntityGroup { get; private set; }
-        public ComponentGroup StaticEntityGroup { get; private set; }
-        public ComponentGroup JointEntityGroup { get; private set; }
+        public EntityQuery DynamicEntityGroup { get; private set; }
+        public EntityQuery StaticEntityGroup { get; private set; }
+        public EntityQuery JointEntityGroup { get; private set; }
 
-        protected override void OnCreateManager()
+        protected override void OnCreate()
         {
-            base.OnCreateManager();
+            base.OnCreate();
 
-            DynamicEntityGroup = GetComponentGroup(new EntityArchetypeQuery
+            DynamicEntityGroup = GetEntityQuery(new EntityQueryDesc
             {
                 All = new ComponentType[]
                 {
@@ -37,7 +37,7 @@ namespace Unity.Physics.Systems
                 }
             });
 
-            StaticEntityGroup = GetComponentGroup(new EntityArchetypeQuery
+            StaticEntityGroup = GetEntityQuery(new EntityQueryDesc
             {
                 All = new ComponentType[]
                 {
@@ -51,7 +51,7 @@ namespace Unity.Physics.Systems
                 },
             });
 
-            JointEntityGroup = GetComponentGroup(new EntityArchetypeQuery
+            JointEntityGroup = GetEntityQuery(new EntityQueryDesc
             {
                 All = new ComponentType[]
                 {

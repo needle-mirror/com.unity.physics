@@ -505,6 +505,7 @@ namespace Unity.Physics
                             result = BoxSphere((BoxCollider*)convexB, sphereA, Inverse(aFromB));
                             flip = true;
                             break;
+                        case ColliderType.Cylinder:
                         case ColliderType.Convex:
                             result = ConvexConvex(ref sphereA->ConvexHull, ref ((ConvexCollider*)convexB)->ConvexHull, aFromB);
                             break;
@@ -528,6 +529,7 @@ namespace Unity.Physics
                             break;
                         case ColliderType.Box:
                         case ColliderType.Quad:
+                        case ColliderType.Cylinder:
                         case ColliderType.Convex:
                             result = ConvexConvex(ref capsuleA->ConvexHull, ref ((ConvexCollider*)convexB)->ConvexHull, aFromB);
                             break;
@@ -552,6 +554,7 @@ namespace Unity.Physics
                         case ColliderType.Box:
                         case ColliderType.Triangle:
                         case ColliderType.Quad:
+                        case ColliderType.Cylinder:
                         case ColliderType.Convex:
                             result = ConvexConvex(ref triangleA->ConvexHull, ref ((ConvexCollider*)convexB)->ConvexHull, aFromB);
                             break;
@@ -570,6 +573,7 @@ namespace Unity.Physics
                         case ColliderType.Box:
                         case ColliderType.Triangle:
                         case ColliderType.Quad:
+                        case ColliderType.Cylinder:
                         case ColliderType.Convex:
                             result = ConvexConvex(ref boxA->ConvexHull, ref ((ConvexCollider*)convexB)->ConvexHull, aFromB);
                             break;
@@ -578,6 +582,7 @@ namespace Unity.Physics
                     }
                     break;
                 case ColliderType.Quad:
+                case ColliderType.Cylinder:
                 case ColliderType.Convex:
                     result = ConvexConvex(ref ((ConvexCollider*)convexA)->ConvexHull, ref ((ConvexCollider*)convexB)->ConvexHull, aFromB);
                     break;
@@ -626,6 +631,7 @@ namespace Unity.Physics
                     break;
                 case ColliderType.Convex:
                 case ColliderType.Box:
+                case ColliderType.Cylinder:
                     ref ConvexHull hull = ref ((ConvexCollider*)target)->ConvexHull;
                     result = ConvexConvex(hull.VerticesPtr, hull.NumVertices, hull.ConvexRadius, &input.Position, 1, 0.0f, MTransform.Identity);
                     break;
@@ -669,6 +675,7 @@ namespace Unity.Physics
                         case ColliderType.Triangle:
                         case ColliderType.Quad:
                         case ColliderType.Box:
+                        case ColliderType.Cylinder:
                             MTransform targetFromQuery = new MTransform(input.Transform);
                             Result result = ConvexConvex(target, input.Collider, targetFromQuery);
                             if (result.Distance < collector.MaxFraction)

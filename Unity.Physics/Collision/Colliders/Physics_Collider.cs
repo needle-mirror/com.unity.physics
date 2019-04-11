@@ -1,7 +1,6 @@
 using System;
 using Unity.Collections;
 using Unity.Mathematics;
-using Unity.Entities;
 using static Unity.Physics.Math;
 
 namespace Unity.Physics
@@ -16,10 +15,11 @@ namespace Unity.Physics
         Triangle = 3,
         Quad = 4,
         Box = 5,
+        Cylinder = 6,
 
         // Composite types
-        Mesh = 6,
-        Compound = 7
+        Mesh = 7,
+        Compound = 8
     }
 
     // The base type of a collider
@@ -108,6 +108,8 @@ namespace Unity.Physics
                             return ((PolygonCollider*)collider)->MemorySize;
                         case ColliderType.Box:
                             return ((BoxCollider*)collider)->MemorySize;
+                        case ColliderType.Cylinder:
+                            return ((CylinderCollider*)collider)->MemorySize;
                         case ColliderType.Mesh:
                             return ((MeshCollider*)collider)->MemorySize;
                         case ColliderType.Compound:
@@ -152,6 +154,8 @@ namespace Unity.Physics
                             return ((PolygonCollider*)collider)->MassProperties;
                         case ColliderType.Box:
                             return ((BoxCollider*)collider)->MassProperties;
+                        case ColliderType.Cylinder:
+                            return ((CylinderCollider*)collider)->MassProperties;
                         case ColliderType.Mesh:
                             return ((MeshCollider*)collider)->MassProperties;
                         case ColliderType.Compound:
@@ -274,6 +278,8 @@ namespace Unity.Physics
                         return ((PolygonCollider*)collider)->CalculateAabb(transform);
                     case ColliderType.Box:
                         return ((BoxCollider*)collider)->CalculateAabb(transform);
+                    case ColliderType.Cylinder:
+                        return ((CylinderCollider*)collider)->CalculateAabb(transform);
                     case ColliderType.Mesh:
                         return ((MeshCollider*)collider)->CalculateAabb(transform);
                     case ColliderType.Compound:

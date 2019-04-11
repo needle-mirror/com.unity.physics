@@ -11,11 +11,13 @@ namespace Unity.Physics
     {
         public struct Face : IEquatable<Face>
         {
-            public short FirstIndex;    // index into FaceVertexIndices array
-            public byte NumVertices;    // number of vertex indices in the FaceVertexIndices array
-            public byte MinHalfAngle;   // 0-255 = 0-90 degrees
+            public short FirstIndex;             // index into FaceVertexIndices array
+            public byte NumVertices;             // number of vertex indices in the FaceVertexIndices array
+            public byte MinHalfAngleCompressed;  // 0-255 = 0-90 degrees
 
-            public bool Equals(Face other) => FirstIndex.Equals(other.FirstIndex) && NumVertices.Equals(other.NumVertices) && MinHalfAngle.Equals(other.MinHalfAngle);
+            private static readonly float k_CompressionFactor = 255.0f / ((float)math.PI * 0.5f);
+            public float MinHalfAngle { set => MinHalfAngleCompressed = (byte)math.min(value * k_CompressionFactor, 255); }
+            public bool Equals(Face other) => FirstIndex.Equals(other.FirstIndex) && NumVertices.Equals(other.NumVertices) && MinHalfAngleCompressed.Equals(other.MinHalfAngleCompressed);
         }
 
         public struct Edge : IEquatable<Edge>
@@ -77,9 +79,9 @@ namespace Unity.Physics
         // Returns the index of the best supporting face that contains supportingVertex
         public int GetSupportingFace(float3 direction, int supportingVertexIndex)
         {
-            // Special case for polygons, they don't have connectivity information and don't need to search edges
-            // because both faces contain all vertices
-            if (Faces.Length == 2)
+            // Special case for for polygons or colliders without connectivity.
+            // Polygons don't need to search edges because both faces contain all vertices.
+            if (Faces.Length == 2 || VertexEdges.Length == 0 || FaceLinks.Length == 0)
             {
                 return GetSupportingFace(direction);
             }

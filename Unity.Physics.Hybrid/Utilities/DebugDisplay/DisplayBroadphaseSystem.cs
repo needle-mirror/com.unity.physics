@@ -63,11 +63,11 @@ namespace Unity.Physics.Authoring
         EndFramePhysicsSystem m_EndFramePhysicsSystem;
         DebugStream m_DebugStreamSystem;
 
-        protected override void OnCreateManager()
+        protected override void OnCreate()
         {
-            m_BuildPhysicsWorldSystem = World.GetOrCreateManager<BuildPhysicsWorld>();
-            m_EndFramePhysicsSystem = World.GetOrCreateManager<EndFramePhysicsSystem>();
-            m_DebugStreamSystem = World.GetOrCreateManager<DebugStream>();
+            m_BuildPhysicsWorldSystem = World.GetOrCreateSystem<BuildPhysicsWorld>();
+            m_EndFramePhysicsSystem = World.GetOrCreateSystem<EndFramePhysicsSystem>();
+            m_DebugStreamSystem = World.GetOrCreateSystem<DebugStream>();
         }
 
         protected override JobHandle OnUpdate(JobHandle inputDeps)

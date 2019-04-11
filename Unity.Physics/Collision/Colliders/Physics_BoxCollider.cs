@@ -47,6 +47,10 @@ namespace Unity.Physics
             {
                 throw new System.ArgumentException("Tried to create BoxCollider with negative, zero, inf or nan convex radius");
             }
+            if (math.any(convexRadius + convexRadius > size))
+            {
+                throw new System.ArgumentException("Tried to create BoxCollider with radius greater than half extent");
+            }
             using (var allocator = new BlobAllocator(-1))
             {
                 ref BoxCollider collider = ref allocator.ConstructRoot<BoxCollider>();
@@ -59,7 +63,7 @@ namespace Unity.Physics
         {
             m_Header.Type = ColliderType.Box;
             m_Header.CollisionType = CollisionType.Convex;
-            m_Header.Version += 1;
+            m_Header.Version = 0;
             m_Header.Magic = 0xff;
             m_Header.Filter = filter;
             m_Header.Material = material;
@@ -86,12 +90,12 @@ namespace Unity.Physics
                 ConvexHull.FaceLinksBlob.Length = 24;
 
                 ConvexHull.Face* faces = (ConvexHull.Face*)(&collider->m_Faces[0]);
-                faces[0] = new ConvexHull.Face { FirstIndex = 0, NumVertices = 4, MinHalfAngle = 0x80 };
-                faces[1] = new ConvexHull.Face { FirstIndex = 4, NumVertices = 4, MinHalfAngle = 0x80 };
-                faces[2] = new ConvexHull.Face { FirstIndex = 8, NumVertices = 4, MinHalfAngle = 0x80 };
-                faces[3] = new ConvexHull.Face { FirstIndex = 12, NumVertices = 4, MinHalfAngle = 0x80 };
-                faces[4] = new ConvexHull.Face { FirstIndex = 16, NumVertices = 4, MinHalfAngle = 0x80 };
-                faces[5] = new ConvexHull.Face { FirstIndex = 20, NumVertices = 4, MinHalfAngle = 0x80 };
+                faces[0] = new ConvexHull.Face { FirstIndex = 0, NumVertices = 4, MinHalfAngleCompressed = 0x80 };
+                faces[1] = new ConvexHull.Face { FirstIndex = 4, NumVertices = 4, MinHalfAngleCompressed = 0x80 };
+                faces[2] = new ConvexHull.Face { FirstIndex = 8, NumVertices = 4, MinHalfAngleCompressed = 0x80 };
+                faces[3] = new ConvexHull.Face { FirstIndex = 12, NumVertices = 4, MinHalfAngleCompressed = 0x80 };
+                faces[4] = new ConvexHull.Face { FirstIndex = 16, NumVertices = 4, MinHalfAngleCompressed = 0x80 };
+                faces[5] = new ConvexHull.Face { FirstIndex = 20, NumVertices = 4, MinHalfAngleCompressed = 0x80 };
 
                 byte* index = &collider->m_FaceVertexIndices[0];
                 byte[] faceVertexIndices = new byte[24] { 2, 6, 4, 0, 1, 5, 7, 3, 1, 0, 4, 5, 7, 6, 2, 3, 3, 2, 0, 1, 7, 5, 4, 6 };
@@ -137,28 +141,32 @@ namespace Unity.Physics
         // Update the vertices and planes to match the current box properties
         private unsafe void Update()
         {
+            m_Header.Version++;
+
             fixed (BoxCollider* collider = &this)
             {
+                var transform = new RigidTransform(m_Orientation, m_Center);
+
                 // TODO: clamp to avoid extents <= 0
                 float3 he = m_Size * 0.5f - ConvexHull.ConvexRadius; // half extents
 
                 float3* vertices = (float3*)(&collider->m_Vertices[0]);
-                vertices[0] = m_Center + math.rotate(m_Orientation, new float3(he.x, he.y, he.z));
-                vertices[1] = m_Center + math.rotate(m_Orientation, new float3(-he.x, he.y, he.z));
-                vertices[2] = m_Center + math.rotate(m_Orientation, new float3(he.x, -he.y, he.z));
-                vertices[3] = m_Center + math.rotate(m_Orientation, new float3(-he.x, -he.y, he.z));
-                vertices[4] = m_Center + math.rotate(m_Orientation, new float3(he.x, he.y, -he.z));
-                vertices[5] = m_Center + math.rotate(m_Orientation, new float3(-he.x, he.y, -he.z));
-                vertices[6] = m_Center + math.rotate(m_Orientation, new float3(he.x, -he.y, -he.z));
-                vertices[7] = m_Center + math.rotate(m_Orientation, new float3(-he.x, -he.y, -he.z));
+                vertices[0] = math.transform(transform, new float3(he.x, he.y, he.z));
+                vertices[1] = math.transform(transform, new float3(-he.x, he.y, he.z));
+                vertices[2] = math.transform(transform, new float3(he.x, -he.y, he.z));
+                vertices[3] = math.transform(transform, new float3(-he.x, -he.y, he.z));
+                vertices[4] = math.transform(transform, new float3(he.x, he.y, -he.z));
+                vertices[5] = math.transform(transform, new float3(-he.x, he.y, -he.z));
+                vertices[6] = math.transform(transform, new float3(he.x, -he.y, -he.z));
+                vertices[7] = math.transform(transform, new float3(-he.x, -he.y, -he.z));
 
                 Plane* planes = (Plane*)(&collider->m_FacePlanes[0]);
-                planes[0] = Math.TransformPlane(m_Orientation, m_Center, new Plane(new float3(1, 0, 0), -he.x));
-                planes[1] = Math.TransformPlane(m_Orientation, m_Center, new Plane(new float3(-1, 0, 0), -he.x));
-                planes[2] = Math.TransformPlane(m_Orientation, m_Center, new Plane(new float3(0, 1, 0), -he.y));
-                planes[3] = Math.TransformPlane(m_Orientation, m_Center, new Plane(new float3(0, -1, 0), -he.y));
-                planes[4] = Math.TransformPlane(m_Orientation, m_Center, new Plane(new float3(0, 0, 1), -he.z));
-                planes[5] = Math.TransformPlane(m_Orientation, m_Center, new Plane(new float3(0, 0, -1), -he.z));
+                planes[0] = Math.TransformPlane(transform, new Plane(new float3(1, 0, 0), -he.x));
+                planes[1] = Math.TransformPlane(transform, new Plane(new float3(-1, 0, 0), -he.x));
+                planes[2] = Math.TransformPlane(transform, new Plane(new float3(0, 1, 0), -he.y));
+                planes[3] = Math.TransformPlane(transform, new Plane(new float3(0, -1, 0), -he.y));
+                planes[4] = Math.TransformPlane(transform, new Plane(new float3(0, 0, 1), -he.z));
+                planes[5] = Math.TransformPlane(transform, new Plane(new float3(0, 0, -1), -he.z));
             }
         }
 

@@ -754,7 +754,7 @@ namespace Unity.Physics.Tests.Collision.Queries
             }
             if (GUILayout.Button("Simplify faces"))
             {
-                cvx.Hull.SimplifyFaces(cvx.MaxFaces, cvx.FaceSimplificationError, cvx.FaceMinAngle);
+                cvx.Hull.SimplifyFaces(cvx.FaceSimplificationError, cvx.MaxFaces, int.MaxValue, cvx.FaceMinAngle);
                 cvx.UpdateMesh = true;
             }
             if (GUILayout.Button("Offset vertices"))

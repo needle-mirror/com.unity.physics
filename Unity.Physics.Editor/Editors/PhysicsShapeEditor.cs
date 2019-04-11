@@ -162,6 +162,8 @@ namespace Unity.Physics.Editor
                     case ShapeType.Mesh:
                         DisplayMeshControls();
                         break;
+                    default:
+                        throw new UnimplementedShapeException((ShapeType)m_ShapeType.intValue);
                 }
             }
 
@@ -213,8 +215,11 @@ namespace Unity.Physics.Editor
                         shape.GetPlaneProperties(out center, out var size2D, out orientation);
                         shape.SetPlane(center, size2D, orientation);
                         break;
-                    default:
+                    case ShapeType.ConvexHull:
+                    case ShapeType.Mesh:
                         return;
+                    default:
+                        throw new UnimplementedShapeException((ShapeType)m_ShapeType.intValue);
                 }
                 EditorUtility.SetDirty(shape);
             }
@@ -384,7 +389,7 @@ namespace Unity.Physics.Editor
                         shape.GetBoxProperties(out var center, out var size, out EulerAngles orientation);
                         s_Box.ConvexRadius = shape.ConvexRadius * radiusScalar;
                         s_Box.center = float3.zero;
-                        s_Box.size = size * linearScalar;
+                        s_Box.size = math.abs(size * linearScalar);
                         using (new Handles.DrawingScope(math.mul(Handles.matrix, float4x4.TRS(center * linearScalar, orientation, 1f))))
                             s_Box.DrawHandle();
                         break;
@@ -413,9 +418,10 @@ namespace Unity.Physics.Editor
                         shape.GetCylinderProperties(out center, out height, out radius, out orientation);
                         s_ConvexCylinder.ConvexRadius = shape.ConvexRadius * radiusScalar;
                         s_ConvexCylinder.center = float3.zero;
-                        s_ConvexCylinder.Height = height;
-                        s_ConvexCylinder.Radius = radius;
-                        using (new Handles.DrawingScope(math.mul(Handles.matrix, float4x4.TRS(center * linearScalar, orientation, linearScalar))))
+                        var s = math.abs(math.mul(math.inverse(orientation), linearScalar));
+                        s_ConvexCylinder.Height = height * s.z;
+                        s_ConvexCylinder.Radius = radius * math.cmax(s.xy);
+                        using (new Handles.DrawingScope(math.mul(Handles.matrix, float4x4.TRS(center * linearScalar, orientation, 1f))))
                             s_ConvexCylinder.DrawHandle();
                         break;
                     case ShapeType.Plane:
@@ -439,9 +445,10 @@ namespace Unity.Physics.Editor
                         if (mesh == null || mesh.vertexCount == 0)
                             break;
                         var localToWorld = new RigidTransform(shape.transform.rotation, shape.transform.position);
-                        shape.GetBakeTransformation(out linearScalar, out radiusScalar);
                         DrawMesh(mesh, float4x4.TRS(localToWorld.pos, localToWorld.rot, linearScalar));
                         break;
+                    default:
+                        throw new UnimplementedShapeException(shape.ShapeType);
                 }
             }
         }

@@ -49,10 +49,10 @@ namespace Unity.Physics
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Plane TransformPlane(quaternion rotation, float3 translation, Plane plane)
+        public static Plane TransformPlane(RigidTransform transform, Plane plane)
         {
-            float3 normal = math.rotate(rotation, plane.Normal);
-            return new Plane(normal, plane.Distance - math.dot(normal, translation));
+            float3 normal = math.rotate(transform.rot, plane.Normal);
+            return new Plane(normal, plane.Distance - math.dot(normal, transform.pos));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

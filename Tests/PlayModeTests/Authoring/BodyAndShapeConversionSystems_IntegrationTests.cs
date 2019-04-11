@@ -102,7 +102,7 @@ namespace Unity.Physics.Tests.Authoring
             {
                 GameObjectConversionUtility.ConvertGameObjectHierarchy(Root, world);
 
-                using (var group = world.EntityManager.CreateComponentGroup(typeof(T)))
+                using (var group = world.EntityManager.CreateEntityQuery(typeof(T)))
                 {
                     using (var bodies = group.ToComponentDataArray<T>(Allocator.Persistent))
                     {
@@ -127,7 +127,7 @@ namespace Unity.Physics.Tests.Authoring
             {
                 GameObjectConversionUtility.ConvertGameObjectHierarchy(Root, world);
 
-                using (var group = world.EntityManager.CreateComponentGroup(typeof(T)))
+                using (var group = world.EntityManager.CreateEntityQuery(typeof(T)))
                 using (var bodies = group.ToComponentDataArray<T>(Allocator.Persistent))
                     Assert.That(bodies.Length, Is.EqualTo(0), $"Conversion pipeline produced {typeof(T).Name}");
             }

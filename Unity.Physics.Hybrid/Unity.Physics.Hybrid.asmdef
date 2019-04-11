@@ -1,12 +1,12 @@
 {
-    "name": "Unity.Physics.Authoring",
+    "name": "Unity.Physics.Hybrid",
     "references": [
+        "Unity.Burst",
         "Unity.Collections",
         "Unity.Entities",
         "Unity.Entities.Hybrid",
         "Unity.Mathematics",
-        "Unity.Physics",
-        "Unity.Burst"
+        "Unity.Physics"
     ],
     "optionalUnityReferences": [],
     "includePlatforms": [],

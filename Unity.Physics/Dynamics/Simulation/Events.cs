@@ -77,7 +77,7 @@ namespace Unity.Physics
 
             private void AdvanceReader()
             {
-                if (m_Reader.RemainingItemCount == 0 && m_CurrentWorkItem < m_NumWorkItems)
+                while (m_Reader.RemainingItemCount == 0 && m_CurrentWorkItem < m_NumWorkItems)
                 {
                     m_Reader.BeginForEachIndex(m_CurrentWorkItem);
                     m_CurrentWorkItem++;
@@ -142,7 +142,7 @@ namespace Unity.Physics
 
             private void AdvanceReader()
             {
-                if (m_Reader.RemainingItemCount == 0 && m_CurrentWorkItem < m_NumWorkItems)
+                while (m_Reader.RemainingItemCount == 0 && m_CurrentWorkItem < m_NumWorkItems)
                 {
                     m_Reader.BeginForEachIndex(m_CurrentWorkItem);
                     m_CurrentWorkItem++;

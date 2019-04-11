@@ -395,7 +395,13 @@ namespace Unity.Physics
                         default:
                         {
                             UnityEngine.Assertions.Assert.IsTrue(simplex.NumVertices == 3);
-                            float3 normal = math.normalize(math.cross(simplex.B.Xyz - simplex.A.Xyz, simplex.C.Xyz - simplex.A.Xyz));
+                            float3 cross = math.cross(simplex.B.Xyz - simplex.A.Xyz, simplex.C.Xyz - simplex.A.Xyz);
+                            float crossLengthSq = math.lengthsq(cross);
+                            if (crossLengthSq < 1e-8f) // hull builder can accept extremely thin triangles for which we cannot compute an accurate normal
+                            {
+                                goto case 2;
+                            }
+                            float3 normal = cross * math.rsqrt(crossLengthSq);
                             float dot = math.dot(normal, simplex.A.Xyz);
                             ret.ClosestPoints.Distance = math.abs(dot);
                             ret.ClosestPoints.NormalInA = math.select(-normal, normal, dot < 0);
@@ -441,18 +447,47 @@ namespace Unity.Physics
                             break;
                     } while (++iteration < maxIterations);
 
-                    // Generate simplex.
-                    ConvexHullBuilder.Triangle triangle = hull.Triangles[closestTriangleIndex];
-                    simplex.NumVertices = 3;
-                    simplex.A.Xyz = hull.Vertices[triangle.Vertex0].Position; simplex.A.Id = hull.Vertices[triangle.Vertex0].UserData;
-                    simplex.B.Xyz = hull.Vertices[triangle.Vertex1].Position; simplex.B.Id = hull.Vertices[triangle.Vertex1].UserData;
-                    simplex.C.Xyz = hull.Vertices[triangle.Vertex2].Position; simplex.C.Id = hull.Vertices[triangle.Vertex2].UserData;
-                    simplex.Direction = -closestPlane.Normal;
-                    simplex.ScaledDistance = closestPlane.Distance;
+                    // There could be multiple triangles in the closest plane, pick the one that has the closest point to the origin on its face
+                    foreach (int triangleIndex in hull.Triangles.Indices)
+                    {
+                        if (distancesCache[triangleIndex] >= closestPlane.Distance - 1e-4f)
+                        {
+                            ConvexHullBuilder.Triangle triangle = hull.Triangles[triangleIndex];
+                            float3 a = hull.Vertices[triangle.Vertex0].Position;
+                            float3 b = hull.Vertices[triangle.Vertex1].Position;
+                            float3 c = hull.Vertices[triangle.Vertex2].Position;
+                            float3 cross = math.cross(b - a, c - a);
+                            float3 dets = new float3(
+                                math.dot(math.cross(a - c, cross), a),
+                                math.dot(math.cross(b - a, cross), b),
+                                math.dot(math.cross(c - b, cross), c));
+                            if (math.all(dets >= 0))
+                            {
+                                Plane plane = hull.ComputePlane(triangleIndex);
+                                if (math.dot(plane.Normal, closestPlane.Normal) > (1 - 1e-4f))
+                                {
+                                    closestTriangleIndex = triangleIndex;
+                                    closestPlane = hull.ComputePlane(triangleIndex);
+                                }
+                                break;
+                            }
+                        }
+                    }
 
-                    // Set normal and distance.
-                    ret.ClosestPoints.NormalInA = -closestPlane.Normal;
-                    ret.ClosestPoints.Distance = closestPlane.Distance;
+                    // Generate simplex.
+                    {
+                        ConvexHullBuilder.Triangle triangle = hull.Triangles[closestTriangleIndex];
+                        simplex.NumVertices = 3;
+                        simplex.A.Xyz = hull.Vertices[triangle.Vertex0].Position; simplex.A.Id = hull.Vertices[triangle.Vertex0].UserData;
+                        simplex.B.Xyz = hull.Vertices[triangle.Vertex1].Position; simplex.B.Id = hull.Vertices[triangle.Vertex1].UserData;
+                        simplex.C.Xyz = hull.Vertices[triangle.Vertex2].Position; simplex.C.Id = hull.Vertices[triangle.Vertex2].UserData;
+                        simplex.Direction = -closestPlane.Normal;
+                        simplex.ScaledDistance = closestPlane.Distance;
+
+                        // Set normal and distance.
+                        ret.ClosestPoints.NormalInA = -closestPlane.Normal;
+                        ret.ClosestPoints.Distance = closestPlane.Distance;
+                    }
                 }
             }
             else

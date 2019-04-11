@@ -42,7 +42,7 @@ namespace Unity.Physics.Tests.Collision.RigidBody
             Physics.RigidBody rigidbody = Unity.Physics.RigidBody.Zero;
 
             const float size = 1.0f;
-            const float convexRadius = 1.0f;
+            const float convexRadius = 0.0f;
 
             var rayStartOK = new float3(-10, -10, -10);
             var rayEndOK = new float3(10, 10, 10);
@@ -82,7 +82,8 @@ namespace Unity.Physics.Tests.Collision.RigidBody
             Physics.RigidBody rigidbody = Unity.Physics.RigidBody.Zero;
 
             const float size = 1.0f;
-            const float convexRadius = 1.0f;
+            const float convexRadius = 0.0f;
+            const float sphereRadius = 1.0f;
 
             var rayStartOK = new float3(-10, -10, -10);
             var rayEndOK = new float3(10, 10, 10);
@@ -100,7 +101,7 @@ namespace Unity.Physics.Tests.Collision.RigidBody
             float3 rayDir = rayEndOK - rayStartOK;
             colliderCastInput.Position = rayStartOK;
             colliderCastInput.Direction = rayDir;
-            colliderCastInput.Collider = (Collider*)SphereCollider.Create(float3.zero, convexRadius).GetUnsafePtr();
+            colliderCastInput.Collider = (Collider*)SphereCollider.Create(float3.zero, sphereRadius).GetUnsafePtr();
 
             Assert.IsTrue(rigidbody.CastCollider(colliderCastInput));
             Assert.IsTrue(rigidbody.CastCollider(colliderCastInput, out closestHit));
@@ -122,7 +123,7 @@ namespace Unity.Physics.Tests.Collision.RigidBody
             Physics.RigidBody rigidbody = Unity.Physics.RigidBody.Zero;
 
             const float size = 1.0f;
-            const float convexRadius = 1.0f;
+            const float convexRadius = 0.0f;
 
             var queryPos = new float3(-10, -10, -10);
 
@@ -153,12 +154,13 @@ namespace Unity.Physics.Tests.Collision.RigidBody
         public unsafe void RigidBodyCalculateDistanceTest()
         {
             const float size = 1.0f;
-            const float convexRadius = 1.0f;
+            const float convexRadius = 0.0f;
+            const float sphereRadius = 1.0f;
 
             var queryPos = new float3(-10, -10, -10);
 
             BlobAssetReference<Collider> boxCollider = BoxCollider.Create(float3.zero, quaternion.identity, new float3(size), convexRadius);
-            BlobAssetReference<Collider> sphereCollider = SphereCollider.Create(float3.zero, convexRadius);
+            BlobAssetReference<Collider> sphereCollider = SphereCollider.Create(float3.zero, sphereRadius);
 
             var rigidBody = new Physics.RigidBody
             {

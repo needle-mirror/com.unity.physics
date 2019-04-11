@@ -231,6 +231,7 @@ namespace Unity.Physics.Authoring
                     case ColliderType.Box:
                     case ColliderType.Triangle:
                     case ColliderType.Quad:
+                    case ColliderType.Cylinder:
                     case ColliderType.Convex:
                         AppendConvex(ref ((ConvexCollider*)collider)->ConvexHull, worldFromCollider, ref results);
                         break;
@@ -432,6 +433,12 @@ namespace Unity.Physics.Authoring
                             Vector3 position = math.transform(Bodies[b].WorldFromBody, dr.Position);
                             Quaternion orientation = math.mul(Bodies[b].WorldFromBody.rot, dr.Orientation);
                             Gizmos.DrawWireMesh(dr.Mesh, position, orientation, dr.Scale);
+
+                            if (dr.Mesh != CachedReferenceCylinder && dr.Mesh != CachedReferenceSphere)
+                            {
+                                // Cleanup any meshes that are not our cached ones
+                                Destroy(dr.Mesh);
+                            }
                         }
                     }
 
@@ -451,9 +458,9 @@ namespace Unity.Physics.Authoring
 
         private DrawComponent m_DrawComponent;
 
-        protected override void OnCreateManager()
+        protected override void OnCreate()
         {
-            m_BuildPhysicsWorldSystem = World.GetOrCreateManager<BuildPhysicsWorld>();
+            m_BuildPhysicsWorldSystem = World.GetOrCreateSystem<BuildPhysicsWorld>();
         }
 
         protected override void OnUpdate()

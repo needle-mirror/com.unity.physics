@@ -33,10 +33,10 @@ namespace Unity.Physics.Tests.Collision.Queries
             float adjustedTolerance = tolerance;
             if (result.Distance < a.ConvexRadius + b.ConvexRadius)
             {
-                // Core shape penetration distances are less accurate, see stopThreshold in ConvexConvexDistanceQueries
-                // Note that the maximum possible inaccuracy scales with the number of vertices, so this may need to be tuned if the tests change
-                // For rigid body simulation the inaccuracy is generally not noticeable
-                adjustedTolerance *= 20.0f;
+                // Core shape penetration distances are less accurate, and error scales with the number of vertices (as well as shape size). See stopThreshold in ConvexConvexDistanceQueries.
+                // This is not usually noticeable in rigid body simulation because accuracy improves as the penetration resolves.
+                // The tolerance is tuned for these tests, it might require further tuning as the tests change.
+                adjustedTolerance = 1e-2f + 1e-3f * (a.NumVertices + b.NumVertices);
             }
 
             // Check that the distances is correct
@@ -63,73 +63,83 @@ namespace Unity.Physics.Tests.Collision.Queries
 
         static unsafe float RefConvexConvexDistance(ref ConvexHull a, ref ConvexHull b, MTransform aFromB)
         {
-            // Build the minkowski difference in a-space
-            int maxNumVertices = a.NumVertices * b.NumVertices;
-            ConvexHullBuilder diff = new ConvexHullBuilder(maxNumVertices, 2 * maxNumVertices, Allocator.Temp);
-            bool success = true;
-            Aabb aabb = Aabb.Empty;
-            for (int iB = 0; iB < b.NumVertices; iB++)
+            bool success = false;
+            if (a.NumVertices + b.NumVertices < 64) // TODO - work around hull builder asserts
             {
-                float3 vertexB = Math.Mul(aFromB, b.Vertices[iB]);
-                for (int iA = 0; iA < a.NumVertices; iA++)
+                // Build the minkowski difference in a-space
+                int maxNumVertices = a.NumVertices * b.NumVertices;
+                ConvexHullBuilder diff = new ConvexHullBuilder(maxNumVertices, 2 * maxNumVertices, Allocator.Temp);
+                Aabb aabb = Aabb.Empty;
+                for (int iB = 0; iB < b.NumVertices; iB++)
                 {
-                    float3 vertexA = a.Vertices[iA];
-                    aabb.Include(vertexA - vertexB);
-                }
-            }
-            diff.IntegerSpaceAabb = aabb;
-            for (int iB = 0; iB < b.NumVertices; iB++)
-            {
-                float3 vertexB = Math.Mul(aFromB, b.Vertices[iB]);
-                for (int iA = 0; iA < a.NumVertices; iA++)
-                {
-                    float3 vertexA = a.Vertices[iA];
-                    if (!diff.AddPoint(vertexA - vertexB, (uint)(iA | iB << 16)))
+                    float3 vertexB = Math.Mul(aFromB, b.Vertices[iB]);
+                    for (int iA = 0; iA < a.NumVertices; iA++)
                     {
-                        // TODO - coplanar vertices are tripping up ConvexHullBuilder, we should fix it but for now fall back to DistanceQueries.ConvexConvex()
-                        success = false;
+                        float3 vertexA = a.Vertices[iA];
+                        aabb.Include(vertexA - vertexB);
                     }
                 }
-            }
-
-            float distance;
-            if (!success || diff.Triangles.GetFirstIndex() == -1)
-            {
-                // No triangles unless the difference is 3D, fall back to GJK
-                // Most of the time this happens for cases like sphere-sphere, capsule-capsule, etc. which have special implementations,
-                // so comparing those to GJK still validates the results of different API queries against each other.
-                distance = DistanceQueries.ConvexConvex(ref a, ref b, aFromB).Distance;
-            }
-            else
-            {
-                // Find the closest triangle to the origin
-                distance = float.MaxValue;
-                bool penetrating = true;
-                for (int t = diff.Triangles.GetFirstIndex(); t != -1; t = diff.Triangles.GetNextIndex(t))
+                diff.IntegerSpaceAabb = aabb;
+                success = true;
+                for (int iB = 0; iB < b.NumVertices; iB++)
                 {
-                    ConvexHullBuilder.Triangle triangle = diff.Triangles[t];
-                    float3 v0 = diff.Vertices[triangle.GetVertex(0)].Position;
-                    float3 v1 = diff.Vertices[triangle.GetVertex(1)].Position;
-                    float3 v2 = diff.Vertices[triangle.GetVertex(2)].Position;
-                    float3 n = diff.ComputePlane(t).Normal;
-                    DistanceQueries.Result result = DistanceQueries.TriangleSphere(v0, v1, v2, n, float3.zero, 0.0f, MTransform.Identity);
-                    if (result.Distance < distance)
+                    float3 vertexB = Math.Mul(aFromB, b.Vertices[iB]);
+                    for (int iA = 0; iA < a.NumVertices; iA++)
                     {
-                        distance = result.Distance;
+                        float3 vertexA = a.Vertices[iA];
+                        if (!diff.AddPoint(vertexA - vertexB, (uint)(iA | iB << 16)))
+                        {
+                            // TODO - coplanar vertices are tripping up ConvexHullBuilder, we should fix it but for now fall back to DistanceQueries.ConvexConvex()
+                            success = false;
+                        }
                     }
-                    penetrating = penetrating & (math.dot(n, -result.NormalInA) < 0.0f); // only penetrating if inside of all planes
                 }
 
-                if (penetrating)
+                float distance = 0.0f;
+                if (success && diff.Triangles.GetFirstIndex() != -1)
                 {
-                    distance = -distance;
+                    // Find the closest triangle to the origin
+                    distance = float.MaxValue;
+                    bool penetrating = true;
+                    for (int t = diff.Triangles.GetFirstIndex(); t != -1; t = diff.Triangles.GetNextIndex(t))
+                    {
+                        ConvexHullBuilder.Triangle triangle = diff.Triangles[t];
+                        float3 v0 = diff.Vertices[triangle.GetVertex(0)].Position;
+                        float3 v1 = diff.Vertices[triangle.GetVertex(1)].Position;
+                        float3 v2 = diff.Vertices[triangle.GetVertex(2)].Position;
+                        float3 n = diff.ComputePlane(t).Normal;
+                        DistanceQueries.Result result = DistanceQueries.TriangleSphere(v0, v1, v2, n, float3.zero, 0.0f, MTransform.Identity);
+                        if (result.Distance < distance)
+                        {
+                            distance = result.Distance;
+                        }
+                        penetrating = penetrating & (math.dot(n, -result.NormalInA) < 0.0f); // only penetrating if inside of all planes
+                    }
+
+                    if (penetrating)
+                    {
+                        distance = -distance;
+                    }
+
+                    distance -= a.ConvexRadius + b.ConvexRadius;
+                }
+                else
+                {
+                    success = false;
                 }
 
-                distance -= a.ConvexRadius + b.ConvexRadius;
+                diff.Dispose();
+
+                if (success)
+                {
+                    return distance;
+                }
             }
 
-            diff.Dispose();
-            return distance;
+            // Fall back in case hull isn't 3D or hull builder fails
+            // Most of the time this happens for cases like sphere-sphere, capsule-capsule, etc. which have special implementations,
+            // so comparing those to GJK still validates the results of different API queries against each other.
+            return DistanceQueries.ConvexConvex(ref a, ref b, aFromB).Distance;
         }
 
         private static unsafe void TestConvexConvexDistance(ConvexCollider* target, ConvexCollider* query, MTransform queryFromTarget, string failureMessage)
@@ -166,12 +176,12 @@ namespace Unity.Physics.Tests.Collision.Queries
                 uint state = rnd.state;
 
                 // Generate random query inputs
-                ConvexCollider* target = (ConvexCollider*)TestUtils.GenerateRandomConvex(ref rnd).GetUnsafePtr();
-                ConvexCollider* query = (ConvexCollider*)TestUtils.GenerateRandomConvex(ref rnd).GetUnsafePtr();
+                var target = TestUtils.GenerateRandomConvex(ref rnd);
+                var query = TestUtils.GenerateRandomConvex(ref rnd);
                 MTransform queryFromTarget = new MTransform(
                     (rnd.NextInt(10) > 0) ? rnd.NextQuaternionRotation() : quaternion.identity,
                     rnd.NextFloat3(-3.0f, 3.0f));
-                TestConvexConvexDistance(target, query, queryFromTarget, "ConvexConvexDistanceTest failed " + i + " (" + state.ToString() + ")");
+                TestConvexConvexDistance((ConvexCollider*)target.GetUnsafePtr(), (ConvexCollider*)query.GetUnsafePtr(), queryFromTarget, "ConvexConvexDistanceTest failed " + i + " (" + state.ToString() + ")");
             }
         }
 
@@ -203,7 +213,7 @@ namespace Unity.Physics.Tests.Collision.Queries
                 uint shapeState = rnd.state;
 
                 // Generate a random collider
-                ConvexCollider* collider = (ConvexCollider*)TestUtils.GenerateRandomConvex(ref rnd).GetUnsafePtr();
+                var collider = TestUtils.GenerateRandomConvex(ref rnd);
 
                 for (int iTest = 0; iTest < numTests; iTest++)
                 {
@@ -219,7 +229,7 @@ namespace Unity.Physics.Tests.Collision.Queries
                     MTransform queryFromTarget = new MTransform(
                         (rnd.NextInt(10) > 0) ? quaternion.AxisAngle(rnd.NextFloat3Direction(), angle) : quaternion.identity,
                         (rnd.NextInt(10) > 0) ? rnd.NextFloat3Direction() * distance : float3.zero);
-                    TestConvexConvexDistance(collider, collider, queryFromTarget, "ConvexConvexDistanceEdgeCaseTest failed " + iShape + ", " + iTest + " (" + shapeState+ ", " + testState + ")");
+                    TestConvexConvexDistance((ConvexCollider*)collider.GetUnsafePtr(), (ConvexCollider*)collider.GetUnsafePtr(), queryFromTarget, "ConvexConvexDistanceEdgeCaseTest failed " + iShape + ", " + iTest + " (" + shapeState+ ", " + testState + ")");
                 }
             }
         }
@@ -477,7 +487,7 @@ namespace Unity.Physics.Tests.Collision.Queries
                     string failureMessage = iWorld + ", " + iTest + " (" + worldState.ToString() + ", " + testState.ToString() + ")";
 
                     // Generate common random query inputs
-                    Collider* collider = (Collider*)TestUtils.GenerateRandomConvex(ref rnd).GetUnsafePtr();
+                    var collider = TestUtils.GenerateRandomConvex(ref rnd);
                     RigidTransform transform = new RigidTransform
                     {
                         pos = rnd.NextFloat3(-10.0f, 10.0f),
@@ -489,7 +499,7 @@ namespace Unity.Physics.Tests.Collision.Queries
                     {
                         ColliderDistanceInput input = new ColliderDistanceInput
                         {
-                            Collider = collider,
+                            Collider = (Collider*)collider.GetUnsafePtr(),
                             Transform = transform,
                             MaxDistance = (rnd.NextInt(4) > 0) ? rnd.NextFloat(5.0f) : 0.0f
                         };
@@ -500,7 +510,7 @@ namespace Unity.Physics.Tests.Collision.Queries
                     {
                         ColliderCastInput input = new ColliderCastInput
                         {
-                            Collider = collider,
+                            Collider = (Collider*)collider.GetUnsafePtr(),
                             Position = transform.pos,
                             Orientation = transform.rot,
                             Direction = ray.Direction
@@ -649,6 +659,14 @@ namespace Unity.Physics.Tests.Collision.Queries
                             }
 
                             // Check the closest point
+                            // TODO - Box-box and box-triangle manifolds have special manifold generation code that trades some accuracy for performance, see comments in 
+                            // ConvexConvexManifoldQueries.BoxBox() and BoxTriangle(). It may change later, until then they get an exception from the closest point distance test.
+                            ColliderType typeA = leafA.Collider->Type;
+                            ColliderType typeB = leafB.Collider->Type;
+                            bool skipClosestPointTest =
+                                (typeA == ColliderType.Box && (typeB == ColliderType.Box || typeB == ColliderType.Triangle)) ||
+                                (typeB == ColliderType.Box && typeA == ColliderType.Triangle);
+                            if (!skipClosestPointTest)
                             {
                                 ContactPoint closestPoint = manifold[minIndex];
                                 RigidTransform aFromWorld = math.inverse(leafA.TransformFromChild);

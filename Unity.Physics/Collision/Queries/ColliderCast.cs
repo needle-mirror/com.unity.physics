@@ -70,6 +70,7 @@ namespace Unity.Physics
                         case ColliderType.Triangle:
                         case ColliderType.Quad:
                         case ColliderType.Box:
+                        case ColliderType.Cylinder:
                         case ColliderType.Convex:
                             return ConvexConvex(input, target, ref collector);
                         case ColliderType.Mesh:

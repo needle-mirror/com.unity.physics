@@ -9,7 +9,7 @@ namespace Unity.Physics.Extensions
     {
         public static CollisionFilter GetCollisionFilter(this Entity entity)
         {
-            var em = World.Active.GetOrCreateManager<EntityManager>();
+            var em = World.Active.EntityManager;
 
             if (em.HasComponent<PhysicsCollider>(entity))
             {
@@ -24,7 +24,7 @@ namespace Unity.Physics.Extensions
 
         public static float GetMass(this Entity entity)
         {
-            var em = World.Active.GetOrCreateManager<EntityManager>();
+            var em = World.Active.EntityManager;
 
             if (em.HasComponent<PhysicsMass>(entity))
             {
@@ -39,7 +39,7 @@ namespace Unity.Physics.Extensions
 
         public static float GetEffectiveMass(this Entity entity, float3 impulse, float3 point)
         {
-            var em = World.Active.GetOrCreateManager<EntityManager>();
+            var em = World.Active.EntityManager;
 
             float effMass = 0;
 
@@ -59,7 +59,7 @@ namespace Unity.Physics.Extensions
         // Get the center of mass in world space
         public static float3 GetCenterOfMass(this Entity entity)
         {
-            var em = World.Active.GetOrCreateManager<EntityManager>();
+            var em = World.Active.EntityManager;
 
             if (em.HasComponent<PhysicsMass>(entity) &&
                 em.HasComponent<Translation>(entity) &&
@@ -82,7 +82,7 @@ namespace Unity.Physics.Extensions
 
         public static float3 GetPosition(this Entity entity)
         {
-            var em = World.Active.GetOrCreateManager<EntityManager>();
+            var em = World.Active.EntityManager;
 
             if (em.HasComponent<Translation>(entity))
             {
@@ -93,7 +93,7 @@ namespace Unity.Physics.Extensions
 
         public static quaternion GetRotation(this Entity entity)
         {
-            var em = World.Active.GetOrCreateManager<EntityManager>();
+            var em = World.Active.EntityManager;
 
             if (em.HasComponent<Rotation>(entity))
             {
@@ -104,7 +104,7 @@ namespace Unity.Physics.Extensions
 
         public static void SetVelocities(this Entity entity, float3 linearVelocity, float3 angularVelocity)
         {
-            var em = World.Active.GetOrCreateManager<EntityManager>();
+            var em = World.Active.EntityManager;
 
             if (em.HasComponent<PhysicsVelocity>(entity))
             {
@@ -118,7 +118,7 @@ namespace Unity.Physics.Extensions
 
         public static void GetVelocities(this Entity entity, out float3 linearVelocity, out float3 angularVelocity)
         {
-            var em = World.Active.GetOrCreateManager<EntityManager>();
+            var em = World.Active.EntityManager;
 
             if (em.HasComponent<PhysicsVelocity>(entity))
             {
@@ -136,7 +136,7 @@ namespace Unity.Physics.Extensions
         // Get the linear velocity of a rigid body (in world space)
         public static float3 GetLinearVelocity(this Entity entity)
         {
-            var em = World.Active.GetOrCreateManager<EntityManager>();
+            var em = World.Active.EntityManager;
 
             if (em.HasComponent<PhysicsVelocity>(entity))
             {
@@ -149,7 +149,7 @@ namespace Unity.Physics.Extensions
         // Get the linear velocity of a rigid body at a given point (in world space)
         public static float3 GetLinearVelocity(this Entity entity, float3 point)
         {
-            var em = World.Active.GetOrCreateManager<EntityManager>();
+            var em = World.Active.EntityManager;
 
             if (em.HasComponent<PhysicsVelocity>(entity) &&
                 em.HasComponent<PhysicsMass>(entity) &&
@@ -180,7 +180,7 @@ namespace Unity.Physics.Extensions
         // Set the linear velocity of a rigid body (in world space)
         public static void SetLinearVelocity(this Entity entity, float3 linearVelocity)
         {
-            var em = World.Active.GetOrCreateManager<EntityManager>();
+            var em = World.Active.EntityManager;
 
             if (em.HasComponent<PhysicsVelocity>(entity))
             {
@@ -193,7 +193,7 @@ namespace Unity.Physics.Extensions
         // Get the angular velocity of a rigid body around it's center of mass (in world space)
         public static float3 GetAngularVelocity(this Entity entity)
         {
-            var em = World.Active.GetOrCreateManager<EntityManager>();
+            var em = World.Active.EntityManager;
 
             if (em.HasComponent<PhysicsVelocity>(entity) &&
                 em.HasComponent<PhysicsMass>(entity) &&
@@ -218,7 +218,7 @@ namespace Unity.Physics.Extensions
         // Set the angular velocity of a rigid body (in world space)
         public static void SetAngularVelocity(this Entity entity, float3 angularVelocity)
         {
-            var em = World.Active.GetOrCreateManager<EntityManager>();
+            var em = World.Active.EntityManager;
 
             if (em.HasComponent<PhysicsVelocity>(entity) &&
                 em.HasComponent<PhysicsMass>(entity) &&
@@ -245,7 +245,7 @@ namespace Unity.Physics.Extensions
 
         public static void ApplyImpulse(this Entity entity, float3 impulse, float3 point)
         {
-            var em = World.Active.GetOrCreateManager<EntityManager>();
+            var em = World.Active.EntityManager;
 
             if (em.HasComponent<PhysicsVelocity>(entity) &&
                 em.HasComponent<PhysicsMass>(entity) &&
@@ -282,7 +282,7 @@ namespace Unity.Physics.Extensions
 
         public static void ApplyLinearImpulse(this Entity entity, float3 impulse)
         {
-            var em = World.Active.GetOrCreateManager<EntityManager>();
+            var em = World.Active.EntityManager;
 
             if (em.HasComponent<PhysicsVelocity>(entity) &&
                 em.HasComponent<PhysicsMass>(entity))
@@ -303,7 +303,7 @@ namespace Unity.Physics.Extensions
 
         public static void ApplyAngularImpulse(this Entity entity, float3 impulse)
         {
-            var em = World.Active.GetOrCreateManager<EntityManager>();
+            var em = World.Active.EntityManager;
 
             if (em.HasComponent<PhysicsVelocity>(entity) &&
                 em.HasComponent<PhysicsMass>(entity))

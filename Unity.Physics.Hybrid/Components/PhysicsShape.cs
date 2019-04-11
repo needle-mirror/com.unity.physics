@@ -43,6 +43,12 @@ namespace Unity.Physics.Authoring
         public static EulerAngles Default => new EulerAngles { RotationOrder = math.RotationOrder.ZXY };
     }
 
+    sealed class UnimplementedShapeException : NotImplementedException
+    {
+        public UnimplementedShapeException(ShapeType shapeType)
+            : base($"Unknown shape type {shapeType} requires explicit implementation") { }
+    }
+
     [AddComponentMenu("DOTS Physics/Physics Shape")]
     [DisallowMultipleComponent]
     [RequiresEntityConversion]
@@ -98,8 +104,11 @@ namespace Unity.Physics.Authoring
                         return m_Capsule.Radius;
                     case ShapeType.Sphere:
                         return 0.5f * math.cmax(m_PrimitiveSize);
-                    default:
+                    case ShapeType.Plane:
+                    case ShapeType.Mesh:
                         return 0f;
+                    default:
+                        throw new UnimplementedShapeException(m_ShapeType);
                 }
             }
             set
@@ -123,6 +132,11 @@ namespace Unity.Physics.Authoring
                     case ShapeType.Plane:
                         maxRadius = 0f;
                         break;
+                    case ShapeType.Capsule:
+                    case ShapeType.Sphere:
+                        break;
+                    default:
+                        throw new UnimplementedShapeException(m_ShapeType);
                 }
                 m_ConvexRadius = math.clamp(m_ConvexRadius, 0f, maxRadius);
             }
@@ -419,6 +433,7 @@ namespace Unity.Physics.Authoring
             m_PrimitiveCenter = center;
             m_PrimitiveSize = math.max(size, new float3());
             m_PrimitiveOrientation = orientation;
+            ConvexRadius = m_ConvexRadius;
 
             SyncCapsuleProperties();
             SyncCylinderProperties();
@@ -463,6 +478,8 @@ namespace Unity.Physics.Authoring
             radius = math.max(0f, radius);
             height = math.max(0f, height);
             m_PrimitiveSize = new float3(radius * 2f, radius * 2f, height);
+
+            ConvexRadius = m_ConvexRadius;
 
             SyncCapsuleProperties();
             SyncCylinderProperties();
@@ -560,6 +577,11 @@ namespace Unity.Physics.Authoring
                     GetPlaneProperties(out center, out var size2D, out orientation);
                     SetPlane(center, size2D, orientation);
                     break;
+                case ShapeType.ConvexHull:
+                case ShapeType.Mesh:
+                    break;
+                default:
+                    throw new UnimplementedShapeException(m_ShapeType);
             }
             SyncCapsuleProperties();
             SyncCylinderProperties();
@@ -578,10 +600,9 @@ namespace Unity.Physics.Authoring
             Bounds bounds = mesh.bounds;
             ShapeType shapeType = m_ShapeType;
             SetBox(bounds.center, bounds.size, quaternion.identity);
-            m_ShapeType = shapeType;
             m_ConvexRadius = math.min(math.cmin(bounds.size) * 0.1f, k_DefaultConvexRadius);
 
-            switch (m_ShapeType)
+            switch (shapeType)
             {
                 case ShapeType.Capsule:
                     GetCapsuleProperties(out var center, out var height, out var radius, out EulerAngles orientation);
@@ -601,6 +622,13 @@ namespace Unity.Physics.Authoring
                     GetPlaneProperties(out center, out var size2D, out orientation);
                     SetPlane(center, size2D, orientation);
                     break;
+                case ShapeType.Box:
+                case ShapeType.ConvexHull:
+                case ShapeType.Mesh:
+                    m_ShapeType = shapeType;
+                    break;
+                default:
+                    throw new UnimplementedShapeException(shapeType);
             }
             SyncCapsuleProperties();
             SyncCylinderProperties();

@@ -85,6 +85,11 @@ namespace Unity.Physics.Authoring
                 case ShapeType.ConvexHull:
                     radiusScalar = math.cmax(s);
                     break;
+                case ShapeType.Plane:
+                case ShapeType.Mesh:
+                    break;
+                default:
+                    throw new UnimplementedShapeException(shape.ShapeType);
             }
         }
     }

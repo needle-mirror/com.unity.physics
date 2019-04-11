@@ -98,8 +98,8 @@ namespace Unity.Physics
                 vertices[2] = v2;
 
                 ConvexHull.Face* faces = (ConvexHull.Face*)(&collider->m_Faces[0]);
-                faces[0] = new ConvexHull.Face { FirstIndex = 0, NumVertices = 3, MinHalfAngle = 0xff };
-                faces[1] = new ConvexHull.Face { FirstIndex = 3, NumVertices = 3, MinHalfAngle = 0xff };
+                faces[0] = new ConvexHull.Face { FirstIndex = 0, NumVertices = 3, MinHalfAngleCompressed = 0xff };
+                faces[1] = new ConvexHull.Face { FirstIndex = 3, NumVertices = 3, MinHalfAngleCompressed = 0xff };
 
                 byte* index = &collider->m_FaceVertexIndices[0];
                 *index++ = 0; *index++ = 1; *index++ = 2;
@@ -126,8 +126,8 @@ namespace Unity.Physics
                 vertices[3] = v3;
 
                 ConvexHull.Face* faces = (ConvexHull.Face*)(&collider->m_Faces[0]);
-                faces[0] = new ConvexHull.Face { FirstIndex = 0, NumVertices = 4, MinHalfAngle = 0xff };
-                faces[1] = new ConvexHull.Face { FirstIndex = 4, NumVertices = 4, MinHalfAngle = 0xff };
+                faces[0] = new ConvexHull.Face { FirstIndex = 0, NumVertices = 4, MinHalfAngleCompressed = 0xff };
+                faces[1] = new ConvexHull.Face { FirstIndex = 4, NumVertices = 4, MinHalfAngleCompressed = 0xff };
 
                 byte* index = &collider->m_FaceVertexIndices[0];
                 *index++ = 0; *index++ = 1; *index++ = 2; *index++ = 3;

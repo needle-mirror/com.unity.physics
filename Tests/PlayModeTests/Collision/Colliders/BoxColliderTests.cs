@@ -23,7 +23,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             float3 center = new float3(-10.10f, 10.12f, 0.01f);
             quaternion orientation = quaternion.AxisAngle(math.normalize(new float3(1.4f, 0.2f, 1.1f)), 38.50f);
             float3 size = new float3(0.01f, 120.40f, 5.4f);
-            float convexRadius = 0.43f;
+            float convexRadius = 0.0f;
             var collider = BoxCollider.Create(center, orientation, size, convexRadius);
             var boxCollider = UnsafeUtilityEx.AsRef<BoxCollider>(collider.GetUnsafePtr());
 
@@ -197,62 +197,6 @@ namespace Unity.Physics.Tests.Collision.Colliders
                 TestUtils.AreEqual(expectedAabb.Min, aabb.Min, 1e-3f);
                 TestUtils.AreEqual(expectedAabb.Max, aabb.Max, 1e-3f);
             }
-        }
-
-        /// <summary>
-        /// Test that a translated and rotated <see cref="BoxCollider"/> generates the correct local AABB
-        /// </summary>
-        /// <remarks>
-        /// <see cref="TestBoxColliderCalculateAabbLocalTranslation"/> for the code used to generate reference data.
-        /// </remarks>
-        [Test]
-        public void TestBoxColliderCalculateAabbLocalTranslationAndOrientation()
-        {
-            float3 center = new float3(-2.56f, -4.33f, 54.30f);
-            quaternion orientation = quaternion.AxisAngle(math.normalize(new float3(0, 1, 1)), 42.0f);
-            float3 size = new float3(5.0f, 0.25f, 1.3f);
-            float convexRadius = 0.25f;
-
-            Aabb expectedAabb = new Aabb
-            {
-                Min = new float3(-4.062223f, -6.442692f, 52.3973f),
-                Max = new float3(-1.057776f, -2.217308f, 56.2027f)
-            };
-
-            var boxCollider = BoxCollider.Create(center, orientation, size, convexRadius);
-            Aabb aabb = boxCollider.Value.CalculateAabb();
-            Debug.Log($"Expeced: Min: {expectedAabb.Min}, Max: {expectedAabb.Max}, Was: Min: {aabb.Min}, Max: {aabb.Max}");
-            TestUtils.AreEqual(expectedAabb.Min, aabb.Min, 1e-3f);
-            TestUtils.AreEqual(expectedAabb.Max, aabb.Max, 1e-3f);
-        }
-
-        /// <summary>
-        /// Create a rotated and translated <see cref="BoxCollider"/> and check that the AABB of the transformed collider is correct
-        /// </summary>
-        /// <remarks>
-        /// <see cref="TestBoxColliderCalculateAabbLocalTranslation"/> for the code used to generate reference data.
-        /// </remarks>
-        [Test]
-        public void TestBoxColliderCalculateAabbTransformed()
-        {
-            float3 center = new float3(2.54f, -4.86f, 6.90f);
-            quaternion orientation = quaternion.AxisAngle(math.normalize(new float3(0.5f, 1, 1)), 42.0f);
-            float3 size = new float3(50.0f, 0.1f, 2.3f);
-            float convexRadius = 0.25f;
-            float3 translation = new float3(-2.5f, 15.0f, -0.01f);
-            quaternion rotation = quaternion.AxisAngle(math.normalize(new float3(4.2f, 0.1f, -3.3f)), 42.1f);
-
-            Aabb expectedAabb = new Aabb
-            {
-                Min = new float3(-17.75146f, 7.216872f, -11.04677f),
-                Max = new float3(11.82336f, 38.96107f, 17.96488f)
-            };
-
-            var boxCollider = BoxCollider.Create(center, orientation, size, convexRadius);
-            Aabb aabb = boxCollider.Value.CalculateAabb(new RigidTransform(rotation, translation));
-            Debug.Log($"Expected: Min: {expectedAabb.Min}, Max: {expectedAabb.Max}, Was: Min: {aabb.Min}, Max: {aabb.Max}");
-            TestUtils.AreEqual(expectedAabb.Min, aabb.Min, 1e-3f);
-            TestUtils.AreEqual(expectedAabb.Max, aabb.Max, 1e-3f);
         }
 
         /// <summary>

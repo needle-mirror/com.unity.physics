@@ -357,6 +357,7 @@ namespace Unity.Physics
                         break;
                     }
                 case ColliderType.Box:
+                case ColliderType.Cylinder:
                 case ColliderType.Convex:
                     hadHit = RayConvex(input.Ray.Origin, input.Ray.Direction, ref ((ConvexCollider*)collider)->ConvexHull, ref fraction, out normal);
                     break;

@@ -6,7 +6,7 @@
         "Unity.Entities.Hybrid",
         "Unity.Mathematics",
         "Unity.Physics",
-        "Unity.Physics.Authoring",
+        "Unity.Physics.Hybrid",
         "Unity.Rendering.Hybrid",
         "Unity.Transforms",
         "Unity.Transforms.Hybrid"

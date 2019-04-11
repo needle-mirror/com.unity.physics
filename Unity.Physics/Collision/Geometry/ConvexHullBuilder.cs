@@ -21,6 +21,7 @@ namespace Unity.Physics
         public int Dimension { get; private set; }
         public int NumFaces { get; private set; }
         public int NumFaceVertices { get; private set; }
+        public Plane ProjectionPlane { get; private set; }
 
         private IntegerSpace m_IntegerSpace;
         private Aabb m_IntegerSpaceAabb;
@@ -207,6 +208,7 @@ namespace Unity.Physics
             m_NextUid = 1;
             m_IntegerSpaceAabb = Aabb.Empty;
             m_IntegerSpace = new IntegerSpace();
+            ProjectionPlane = new Plane(new float3(0), 0);
         }
 
         /// <summary>
@@ -219,6 +221,7 @@ namespace Unity.Physics
             Dimension = -1;
             NumFaces = 0;
             NumFaceVertices = 0;
+            ProjectionPlane = new Plane(new float3(0), 0);
             m_NextUid = 1;
             m_IntegerSpaceAabb = Aabb.Empty;
             m_IntegerSpace = new IntegerSpace();
@@ -234,6 +237,7 @@ namespace Unity.Physics
             Dimension = other.Dimension;
             NumFaces = other.NumFaces;
             NumFaceVertices = other.NumFaceVertices;
+            ProjectionPlane = other.ProjectionPlane;
             m_IntegerSpaceAabb = other.m_IntegerSpaceAabb;
             m_IntegerSpace = other.m_IntegerSpace;
             m_NextUid = other.m_NextUid;
@@ -254,15 +258,19 @@ namespace Unity.Physics
         /// <summary>
         /// Reset the convex hull.
         /// </summary>
-        public void Reset()
+        public void Reset(bool keepIntegerSpaceAabb = false)
         {
             Vertices.Clear();
             Triangles.Clear();
             Dimension = -1;
             NumFaces = 0;
             NumFaceVertices = 0;
-            m_IntegerSpaceAabb = Aabb.Empty;
-            m_IntegerSpace = new IntegerSpace();
+            ProjectionPlane = new Plane(new float3(0), 0);
+            if (!keepIntegerSpaceAabb)
+            {
+                m_IntegerSpaceAabb = Aabb.Empty;
+                m_IntegerSpace = new IntegerSpace();
+            }
         }
 
         /// <summary>
@@ -271,11 +279,10 @@ namespace Unity.Physics
         /// <param name="point">Point to insert.</param>
         /// <param name="userData">User data attached to the new vertex if insertion succeeds.</param>        
         /// <returns>true if the insertion succeeded, false otherwise.</returns>
-        public unsafe bool AddPoint(float3 point, uint userData = 0, bool project = false)
+        public unsafe bool AddPoint(float3 point, uint userData = 0)
         {
             // Acceptance tolerances
             const float minDistanceFromPoint = 1e-5f;   // for dimension = 1
-            const float minVolumeOfTriangle = 1e-6f;    // for dimension = 2
 
             // Reset faces.
             NumFaces = 0;
@@ -312,7 +319,6 @@ namespace Unity.Physics
                 // 0 dimensional hull, make a line.
                 case 0:
                 {
-                    if (project) return false;
                     if (math.lengthsq(Vertices[0].Position - point) <= minDistanceFromPoint) return false;
                     AllocateVertex(point, userData);
                     Dimension = 1;
@@ -322,10 +328,10 @@ namespace Unity.Physics
                 // 1 dimensional hull, make a triangle.
                 case 1:
                 {
-                    float3 delta = Vertices[1].Position - Vertices[0].Position;
-                    if (project || math.lengthsq(math.cross(delta, point - Vertices[0].Position)) < minVolumeOfTriangle)
+                    if (IsTriangleAreaZero(Vertices[0].IntPosition, Vertices[1].IntPosition, intPoint))
                     {
                         // Extend the line.
+                        var delta = Vertices[1].Position - Vertices[0].Position;
                         float3 diff = point - Vertices[0].Position;
                         float dot = math.dot(diff, delta);
                         float solution = dot * math.rcp(math.lengthsq(delta));
@@ -352,6 +358,7 @@ namespace Unity.Physics
                         // Extend dimension.
                         AllocateVertex(point, userData);
                         Dimension = 2;
+                        ProjectionPlane = ComputePlane(0, 1, 2, true);
                     }
                 }
                 break;
@@ -359,22 +366,14 @@ namespace Unity.Physics
                 // 2 dimensional hull, make a volume or expand face.
                 case 2:
                 {
-                    long det = project ? 0 : Det64(0, 1, 2, intPoint);
+                    long det = Det64(0, 1, 2, intPoint);
                     if (det == 0)
                     {
-                        // Grow.
-                        Plane projectionPlane = ComputeProjectionPlane();
-                        if (project)
-                        {
-                            point -= projectionPlane.Normal * Dotxyz1(projectionPlane, point);
-                            intPoint = m_IntegerSpace.ToIntegerSpace(point);
-                        }
-
                         bool* isOutside = stackalloc bool[Vertices.PeakCount];
                         bool isOutsideAny = false;
                         for (int i = Vertices.PeakCount - 1, j = 0; j < Vertices.PeakCount; i = j++)
                         {
-                            float sign = math.dot(projectionPlane.Normal, math.cross(Vertices[j].Position - point, Vertices[i].Position - point));
+                            float sign = math.dot(ProjectionPlane.Normal, math.cross(Vertices[j].Position - point, Vertices[i].Position - point));
                             isOutsideAny |= isOutside[i] = sign > 0;
                         }
                         if (isOutsideAny)
@@ -404,6 +403,7 @@ namespace Unity.Physics
                     else
                     {
                         // Extend dimension.
+                        ProjectionPlane = new Plane(new float3(0), 0);
 
                         // Orient tetrahedron.
                         if (det > 0)
@@ -636,93 +636,134 @@ namespace Unity.Physics
                     break;
 
                 case 3:
+                {
+                    var sortedTriangles = new List<int>();
+                    var triangleAreas = new float[Triangles.PeakCount];
+                    foreach (int triangleIndex in Triangles.Indices)
                     {
-                        var sortedTriangles = new List<int>();
-                        var triangleAreas = new float[Triangles.PeakCount];
-                        foreach (int triangleIndex in Triangles.Indices)
-                        {
-                            Triangle t = Triangles[triangleIndex];
-                            float3 o = Vertices[t.Vertex0].Position;
-                            float3 a = Vertices[t.Vertex1].Position - o;
-                            float3 b = Vertices[t.Vertex2].Position - o;
-                            triangleAreas[triangleIndex] = math.lengthsq(math.cross(a, b));
-                            t.FaceIndex = -1;
-                            Triangles[triangleIndex] = t;
-                            sortedTriangles.Add(triangleIndex);
-                        }
-
-                        sortedTriangles.Sort((a, b) => triangleAreas[b].CompareTo(triangleAreas[a]));
-
-                        var boundaryEdges = new List<Edge>();
-                        foreach (int triangleIndex in sortedTriangles)
-                        {
-                            if (Triangles[triangleIndex].FaceIndex != -1)
-                            {
-                                continue;
-                            }
-                            int newFaceIndex = NumFaces++;
-                            float3 normal = ComputePlane(triangleIndex).Normal;
-                            Triangle t = Triangles[triangleIndex]; t.FaceIndex = newFaceIndex; Triangles[triangleIndex] = t;
-
-                            boundaryEdges.Clear();
-                            boundaryEdges.Add(new Edge(triangleIndex, 0));
-                            boundaryEdges.Add(new Edge(triangleIndex, 1));
-                            boundaryEdges.Add(new Edge(triangleIndex, 2));
-
-                            while (true)
-                            {
-                                int openBoundaryEdgeIndex = -1;
-                                float maxArea = -1;
-
-                                for (int i = 0; i < boundaryEdges.Count; ++i)
-                                {
-                                    Edge edge = boundaryEdges[i];
-                                    Edge linkedEdge = GetLinkedEdge(edge);
-
-                                    int linkedTriangleIndex = linkedEdge.TriangleIndex;
-
-                                    if (Triangles[linkedTriangleIndex].FaceIndex != -1) continue;
-                                    if (triangleAreas[linkedTriangleIndex] <= maxArea) continue;
-                                    if (math.dot(normal, ComputePlane(linkedTriangleIndex).Normal) < maxCosAngle) continue;
-
-                                    int apex = ApexVertex(linkedEdge);
-                                    Plane p0 = PlaneFromTwoEdges(Vertices[apex].Position, Vertices[apex].Position - Vertices[StartVertex(edge)].Position, normal);
-                                    Plane p1 = PlaneFromTwoEdges(Vertices[apex].Position, Vertices[EndVertex(edge)].Position - Vertices[apex].Position, normal);
-
-                                    var accept = true;
-                                    for (int j = 1; accept && j < (boundaryEdges.Count - 1); ++j)
-                                    {
-                                        float3 x = Vertices[EndVertex(boundaryEdges[(i + j) % boundaryEdges.Count])].Position;
-                                        float d = math.max(Dotxyz1(p0, x), Dotxyz1(p1, x));
-                                        accept &= d < convexEps;
-                                    }
-
-                                    if (accept)
-                                    {
-                                        openBoundaryEdgeIndex = i;
-                                        maxArea = triangleAreas[linkedTriangleIndex];
-                                    }
-                                }
-
-                                if (openBoundaryEdgeIndex != -1)
-                                {
-                                    Edge linkedEdge = GetLinkedEdge(boundaryEdges[openBoundaryEdgeIndex]);
-                                    boundaryEdges[openBoundaryEdgeIndex] = linkedEdge.Prev;
-                                    boundaryEdges.Insert(openBoundaryEdgeIndex, linkedEdge.Next);
-
-                                    Triangle tri = Triangles[linkedEdge.TriangleIndex];
-                                    tri.FaceIndex = newFaceIndex;
-                                    Triangles[linkedEdge.TriangleIndex] = tri;
-                                }
-                                else
-                                {
-                                    break;
-                                }
-                            }
-                            NumFaceVertices += boundaryEdges.Count;
-                        }
+                        Triangle t = Triangles[triangleIndex];
+                        float3 o = Vertices[t.Vertex0].Position;
+                        float3 a = Vertices[t.Vertex1].Position - o;
+                        float3 b = Vertices[t.Vertex2].Position - o;
+                        triangleAreas[triangleIndex] = math.lengthsq(math.cross(a, b));
+                        t.FaceIndex = -1;
+                        Triangles[triangleIndex] = t;
+                        sortedTriangles.Add(triangleIndex);
                     }
-                    break;
+
+                    sortedTriangles.Sort((a, b) => triangleAreas[b].CompareTo(triangleAreas[a]));
+
+                    var boundaryEdges = new List<Edge>();
+                    foreach (int triangleIndex in sortedTriangles)
+                    {
+                        if (Triangles[triangleIndex].FaceIndex != -1)
+                        {
+                            continue;
+                        }
+                        int newFaceIndex = NumFaces++;
+                        float3 normal = ComputePlane(triangleIndex).Normal;
+                        Triangle t = Triangles[triangleIndex]; t.FaceIndex = newFaceIndex; Triangles[triangleIndex] = t;
+
+                        boundaryEdges.Clear();
+                        boundaryEdges.Add(new Edge(triangleIndex, 0));
+                        boundaryEdges.Add(new Edge(triangleIndex, 1));
+                        boundaryEdges.Add(new Edge(triangleIndex, 2));
+
+                        while (true)
+                        {
+                            int openBoundaryEdgeIndex = -1;
+                            float maxArea = -1;
+
+                            for (int i = 0; i < boundaryEdges.Count; ++i)
+                            {
+                                Edge edge = boundaryEdges[i];
+                                Edge linkedEdge = GetLinkedEdge(edge);
+
+                                int linkedTriangleIndex = linkedEdge.TriangleIndex;
+
+                                if (Triangles[linkedTriangleIndex].FaceIndex != -1) continue;
+                                if (triangleAreas[linkedTriangleIndex] <= maxArea) continue;
+                                if (math.dot(normal, ComputePlane(linkedTriangleIndex).Normal) < maxCosAngle) continue;
+
+                                int apex = ApexVertex(linkedEdge);
+                                Plane p0 = PlaneFromTwoEdges(Vertices[apex].Position, Vertices[apex].Position - Vertices[StartVertex(edge)].Position, normal);
+                                Plane p1 = PlaneFromTwoEdges(Vertices[apex].Position, Vertices[EndVertex(edge)].Position - Vertices[apex].Position, normal);
+
+                                var accept = true;
+                                for (int j = 1; accept && j < (boundaryEdges.Count - 1); ++j)
+                                {
+                                    float3 x = Vertices[EndVertex(boundaryEdges[(i + j) % boundaryEdges.Count])].Position;
+                                    float d = math.max(Dotxyz1(p0, x), Dotxyz1(p1, x));
+                                    accept &= d < convexEps;
+                                }
+
+                                if (accept)
+                                {
+                                    openBoundaryEdgeIndex = i;
+                                    maxArea = triangleAreas[linkedTriangleIndex];
+                                }
+                            }
+
+                            if (openBoundaryEdgeIndex != -1)
+                            {
+                                Edge linkedEdge = GetLinkedEdge(boundaryEdges[openBoundaryEdgeIndex]);
+                                boundaryEdges[openBoundaryEdgeIndex] = linkedEdge.Prev;
+                                boundaryEdges.Insert(openBoundaryEdgeIndex, linkedEdge.Next);
+
+                                Triangle tri = Triangles[linkedEdge.TriangleIndex];
+                                tri.FaceIndex = newFaceIndex;
+                                Triangles[linkedEdge.TriangleIndex] = tri;
+                            }
+                            else
+                            {
+                                break;
+                            }
+                        }
+                        NumFaceVertices += boundaryEdges.Count;
+                    }
+                }
+                break;
+            }
+        }
+
+        /// <summary>
+        /// Remove redundant (colinear, coplanar) vertices from a 3D convex hull.        
+        /// </summary>
+        /// <param name="minCosAngle">Assume that edges that form a angle smaller than this value are flat</param>
+        [BurstDiscard]
+        public unsafe void RemoveRedundantVertices(float minCosAngle = 0.999f)
+        {
+            var newVertices = new List<Vertex>();
+            for (bool remove = true; remove;)
+            {
+                remove = false;
+                if (Dimension != 3) return;
+
+                for (var primaryEdge = GetFirstPrimaryEdge(); primaryEdge.IsValid; primaryEdge = GetNextPrimaryEdge(primaryEdge))
+                {
+                    var edge = primaryEdge;
+                    int cardinality = 0;
+                    do
+                    {
+                        // Increment cardinality if planes on both side of the edge form an angle greater than acos(minCosAngle).
+                        var plane0 = ComputePlane(edge.TriangleIndex);
+                        var plane1 = ComputePlane(GetLinkedEdge(edge).TriangleIndex);
+                        if (math.dot(plane0.Normal, plane1.Normal) < minCosAngle) cardinality++;
+
+                        // Turn clockwise around the primary edge start vertex.
+                        edge = GetLinkedEdge(edge.Prev);
+                    } while (edge.Value != primaryEdge.Value);
+
+                    // Only add vertices with cardinality greater or equal to 3.
+                    if (cardinality >= 3)
+                        newVertices.Add(Vertices[StartVertex(primaryEdge)]);
+                    else
+                        remove = true;
+                }
+
+                Reset(true);
+                foreach (var vertex in newVertices) AddPoint(vertex.Position, vertex.UserData);
+                newVertices.Clear();
             }
         }
 
@@ -733,25 +774,25 @@ namespace Unity.Physics
         /// <param name="minVertices"></param>
         /// <param name="volumeConservation"></param>
         [BurstDiscard]
-        public unsafe int SimplifyVertices(float maxError, int minVertices = 0, float volumeConservation = 1)
+        public unsafe void SimplifyVertices(float maxError, int minVertices = 0, float volumeConservation = 1)
         {
             // Ensure that parameters are valid.
             maxError = math.max(0, maxError);
-            minVertices = math.max(0, minVertices);
+            minVertices = math.max(Dimension + 1, minVertices);
             volumeConservation = math.clamp(volumeConservation, 0, 1);
 
-            // Allocate new points.
-            var totalVerticesRemoved = 0;
+            // Remove colinear and coplanar vertices first.
+            RemoveRedundantVertices();
+
+            // Keep collapsing edges until no changes are possible.            
             int numVertices = Vertices.PeakCount;
             var newPoints = new List<EdgeCollapse>();
-
-            // Keep simplifying until no changes are possible.
             while (true)
             {
                 // 2D hull.
                 if (Dimension == 2 && Vertices.PeakCount > 3)
                 {
-                    Plane projectionPlane = ComputeProjectionPlane();
+                    Plane projectionPlane = ProjectionPlane;
 
                     Plane* edgePlanes = stackalloc Plane[Vertices.PeakCount];
                     for (int n = Vertices.PeakCount, i = n - 1, j = 0; j < n; i = j++)
@@ -778,6 +819,7 @@ namespace Unity.Physics
                 {
                     var perVertexPlanes = new float4[Vertices.PeakCount];
 
+                    // Compute angle-weighted normals per vertex and store it in 'perVertexPlanes'.
                     foreach (int triangleIndex in Triangles.Indices)
                     {
                         Triangle t = Triangles[triangleIndex];
@@ -876,7 +918,7 @@ namespace Unity.Physics
                     }
 
                     // Rebuild convex hull.
-                    Reset();
+                    Reset(keepIntegerSpaceAabb: true);
                     for (int i = 0; i < newPoints.Count; ++i)
                     {
                         if (newPoints[i].Data.w > 0)
@@ -884,21 +926,242 @@ namespace Unity.Physics
                             AddPoint(newPoints[i].Data.xyz, (uint)i);
                         }
                     }
+                    RemoveRedundantVertices();
                 }
 
                 if (verticesRemoved > 0)
                 {
                     newPoints.Clear();
                     numVertices = Vertices.PeakCount;
-                    totalVerticesRemoved += verticesRemoved;
                 }
                 else
                 {
                     break;
                 }
             }
+        }
 
-            return totalVerticesRemoved;
+        /// <summary>
+        /// Simplify faces.
+        /// </summary>
+        /// <param name="minError">Stop refining when the error is below this number (unit: distance)</param>
+        /// <param name="maxFaces">Maximum number of faces allowed.</param>
+        /// <param name="maxVertices">Maximum number of vertices allowed</param>
+        /// <param name="minAngle">Do not generate face that form an angle smaller than this value with its neighbors (unit: angle in radian)</param>
+        [BurstDiscard]
+        public void SimplifyFaces(float minError, int maxFaces = int.MaxValue, int maxVertices = int.MaxValue, float minAngle = 0)
+        {
+            // This method is only working on 3D convex hulls.
+            Assert.IsTrue(Dimension == 3);
+
+            RemoveRedundantVertices();
+            BuildFaceIndices();
+
+            maxFaces = math.clamp(maxFaces, 6, NumFaces);
+            minError = math.max(0, minError);
+
+            float cosAngle = math.clamp(math.cos(minAngle), 0, 1);
+            var planes = new List<Plane>();
+
+            foreach (int triangleIndex in Triangles.Indices)
+            {
+                planes.Add(ComputePlane(triangleIndex));
+            }
+
+            Aabb actualAabb = ComputeAabb();
+
+            Reset(true);
+            AddPoint(math.select(actualAabb.Min, actualAabb.Max, new bool3(false, false, false)));
+            AddPoint(math.select(actualAabb.Min, actualAabb.Max, new bool3(true, false, false)));
+            AddPoint(math.select(actualAabb.Min, actualAabb.Max, new bool3(true, true, false)));
+            AddPoint(math.select(actualAabb.Min, actualAabb.Max, new bool3(false, true, false)));
+            AddPoint(math.select(actualAabb.Min, actualAabb.Max, new bool3(false, false, true)));
+            AddPoint(math.select(actualAabb.Min, actualAabb.Max, new bool3(true, false, true)));
+            AddPoint(math.select(actualAabb.Min, actualAabb.Max, new bool3(true, true, true)));
+            AddPoint(math.select(actualAabb.Min, actualAabb.Max, new bool3(false, true, true)));
+
+            BuildFaceIndices();
+
+            while (NumFaces <= maxFaces && Vertices.PeakCount <= maxVertices && planes.Count > 0)
+            {
+                float maxd = 0;
+                int bestPlane = -1;
+
+                float3[] normals = null;
+                if (cosAngle < 1)
+                {
+                    normals = new float3[Triangles.PeakCount];
+                    foreach (int triangleIndex in Triangles.Indices)
+                    {
+                        normals[triangleIndex] = ComputePlane(triangleIndex).Normal;
+                    }
+                }
+
+                for (int i = 0; i < planes.Count; ++i)
+                {
+                    float d = Dotxyz1(planes[i], Vertices[ComputeSupportingVertex(planes[i].Normal)].Position);
+                    if (d > maxd)
+                    {
+                        if (normals != null)
+                        {
+                            bool isAngleOk = true;
+                            foreach (int triangleIndex in Triangles.Indices)
+                            {
+                                if (math.dot(normals[triangleIndex], planes[i].Normal) > cosAngle)
+                                {
+                                    isAngleOk = false;
+                                    break;
+                                }
+                            }
+                            if (!isAngleOk)
+                            {
+                                continue;
+                            }
+                        }
+                        bestPlane = i;
+                        maxd = d;
+                    }
+                }
+
+                if (bestPlane == -1) break;
+                if (maxd <= minError) break;
+
+                ConvexHullBuilder negHull, posHull;
+                SplitByPlane(planes[bestPlane], out negHull, out posHull);
+                planes.RemoveAt(bestPlane);
+                if (negHull.Dimension == 3)
+                {
+                    negHull.RemoveRedundantVertices();
+                    negHull.BuildFaceIndices();
+                    if (negHull.NumFaces <= maxFaces && negHull.Vertices.PeakCount <= maxVertices)
+                    {
+                        CopyFrom(negHull);
+                    }
+                }
+                posHull.Dispose();
+                negHull.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// Offset vertices with respect to the surface by a given amount while minimizing distortions.
+        /// </summary>
+        /// <param name="surfaceOffset">a positive value will move vertices outward while a negative value will push them toward the inside</param>
+        /// <param name="minRadius">Prevent vertices to be shrunk too much</param>
+        [BurstDiscard]
+        public void OffsetVertices(float surfaceOffset, float minRadius = 0)
+        {
+            minRadius = math.abs(minRadius);
+
+            // This method is only working on 3D convex hulls.
+            Assert.IsTrue(Dimension == 3);
+
+            float3 com = ComputeMassProperties().CenterOfMass;
+            Vertex[] newVertices = new Vertex[Vertices.PeakCount];
+            int numVertices = 0;
+            foreach (int vertexIndex in Vertices.Indices)
+            {
+                Edge edge = GetVertexEdge(vertexIndex);
+                float3 normal = ComputeVertexNormal(edge);
+                float offset = surfaceOffset;
+                float3 position = Vertices[vertexIndex].Position;
+                if (surfaceOffset < 0)
+                {
+                    // Clip offset to prevent flipping.
+                    var plane = new float4(normal, -math.dot(com, normal) - minRadius);
+                    offset = math.max(-Dotxyz1(plane, position), offset);
+                }
+                newVertices[numVertices++] = new Vertex
+                {
+                    Position = position + normal * offset,
+                    UserData = Vertices[vertexIndex].UserData
+                };
+            }
+
+            Reset(true);
+            for (int i = 0; i < numVertices; ++i)
+            {
+                AddPoint(newVertices[i].Position, newVertices[i].UserData);
+            }
+        }
+
+        /// <summary>
+        /// Split this convex hull by a plane.
+        /// </summary>
+        [BurstDiscard]
+        public void SplitByPlane(Plane plane, out ConvexHullBuilder negHull, out ConvexHullBuilder posHull, uint isecUserData = 0)
+        {
+            negHull = new ConvexHullBuilder(Vertices.PeakCount * 2, Vertices.PeakCount * 4);
+            posHull = new ConvexHullBuilder(Vertices.PeakCount * 2, Vertices.PeakCount * 4);
+            negHull.IntegerSpaceAabb = IntegerSpaceAabb;
+            posHull.IntegerSpaceAabb = IntegerSpaceAabb;
+
+            // Compute vertices signed distance to plane and add them to the hull they belong too.
+            const float minD2P = 1e-6f;
+            var perVertexD2P = new float[Vertices.PeakCount];
+            foreach (int i in Vertices.Indices)
+            {
+                float3 position = Vertices[i].Position;
+                perVertexD2P[i] = Dotxyz1(plane, position);
+                if (math.abs(perVertexD2P[i]) <= minD2P) perVertexD2P[i] = 0;
+                if (perVertexD2P[i] <= 0) negHull.AddPoint(position, Vertices[i].UserData);
+                if (perVertexD2P[i] >= 0) posHull.AddPoint(position, Vertices[i].UserData);
+            }
+
+            // Add intersecting vertices.
+            switch (Dimension)
+            {
+                case 1:
+                {
+                    if ((perVertexD2P[0] * perVertexD2P[1]) < 0)
+                    {
+                        float sol = perVertexD2P[0] / (perVertexD2P[0] - perVertexD2P[1]);
+                        float3 isec = Vertices[0].Position + (Vertices[1].Position - Vertices[0].Position) * sol;
+                        negHull.AddPoint(isec, isecUserData);
+                        posHull.AddPoint(isec, isecUserData);
+                    }
+                }
+                break;
+                case 2:
+                {
+                    for (int n = Vertices.PeakCount, i = n - 1, j = 0; j < n; i = j++)
+                    {
+                        if ((perVertexD2P[i] * perVertexD2P[j]) < 0)
+                        {
+                            float sol = perVertexD2P[i] / (perVertexD2P[i] - perVertexD2P[j]);
+                            float3 isec = Vertices[i].Position + (Vertices[j].Position - Vertices[i].Position) * sol;
+                            negHull.AddPoint(isec, isecUserData);
+                            posHull.AddPoint(isec, isecUserData);
+                        }
+                    }
+                }
+                break;
+                case 3:
+                {
+                    var edges = new List<EdgeCollapse>();
+                    for (var edge = GetFirstPrimaryEdge(); edge.IsValid; edge = GetNextPrimaryEdge(edge))
+                    {
+                        float d = math.dot(ComputePlane(edge.TriangleIndex).Normal, ComputePlane(GetLinkedEdge(edge).TriangleIndex).Normal);
+                        edges.Add(new EdgeCollapse { StartVertex = StartVertex(edge), EndVertex = EndVertex(edge), Data = new float4(d) });
+                    }
+
+                    // Insert sharpest edge intersection first to improve quality.
+                    edges.Sort((a, b) => a.Data.x.CompareTo(b.Data.x));
+
+                    foreach (var edge in edges)
+                    {
+                        int i = edge.StartVertex, j = edge.EndVertex;
+                        if ((perVertexD2P[i] * perVertexD2P[j]) < 0)
+                        {
+                            float sol = perVertexD2P[i] / (perVertexD2P[i] - perVertexD2P[j]);
+                            float3 isec = Vertices[i].Position + (Vertices[j].Position - Vertices[i].Position) * sol;
+                            negHull.AddPoint(isec, isecUserData);
+                            posHull.AddPoint(isec, isecUserData);
+                        }
+                    }
+                }
+                break;
+            }
         }
 
         private int AllocateVertex(float3 point, uint userData)
@@ -1141,7 +1404,7 @@ namespace Unity.Physics
             switch (Dimension)
             {
                 case 2:
-                    n = ComputeProjectionPlane().Normal;
+                    n = ProjectionPlane.Normal;
                     break;
 
                 case 3:
@@ -1224,65 +1487,65 @@ namespace Unity.Physics
                     mp.CenterOfMass = (Vertices[0].Position + Vertices[1].Position) * 0.5f;
                     break;
                 case 2:
+                {
+                    float3 offset = ComputeCentroid();
+                    for (int n = Vertices.PeakCount, i = n - 1, j = 0; j < n; i = j++)
                     {
-                        float3 offset = ComputeCentroid();
-                        for (int n = Vertices.PeakCount, i = n - 1, j = 0; j < n; i = j++)
-                        {
-                            float w = math.length(math.cross(Vertices[i].Position - offset, Vertices[j].Position - offset));
-                            mp.CenterOfMass += (Vertices[i].Position + Vertices[j].Position + offset) * w;
-                            mp.SurfaceArea += w;
-                        }
-                        mp.CenterOfMass /= mp.SurfaceArea * 3;
-                        mp.InertiaTensor = float3x3.identity; // <todo>
-                        mp.SurfaceArea *= 0.5f;
+                        float w = math.length(math.cross(Vertices[i].Position - offset, Vertices[j].Position - offset));
+                        mp.CenterOfMass += (Vertices[i].Position + Vertices[j].Position + offset) * w;
+                        mp.SurfaceArea += w;
                     }
-                    break;
+                    mp.CenterOfMass /= mp.SurfaceArea * 3;
+                    mp.InertiaTensor = float3x3.identity; // <todo>
+                    mp.SurfaceArea *= 0.5f;
+                }
+                break;
                 case 3:
+                {
+                    float3 offset = ComputeCentroid();
+                    int numTriangles = 0;
+                    float* dets = stackalloc float[Triangles.Capacity];
+                    foreach (int i in Triangles.Indices)
                     {
-                        float3 offset = ComputeCentroid();
-                        int numTriangles = 0;
-                        float* dets = stackalloc float[Triangles.Capacity];
-                        foreach (int i in Triangles.Indices)
-                        {
-                            float3 v0 = Vertices[Triangles[i].Vertex0].Position - offset;
-                            float3 v1 = Vertices[Triangles[i].Vertex1].Position - offset;
-                            float3 v2 = Vertices[Triangles[i].Vertex2].Position - offset;
-                            float w = Det(v0, v1, v2);
-                            mp.CenterOfMass += (v0 + v1 + v2) * w;
-                            mp.Volume += w;
-                            mp.SurfaceArea += math.length(math.cross(v1 - v0, v2 - v0));
-                            dets[i] = w;
-                            numTriangles++;
-                        }
-
-                        mp.CenterOfMass = mp.CenterOfMass / (mp.Volume * 4) + offset;
-
-                        var diag = new float3(0);
-                        var offd = new float3(0);
-
-                        foreach (int i in Triangles.Indices)
-                        {
-                            float3 v0 = Vertices[Triangles[i].Vertex0].Position - mp.CenterOfMass;
-                            float3 v1 = Vertices[Triangles[i].Vertex1].Position - mp.CenterOfMass;
-                            float3 v2 = Vertices[Triangles[i].Vertex2].Position - mp.CenterOfMass;
-                            diag += (v0 * v1 + v1 * v2 + v2 * v0 + v0 * v0 + v1 * v1 + v2 * v2) * dets[i];
-                            offd += (v0.yzx * v1.zxy + v1.yzx * v2.zxy + v2.yzx * v0.zxy +
-                                    v0.yzx * v2.zxy + v1.yzx * v0.zxy + v2.yzx * v1.zxy +
-                                    (v0.yzx * v0.zxy + v1.yzx * v1.zxy + v2.yzx * v2.zxy) * 2) * dets[i];
-                            numTriangles++;
-                        }
-
-                        diag /= mp.Volume * (60 / 6);
-                        offd /= mp.Volume * (120 / 6);
-
-                        mp.InertiaTensor.c0 = new float3(diag.y + diag.z, -offd.z, -offd.y);
-                        mp.InertiaTensor.c1 = new float3(-offd.z, diag.x + diag.z, -offd.x);
-                        mp.InertiaTensor.c2 = new float3(-offd.y, -offd.x, diag.x + diag.y);
-
-                        mp.SurfaceArea /= 2;
-                        mp.Volume /= 6;
+                        float3 v0 = Vertices[Triangles[i].Vertex0].Position - offset;
+                        float3 v1 = Vertices[Triangles[i].Vertex1].Position - offset;
+                        float3 v2 = Vertices[Triangles[i].Vertex2].Position - offset;
+                        float w = Det(v0, v1, v2);
+                        mp.CenterOfMass += (v0 + v1 + v2) * w;
+                        mp.Volume += w;
+                        mp.SurfaceArea += math.length(math.cross(v1 - v0, v2 - v0));
+                        dets[i] = w;
+                        numTriangles++;
                     }
-                    break;
+
+                    mp.CenterOfMass = mp.CenterOfMass / (mp.Volume * 4) + offset;
+
+                    var diag = new float3(0);
+                    var offd = new float3(0);
+
+                    foreach (int i in Triangles.Indices)
+                    {
+                        float3 v0 = Vertices[Triangles[i].Vertex0].Position - mp.CenterOfMass;
+                        float3 v1 = Vertices[Triangles[i].Vertex1].Position - mp.CenterOfMass;
+                        float3 v2 = Vertices[Triangles[i].Vertex2].Position - mp.CenterOfMass;
+                        diag += (v0 * v1 + v1 * v2 + v2 * v0 + v0 * v0 + v1 * v1 + v2 * v2) * dets[i];
+                        offd += (v0.yzx * v1.zxy + v1.yzx * v2.zxy + v2.yzx * v0.zxy +
+                                v0.yzx * v2.zxy + v1.yzx * v0.zxy + v2.yzx * v1.zxy +
+                                (v0.yzx * v0.zxy + v1.yzx * v1.zxy + v2.yzx * v2.zxy) * 2) * dets[i];
+                        numTriangles++;
+                    }
+
+                    diag /= mp.Volume * (60 / 6);
+                    offd /= mp.Volume * (120 / 6);
+
+                    mp.InertiaTensor.c0 = new float3(diag.y + diag.z, -offd.z, -offd.y);
+                    mp.InertiaTensor.c1 = new float3(-offd.z, diag.x + diag.z, -offd.x);
+                    mp.InertiaTensor.c2 = new float3(-offd.y, -offd.x, diag.x + diag.y);
+
+                    mp.SurfaceArea /= 2;
+                    mp.Volume /= 6;
+                }
+                break;
             }
 
             return mp;
@@ -1314,14 +1577,6 @@ namespace Unity.Physics
             return ComputePlane(Triangles[triangleIndex].Vertex0, Triangles[triangleIndex].Vertex1, Triangles[triangleIndex].Vertex2, fromIntCoordinates);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public Plane ComputeProjectionPlane()
-        {
-            if (Dimension == 2)
-                return ComputePlane(0, 1, 2, true);
-            return new Plane();
-        }
-
         #endregion
 
         #region Helpers
@@ -1348,6 +1603,15 @@ namespace Unity.Physics
             return Det64(Vertices[a].IntPosition, Vertices[b].IntPosition, Vertices[c].IntPosition, d);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private bool IsTriangleAreaZero(int3 a, int3 b, int3 c)
+        {
+            long x0 = a.x - b.x, y0 = a.y - b.y, z0 = a.z - b.z;
+            long x1 = a.x - c.x, y1 = a.y - c.y, z1 = a.z - c.z;
+            long cx = x1 * y0 - x0 * y1, cy = x1 * z0 - x0 * z1, cz = y1 * z0 - y0 * z1;
+            return cx == 0 && cy == 0 && cz == 0;
+        }
+
         #endregion
     }
 
@@ -1355,183 +1619,6 @@ namespace Unity.Physics
     // Extensions, not part of the core functionality (yet)
     public static class ConvexHullBuilderExtensions
     {
-        /// <summary>
-        /// Simplify faces.
-        /// </summary>
-        [BurstDiscard]
-        public static int SimplifyFaces(this ConvexHullBuilder builder, int maxFaces, float minError, float minAngle)
-        {
-            // This method is only working on 3D convex hulls.
-            Assert.IsTrue(builder.Dimension == 3);
-
-            builder.BuildFaceIndices();
-
-            maxFaces = math.max(6, maxFaces < 0 ? builder.NumFaces : maxFaces);
-            minError = math.max(0, minError);
-
-            float cosAngle = math.clamp(math.cos(minAngle), 0, 1);
-            var planes = new List<Plane>();
-
-            foreach (int triangleIndex in builder.Triangles.Indices)
-            {
-                planes.Add(builder.ComputePlane(triangleIndex));
-            }
-
-            Aabb actualAabb = builder.ComputeAabb();
-
-            builder.Reset();
-            builder.AddPoint(math.select(actualAabb.Min, actualAabb.Max, new bool3(false, false, false)));
-            builder.AddPoint(math.select(actualAabb.Min, actualAabb.Max, new bool3(true, false, false)));
-            builder.AddPoint(math.select(actualAabb.Min, actualAabb.Max, new bool3(true, true, false)));
-            builder.AddPoint(math.select(actualAabb.Min, actualAabb.Max, new bool3(false, true, false)));
-            builder.AddPoint(math.select(actualAabb.Min, actualAabb.Max, new bool3(false, false, true)));
-            builder.AddPoint(math.select(actualAabb.Min, actualAabb.Max, new bool3(true, false, true)));
-            builder.AddPoint(math.select(actualAabb.Min, actualAabb.Max, new bool3(true, true, true)));
-            builder.AddPoint(math.select(actualAabb.Min, actualAabb.Max, new bool3(false, true, true)));
-
-            builder.BuildFaceIndices();
-
-            while (builder.NumFaces < maxFaces && planes.Count > 0)
-            {
-                float maxd = 0;
-                int bestPlane = -1;
-
-                float3[] normals = null;
-                if (cosAngle < 1)
-                {
-                    normals = new float3[builder.Triangles.PeakCount];
-                    foreach (int triangleIndex in builder.Triangles.Indices)
-                    {
-                        normals[triangleIndex] = builder.ComputePlane(triangleIndex).Normal;
-                    }
-                }
-
-                for (int i = 0; i < planes.Count; ++i)
-                {
-                    float d = Dotxyz1(planes[i], builder.Vertices[builder.ComputeSupportingVertex(planes[i].Normal)].Position);
-                    if (d > maxd)
-                    {
-                        if (normals != null)
-                        {
-                            bool isAngleOk = true;
-                            foreach (int triangleIndex in builder.Triangles.Indices)
-                            {
-                                if (math.dot(normals[triangleIndex], planes[i].Normal) > cosAngle)
-                                {
-                                    isAngleOk = false;
-                                    break;
-                                }
-                            }
-                            if (!isAngleOk)
-                            {
-                                continue;
-                            }
-                        }
-                        bestPlane = i;
-                        maxd = d;
-                    }
-                }
-
-                if (bestPlane == -1) break;
-                if (maxd <= minError) break;
-
-                ConvexHullBuilder negHull, posHull;
-                SplitByPlane(builder, planes[bestPlane], out negHull, out posHull);
-                planes.RemoveAt(bestPlane);
-                if (negHull.Dimension == 3)
-                {
-                    negHull.BuildFaceIndices();
-                    if (negHull.NumFaces <= maxFaces)
-                    {
-                        builder.CopyFrom(negHull);
-                    }
-                }
-                posHull.Dispose();
-                negHull.Dispose();
-            }
-
-            return builder.NumFaces;
-        }
-
-        /// <summary>
-        /// Split this convex hull by a plane.
-        /// </summary>
-        [BurstDiscard]
-        public static void SplitByPlane(this ConvexHullBuilder builder, Plane plane, out ConvexHullBuilder negHull, out ConvexHullBuilder posHull, uint isecUserData = 0)
-        {
-            negHull = new ConvexHullBuilder(builder.Vertices.PeakCount * 2, builder.Vertices.PeakCount * 4);
-            posHull = new ConvexHullBuilder(builder.Vertices.PeakCount * 2, builder.Vertices.PeakCount * 4);
-            negHull.IntegerSpaceAabb = builder.IntegerSpaceAabb;
-            posHull.IntegerSpaceAabb = builder.IntegerSpaceAabb;
-
-            // Compute vertices signed distance to plane and add them to the hull they belong too.
-            const float minD2P = 1e-6f;
-            var perVertexD2P = new float[builder.Vertices.PeakCount];
-            foreach (int i in builder.Vertices.Indices)
-            {
-                float3 position = builder.Vertices[i].Position;
-                perVertexD2P[i] = Dotxyz1(plane, position);
-                if (math.abs(perVertexD2P[i]) <= minD2P) perVertexD2P[i] = 0;
-                if (perVertexD2P[i] <= 0) negHull.AddPoint(position, builder.Vertices[i].UserData);
-                if (perVertexD2P[i] >= 0) posHull.AddPoint(position, builder.Vertices[i].UserData);
-            }
-
-            // Add intersecting vertices.
-            switch (builder.Dimension)
-            {
-                case 1:
-                    {
-                        if ((perVertexD2P[0] * perVertexD2P[1]) < 0)
-                        {
-                            float sol = perVertexD2P[0] / (perVertexD2P[0] - perVertexD2P[1]);
-                            float3 isec = builder.Vertices[0].Position + (builder.Vertices[1].Position - builder.Vertices[0].Position) * sol;
-                            negHull.AddPoint(isec, isecUserData);
-                            posHull.AddPoint(isec, isecUserData);
-                        }
-                    }
-                    break;
-                case 2:
-                    {
-                        for (int n = builder.Vertices.PeakCount, i = n - 1, j = 0; j < n; i = j++)
-                        {
-                            if ((perVertexD2P[i] * perVertexD2P[j]) < 0)
-                            {
-                                float sol = perVertexD2P[i] / (perVertexD2P[i] - perVertexD2P[j]);
-                                float3 isec = builder.Vertices[i].Position + (builder.Vertices[j].Position - builder.Vertices[i].Position) * sol;
-                                negHull.AddPoint(isec, isecUserData);
-                                posHull.AddPoint(isec, isecUserData);
-                            }
-                        }
-                    }
-                    break;
-                case 3:
-                    {
-                        var edges = new List<ConvexHullBuilder.EdgeCollapse>();
-                        for (ConvexHullBuilder.Edge edge = builder.GetFirstPrimaryEdge(); edge.IsValid; edge = builder.GetNextPrimaryEdge(edge))
-                        {
-                            float d = math.dot(builder.ComputePlane(edge.TriangleIndex).Normal, builder.ComputePlane(builder.GetLinkedEdge(edge).TriangleIndex).Normal);
-                            edges.Add(new ConvexHullBuilder.EdgeCollapse { StartVertex = builder.StartVertex(edge), EndVertex = builder.EndVertex(edge), Data = new float4(d) });
-                        }
-
-                        // Insert sharpest edge intersection first to improve quality.
-                        edges.Sort((a, b) => a.Data.x.CompareTo(b.Data.x));
-
-                        foreach (ConvexHullBuilder.EdgeCollapse edge in edges)
-                        {
-                            int i = edge.StartVertex, j = edge.EndVertex;
-                            if ((perVertexD2P[i] * perVertexD2P[j]) < 0)
-                            {
-                                float sol = perVertexD2P[i] / (perVertexD2P[i] - perVertexD2P[j]);
-                                float3 isec = builder.Vertices[i].Position + (builder.Vertices[j].Position - builder.Vertices[i].Position) * sol;
-                                negHull.AddPoint(isec, isecUserData);
-                                posHull.AddPoint(isec, isecUserData);
-                            }
-                        }
-                    }
-                    break;
-            }
-        }
-
         /// <summary>
         /// For 3D convex hulls, vertex indices are not always continuous, this methods compact them.
         /// </summary>
@@ -1564,46 +1651,6 @@ namespace Unity.Physics
                         builder.Triangles[triangleIndex] = t;
                     }
                 }
-            }
-        }
-
-        /// <summary>
-        /// Offset vertices with respect to the surface by a given amount while minimizing distortions.
-        /// </summary>
-        /// <param name="surfaceOffset">a positive value will move vertices outward while a negative value will push them toward the inside</param>
-        /// <param name="minRadius">Prevent vertices to be shrunk too much</param>
-        [BurstDiscard]
-        public static void OffsetVertices(this ConvexHullBuilder builder, float surfaceOffset, float minRadius = 0)
-        {
-            // This method is only working on 3D convex hulls.
-            Assert.IsTrue(builder.Dimension == 3);
-
-            float3 com = builder.ComputeMassProperties().CenterOfMass;
-            ConvexHullBuilder.Vertex[] newVertices = new ConvexHullBuilder.Vertex[builder.Vertices.PeakCount];
-            int numVertices = 0;
-            foreach (int vertexIndex in builder.Vertices.Indices)
-            {
-                ConvexHullBuilder.Edge edge = builder.GetVertexEdge(vertexIndex);
-                float3 normal = builder.ComputeVertexNormal(edge);
-                float offset = surfaceOffset;
-                float3 position = builder.Vertices[vertexIndex].Position;
-                if (surfaceOffset < 0)
-                {
-                    // Clip offset to prevent flipping.
-                    var plane = new float4(normal, -math.dot(com, normal) + minRadius);
-                    offset = math.max(-Dotxyz1(plane, position), offset);
-                }
-                newVertices[numVertices++] = new ConvexHullBuilder.Vertex
-                {
-                    Position = position + normal * offset,
-                    UserData = builder.Vertices[vertexIndex].UserData
-                };
-            }
-
-            builder.Reset();
-            for (int i = 0; i < numVertices; ++i)
-            {
-                builder.AddPoint(newVertices[i].Position, newVertices[i].UserData);
             }
         }
     }

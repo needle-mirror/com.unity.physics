@@ -9,7 +9,7 @@
         "Unity.Mathematics",
         "Unity.PerformanceTesting",
         "Unity.Physics",
-        "Unity.Physics.Authoring",
+        "Unity.Physics.Hybrid",
         "Unity.Physics.Editor",
         "Unity.Transforms"
     ],

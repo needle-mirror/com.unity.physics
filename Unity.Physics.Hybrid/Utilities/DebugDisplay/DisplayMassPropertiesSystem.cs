@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace Unity.Physics.Authoring
 {
-    /// Create and dispatch a DisplayMassPropertiesJob 
+    /// Create and dispatch a DisplayMassPropertiesJob
     [UpdateAfter(typeof(StepPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
     public class DisplayMassPropertiesSystem : JobComponentSystem
     {
@@ -17,12 +17,12 @@ namespace Unity.Physics.Authoring
         EndFramePhysicsSystem m_EndFramePhysicsSystem;
         DebugStream m_DebugStreamSystem;
 
-        protected override void OnCreateManager()
+        protected override void OnCreate()
         {
-            m_BuildPhysicsWorldSystem = World.GetOrCreateManager<BuildPhysicsWorld>();
-            m_StepPhysicsWorld = World.GetOrCreateManager<StepPhysicsWorld>();
-            m_EndFramePhysicsSystem = World.GetOrCreateManager<EndFramePhysicsSystem>();
-            m_DebugStreamSystem = World.GetOrCreateManager<DebugStream>();
+            m_BuildPhysicsWorldSystem = World.GetOrCreateSystem<BuildPhysicsWorld>();
+            m_StepPhysicsWorld = World.GetOrCreateSystem<StepPhysicsWorld>();
+            m_EndFramePhysicsSystem = World.GetOrCreateSystem<EndFramePhysicsSystem>();
+            m_DebugStreamSystem = World.GetOrCreateSystem<DebugStream>();
         }
 
         protected override JobHandle OnUpdate(JobHandle inputDeps)

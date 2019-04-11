@@ -15,13 +15,13 @@ namespace Unity.Physics.Systems
         StepPhysicsWorld m_StepPhysicsWorld;
         ExportPhysicsWorld m_ExportPhysicsWorld;
 
-        protected override void OnCreateManager()
+        protected override void OnCreate()
         {
             HandlesToWaitFor = new NativeList<JobHandle>(16, Allocator.Persistent);
 
-            m_BuildPhysicsWorld = World.GetOrCreateManager<BuildPhysicsWorld>();
-            m_StepPhysicsWorld = World.GetOrCreateManager<StepPhysicsWorld>();
-            m_ExportPhysicsWorld = World.GetOrCreateManager<ExportPhysicsWorld>();
+            m_BuildPhysicsWorld = World.GetOrCreateSystem<BuildPhysicsWorld>();
+            m_StepPhysicsWorld = World.GetOrCreateSystem<StepPhysicsWorld>();
+            m_ExportPhysicsWorld = World.GetOrCreateSystem<ExportPhysicsWorld>();
         }
 
         protected override void OnDestroyManager()

@@ -724,7 +724,7 @@ namespace Unity.Physics.Tests.Utils
         // Random generation
         //
 
-        public static unsafe BlobAssetReference<Collider> GenerateRandomMesh(ref Random rnd)
+        public static BlobAssetReference<Collider> GenerateRandomMesh(ref Random rnd)
         {
             int numTriangles = rnd.NextInt(1, 250);
             float3[] vertices = new float3[numTriangles * 3];
@@ -873,8 +873,8 @@ namespace Unity.Physics.Tests.Utils
 
         public static unsafe BlobAssetReference<Collider> GenerateRandomConvex(ref Random rnd)
         {
-            ColliderType colliderType = (ColliderType)rnd.NextInt((int)ColliderType.Box);
-            float radius = (rnd.NextInt(4) > 0) ? rnd.NextFloat(0.5f) : 0.0f;
+            ColliderType colliderType = (ColliderType)rnd.NextInt((int)ColliderType.Cylinder + 1);
+            float convexRadius = (rnd.NextInt(4) > 0) ? rnd.NextFloat(0.5f) : 0.0f;
             switch (colliderType)
             {
                 case ColliderType.Convex:
@@ -889,7 +889,7 @@ namespace Unity.Physics.Tests.Utils
                     {
                         points[i] = rnd.NextFloat3(-1.0f, 1.0f);
                     }
-                    var collider = ConvexCollider.Create(points, radius);
+                    var collider = ConvexCollider.Create(points, convexRadius);
                     points.Dispose();
                     return collider;
                 }
@@ -930,16 +930,30 @@ namespace Unity.Physics.Tests.Utils
 
                 case ColliderType.Box:
                 {
-                    float3 center = (rnd.NextInt(4) > 0) ? float3.zero : rnd.NextFloat3(-0.5f, 0.5f);
-                    quaternion orientation = (rnd.NextInt(4) > 0) ? quaternion.identity : rnd.NextQuaternionRotation();
-                    return BoxCollider.Create(center, orientation, rnd.NextFloat3(0.01f, 1.0f), radius);
+                    float3 center = (rnd.NextInt(4) > 0) ? Unity.Mathematics.float3.zero : rnd.NextFloat3(-0.5f, 0.5f);
+                    quaternion orientation = (rnd.NextInt(4) > 0) ? Unity.Mathematics.quaternion.identity : rnd.NextQuaternionRotation();
+                    float minSize = 0.05f; // TODO - work around hull builder problems with small faces, sometimes doesn't extend 1D->2D based on face area
+                    float3 size = rnd.NextFloat3(minSize, 1.0f);
+                    float maxConvexRadius = math.max(math.cmin((size - minSize) / (2.0f * (1.0f + float.Epsilon))), 0.0f);
+                    return BoxCollider.Create(center, orientation, size, math.min(maxConvexRadius, convexRadius));
+                }
+
+                case ColliderType.Cylinder:
+                {
+                    float3 center = (rnd.NextInt(4) > 0) ? Unity.Mathematics.float3.zero : rnd.NextFloat3(-0.5f, 0.5f);
+                    quaternion orientation = (rnd.NextInt(4) > 0) ? Unity.Mathematics.quaternion.identity : rnd.NextQuaternionRotation();
+                    float minSize = 0.01f; // TODO - cylinder gets degenerate faces if radius-convexRadius=0 or height/2-convexRadius=0, decide how to handle this in CylinderCollider
+                    float height = rnd.NextFloat(2.0f * minSize, 1f);
+                    float cylinderRadius = rnd.NextFloat(minSize, 1.0f);
+                    float maxConvexRadius = math.max(math.min(height / 2, cylinderRadius) - minSize, 0.0f);
+                    return CylinderCollider.Create(center, height, cylinderRadius, orientation, math.min(maxConvexRadius, convexRadius));
                 }
 
                 default: throw new System.NotImplementedException();
             }
         }
 
-        public static unsafe BlobAssetReference<Collider> GenerateRandomCollider(ref Random rnd)
+        public static BlobAssetReference<Collider> GenerateRandomCollider(ref Random rnd)
         {
             if (rnd.NextInt(10) > 0)
             {
@@ -952,7 +966,7 @@ namespace Unity.Physics.Tests.Utils
             return GenerateRandomCompound(ref rnd);
         }
 
-        public static unsafe Physics.PhysicsWorld GenerateRandomWorld(ref Random rnd, int numBodies, float size)
+        public static unsafe PhysicsWorld GenerateRandomWorld(ref Random rnd, int numBodies, float size)
         {
             // Create the world
             PhysicsWorld world = new PhysicsWorld(numBodies, 0, 0);
@@ -968,7 +982,7 @@ namespace Unity.Physics.Tests.Utils
                         pos = rnd.NextFloat3(-size, size),
                         rot = (rnd.NextInt(10) > 0) ? rnd.NextQuaternionRotation() : quaternion.identity
                     },
-                    Collider = (Collider*)GenerateRandomCollider(ref rnd).GetUnsafePtr(),
+                    Collider = (Collider*)GenerateRandomCollider(ref rnd).GetUnsafePtr(),   // Not safe, could be garbage collected
                     Entity = Entity.Null,
                     CustomData = 0
                 };

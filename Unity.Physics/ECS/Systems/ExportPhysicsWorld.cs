@@ -17,10 +17,10 @@ namespace Unity.Physics.Systems
         BuildPhysicsWorld m_BuildPhysicsWorldSystem;
         StepPhysicsWorld m_StepPhysicsWorldSystem;
 
-        protected override void OnCreateManager()
+        protected override void OnCreate()
         {
-            m_BuildPhysicsWorldSystem = World.GetOrCreateManager<BuildPhysicsWorld>();
-            m_StepPhysicsWorldSystem = World.GetOrCreateManager<StepPhysicsWorld>();
+            m_BuildPhysicsWorldSystem = World.GetOrCreateSystem<BuildPhysicsWorld>();
+            m_StepPhysicsWorldSystem = World.GetOrCreateSystem<StepPhysicsWorld>();
         }
 
         protected override JobHandle OnUpdate(JobHandle inputDeps)

@@ -39,12 +39,22 @@ namespace Unity.Physics
             var triangles = (ConvexHullBuilder.Triangle*)UnsafeUtility.Malloc(triangleCapacity * sizeof(ConvexHullBuilder.Triangle), 16, Allocator.Temp);
             var builder = new ConvexHullBuilder(vertices, verticesCapacity, triangles, triangleCapacity);
             float3 s = scale ?? new float3(1);
-            foreach (float3 point in points)
+
+            // Build the points' AABB and validate them
+            var domain = new Aabb();
+            foreach (var point in points)
             {
                 if (math.any(!math.isfinite(point)))
                 {
                     throw new ArgumentException("Tried to create ConvexCollider with invalid points");
                 }
+                domain.Include(point * s);
+            }
+
+            // Add points to the hull
+            builder.IntegerSpaceAabb = domain;
+            foreach (float3 point in points)
+            {
                 builder.AddPoint(point * s);
             }
 
@@ -54,7 +64,7 @@ namespace Unity.Physics
             float maxAngle = 0.1f * (float)math.PI / 180.0f;
             builder.BuildFaceIndices(maxAngle);
 
-            // Simplify the hull until it fits requirements
+            // Simplify the hull until it's under the max vertices requirement
             // TODO.ma this is just a failsafe. We need to think about user-controlled simplification settings & how to warn the user if their shape is too complex.
             {
                 const int maxVertices = 252;    // as per Havok
@@ -253,15 +263,13 @@ namespace Unity.Physics
                         numEdges++;
                     }
                     Assert.IsTrue(numEdges >= 3);
-                    float minHalfAngle = math.acos(maxCosAngle) * 0.5f;
-                    byte halfAngleCompressed = (byte)(minHalfAngle * 255.0f / (math.PI * 0.5f));
 
                     // Store the face
                     Faces.Add(new ConvexHull.Face
                     {
                         FirstIndex = firstVertexIndex,
                         NumVertices = numEdges,
-                        MinHalfAngle = halfAngleCompressed
+                        MinHalfAngle = math.acos(maxCosAngle) * 0.5f
                     });
                 }
 

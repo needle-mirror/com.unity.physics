@@ -29,12 +29,12 @@ namespace Unity.Physics.Systems
         BuildPhysicsWorld m_BuildPhysicsWorldSystem;
 
         // Entity group queries
-        private ComponentGroup m_PhysicsEntityGroup;
+        private EntityQuery m_PhysicsEntityGroup;
 
 
-        protected override void OnCreateManager()
+        protected override void OnCreate()
         {
-            m_BuildPhysicsWorldSystem = World.GetOrCreateManager<BuildPhysicsWorld>();
+            m_BuildPhysicsWorldSystem = World.GetOrCreateSystem<BuildPhysicsWorld>();
 
             Simulation = new DummySimulation();
             RegisterSimulation(SimulationType.NoPhysics, () => new DummySimulation());
@@ -46,10 +46,10 @@ namespace Unity.Physics.Systems
 
             m_Callbacks = new SimulationCallbacks();
 
-            base.OnCreateManager();
+            base.OnCreate();
 
             // Needed to keep ComponentSystem active when no Entity has PhysicsStep component
-            m_PhysicsEntityGroup = GetComponentGroup(new EntityArchetypeQuery
+            m_PhysicsEntityGroup = GetEntityQuery(new EntityQueryDesc
             {
                 All = new ComponentType[]
                 {

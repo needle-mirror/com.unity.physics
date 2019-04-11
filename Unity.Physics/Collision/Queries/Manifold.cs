@@ -142,6 +142,7 @@ namespace Unity.Physics
                             flipped = !flipped;
                             break;
                         case ColliderType.Quad:
+                        case ColliderType.Cylinder:
                         case ColliderType.Convex:
                             ConvexConvexManifoldQueries.ConvexConvex(
                                 ref ((SphereCollider*)convexColliderA)->ConvexHull, ref ((ConvexCollider*)convexColliderB)->ConvexHull,
@@ -171,6 +172,7 @@ namespace Unity.Physics
                             break;
                         case ColliderType.Capsule:
                         case ColliderType.Quad:
+                        case ColliderType.Cylinder:
                         case ColliderType.Convex:
                             ConvexConvexManifoldQueries.ConvexConvex(
                                 ref ((BoxCollider*)convexColliderA)->ConvexHull, ref ((ConvexCollider*)convexColliderB)->ConvexHull,
@@ -200,6 +202,7 @@ namespace Unity.Physics
                             break;
                         case ColliderType.Quad:
                         case ColliderType.Box:
+                        case ColliderType.Cylinder:
                         case ColliderType.Convex:
                             ConvexConvexManifoldQueries.ConvexConvex(
                                 ref ((CapsuleCollider*)convexColliderA)->ConvexHull, ref ((ConvexCollider*)convexColliderB)->ConvexHull,
@@ -231,6 +234,7 @@ namespace Unity.Physics
                             break;
                         case ColliderType.Triangle:
                         case ColliderType.Quad:
+                        case ColliderType.Cylinder:
                         case ColliderType.Convex:
                             ConvexConvexManifoldQueries.ConvexConvex(
                                 ref ((PolygonCollider*)convexColliderA)->ConvexHull, ref ((ConvexCollider*)convexColliderB)->ConvexHull,
@@ -241,6 +245,7 @@ namespace Unity.Physics
                     }
                     break;
                 case ColliderType.Quad:
+                case ColliderType.Cylinder:
                 case ColliderType.Convex:
                     ConvexConvexManifoldQueries.ConvexConvex(
                         ref ((ConvexCollider*)convexColliderA)->ConvexHull, ref ((ConvexCollider*)convexColliderB)->ConvexHull,
