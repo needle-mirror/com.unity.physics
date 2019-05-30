@@ -193,7 +193,6 @@ namespace Unity.Physics.Tests.Collision.Colliders
 
                 var boxCollider = BoxCollider.Create(center, orientation, size, convexRadius);
                 Aabb aabb = boxCollider.Value.CalculateAabb();
-                Debug.Log($"Expected: Min: {expectedAabb.Min}, Max: {expectedAabb.Max}, Was: Min: {aabb.Min}, Max: {aabb.Max}");
                 TestUtils.AreEqual(expectedAabb.Min, aabb.Min, 1e-3f);
                 TestUtils.AreEqual(expectedAabb.Max, aabb.Max, 1e-3f);
             }
@@ -221,7 +220,6 @@ namespace Unity.Physics.Tests.Collision.Colliders
 
             MassProperties massProperties = boxCollider.Value.MassProperties;
             float3 inertiaTensor = massProperties.MassDistribution.InertiaTensor;
-            Debug.Log($"Expected Inertia Tensor: {expectedInertiaTensor}, was: {inertiaTensor}");
             TestUtils.AreEqual(expectedInertiaTensor, inertiaTensor, 1e-3f);
         }
 

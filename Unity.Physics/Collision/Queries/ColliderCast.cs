@@ -5,24 +5,37 @@ using static Unity.Physics.Math;
 
 namespace Unity.Physics
 {
-    // The input to collider cast queries
+    // The input to collider cast queries consists of a Collider and its initial orientation,
+    // and the Start & End positions of a line segment the Collider is to be swept along.
     public unsafe struct ColliderCastInput
     {
         public Collider* Collider;
-        public float3 Position
-        {
-            get => m_Ray.Origin;
-            set => m_Ray.Origin = value;
-        }
         public quaternion Orientation { get; set; }
-        public float3 Direction
+
+        public float3 Start
         {
-            get => m_Ray.Direction;
-            set => m_Ray.Direction = value;
+            get => Ray.Origin;
+            set
+            {
+                float3 end = Ray.Origin + Ray.Displacement;
+                Ray.Origin = value;
+                Ray.Displacement = end - value;
+            }
+        }
+        public float3 End
+        {
+            get => Ray.Origin + Ray.Displacement;
+            set => Ray.Displacement = value - Ray.Origin;
         }
 
-        private Ray m_Ray;
-        public Ray Ray => m_Ray;
+        internal Ray Ray;
+
+        #region Obsolete members
+        [Obsolete("Position has been deprecated. Use Start Instead (RemovedAfter 2019-07-29) (UnityUpgradable) -> Start")]
+        public float3 Position { get => Ray.Origin; set => Ray.Origin = value; }
+        [Obsolete("Direction has been deprecated. Use End Instead (RemovedAfter 2019-07-29)")]
+        public float3 Direction { get => Ray.Direction; set => Ray.Direction = value; }
+        #endregion
     }
 
     // A hit from a collider cast query
@@ -93,7 +106,7 @@ namespace Unity.Physics
             //Assert.IsTrue(target->CollisionType == CollisionType.Convex && input.Collider->CollisionType == CollisionType.Convex, "ColliderCast.ConvexConvex can only process convex colliders");
 
             // Get the current transform
-            MTransform targetFromQuery = new MTransform(input.Orientation, input.Position);
+            MTransform targetFromQuery = new MTransform(input.Orientation, input.Start);
 
             // Conservative advancement
             const float tolerance = 1e-3f;      // return if this close to a hit
@@ -114,7 +127,7 @@ namespace Unity.Physics
                 // Check for a hit
                 if (distanceResult.Distance < tolerance || --iterations == 0)
                 {
-                    targetFromQuery.Translation = input.Ray.Origin;
+                    targetFromQuery.Translation = input.Start;
                     return collector.AddHit(new ColliderCastHit
                     {
                         Position = distanceResult.PositionOnBinA,
@@ -126,7 +139,7 @@ namespace Unity.Physics
                 }
 
                 // Check for a miss
-                float dot = math.dot(distanceResult.NormalInA, input.Direction);
+                float dot = math.dot(distanceResult.NormalInA, input.Ray.Displacement);
                 if (dot <= 0.0f)
                 {
                     // Collider is moving away from the target, it will never hit
@@ -141,7 +154,7 @@ namespace Unity.Physics
                     return false;
                 }
 
-                targetFromQuery.Translation = input.Position + fraction * input.Direction;
+                targetFromQuery.Translation = math.lerp(input.Start, input.End, fraction);
             }
         }
 
@@ -228,9 +241,9 @@ namespace Unity.Physics
                 // Transform the cast into child space
                 ColliderCastInput inputLs = input;
                 RigidTransform childFromCompound = math.inverse(child.CompoundFromChild);
-                inputLs.Position = math.transform(childFromCompound, input.Ray.Origin);
+                inputLs.Ray.Origin = math.transform(childFromCompound, input.Ray.Origin);
+                inputLs.Ray.Displacement = math.mul(childFromCompound.rot, input.Ray.Displacement);
                 inputLs.Orientation = math.mul(childFromCompound.rot, input.Orientation);
-                inputLs.Direction = math.mul(childFromCompound.rot, input.Direction);
 
                 int numHits = collector.NumHits;
                 float fraction = collector.MaxFraction;

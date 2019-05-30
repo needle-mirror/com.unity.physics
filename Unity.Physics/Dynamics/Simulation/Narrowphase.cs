@@ -3,53 +3,44 @@ using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 
+
 namespace Unity.Physics
 {
     // Body pair processor / dispatcher
     public static class NarrowPhase // TODO: rename
     {
-        public static JobHandle ScheduleProcessBodyPairsJobs(ref PhysicsWorld world, float timeStep, int numIterations, ref Simulation.Context context, JobHandle inputDeps)
+    
+        unsafe public static JobHandle ScheduleProcessBodyPairsJobs(ref PhysicsWorld world, float timeStep, int numIterations, ref Simulation.Context context, JobHandle inputDeps)
         {
-            //<todo.eoin.usermod Can we get rid of this max()? Needed if the user wants to add contacts themselves.
-            int numWorkItems = math.max(1, context.SolverSchedulerInfo.NumWorkItems);
+            var numWorkItems = context.SolverSchedulerInfo.NumWorkItems;
+            var contactsHandle = BlockStream.ScheduleConstruct(out context.Contacts, numWorkItems, 0xcf97529c, inputDeps);
+            var jointJacobiansHandle = BlockStream.ScheduleConstruct(out context.JointJacobians, numWorkItems, 0xd3185f82, inputDeps);
+            var jacobiansHandle = BlockStream.ScheduleConstruct(out context.Jacobians, numWorkItems, 0x8d8f394d, inputDeps);
 
-            context.Contacts = new BlockStream(numWorkItems, 0xcf97529c);
-            context.JointJacobians = new BlockStream(numWorkItems, 0xd3185f82);
-            context.Jacobians = new BlockStream(numWorkItems, 0x8d8f394d);
-
-            return new ProcessBodyPairsJob
+            var processHandle = new ProcessBodyPairsJob
             {
                 World = world,
                 TimeStep = timeStep,
                 NumIterations = numIterations,
-                PhasedDispatchPairs = context.PhasedDispatchPairsArray,
+                PhasedDispatchPairs = context.PhasedDispatchPairs.AsDeferredJobArray(),
                 SolverSchedulerInfo = context.SolverSchedulerInfo,
                 ContactWriter = context.Contacts,
-                JointJacobianWriter = context.JointJacobians
-            }.Schedule(numWorkItems, 1, inputDeps);
+                JointJacobianWriter = context.JointJacobians,
+            }.ScheduleUnsafeIndex0(numWorkItems, 1, JobHandle.CombineDependencies(contactsHandle, jointJacobiansHandle, jacobiansHandle));
+
+            
+            context.DisposeProcessBodyPairs = NativeListUtilityTemp.DisposeHotFix(ref context.PhasedDispatchPairs, processHandle);
+
+            return processHandle;
         }
-
+        
         [BurstCompile]
-        private struct DisposePhasedDispatchPairs : IJob
-        {
-#pragma warning disable CS0649
-            [ReadOnly] [DeallocateOnJobCompletion]
-            public NativeArray<Scheduler.DispatchPair> PhasedDispatchPairs;
-#pragma warning restore CS0649
-
-            public void Execute()
-            {
-                // Nothing to do, this jobs only disposes PhasedDispatchPairs.
-            }
-        }
-
-        [BurstCompile]
-        private struct ProcessBodyPairsJob : IJobParallelFor
+        private struct ProcessBodyPairsJob : IJobParallelForDefer
         {
             [ReadOnly] public PhysicsWorld World;
             [ReadOnly] public float TimeStep;
             [ReadOnly] public int NumIterations;
-            [ReadOnly] [DeallocateOnJobCompletion] public NativeArray<Scheduler.DispatchPair> PhasedDispatchPairs;
+            [ReadOnly] public NativeArray<Scheduler.DispatchPair> PhasedDispatchPairs;
             [ReadOnly] public Scheduler.SolverSchedulerInfo SolverSchedulerInfo;
             public BlockStream.Writer ContactWriter;
             public BlockStream.Writer JointJacobianWriter;

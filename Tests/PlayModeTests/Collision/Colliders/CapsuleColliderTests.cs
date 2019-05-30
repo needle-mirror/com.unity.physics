@@ -124,8 +124,6 @@ namespace Unity.Physics.Tests.Collision.Colliders
             expectedAabb.Max = math.max(p0, p1) + new float3(radius);
 
             Aabb aabb = capsuleCollider.Value.CalculateAabb();
-            Debug.Log($"Expected Aabb: Min {expectedAabb.Min}, Max {expectedAabb.Max}");
-            Debug.Log($"Actual   Aabb: Min {aabb.Min}, Max {aabb.Max}");
             TestUtils.AreEqual(expectedAabb.Min, aabb.Min, 1e-3f);
             TestUtils.AreEqual(expectedAabb.Max, aabb.Max, 1e-3f);
         }
@@ -152,8 +150,6 @@ namespace Unity.Physics.Tests.Collision.Colliders
             expectedAabb.Max = math.max(p0Transformed, p1Transformed) + new float3(radius);
 
             Aabb aabb = capsuleCollider.Value.CalculateAabb(new RigidTransform(rotation, translation));
-            Debug.Log($"Expected Aabb: Min {expectedAabb.Min}, Max {expectedAabb.Max}");
-            Debug.Log($"Actual   Aabb: Min {aabb.Min}, Max {aabb.Max}");
             TestUtils.AreEqual(expectedAabb.Min, aabb.Min, 1e-3f);
             TestUtils.AreEqual(expectedAabb.Max, aabb.Max, 1e-3f);
         }
@@ -186,7 +182,6 @@ namespace Unity.Physics.Tests.Collision.Colliders
 
             var capsuleCollider = CapsuleCollider.Create(p0, p1, radius);
             float3 inertiaTensor = capsuleCollider.Value.MassProperties.MassDistribution.InertiaTensor;
-            Debug.Log($"Expected inertia tensor: {expectedInertiaTensor}, was {inertiaTensor}");
             TestUtils.AreEqual(expectedInertiaTensor, inertiaTensor, 1e-3f);
         }
 

@@ -6,7 +6,8 @@
         "Unity.Entities",
         "Unity.Entities.Hybrid",
         "Unity.Mathematics",
-        "Unity.Physics"
+        "Unity.Physics",
+        "Unity.Transforms"
     ],
     "optionalUnityReferences": [],
     "includePlatforms": [],

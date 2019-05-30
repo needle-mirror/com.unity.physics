@@ -71,9 +71,9 @@ namespace Unity.Physics.Systems
         }
 
         // Enqueue a callback to run during scheduling of the next simulation step
-        public void EnqueueCallback(SimulationCallbacks.Phase phase, SimulationCallbacks.Callback callback)
+        public void EnqueueCallback(SimulationCallbacks.Phase phase, SimulationCallbacks.Callback callback, JobHandle dependency = default(JobHandle))
         {
-            m_Callbacks.Enqueue(phase, callback);
+            m_Callbacks.Enqueue(phase, callback, dependency);
         }
 
         protected override JobHandle OnUpdate(JobHandle inputDeps)
@@ -118,13 +118,6 @@ namespace Unity.Physics.Systems
         private class DummySimulation : ISimulation
         {
             public SimulationType Type => SimulationType.NoPhysics;
-
-            // TODO: Make sure these return dummies that can have foreach() etc safely called on them
-            public SimulationData.BodyPairs BodyPairs => new SimulationData.BodyPairs();
-            public SimulationData.Contacts Contacts => new SimulationData.Contacts();
-            public SimulationData.Jacobians Jacobians => new SimulationData.Jacobians();
-            public CollisionEvents CollisionEvents => new CollisionEvents();
-            public TriggerEvents TriggerEvents => new TriggerEvents();
 
             public void Dispose() { }
             public void Step(SimulationStepInput input) { }

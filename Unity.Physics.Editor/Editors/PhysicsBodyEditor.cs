@@ -115,21 +115,18 @@ namespace Unity.Physics.Editor
             DisplayStatusMessages();
         }
 
-        List<MatrixState> m_MatrixStates = new List<MatrixState>();
+        List<string> m_StatusMessages = new List<string>(8);
 
         void DisplayStatusMessages()
         {
-            m_MatrixStates.Clear();
-            foreach (var t in targets)
-            {
-                var localToWorld = (float4x4)(t as PhysicsBody).transform.localToWorldMatrix;
-                m_MatrixStates.Add(ManipulatorUtility.GetMatrixState(ref localToWorld));
-            }
+            m_StatusMessages.Clear();
 
-            string matrixStatusMessage;
-            var matrixStatus = MatrixGUIUtility.GetMatrixStatusMessage(m_MatrixStates, out matrixStatusMessage);
-            if (matrixStatus != MessageType.None)
-                EditorGUILayout.HelpBox(matrixStatusMessage, MessageType.Warning);
+            var hierarchyStatusMessage = StatusMessageUtility.GetHierarchyStatusMessage(targets);
+            if (!string.IsNullOrEmpty(hierarchyStatusMessage))
+                m_StatusMessages.Add(hierarchyStatusMessage);
+
+            if (m_StatusMessages.Count > 0)
+                EditorGUILayout.HelpBox(string.Join("\n\n", m_StatusMessages), MessageType.None);
         }
     }
 }

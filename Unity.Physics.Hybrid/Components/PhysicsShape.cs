@@ -49,7 +49,7 @@ namespace Unity.Physics.Authoring
             : base($"Unknown shape type {shapeType} requires explicit implementation") { }
     }
 
-    [AddComponentMenu("DOTS Physics/Physics Shape")]
+    [AddComponentMenu("DOTS/Physics/Physics Shape")]
     [DisallowMultipleComponent]
     [RequiresEntityConversion]
     public sealed class PhysicsShape : MonoBehaviour, IInheritPhysicsMaterialProperties
@@ -278,6 +278,7 @@ namespace Unity.Physics.Authoring
             );
         }
 
+        [Obsolete("RemovedAfter 2019-08-10")]
         public void GetCapsuleProperties(out float3 vertex0, out float3 vertex1, out float radius)
         {
             UpdateCapsuleAxis();
@@ -348,31 +349,65 @@ namespace Unity.Physics.Authoring
             orientation.SetValue(math.mul(m_PrimitiveOrientation, offset));
         }
 
+        [Obsolete("RemovedAfter 2019-08-10")]
         public void GetPlaneProperties(out float3 vertex0, out float3 vertex1, out float3 vertex2, out float3 vertex3)
         {
-            float3 center;
-            float2 size;
-            quaternion orientation;
-            GetPlaneProperties(out center, out size, out orientation);
-            float3 sizeYUp = math.float3(size.x, 0, size.y);
- 
-            vertex0 = center + math.mul(orientation, sizeYUp * math.float3(-0.5f, 0,  0.5f));
-            vertex1 = center + math.mul(orientation, sizeYUp * math.float3( 0.5f, 0,  0.5f));
-            vertex2 = center + math.mul(orientation, sizeYUp * math.float3( 0.5f, 0, -0.5f));
-            vertex3 = center + math.mul(orientation, sizeYUp * math.float3(-0.5f, 0, -0.5f));
+            this.GetPlanePoints(out vertex0, out vertex1, out vertex2, out vertex3);
         }
 
+        static readonly List<MeshFilter> s_MeshFilters = new List<MeshFilter>(8);
+        static readonly List<PhysicsShape> s_PhysicsShapes = new List<PhysicsShape>(8);
         static readonly List<Vector3> s_Vertices = new List<Vector3>(65535);
 
         public void GetConvexHullProperties(NativeList<float3> pointCloud)
         {
-            // TODO: currently only handling a single mesh
-            var mesh = GetMesh();
-            if (mesh == null)
+            pointCloud.Clear();
+
+            if (m_CustomMesh != null)
+            {
+                m_CustomMesh.GetVertices(s_Vertices);
+                foreach (var v in s_Vertices)
+                    pointCloud.Add(v);
                 return;
-            mesh.GetVertices(s_Vertices);
-            foreach (var v in s_Vertices)
-                pointCloud.Add(v);
+            }
+
+            // TODO: account for skinned mesh renderers
+            var primaryBody = this.GetPrimaryBody();
+            GetComponentsInChildren(true, s_MeshFilters);
+            foreach (var meshFilter in s_MeshFilters)
+            {
+                if (
+                    meshFilter.sharedMesh == null
+                    || PhysicsShapeExtensions.GetPrimaryBody(meshFilter.gameObject) != primaryBody
+                )
+                    continue;
+
+                // do not simply use GameObject.activeInHierarchy because it will be false when instantiating a prefab
+                var t = meshFilter.transform;
+                while (t != transform)
+                {
+                    if (!t.gameObject.activeSelf)
+                        continue;
+                    t = t.parent;
+                }
+
+                var renderer = meshFilter.GetComponent<MeshRenderer>();
+                if (renderer == null || !renderer.enabled)
+                    continue;
+
+                s_PhysicsShapes.Clear();
+                meshFilter.gameObject.GetComponentsInParent(true, s_PhysicsShapes);
+                if (s_PhysicsShapes[0] != this)
+                    continue;
+
+                meshFilter.sharedMesh.GetVertices(s_Vertices);
+                var meshToLocal =
+                    math.mul(math.inverse(transform.localToWorldMatrix), meshFilter.transform.localToWorldMatrix);
+                foreach (var v in s_Vertices)
+                    pointCloud.Add(math.mul(meshToLocal, new float4(v, 1f)).xyz);
+            }
+            s_MeshFilters.Clear();
+            s_PhysicsShapes.Clear();
         }
 
         public UnityMesh GetMesh()
@@ -590,17 +625,45 @@ namespace Unity.Physics.Authoring
             PhysicsMaterialProperties.OnValidate(ref m_Material, true);
         }
 
-        public void FitToGeometry()
-        {
-            // TODO: replace this naive generation of shape information based on bounds extents
-            UnityMesh mesh = GetMesh();
-            if (mesh == null)
-                return;
+        // matrix to transform point from shape space into world space
+        internal float4x4 GetShapeToWorldMatrix() =>
+            float4x4.TRS(transform.position, transform.rotation, 1f);
 
-            Bounds bounds = mesh.bounds;
-            ShapeType shapeType = m_ShapeType;
-            SetBox(bounds.center, bounds.size, quaternion.identity);
-            m_ConvexRadius = math.min(math.cmin(bounds.size) * 0.1f, k_DefaultConvexRadius);
+        // matrix to transform point from object's local transform matrix into shape space
+        internal float4x4 GetLocalToShapeMatrix() =>
+            math.mul(math.inverse(GetShapeToWorldMatrix()), transform.localToWorldMatrix);
+
+        internal void BakePoints(NativeArray<float3> points)
+        {
+            var localToShape = GetLocalToShapeMatrix();
+            for (int i = 0, count = points.Length; i < count; ++i)
+                points[i] = math.mul(localToShape, new float4(points[i], 1f)).xyz;
+        }
+
+        [Obsolete("FitToGeometry() has been deprecated. Use FitToEnabledRenderMeshes() instead. (RemovedAfter 2019-08-27) (UnityUpgradable) -> FitToEnabledRenderMeshes(*)")]
+        public void FitToGeometry() => FitToEnabledRenderMeshes();
+
+        public void FitToEnabledRenderMeshes()
+        {
+            var shapeType = m_ShapeType;
+
+            using (var points = new NativeList<float3>(65535, Allocator.TempJob))
+            {
+                // temporarily un-assign custom mesh and assume this shape is a convex hull
+                var customMesh = m_CustomMesh;
+                m_CustomMesh = null;
+                GetConvexHullProperties(points);
+                m_CustomMesh = customMesh;
+                if (points.Length == 0)
+                    return;
+
+                var bounds = new Bounds(points[0], float3.zero);
+                for (int i = 1, count = points.Length; i < count; ++i)
+                    bounds.Encapsulate(points[i]);
+
+                SetBox(bounds.center, bounds.size, quaternion.identity);
+                m_ConvexRadius = math.min(math.cmin(bounds.size) * 0.1f, k_DefaultConvexRadius);
+            }
 
             switch (shapeType)
             {
@@ -637,7 +700,7 @@ namespace Unity.Physics.Authoring
 
         void Reset()
         {
-            FitToGeometry();
+            FitToEnabledRenderMeshes();
             // TODO: also pick best primitive shape
         }
     }

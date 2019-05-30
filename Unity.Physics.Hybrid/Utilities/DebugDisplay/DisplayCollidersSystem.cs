@@ -1,20 +1,15 @@
+using System;
 using System.Collections.Generic;
-using Unity.Physics;
 using Unity.Physics.Systems;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
-using Collider = Unity.Physics.Collider;
-using SphereCollider = Unity.Physics.SphereCollider;
-using CapsuleCollider = Unity.Physics.CapsuleCollider;
-using MeshCollider = Unity.Physics.MeshCollider;
-using Mesh = Unity.Physics.Mesh;
 
 namespace Unity.Physics.Authoring
 {
     /// A system to display debug geometry for all body colliders
-    [UpdateAfter(typeof(BuildPhysicsWorld))]
+    [UpdateAfter(typeof(StepPhysicsWorld))]
     public class DisplayBodyColliders : ComponentSystem
     {
         BuildPhysicsWorld m_BuildPhysicsWorldSystem;
@@ -27,9 +22,8 @@ namespace Unity.Physics.Authoring
         {
             public NativeSlice<RigidBody> Bodies;
             public int NumDynamicBodies;
-            public int Enabled;
-            public int EnableConvexConnectivity;
-            public int EnableMeshEdges;
+            public int EnableColliders;
+            public int EnableEdges;
 
             protected static UnityEngine.Mesh ReferenceSphere => GetReferenceMesh(ref CachedReferenceSphere, PrimitiveType.Sphere);
             protected static UnityEngine.Mesh ReferenceCylinder => GetReferenceMesh(ref CachedReferenceCylinder, PrimitiveType.Cylinder);
@@ -48,10 +42,15 @@ namespace Unity.Physics.Authoring
 
             static UnityEngine.Mesh CreateReferenceMesh(PrimitiveType type)
             {
-                GameObject refGo = GameObject.CreatePrimitive(type);
-                UnityEngine.Mesh mesh = refGo.GetComponent<MeshFilter>().sharedMesh;
-                Destroy(refGo);
-                return mesh;
+                switch (type)
+                {
+                    case PrimitiveType.Cylinder:
+                        return Resources.GetBuiltinResource<UnityEngine.Mesh>("New-Cylinder.fbx");
+                    case PrimitiveType.Sphere:
+                        return Resources.GetBuiltinResource<UnityEngine.Mesh>("New-Sphere.fbx");
+                    default:
+                        throw new NotImplementedException($"No reference mesh specified for {type}");
+                }
             }
 
             // Combination mesh+scale, to enable sharing spheres
@@ -257,7 +256,7 @@ namespace Unity.Physics.Authoring
                 return results;
             }
 
-            public void DrawConnectivity(RigidBody body)
+            public void DrawConnectivity(RigidBody body, bool drawVertices = false)
             {
                 if (body.Collider->CollisionType != CollisionType.Convex)
                 {
@@ -277,7 +276,23 @@ namespace Unity.Physics.Authoring
                     to = hullIn.Vertices[toIndex];
                 }
 
-                if (hull.VertexEdges.Length > 0)
+                if (hull.FaceLinks.Length > 0)
+                {
+                    Gizmos.color = new Color(0.0f, 1.0f, 0.0f);
+                    foreach (ConvexHull.Face face in hull.Faces)
+                    {
+                        for (int edgeIndex = 0; edgeIndex < face.NumVertices; edgeIndex++)
+                        {
+                            ConvexHull.Edge linkedEdge = hull.FaceLinks[face.FirstIndex + edgeIndex];
+                            ConvexHull.Face linkedFace = hull.Faces[linkedEdge.FaceIndex];
+
+                            GetEdge(ref hull, face, edgeIndex, out float3 from, out float3 to);
+                            Gizmos.DrawLine(from, to);
+                        }
+                    }
+                }
+
+                if (drawVertices && hull.VertexEdges.Length > 0)
                 {
                     Gizmos.color = new Color(1.0f, 0.0f, 0.0f);
                     foreach (ConvexHull.Edge vertexEdge in hull.VertexEdges)
@@ -290,27 +305,6 @@ namespace Unity.Physics.Authoring
                         Gizmos.DrawRay(from, direction);
                     }
                 }
-
-                if (hull.FaceLinks.Length > 0)
-                {
-                    Gizmos.color = new Color(0.0f, 1.0f, 0.0f);
-                    foreach (ConvexHull.Face face in hull.Faces)
-                    {
-                        for (int edgeIndex = 0; edgeIndex < face.NumVertices; edgeIndex++)
-                        {
-                            ConvexHull.Edge linkedEdge = hull.FaceLinks[face.FirstIndex + edgeIndex];
-                            ConvexHull.Face linkedFace = hull.Faces[linkedEdge.FaceIndex];
-
-                            GetEdge(ref hull, face, edgeIndex, out float3 from, out float3 to);
-                            GetEdge(ref hull, linkedFace, linkedEdge.EdgeIndex, out float3 linkedFrom, out float3 linkedTo);
-
-                            Gizmos.DrawLine(math.lerp(from, to, 0.333f), math.lerp(from, to, 0.666f));
-                            Gizmos.DrawLine(math.lerp(linkedFrom, linkedTo, 0.333f), math.lerp(linkedFrom, linkedTo, 0.666f));
-                            Gizmos.DrawLine(math.lerp(from, to, 0.5f), math.lerp(linkedFrom, linkedTo, 0.5f));
-                        }
-                    }
-                }
-
                 Gizmos.matrix = originalMatrix;
             }
 
@@ -399,21 +393,22 @@ namespace Unity.Physics.Authoring
 
             public void OnDrawGizmos()
             {
-                if (Enabled == 0)
+                if (EnableColliders == 0 && EnableEdges == 0)
                 {
                     return;
                 }
 
                 for (int b = 0; b < Bodies.Length; b++)
                 {
-                    if (Bodies[b].Collider == null)
+                    var body = Bodies[b];
+                    if (body.Collider == null)
                     {
                         continue;
                     }
 
                     // Draw collider
                     {
-                        List<DisplayResult> displayResults = BuildDebugDisplayMesh(Bodies[b].Collider);
+                        List<DisplayResult> displayResults = BuildDebugDisplayMesh(body.Collider);
                         if (displayResults.Count == 0)
                         {
                             continue;
@@ -430,27 +425,30 @@ namespace Unity.Physics.Authoring
 
                         foreach (DisplayResult dr in displayResults)
                         {
-                            Vector3 position = math.transform(Bodies[b].WorldFromBody, dr.Position);
-                            Quaternion orientation = math.mul(Bodies[b].WorldFromBody.rot, dr.Orientation);
-                            Gizmos.DrawWireMesh(dr.Mesh, position, orientation, dr.Scale);
-
-                            if (dr.Mesh != CachedReferenceCylinder && dr.Mesh != CachedReferenceSphere)
+                            if (EnableColliders != 0)
                             {
-                                // Cleanup any meshes that are not our cached ones
-                                Destroy(dr.Mesh);
+                                Vector3 position = math.transform(body.WorldFromBody, dr.Position);
+                                Quaternion orientation = math.mul(body.WorldFromBody.rot, dr.Orientation);
+                                Gizmos.DrawMesh(dr.Mesh, position, orientation, dr.Scale);
+                                if (dr.Mesh != CachedReferenceCylinder && dr.Mesh != CachedReferenceSphere)
+                                {
+                                    // Cleanup any meshes that are not our cached ones
+                                    Destroy(dr.Mesh);
+                                }
+                            }
+
+                            if (EnableEdges != 0)
+                            {
+                                if (body.Collider->Type == ColliderType.Mesh)
+                                {
+                                    DrawMeshEdges(body);
+                                }
+                                else
+                                {
+                                    DrawConnectivity(body);
+                                }
                             }
                         }
-                    }
-
-                    // Draw connectivity
-                    if (EnableConvexConnectivity != 0)
-                    {
-                        DrawConnectivity(Bodies[b]);
-                    }
-
-                    if (EnableMeshEdges != 0)
-                    {
-                        DrawMeshEdges(Bodies[b]);
                     }
                 }
             }
@@ -471,7 +469,7 @@ namespace Unity.Physics.Authoring
             }
 
             int drawColliders = GetSingleton<PhysicsDebugDisplayData>().DrawColliders;
-            int drawMeshEdges = GetSingleton<PhysicsDebugDisplayData>().DrawMeshEdges;
+            int drawColliderEdges = GetSingleton<PhysicsDebugDisplayData>().DrawColliderEdges;
 
             if (m_DrawComponent == null)
             {
@@ -484,8 +482,8 @@ namespace Unity.Physics.Authoring
 
             m_DrawComponent.Bodies = m_BuildPhysicsWorldSystem.PhysicsWorld.Bodies;
             m_DrawComponent.NumDynamicBodies = m_BuildPhysicsWorldSystem.PhysicsWorld.NumDynamicBodies;
-            m_DrawComponent.Enabled = drawColliders;
-            m_DrawComponent.EnableMeshEdges = drawColliders * drawMeshEdges;
+            m_DrawComponent.EnableColliders = drawColliders;
+            m_DrawComponent.EnableEdges = drawColliderEdges;
         }
     }
 }

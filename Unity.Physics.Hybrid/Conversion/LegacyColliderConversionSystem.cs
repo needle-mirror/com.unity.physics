@@ -61,19 +61,17 @@ namespace Unity.Physics.Authoring
         protected static CollisionFilter ProduceCollisionFilter(LegacyCollider collider)
         {
             var layer = collider.gameObject.layer;
-            var filter = new CollisionFilter { CategoryBits = (uint)(1 << collider.gameObject.layer) };
+            var filter = new CollisionFilter { BelongsTo = (uint)(1 << collider.gameObject.layer) };
             for (var i = 0; i < 32; ++i)
-                filter.MaskBits |= (uint)(LegacyPhysics.GetIgnoreLayerCollision(layer, i) ? 0 : 1 << i);
+                filter.CollidesWith |= (uint)(LegacyPhysics.GetIgnoreLayerCollision(layer, i) ? 0 : 1 << i);
             return filter;
         }
 
-        protected override bool ShouldConvertShape(T shape) => true;
+        protected override bool ShouldConvertShape(T shape) => shape.enabled;
         protected override GameObject GetPrimaryBody(T shape) => shape.GetPrimaryBody();
         protected override byte GetCustomFlags(T shape) => 0;
     }
 
-    [UpdateAfter(typeof(FirstPassPhysicsBodyConversionSystem))]
-    [UpdateAfter(typeof(FirstPassLegacyRigidbodyConversionSystem))]
     public class LegacyBoxColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacyBox>
     {
         protected override BlobAssetReference<Collider> ProduceColliderBlob(LegacyBox shape)
@@ -98,8 +96,6 @@ namespace Unity.Physics.Authoring
         }
     }
 
-    [UpdateAfter(typeof(FirstPassPhysicsBodyConversionSystem))]
-    [UpdateAfter(typeof(FirstPassLegacyRigidbodyConversionSystem))]
     public class LegacyCapsuleColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacyCapsule>
     {
         protected override BlobAssetReference<Collider> ProduceColliderBlob(LegacyCapsule shape)
@@ -128,24 +124,28 @@ namespace Unity.Physics.Authoring
         }
     }
 
-    [UpdateAfter(typeof(FirstPassPhysicsBodyConversionSystem))]
-    [UpdateAfter(typeof(FirstPassLegacyRigidbodyConversionSystem))]
     public class LegacySphereColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacySphere>
     {
         protected override BlobAssetReference<Collider> ProduceColliderBlob(LegacySphere shape)
         {
-            var scale = (float3)shape.transform.lossyScale;
+            var worldCenter = math.mul(shape.transform.localToWorldMatrix, new float4(shape.center, 1f));
+            var shapeFromWorld = math.inverse(
+                new float4x4(new RigidTransform(shape.transform.rotation, shape.transform.position))
+            );
+            var center = math.mul(shapeFromWorld, worldCenter).xyz;
+
+            var linearScale = (float3)shape.transform.lossyScale;
+            var radius = shape.radius * math.cmax(math.abs(linearScale));
+
             return SphereCollider.Create(
-                shape.center * scale,
-                shape.radius * math.cmax(math.abs(scale)),
+                center,
+                radius,
                 ProduceCollisionFilter(shape),
                 ProduceMaterial(shape)
             );
         }
     }
 
-    [UpdateAfter(typeof(FirstPassPhysicsBodyConversionSystem))]
-    [UpdateAfter(typeof(FirstPassLegacyRigidbodyConversionSystem))]
     public class LegacyMeshColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacyMesh>
     {
         List<Vector3> m_Vertices = new List<Vector3>(65535 / 2);

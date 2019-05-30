@@ -35,7 +35,6 @@ namespace Unity.Physics.Systems
 
             handle = new ExportDynamicBodiesJob
             {
-                DynamicBodies = world.DynamicBodies,
                 MotionVelocities = world.MotionVelocities,
                 MotionDatas = world.MotionDatas,
 
@@ -51,7 +50,6 @@ namespace Unity.Physics.Systems
         [BurstCompile]
         internal struct ExportDynamicBodiesJob : IJobChunk
         {
-            [ReadOnly] public NativeSlice<RigidBody> DynamicBodies;
             [ReadOnly] public NativeSlice<MotionVelocity> MotionVelocities;
             [ReadOnly] public NativeSlice<MotionData> MotionDatas;
 

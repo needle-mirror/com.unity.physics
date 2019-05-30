@@ -116,7 +116,6 @@ namespace Unity.Physics.Tests.Collision.Colliders
             expected.Max = center + new float3(radius, radius, radius);
 
             Aabb actual = sphereCollider.Value.CalculateAabb();
-            Debug.Log($"Expected aabb: Min: {expected.Min} Max: {expected.Max}, was Min: {actual.Min} Max: {actual.Max}");
             TestUtils.AreEqual(expected.Min, actual.Min, 1e-3f);
             TestUtils.AreEqual(expected.Max, actual.Max, 1e-3f);
         }
@@ -139,7 +138,6 @@ namespace Unity.Physics.Tests.Collision.Colliders
             expected.Max = math.mul(rotation, center) + translation + new float3(radius, radius, radius);
 
             Aabb actual = sphereCollider.Value.CalculateAabb(new RigidTransform(rotation, translation));
-            Debug.Log($"Expected aabb: Min: {expected.Min} Max: {expected.Max}, was Min: {actual.Min} Max: {actual.Max}");
             TestUtils.AreEqual(expected.Min, actual.Min, 1e-3f);
             TestUtils.AreEqual(expected.Max, actual.Max, 1e-3f);
 
@@ -161,7 +159,6 @@ namespace Unity.Physics.Tests.Collision.Colliders
             float inertia = 2.0f / 5.0f * radius * radius;
             float3 expectedInertiaTensor = new float3(inertia, inertia, inertia);
             float3 inertiaTensor = sphereCollider.Value.MassProperties.MassDistribution.InertiaTensor;
-            Debug.Log($"Expected inertia tensor: {expectedInertiaTensor}, was: {inertiaTensor}");
             TestUtils.AreEqual(expectedInertiaTensor, inertiaTensor, 1e-3f);
         }
 

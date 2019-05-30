@@ -21,7 +21,7 @@ namespace Unity.Physics
 
         #region Construction
 
-        public static BlobAssetReference<Collider> Create(float3 point0, float3 point1, float radius, CollisionFilter? filter = null, Material? material = null)
+        unsafe public static BlobAssetReference<Collider> Create(float3 point0, float3 point1, float radius, CollisionFilter? filter = null, Material? material = null)
         {
             if (math.any(!math.isfinite(point0)))
             {
@@ -36,12 +36,9 @@ namespace Unity.Physics
                 throw new System.ArgumentException("Tried to create capsule collider with zero/negative/inf/nan radius");
             }
 
-            using (var allocator = new BlobAllocator(-1))
-            {
-                ref CapsuleCollider collider = ref allocator.ConstructRoot<CapsuleCollider>();
-                collider.Init(point0, point1, radius, filter ?? CollisionFilter.Default, material ?? Material.Default);
-                return allocator.CreateBlobAssetReference<Collider>(Allocator.Persistent);
-            }
+            var collider = default(CapsuleCollider);
+            collider.Init(point0, point1, radius, filter ?? CollisionFilter.Default, material ?? Material.Default);
+            return BlobAssetReference<Collider>.Create(&collider, sizeof(CapsuleCollider));
         }
 
         internal unsafe void Init(float3 vertex0, float3 vertex1, float radius, CollisionFilter filter, Material material)
@@ -54,7 +51,7 @@ namespace Unity.Physics
             m_Header.Material = material;
 
             ConvexHull.ConvexRadius = radius;
-            ConvexHull.VerticesBlob.Offset = (int)((byte*)UnsafeUtility.AddressOf(ref m_Vertex0) - (byte*)UnsafeUtility.AddressOf(ref ConvexHull.VerticesBlob.Offset));
+            ConvexHull.VerticesBlob.Offset = UnsafeEx.CalculateOffset(ref m_Vertex0, ref ConvexHull.VerticesBlob.Offset);
             ConvexHull.VerticesBlob.Length = 2;
             // note: no faces
 

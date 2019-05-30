@@ -26,7 +26,7 @@ namespace Unity.Physics.Authoring
             m_DebugStreamSystem = World.GetOrCreateSystem<DebugStream>();
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDeps)
+        protected unsafe override JobHandle OnUpdate(JobHandle inputDeps)
         {
             if (!(HasSingleton<PhysicsDebugDisplayData>() && GetSingleton<PhysicsDebugDisplayData>().DrawCollisionEvents != 0))
             {
@@ -35,62 +35,79 @@ namespace Unity.Physics.Authoring
 
             inputDeps = JobHandle.CombineDependencies(inputDeps, m_BuildPhysicsWorldSystem.FinalJobHandle, m_StepPhysicsWorldSystem.FinalSimulationJobHandle);
 
+            DebugStream.Context debugOutput = m_DebugStreamSystem.GetContext(1);
+            debugOutput.Begin(0);
+            // Allocate a NativeArray to store our debug output, so it can be shared across the display/finish jobs
+            NativeArray<DebugStream.Context> sharedOutput = new NativeArray<DebugStream.Context>(1, Allocator.TempJob);
+            sharedOutput[0] = debugOutput;
+
+            // Explicitly call ScheduleImpl here, to avoid a dependency on Havok.Physics
             JobHandle handle = new DisplayCollisionEventsJob
             {
                 World = m_BuildPhysicsWorldSystem.PhysicsWorld,
-                CollisionEvents = m_StepPhysicsWorldSystem.Simulation.CollisionEvents,
-                OutputStream = m_DebugStreamSystem.GetContext(1)
-            }.Schedule(1, 1, inputDeps);
+                OutputStream = sharedOutput
+            }.ScheduleImpl(m_StepPhysicsWorldSystem.Simulation, ref m_BuildPhysicsWorldSystem.PhysicsWorld, inputDeps);
 
-            m_EndFramePhysicsSystem.HandlesToWaitFor.Add(handle);
+            JobHandle finishHandle = new FinishDisplayCollisionEventsJob
+            {
+                OutputStream = sharedOutput
+            }.Schedule(handle);
+
+            m_EndFramePhysicsSystem.HandlesToWaitFor.Add(finishHandle);
 
             return handle;
         }
 
         // Job which iterates over collision events and writes display info to a DebugStream.
         //[BurstCompile]
-        struct DisplayCollisionEventsJob : IJobParallelFor
+        unsafe struct DisplayCollisionEventsJob : ICollisionEventsJob
         {
             [ReadOnly] public PhysicsWorld World;
-            [ReadOnly] public CollisionEvents CollisionEvents;
-            public DebugStream.Context OutputStream;
+            public NativeArray<DebugStream.Context> OutputStream;
 
-            public unsafe void Execute(int workItemIndex)
+            public void Execute(CollisionEvent collisionEvent)
             {
-                OutputStream.Begin(workItemIndex);
-                foreach (CollisionEvent collisionEvent in CollisionEvents)
+                DebugStream.Context outputContext = OutputStream[0];
+
+                RigidBody bodyA = World.Bodies[collisionEvent.BodyIndices.BodyAIndex];
+                RigidBody bodyB = World.Bodies[collisionEvent.BodyIndices.BodyBIndex];
+                float totalImpulse = math.csum(collisionEvent.AccumulatedImpulses);
+
+                bool AreCollisionEventsEnabled(Collider* collider, ColliderKey key)
                 {
-                    float3 offset = new float3(0, 1, 0);
-
-                    RigidBody bodyA = World.Bodies[collisionEvent.BodyIndices.BodyAIndex];
-                    RigidBody bodyB = World.Bodies[collisionEvent.BodyIndices.BodyBIndex];
-                    float totalImpulse = math.csum(collisionEvent.AccumulatedImpulses);
-
-                    bool AreCollisionEventsEnabled(Collider* collider, ColliderKey key)
+                    if (collider->CollisionType == CollisionType.Convex)
                     {
-                        if (collider->CollisionType == CollisionType.Convex)
-                        {
-                            return ((ConvexColliderHeader*)collider)->Material.EnableCollisionEvents;
-                        }
-                        else
-                        {
-                            collider->GetLeaf(key, out ChildCollider child);
-                            collider = child.Collider;
-                            UnityEngine.Assertions.Assert.IsTrue(collider->CollisionType == CollisionType.Convex);
-                            return ((ConvexColliderHeader*)collider)->Material.EnableCollisionEvents;
-                        }
+                        return ((ConvexColliderHeader*)collider)->Material.EnableCollisionEvents;
                     }
-
-                    if (AreCollisionEventsEnabled(bodyA.Collider, collisionEvent.ColliderKeys.ColliderKeyA))
+                    else
                     {
-                        OutputStream.Text(totalImpulse.ToString().ToCharArray(), bodyA.WorldFromBody.pos + offset, Color.blue);
-                    }
-                    if (AreCollisionEventsEnabled(bodyB.Collider, collisionEvent.ColliderKeys.ColliderKeyB))
-                    {
-                        OutputStream.Text(totalImpulse.ToString().ToCharArray(), bodyB.WorldFromBody.pos + offset, Color.blue);
+                        collider->GetLeaf(key, out ChildCollider child);
+                        collider = child.Collider;
+                        UnityEngine.Assertions.Assert.IsTrue(collider->CollisionType == CollisionType.Convex);
+                        return ((ConvexColliderHeader*)collider)->Material.EnableCollisionEvents;
                     }
                 }
-                OutputStream.End();
+
+                bool areBodyACollisionEventsEnabled = AreCollisionEventsEnabled(bodyA.Collider, collisionEvent.ColliderKeys.ColliderKeyA);
+                bool areBodyBCollisionEventsEnabled = AreCollisionEventsEnabled(bodyB.Collider, collisionEvent.ColliderKeys.ColliderKeyB);
+                if (areBodyACollisionEventsEnabled || areBodyBCollisionEventsEnabled)
+                {
+                    outputContext.Text(totalImpulse.ToString().ToCharArray(), 
+                        math.lerp(bodyA.WorldFromBody.pos, bodyB.WorldFromBody.pos, 0.5f), Color.blue);
+                }
+
+                OutputStream[0] = outputContext;
+            }
+        }
+
+        public unsafe struct FinishDisplayCollisionEventsJob : IJob
+        {
+            [DeallocateOnJobCompletion]
+            public NativeArray<DebugStream.Context> OutputStream;
+
+            public void Execute()
+            {
+                OutputStream[0].End();
             }
         }
     }

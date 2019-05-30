@@ -33,7 +33,7 @@ namespace Unity.Physics
 
         #region Construction
 
-        public static BlobAssetReference<Collider> Create(float3 center, quaternion orientation, float3 size, float convexRadius, CollisionFilter? filter = null, Material? material = null)
+        unsafe public static BlobAssetReference<Collider> Create(float3 center, quaternion orientation, float3 size, float convexRadius, CollisionFilter? filter = null, Material? material = null)
         {
             if (math.any(!math.isfinite(center)))
             {
@@ -51,13 +51,12 @@ namespace Unity.Physics
             {
                 throw new System.ArgumentException("Tried to create BoxCollider with radius greater than half extent");
             }
-            using (var allocator = new BlobAllocator(-1))
-            {
-                ref BoxCollider collider = ref allocator.ConstructRoot<BoxCollider>();
-                collider.Init(center, orientation, size, convexRadius, filter ?? CollisionFilter.Default, material ?? Material.Default);
-                return allocator.CreateBlobAssetReference<Collider>(Allocator.Persistent);
-            }
+
+            var collider = default(BoxCollider);
+            collider.Init(center, orientation, size, convexRadius, filter ?? CollisionFilter.Default, material ?? Material.Default);
+            return BlobAssetReference<Collider>.Create(&collider, sizeof(BoxCollider));
         }
+
 
         internal unsafe void Init(float3 center, quaternion orientation, float3 size, float convexRadius, CollisionFilter filter, Material material)
         {
@@ -71,22 +70,22 @@ namespace Unity.Physics
             // Build immutable convex data
             fixed (BoxCollider* collider = &this)
             {
-                ConvexHull.VerticesBlob.Offset = (int)((byte*)UnsafeUtility.AddressOf(ref collider->m_Vertices[0]) - (byte*)UnsafeUtility.AddressOf(ref ConvexHull.VerticesBlob.Offset));
+                ConvexHull.VerticesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_Vertices[0], ref ConvexHull.VerticesBlob);
                 ConvexHull.VerticesBlob.Length = 8;
 
-                ConvexHull.FacePlanesBlob.Offset = (int)((byte*)UnsafeUtility.AddressOf(ref collider->m_FacePlanes[0]) - (byte*)UnsafeUtility.AddressOf(ref ConvexHull.FacePlanesBlob.Offset));
+                ConvexHull.FacePlanesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_FacePlanes[0], ref ConvexHull.FacePlanesBlob);
                 ConvexHull.FacePlanesBlob.Length = 6;
 
-                ConvexHull.FacesBlob.Offset = (int)((byte*)UnsafeUtility.AddressOf(ref collider->m_Faces[0]) - (byte*)UnsafeUtility.AddressOf(ref ConvexHull.FacesBlob.Offset));
+                ConvexHull.FacesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_Faces[0], ref ConvexHull.FacesBlob.Offset);
                 ConvexHull.FacesBlob.Length = 6;
 
-                ConvexHull.FaceVertexIndicesBlob.Offset = (int)((byte*)UnsafeUtility.AddressOf(ref collider->m_FaceVertexIndices[0]) - (byte*)UnsafeUtility.AddressOf(ref ConvexHull.FaceVertexIndicesBlob.Offset));
+                ConvexHull.FaceVertexIndicesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_FaceVertexIndices[0], ref ConvexHull.FaceVertexIndicesBlob);
                 ConvexHull.FaceVertexIndicesBlob.Length = 24;
 
-                ConvexHull.VertexEdgesBlob.Offset = (int)((byte*)UnsafeUtility.AddressOf(ref collider->m_VertexEdges[0]) - (byte*)UnsafeUtility.AddressOf(ref ConvexHull.VertexEdgesBlob.Offset));
+                ConvexHull.VertexEdgesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_VertexEdges[0], ref ConvexHull.VertexEdgesBlob);
                 ConvexHull.VertexEdgesBlob.Length = 8;
 
-                ConvexHull.FaceLinksBlob.Offset = (int)((byte*)UnsafeUtility.AddressOf(ref collider->m_FaceLinks[0]) - (byte*)UnsafeUtility.AddressOf(ref ConvexHull.FaceLinksBlob.Offset));
+                ConvexHull.FaceLinksBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_FaceLinks[0], ref ConvexHull.FaceLinksBlob);
                 ConvexHull.FaceLinksBlob.Length = 24;
 
                 ConvexHull.Face* faces = (ConvexHull.Face*)(&collider->m_Faces[0]);

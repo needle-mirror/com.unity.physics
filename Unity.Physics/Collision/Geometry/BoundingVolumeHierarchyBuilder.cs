@@ -53,7 +53,7 @@ namespace Unity.Physics
 
             void SortRange(int axis, ref Range range)
             {
-                for (int i = range.Start; i < range.Length; ++i)
+                for (int i = range.Start; i < range.Start + range.Length; ++i)
                 {
                     PointAndIndex value = Points[i];
                     float key = value.Position[axis];
@@ -203,7 +203,7 @@ namespace Unity.Physics
 
                 float4* p = PointsAsFloat4;
                 float4* start = p + range.Start;
-                float4* end = p + range.Length - 1;
+                float4* end = start + range.Length - 1;
 
                 do
                 {
@@ -321,7 +321,7 @@ namespace Unity.Physics
                     }
 
                     hasLeftOvers = 0;
-                    CreateChildren(subRanges, numSubRanges, range.Root, ref freeNodeIndex, (Range*)UnsafeUtility.AddressOf(ref range), ref hasLeftOvers);
+                    CreateChildren(subRanges, numSubRanges, range.Root, ref freeNodeIndex, &range, ref hasLeftOvers);
 
                     Assert.IsTrue(hasLeftOvers <= 1/*, "Internal error"*/);
                 } while (hasLeftOvers > 0);
@@ -407,12 +407,13 @@ namespace Unity.Physics
         }
 
         public unsafe JobHandle ScheduleBuildJobs(
-            NativeArray<PointAndIndex> points, NativeArray<Aabb> aabbs, NativeArray<CollisionFilter> bodyFilters,
+            NativeArray<PointAndIndex> points, NativeArray<Aabb> aabbs, NativeArray<CollisionFilter> bodyFilters, NativeArray<int> shouldDoWork,
             int numThreadsHint, JobHandle inputDeps, int numNodes, NativeArray<Builder.Range> ranges, NativeArray<int> numBranches)
         {
             JobHandle handle = inputDeps;
 
             var branchNodeOffsets = new NativeArray<int>(Constants.MaxNumTreeBranches, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+            int oldNumBranches = numBranches[0];
 
             // Build initial branches
             handle = new BuildFirstNLevelsJob
@@ -423,7 +424,8 @@ namespace Unity.Physics
                 Ranges = ranges,
                 BranchNodeOffsets = branchNodeOffsets,
                 BranchCount = numBranches,
-                ThreadCount = numThreadsHint
+                ThreadCount = numThreadsHint,
+                ShouldDoWork = shouldDoWork
             }.Schedule(handle);
 
             // Build branches
@@ -437,7 +439,7 @@ namespace Unity.Physics
                 Ranges = ranges,
                 BranchNodeOffsets = branchNodeOffsets,
                 BranchCount = numBranches
-            }.Schedule(Constants.MaxNumTreeBranches, 1, handle);
+            }.ScheduleUnsafeIndex0(numBranches, 1, handle);
 
             // Note: This job also deallocates the aabbs and lookup arrays on completion
             handle = new FinalizeTreeJob
@@ -448,7 +450,9 @@ namespace Unity.Physics
                 LeafFilters = bodyFilters,
                 NumNodes = numNodes,
                 BranchNodeOffsets = branchNodeOffsets,
-                BranchCount = numBranches
+                BranchCount = numBranches,
+                OldBranchCount = oldNumBranches,
+                ShouldDoWork = shouldDoWork
             }.Schedule(handle);
 
             return handle;
@@ -742,10 +746,20 @@ namespace Unity.Physics
             public NativeArray<Builder.Range> Ranges;
             public NativeArray<int> BranchNodeOffsets;
             public NativeArray<int> BranchCount;
+            public NativeArray<int> ShouldDoWork;
+
             public int ThreadCount;
 
             public void Execute()
             {
+                if (ShouldDoWork[0] == 0)
+                {
+                    // If we need to to skip tree building tasks, than set BranchCount to zero so
+                    // that BuildBranchesJob also gets early out in runtime.
+                    BranchCount[0] = 0;
+                    return;
+                }
+
                 var bvh = new BoundingVolumeHierarchy(Nodes, NodeFilters);
                 bvh.BuildFirstNLevels(Points, Ranges, BranchNodeOffsets, ThreadCount, out int branchCount);
                 BranchCount[0] = branchCount;
@@ -753,7 +767,7 @@ namespace Unity.Physics
         }
 
         [BurstCompile]
-        public unsafe struct BuildBranchesJob : IJobParallelFor
+        public unsafe struct BuildBranchesJob : IJobParallelForDefer
         {
             [ReadOnly] public NativeArray<Aabb> Aabbs;
             [ReadOnly] public NativeArray<CollisionFilter> BodyFilters;
@@ -771,13 +785,6 @@ namespace Unity.Physics
 
             public void Execute(int index)
             {
-                // This is need since we schedule the job before we know the exact number of 
-                // branches we need to build.
-                if (index >= BranchCount[0])
-                {
-                    return;
-                }
-
                 Assert.IsTrue(BranchNodeOffsets[index] >= 0);
                 var bvh = new BoundingVolumeHierarchy(Nodes, NodeFilters);
                 int lastNode = bvh.BuildBranch(Points, Aabbs, Ranges[index], BranchNodeOffsets[index]);
@@ -796,15 +803,24 @@ namespace Unity.Physics
             [ReadOnly] [DeallocateOnJobCompletion] public NativeArray<Aabb> Aabbs;
             [ReadOnly] [DeallocateOnJobCompletion] public NativeArray<int> BranchNodeOffsets;
             [ReadOnly] public NativeArray<CollisionFilter> LeafFilters;
-            [ReadOnly] public NativeArray<int> BranchCount;
+            [ReadOnly] public NativeArray<int> ShouldDoWork;
             [NativeDisableUnsafePtrRestriction]
             public Node* Nodes;
             [NativeDisableUnsafePtrRestriction]
             public CollisionFilter* NodeFilters;
             public int NumNodes;
+            public int OldBranchCount;
+            public NativeArray<int> BranchCount;
 
             public void Execute()
             {
+                if (ShouldDoWork[0] == 0)
+                {
+                    // Restore original branch count
+                    BranchCount[0] = OldBranchCount;
+                    return;
+                }
+
                 int minBranchNodeIndex = BranchNodeOffsets[0] - 1;
                 int branchCount = BranchCount[0];
                 for (int i = 1; i < BranchCount[0]; i++)

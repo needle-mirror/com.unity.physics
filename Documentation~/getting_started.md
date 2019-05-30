@@ -29,11 +29,11 @@ So far we have used Box and Sphere for the collision types. Currently six distin
 * **Convex Hull** : a 'convex hull' is as if you wrapped the object in paper, all the holes and concave parts will not be represented, just the outer most features. Collision detection algorithms for something you know is convex is much faster than concave. This is what a convex hull looks like for a teapot:
 ![collider_cast](images/Convex_Hull_Teapot.png)
 
-* **Mesh** : a arbitrary triangle soup. The most expensive and is assumed to be concave. All the convex shapes above all can collide with each other, and they can collide with Mesh, but Mesh can't collide with other Mesh in Unity Physics. So best used for static objects, but if you know your dynamic object Mesh will not need to collide with other Mesh it can be dynamic, but make sure to setup your collision filtering appropriately.
+* **Mesh** : a arbitrary triangle soup. The most expensive and is assumed to be concave. Mesh versus mesh collision in particular can be very expensive, so best practice is to use mesh shapes only for static objects and convex shapes for dynamic objects. But if you know your dynamic mesh shape will not need to collide with another mesh then it can be dynamic, but make sure to setup your collision filtering appropriately.
 
 ### What is 'convex radius'
 
-In a lot of the shapes you will see a 'convex radius' field. That is an optimization for collision detection so that it can extend the hull of the shape out by a bit, like an outer shell of that size around the object. That has the side effect of rounding out corners, so you don't want it too big, and is normally quite small with respect to the size of the object.
+In a lot of the shapes you will see a 'convex radius' field. That is an optimization for collision detection so that it can inflate the hull of the shape a little, like an outer shell of that size around the object. That has the side effect of rounding out corners, so you typically don't want it too big, and is normally quite small with respect to the size of the object.
 
 ## Compound Shapes
 
@@ -52,24 +52,24 @@ You can add a **Physics Step** to an object in the scene (just one object in the
 
 ![collider_cast](images/StepPhysics.png)
 
-Try adding that to the sphere scene you had above, and change gravity to be 10 in y instead of the -9.81 default. On play the sphere should 'fall' upwards, instead of down. Can have any value you like for the world gravity, and note also for gravity that you can alter it per body via the Gravity Factor scalar (default is +1, so  1*WorldGravity, but can be any signed float value).
+Try adding that to the sphere scene you had above, and change gravity to be 10 in y instead of the -9.81 default. On play the sphere should 'fall' upwards, instead of down. You can use any value you like for the world gravity, and note also for gravity that you can alter it per body via the Gravity Factor scalar (default is +1, so  1*WorldGravity, but can be any signed float value).
 
 For now 'Unity Physics' is the only choice you should use in the Simulation Type drop down. 
 'Havok Physics' will be an option soon to allow the exact same scene setup to be run through the full Havok Physics SDK instead.
 
 
-
 # Interacting with physics bodies
 
-Since Unity Physics is purely based in DOTS, rigid bodies are represented component data on the Entities. The simplified 'physics body' and 'physics shape' view you have in the Editor is actual composed of multiple components under the hood at runtime, to allow more efficient access and say save space for static bodies which do not require some of the data.
+Since Unity Physics is purely based in DOTS, rigid bodies are represented component data on the Entities. The simplified 'physics body' and 'physics shape' view you have in the Editor is actually composed of multiple components under the hood at runtime, to allow more efficient access and say save space for static bodies which do not require some of the data.
 
-The current set for a rigid body is: 
+The current set of components for a rigid body is: 
 
-* PhysicsCollider : the shape of the body. Needed for all bodies that collide.
-* PhysicsVelocity : the current velocities (linear and angular) of a dynamic body.  (Dynamic body only)
-* PhysicsMass : the current mass properties (inertia) of a dynamic body. (Dynamic body only)
-* PhysicsDamping : the amount of damping to apply to the motion of the body. (Dynamic body only)
-* PhysicsGravityFactor : scalar for how much gravity should affect the body. Assumed to be 1 if not on a body. (Dynamic body only)
+* PhysicsCollider : the shape of the body. Needed for any bodies that can collide.
+* PhysicsVelocity : the current velocities (linear and angular) of a dynamic body. Needed for any body that can move.
+* PhysicsMass : the current mass properties (center of mass and inertia) of a dynamic body. Assumed to be infinite mass if not present.
+* PhysicsDamping : the amount of damping to apply to the motion of a dynamic body. Assumed to be zero if not present.
+* PhysicsGravityFactor : scalar for how much gravity should affect a dynamic body. Assumed to be 1 if not present.
+* PhysicsCustomData : custom flags applied to the body, which flow through to events. Assumed to be zero if not present.
 
 For all bodies we require the Unity.Transforms Translation and Rotation component data. This will represent the transform of the body.
 
@@ -120,7 +120,7 @@ public class AttractComponent : MonoBehaviour
 
     void Update()
     {
-        var vortex = World.Active.GetOrCreateManager<AttractSystem>();
+        var vortex = World.Active.GetOrCreateSystem<AttractSystem>();
         vortex.center = transform.position;
         vortex.maxDistanceSqrd = maxDistance * maxDistance;
         vortex.strength = strength;
@@ -136,7 +136,7 @@ The correct DOTS way to do this would be something along the lines of using  ICo
 
 ## Impulses 
 
-We have seen now how to alter velocity in code, but it can be tricky to work out what velocity values to set to get a desired outcome. A common thing to want to do is apply an impulse at a given point on the body and have it react. To work out the affect on angular velocity from a given linear impulse. So say if shooting the object with a gun. We provide a few Unity.Physics.Extensions.ComponentExtensions to do the math for you, for instance ApplyImpulse():
+We have seen now how to alter velocity in code, but it can be tricky to work out what velocity values to set to get a desired outcome. A common thing to want to do is apply an impulse at a given point on the body and have it react. To work out the affect on angular velocity from a given linear impulse. So say if shooting the object with a gun. We provide a few `Unity.Physics.Extensions.ComponentExtensions` to do the math for you, for example `ApplyImpulse()`:
 
 ```csharp
     public static void ApplyImpulse(ref PhysicsVelocity pv, PhysicsMass pm, 
@@ -246,8 +246,8 @@ public unsafe Entity CreateBody(RenderMesh displayMesh, float3 position, quatern
     ComponentType[] componentTypes = new ComponentType[isDynamic ? 7 : 4];
 
     componentTypes[0] = typeof(RenderMesh);
-    componentTypes[1] = typeof(TranslationProxy);
-    componentTypes[2] = typeof(RotationProxy);
+    componentTypes[1] = typeof(Translation;
+    componentTypes[2] = typeof(Rotation);
     componentTypes[3] = typeof(PhysicsCollider);
     if (isDynamic)
     {
@@ -302,5 +302,3 @@ Now that you can create bodies, it would be a good time to learn about collision
 [Collision queries](collision_queries.md)
 
 [(Back to Index)](index.md)
-
-

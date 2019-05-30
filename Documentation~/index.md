@@ -13,5 +13,5 @@ These are very early stage documents which will be extended over time. Please re
 * [Getting started](getting_started.md)
 * [Collision queries](collision_queries.md)
 * [Core components](core_components.md)
-* [Modifying simulation results](simulation_modification.md)
+* [Modifying simulation behaviour](simulation_modification.md)
 * [Glossary](glossary.md)

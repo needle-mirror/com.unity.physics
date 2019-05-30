@@ -1,5 +1,6 @@
 ﻿using NUnit.Framework;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.PerformanceTesting;
@@ -10,6 +11,21 @@ namespace Unity.Physics.Tests.PerformanceTests
 {
     public class RadixSortTests
     {
+        //@TODO: Make part of NativeArray API
+        unsafe static NativeArray<U> ReinterpretCast<T, U>(NativeArray<T> array)
+            where T : struct
+            where U : struct
+        {
+            Assert.AreEqual(UnsafeUtility.SizeOf<T>(), UnsafeUtility.SizeOf<U>());
+            
+            var castedArray = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<U>((byte*)array.GetUnsafePtr(), array.Length, Allocator.Invalid);
+#if ENABLE_UNITY_COLLECTIONS_CHECKS
+            NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref castedArray, NativeArrayUnsafeUtility.GetAtomicSafetyHandle(array));
+#endif
+            return castedArray;
+        }
+
+        
         public static void InitPairs(int minIndex, int maxIndex, int count, NativeArray<ulong> pairs)
         {
             Random.InitState(1234);
@@ -30,6 +46,8 @@ namespace Unity.Physics.Tests.PerformanceTests
                 pairs[i] = indexB << 40 | indexA << 16;
             }
         }
+
+
 
 #if UNITY_2019_2_OR_NEWER
         [Test, Performance]
@@ -61,8 +79,8 @@ namespace Unity.Physics.Tests.PerformanceTests
 
             var job = new Scheduler.RadixSortPerBodyAJob
             {
-                InputArray = pairs,
-                OutputArray = sortedPairs,
+                InputArray = ReinterpretCast<ulong, Scheduler.DispatchPair>(pairs),
+                OutputArray = ReinterpretCast<ulong, Scheduler.DispatchPair>(sortedPairs),
                 DigitCount = tempCount,
                 MaxDigits = numDigits,
                 MaxIndex = maxBodyIndex
@@ -99,7 +117,7 @@ namespace Unity.Physics.Tests.PerformanceTests
         [TestCase(1000, TestName = "PerfDefaultSortOnSubarrays 1000")]
         [TestCase(10000, TestName = "PerfDefaultSortOnSubarrays 10 000")]
         [TestCase(100000, TestName = "PerfDefaultSortOnSubarrays 100 000")]
-        public void PerfDefaultSortOnSubarrays(int count)
+        unsafe public void PerfDefaultSortOnSubarrays(int count)
         {
             int maxBodyIndex = (int)math.pow(count, 0.7f);
             int numDigits = 0;
@@ -110,18 +128,18 @@ namespace Unity.Physics.Tests.PerformanceTests
                 numDigits++;
             }
 
-            var pairs = new NativeArray<ulong>(count, Allocator.Temp);
-            var sortedPairs = new NativeArray<ulong>(count, Allocator.Temp);
+            var pairs = new NativeArray<ulong>(count, Allocator.TempJob);
+            var sortedPairs = new NativeArray<ulong>(count, Allocator.TempJob);
 
             InitPairs(1, maxBodyIndex, count, pairs);
 
             // Do a single pass of radix sort on bodyA only.
             var tempCount = new NativeArray<int>(maxBodyIndex + 1, Allocator.TempJob);
-            Scheduler.RadixSortPerBodyAJob.RadixSortPerBodyA(pairs, sortedPairs, tempCount, numDigits, maxBodyIndex, 16);
+            Scheduler.RadixSortPerBodyAJob.RadixSortPerBodyA((ulong*)pairs.GetUnsafePtr(), (ulong*)sortedPairs.GetUnsafePtr(), pairs.Length, tempCount, numDigits, maxBodyIndex, 16);
 
             var job = new Scheduler.SortSubArraysJob
             {
-                InOutArray = sortedPairs,
+                InOutArray = ReinterpretCast<ulong, Scheduler.DispatchPair>(sortedPairs),
                 NextElementIndex = tempCount
             };
 

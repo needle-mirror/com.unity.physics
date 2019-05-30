@@ -213,7 +213,7 @@ namespace Unity.Physics
                 jointData->Version = 1;
 
                 byte* end = (byte*)jointData + sizeof(JointData);
-                jointData->m_ConstraintsBlob.Offset = (int)(end - (byte*)UnsafeUtility.AddressOf(ref jointData->m_ConstraintsBlob.Offset));
+                jointData->m_ConstraintsBlob.Offset = UnsafeEx.CalculateOffset(end, ref jointData->m_ConstraintsBlob);
                 jointData->m_ConstraintsBlob.Length = constraints.Length;
 
                 for (int i = 0; i < constraints.Length; i++)
@@ -222,11 +222,11 @@ namespace Unity.Physics
                 }
             }
 
-            // Copy it into blob asset
-            byte[] bytes = new byte[totalSize];
-            Marshal.Copy((IntPtr)jointData, bytes, 0, totalSize);
+            var blob = BlobAssetReference<JointData>.Create(jointData, totalSize);
+            
             UnsafeUtility.Free(jointData, Allocator.Temp);
-            return BlobAssetReference<JointData>.Create(bytes);
+
+            return blob;
         }
 
         #region Common joint descriptions
@@ -255,15 +255,19 @@ namespace Unity.Physics
             );
         }
 
-        public static BlobAssetReference<JointData> CreatePrismatic(float3 positionAinA, float3 positionBinB, float3 axisInB,
-            float minDistanceOnAxis, float maxDistanceOnAxis, float minDistanceFromAxis, float maxDistanceFromAxis)
+        public static BlobAssetReference<JointData> CreatePrismatic(float3 positionAinA, float3 positionBinB, float3 axisInA, float3 axisInB,
+            float3 perpendicularAxisInA, float3 perpendicularAxisInB, float minDistanceOnAxis, float maxDistanceOnAxis, float minDistanceFromAxis, float maxDistanceFromAxis)
         {
-            CalculatePerpendicularNormalized(axisInB, out float3 perpendicular1, out float3 perpendicular2);
+            // Check that the perpendicular axes are perpendicular
+            Assert.IsTrue(math.abs(math.dot(axisInA, perpendicularAxisInA)) < 1e-5f);
+            Assert.IsTrue(math.abs(math.dot(axisInB, perpendicularAxisInB)) < 1e-5f);
+
             return Create(
-                new MTransform(float3x3.identity, positionAinA),
-                new MTransform(new float3x3(axisInB, perpendicular1, perpendicular2), positionBinB),
+                new MTransform(new float3x3(axisInA, perpendicularAxisInA, math.cross(axisInA, perpendicularAxisInA)), positionAinA),
+                new MTransform(new float3x3(axisInB, perpendicularAxisInB, math.cross(axisInB, perpendicularAxisInB)), positionBinB),
                 new[]
                 {
+                    Constraint.FixedAngle(),
                     Constraint.Planar(0, minDistanceOnAxis, maxDistanceOnAxis),
                     Constraint.Cylindrical(0, minDistanceFromAxis, maxDistanceFromAxis)
                 }

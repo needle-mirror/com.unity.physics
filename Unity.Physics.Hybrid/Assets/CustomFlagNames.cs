@@ -10,7 +10,7 @@ namespace Unity.Physics.Authoring
         IReadOnlyList<string> FlagNames { get; }
     }
     
-    [CreateAssetMenu(menuName = "DOTS Physics/Custom Flag Names", fileName = "Custom Flag Names")]
+    [CreateAssetMenu(menuName = "DOTS/Physics/Custom Flag Names", fileName = "Custom Flag Names")]
     public class CustomFlagNames : ScriptableObject, IFlagNames
     {
         public IReadOnlyList<string> FlagNames => m_FlagNames;

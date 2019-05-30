@@ -13,44 +13,48 @@ namespace Unity.Physics
             PostCreateDispatchPairs,
             PostCreateContacts,
             PostCreateContactJacobians,
-            PostSolveJacobians,
-            PostIntegrateMotions
+            PostSolveJacobians
         }
 
-        public delegate JobHandle Callback(ref ISimulation simulation, JobHandle inputDeps);
+        public delegate JobHandle Callback(ref ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps);
 
         private static readonly int k_NumPhases = Enum.GetValues(typeof(Phase)).Length;
 
-        private readonly List<Callback>[] m_Callbacks = new List<Callback>[k_NumPhases];
+        struct CallbackAndDependency
+        {
+            public Callback Callback;
+            public JobHandle Dependency;
+        }
+
+        private readonly List<CallbackAndDependency>[] m_Callbacks = new List<CallbackAndDependency>[k_NumPhases];
 
         public SimulationCallbacks()
         {
             for (int i = 0; i < k_NumPhases; ++i)
             {
-                m_Callbacks[i] = new List<Callback>(8);
+                m_Callbacks[i] = new List<CallbackAndDependency>(8);
             }
         }
 
-        public void Enqueue(Phase phase, Callback cb)
+        public void Enqueue(Phase phase, Callback cb, JobHandle dependency)
         {
-            m_Callbacks[(int)phase].Add(cb);
+            m_Callbacks[(int)phase].Add(new CallbackAndDependency { Callback = cb, Dependency = dependency });
         }
 
-        public JobHandle Execute(Phase phase, ISimulation simulation, JobHandle inputDeps)
+        public bool Any(Phase phase)
         {
-            ref List<Callback> cbs = ref m_Callbacks[(int)phase];
+            return m_Callbacks[(int)phase].Count > 0;
+        }
+
+        public JobHandle Execute(Phase phase, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)
+        {
+            ref List<CallbackAndDependency> cbs = ref m_Callbacks[(int)phase];
             if (m_Callbacks[(int)phase].Count > 0)
             {
-                NativeList<JobHandle> handles = new NativeList<JobHandle>(cbs.Count, Allocator.Temp);
-                foreach (Callback callback in cbs)
-                {
-                    JobHandle newTask = callback(ref simulation, inputDeps);
-                    handles.Add(newTask);
-                    inputDeps = newTask; // Have to assume each callback will modify the same data
-                }
-                JobHandle handle = JobHandle.CombineDependencies(handles);
-                handles.Dispose();
-                return handle;
+                foreach (CallbackAndDependency callback in cbs)
+                    inputDeps = callback.Callback(ref simulation, ref world, JobHandle.CombineDependencies(inputDeps, callback.Dependency));
+
+                return inputDeps;
             }
             return inputDeps;
         }

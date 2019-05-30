@@ -125,11 +125,9 @@ namespace Unity.Physics
             nodes.Dispose();
 
             // Copy collider into blob
-            // TODO: Allocate it directly into blob instead
-            byte[] bytes = new byte[totalColliderSize];
-            Marshal.Copy((IntPtr)meshCollider, bytes, 0, totalColliderSize);
+            var blob = BlobAssetReference<Collider>.Create(meshCollider, totalColliderSize);
             UnsafeUtility.Free(meshCollider, Allocator.Temp);
-            return BlobAssetReference<Collider>.Create(bytes);
+            return blob;
         }
 
         #endregion

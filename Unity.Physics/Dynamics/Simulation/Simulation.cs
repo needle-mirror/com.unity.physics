@@ -1,6 +1,7 @@
 ﻿using System;
 using Unity.Collections;
 using Unity.Jobs;
+using Unity.Jobs.LowLevel.Unsafe;
 using Unity.Mathematics;
 
 namespace Unity.Physics
@@ -38,17 +39,6 @@ namespace Unity.Physics
         // - Jobs which use the simulation results should depend on "finalSimulationJobHandle" 
         // - The end of each step should depend on "finalHandle" (makes sure all simulation and cleanup is finished)
         void ScheduleStepJobs(SimulationStepInput input, JobHandle inputDeps, out JobHandle finalSimulationJobHandle, out JobHandle finalJobHandle);
-        
-        // Read-write access to simulation data flowing through the step.
-        // Warning: Only valid at specific sync points during the step!
-        SimulationData.BodyPairs BodyPairs { get; }
-        SimulationData.Contacts Contacts { get; }
-        SimulationData.Jacobians Jacobians { get; }
-
-        // Events produced by the simulation step.
-        // Valid until the start of the next step.
-        CollisionEvents CollisionEvents { get; }
-        TriggerEvents TriggerEvents { get; }
     }
 
     // Default simulation implementation
@@ -56,14 +46,11 @@ namespace Unity.Physics
     {
         public SimulationType Type => SimulationType.UnityPhysics;
 
-        public SimulationData.BodyPairs BodyPairs => new SimulationData.BodyPairs(m_Context.PhasedDispatchPairsArray);
-        public SimulationData.Contacts Contacts => new SimulationData.Contacts(m_Context.Contacts, m_Context.SolverSchedulerInfo);
-        public SimulationData.Jacobians Jacobians => new SimulationData.Jacobians(m_Context.Jacobians, m_Context.SolverSchedulerInfo.NumWorkItems);
-        public CollisionEvents CollisionEvents => new CollisionEvents(m_Context.CollisionEventStream);
-        public TriggerEvents TriggerEvents => new TriggerEvents(m_Context.TriggerEventStream);
+        internal LowLevel.CollisionEvents CollisionEvents => new LowLevel.CollisionEvents(m_Context.CollisionEventStream);
+        internal LowLevel.TriggerEvents TriggerEvents => new LowLevel.TriggerEvents(m_Context.TriggerEventStream);
 
         private readonly Scheduler m_Scheduler;
-        private Context m_Context;
+        internal Context m_Context;
 
         public Simulation()
         {
@@ -86,7 +73,7 @@ namespace Unity.Physics
 
         // Schedule all the jobs for the simulation step.
         // Enqueued callbacks can choose to inject additional jobs at defined sync points.
-        public void ScheduleStepJobs(SimulationStepInput input, JobHandle inputDeps, out JobHandle finalSimulationJobHandle, out JobHandle finalJobHandle)
+        public unsafe void ScheduleStepJobs(SimulationStepInput input, JobHandle inputDeps, out JobHandle finalSimulationJobHandle, out JobHandle finalJobHandle)
         {
             // Dispose event streams from previous frame
             DisposeEventStreams();
@@ -104,41 +91,32 @@ namespace Unity.Physics
             SimulationCallbacks callbacks = input.Callbacks ?? new SimulationCallbacks();
             JobHandle handle = inputDeps;
 
-            // We need to make sure that broadphase tree building is done before we schedule FindOverlapsJobs.
-            handle.Complete();
-
             // Find all body pairs that overlap in the broadphase
             handle = input.World.CollisionWorld.Broadphase.ScheduleFindOverlapsJobs(
-                out BlockStream dynamicVsDynamicBroadphasePairsStream, out BlockStream staticVsDynamicBroadphasePairsStream, handle);
-            handle.Complete();  // Need to know the total number of pairs before continuing
+                out BlockStream dynamicVsDynamicBroadphasePairsStream, out BlockStream staticVsDynamicBroadphasePairsStream, ref m_Context, handle);
 
             // Create phased dispatch pairs for all interacting body pairs
             handle = m_Scheduler.ScheduleCreatePhasedDispatchPairsJob(
-                ref input.World, ref dynamicVsDynamicBroadphasePairsStream,  ref staticVsDynamicBroadphasePairsStream, ref m_Context, handle);
-            handle.Complete();  // Need to know the total number of work items before continuing
-            handle = callbacks.Execute(SimulationCallbacks.Phase.PostCreateDispatchPairs, this, handle);
-            m_Context.CreateBodyPairsHandle = handle;
+                ref input.World, ref dynamicVsDynamicBroadphasePairsStream, ref staticVsDynamicBroadphasePairsStream, ref m_Context, handle);
+
+            handle = callbacks.Execute(SimulationCallbacks.Phase.PostCreateDispatchPairs, this, ref input.World, handle);
 
             // Create contact points & joint Jacobians
             handle = NarrowPhase.ScheduleProcessBodyPairsJobs(ref input.World, input.TimeStep, input.NumSolverIterations, ref m_Context, handle);
-            handle = callbacks.Execute(SimulationCallbacks.Phase.PostCreateContacts, this, handle);
-            m_Context.CreateContactsHandle = handle;
+            handle = callbacks.Execute(SimulationCallbacks.Phase.PostCreateContacts, this, ref input.World, handle);
 
             // Create contact Jacobians
-            handle = Solver.ScheduleBuildContactJacobiansJobs(ref input.World.DynamicsWorld, input.TimeStep, ref m_Context, handle);
-            handle = callbacks.Execute(SimulationCallbacks.Phase.PostCreateContactJacobians, this, handle);
-            m_Context.CreateContactJacobiansHandle = handle;
+            handle = Solver.ScheduleBuildContactJacobiansJobs(ref input.World.DynamicsWorld, input.TimeStep, math.length(input.Gravity), ref m_Context, handle);
+            handle = callbacks.Execute(SimulationCallbacks.Phase.PostCreateContactJacobians, this, ref input.World, handle);
 
             // Solve all Jacobians
             int numIterations = input.NumSolverIterations > 0 ? input.NumSolverIterations : 4;
-            handle = Solver.ScheduleSolveJacobiansJobs(ref input.World.DynamicsWorld, input.TimeStep, input.Gravity, numIterations, ref m_Context, handle);
-            handle = callbacks.Execute(SimulationCallbacks.Phase.PostSolveJacobians, this, handle);
-            m_Context.SolveContactJacobiansHandle = handle;
+            handle = Solver.ScheduleSolveJacobiansJobs(ref input.World.DynamicsWorld, input.TimeStep, numIterations, ref m_Context, handle);
 
-            // Integration motions
+            handle = callbacks.Execute(SimulationCallbacks.Phase.PostSolveJacobians, this, ref input.World, handle);
+
+            // Integrate motions
             handle = Integrator.ScheduleIntegrateJobs(ref input.World.DynamicsWorld, input.TimeStep, input.Gravity, handle);
-            handle = callbacks.Execute(SimulationCallbacks.Phase.PostIntegrateMotions, this, handle);
-            m_Context.IntegrateMotionsHandle = handle;
 
             // Synchronize the collision world
             if (input.SynchronizeCollisionWorld)
@@ -150,9 +128,21 @@ namespace Unity.Physics
             finalSimulationJobHandle = handle;
 
             // Return the final handle, which includes disposing temporary arrays
-            finalJobHandle = JobHandle.CombineDependencies(finalSimulationJobHandle, m_Context.DisposeBroadphasePairs, m_Context.DisposeContacts);
-            finalJobHandle = JobHandle.CombineDependencies(finalJobHandle, m_Context.DisposeJacobians, m_Context.DisposeJointJacobians);
-            finalJobHandle = JobHandle.CombineDependencies(finalJobHandle, m_Context.DisposeSolverSchedulerData);
+            JobHandle* deps = stackalloc JobHandle[11]
+            {
+                finalSimulationJobHandle,
+                m_Context.DisposeOverlapPairs0,
+                m_Context.DisposeOverlapPairs1,
+                m_Context.DisposeBroadphasePairs0,
+                m_Context.DisposeBroadphasePairs1,
+                m_Context.DisposeContacts,
+                m_Context.DisposeJacobians,
+                m_Context.DisposeJointJacobians,
+                m_Context.DisposeSolverSchedulerData,
+                m_Context.DisposeProcessBodyPairs,
+                m_Context.DisposePhasedDispatchPairs
+            };
+            finalJobHandle = JobHandleUnsafeUtility.CombineDependencies(deps, 11);
         }
 
         // Event streams live until the next step, so they should be disposed at the beginning of it
@@ -175,7 +165,7 @@ namespace Unity.Physics
             // body appears at most once, so that the interactions within each phase can be solved
             // in parallel with each other but not with other phases. This is consumed by the
             // ProcessBodyPairsJob, which outputs Contacts and Joint jacobians.
-            public NativeArray<Scheduler.DispatchPair> PhasedDispatchPairsArray;
+            public NativeList<Scheduler.DispatchPair> PhasedDispatchPairs;
 
             // Built by the scheduler. Describes the grouping of PhasedBodyPairs
             // which informs how we can schedule the solver jobs and where they read info from.
@@ -188,17 +178,16 @@ namespace Unity.Physics
             public BlockStream CollisionEventStream;
             public BlockStream TriggerEventStream;
 
-            public JobHandle CreateBodyPairsHandle;
-            public JobHandle CreateContactsHandle;
-            public JobHandle CreateContactJacobiansHandle;
-            public JobHandle SolveContactJacobiansHandle;
-            public JobHandle IntegrateMotionsHandle;
-
-            public JobHandle DisposeBroadphasePairs;
+            public JobHandle DisposeOverlapPairs0;
+            public JobHandle DisposeOverlapPairs1;
+            public JobHandle DisposeBroadphasePairs0;
+            public JobHandle DisposeBroadphasePairs1;
             public JobHandle DisposeContacts;
             public JobHandle DisposeJacobians;
             public JobHandle DisposeJointJacobians;
             public JobHandle DisposeSolverSchedulerData;
+            public JobHandle DisposeProcessBodyPairs;
+            public JobHandle DisposePhasedDispatchPairs;
         }
     }
 }

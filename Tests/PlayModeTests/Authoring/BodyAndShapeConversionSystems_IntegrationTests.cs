@@ -1,7 +1,6 @@
 ﻿using System;
+using System.Linq;
 using NUnit.Framework;
-using Unity.Collections;
-using Unity.Entities;
 using Unity.Physics.Authoring;
 using UnityEngine;
 
@@ -61,6 +60,18 @@ namespace Unity.Physics.Tests.Authoring
         }
 
         [Test]
+        public void ConversionSystems_WhenGOHasDynamicPhysicsBodyWithNoPhysicsShape_AndDynamicRigidbodyWithNoCollider_EntityHasNoPhysicsCollider()
+        {
+            CreateHierarchy(new[] { typeof(Rigidbody), typeof(PhysicsBody) }, Array.Empty<Type>(), Array.Empty<Type>());
+            Root.GetComponent<PhysicsBody>().MotionType = BodyMotionType.Dynamic;
+            Root.GetComponent<PhysicsBody>().Mass = 100f;
+            Root.GetComponent<Rigidbody>().isKinematic = false;
+            Root.GetComponent<Rigidbody>().mass = 50f;
+
+            VerifyNoDataProduced<PhysicsCollider>();
+        }
+
+        [Test]
         public void ConversionSystems_WhenGOHasDynamicPhysicsBody_AndKinematicRigidbody_EntityUsesPhysicsBodyMass()
         {
             CreateHierarchy(new[] { typeof(Rigidbody), typeof(PhysicsBody) }, Array.Empty<Type>(), Array.Empty<Type>());
@@ -94,47 +105,42 @@ namespace Unity.Physics.Tests.Authoring
             VerifyNoDataProduced<PhysicsGravityFactor>();
         }
 
-        void TestConvertedData<T>(Action<T> checkValue) where T : struct, IComponentData
+        [Test]
+        public void ConversionSystems_WhenGOHasBody_GOIsActive_BodyIsConverted(
+            [Values(typeof(PhysicsBody), typeof(Rigidbody))]Type bodyType
+        )
         {
-            var world = new World("Test world");
+            CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { bodyType });
 
-            try
-            {
-                GameObjectConversionUtility.ConvertGameObjectHierarchy(Root, world);
-
-                using (var group = world.EntityManager.CreateEntityQuery(typeof(T)))
-                {
-                    using (var bodies = group.ToComponentDataArray<T>(Allocator.Persistent))
-                    {
-                        Assume.That(bodies, Has.Length.EqualTo(1));
-                        var componentData = bodies[0];
-
-                        checkValue(componentData);
-                    }
-                }
-            }
-            finally
-            {
-                world.Dispose();
-            }
+            // conversion presumed to create PhysicsVelocity under default conditions
+            TestConvertedData<PhysicsVelocity>(v => Assert.That(v, Is.EqualTo(default(PhysicsVelocity))));
         }
 
-        void VerifyNoDataProduced<T>() where T : struct, IComponentData
+        [Test]
+        public void ConversionSystems_WhenGOHasBody_AuthoringComponentDisabled_AuthoringDataNotConverted()
         {
-            var world = new World("Test world");
+            CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { typeof(PhysicsBody) });
+            Child.GetComponent<PhysicsBody>().enabled = false;
 
-            try
-            {
-                GameObjectConversionUtility.ConvertGameObjectHierarchy(Root, world);
+            // conversion presumed to create PhysicsVelocity under default conditions
+            // covered by corresponding test ConversionSystems_WhenGOHasBody_GOIsActive_BodyIsConverted
+            VerifyNoDataProduced<PhysicsVelocity>();
+        }
 
-                using (var group = world.EntityManager.CreateEntityQuery(typeof(T)))
-                using (var bodies = group.ToComponentDataArray<T>(Allocator.Persistent))
-                    Assert.That(bodies.Length, Is.EqualTo(0), $"Conversion pipeline produced {typeof(T).Name}");
-            }
-            finally
-            {
-                world.Dispose();
-            }
+        [Test]
+        public void ConversionSystems_WhenGOHasBody_GOIsInactive_BodyIsNotConverted(
+            [Values]Node inactiveNode,
+            [Values(typeof(PhysicsBody), typeof(Rigidbody))]Type bodyType
+        )
+        {
+            CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { bodyType });
+            GetNode(inactiveNode).SetActive(false);
+            var numInactiveNodes = Root.GetComponentsInChildren<Transform>(true).Count(t => t.gameObject.activeSelf);
+            Assume.That(numInactiveNodes, Is.EqualTo(2));
+
+            // conversion presumed to create PhysicsVelocity under default conditions
+            // covered by corresponding test ConversionSystems_WhenGOHasBody_GOIsActive_BodyIsConverted
+            VerifyNoDataProduced<PhysicsVelocity>();
         }
     }
 }

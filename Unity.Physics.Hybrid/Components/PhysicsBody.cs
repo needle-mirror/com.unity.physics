@@ -12,7 +12,7 @@ namespace Unity.Physics.Authoring
         Static
     }
 
-    [AddComponentMenu("DOTS Physics/Physics Body")]
+    [AddComponentMenu("DOTS/Physics/Physics Body")]
     [DisallowMultipleComponent]
     [RequiresEntityConversion]
     public sealed class PhysicsBody : MonoBehaviour

@@ -118,29 +118,29 @@ namespace Unity.Physics
                 {
                     byte* end = (byte*)collider + UnsafeUtility.SizeOf<ConvexCollider>();
 
-                    hull.VerticesBlob.Offset = (int)(end - (byte*)UnsafeUtility.AddressOf(ref hull.VerticesBlob.Offset));
+                    hull.VerticesBlob.Offset = UnsafeEx.CalculateOffset(end, ref hull.VerticesBlob);
                     hull.VerticesBlob.Length = tempHull.Vertices.Count;
                     end += sizeof(float3) * tempHull.Vertices.Count;
 
                     end = (byte*)Math.NextMultipleOf16((ulong)end); // planes currently must be aligned for Havok
 
-                    hull.FacePlanesBlob.Offset = (int)(end - (byte*)UnsafeUtility.AddressOf(ref hull.FacePlanesBlob.Offset));
+                    hull.FacePlanesBlob.Offset = UnsafeEx.CalculateOffset(end, ref hull.FacePlanesBlob);
                     hull.FacePlanesBlob.Length = tempHull.Planes.Count;
                     end += sizeof(Plane) * tempHull.Planes.Count;
 
-                    hull.FacesBlob.Offset = (int)(end - (byte*)UnsafeUtility.AddressOf(ref hull.FacesBlob.Offset));
+                    hull.FacesBlob.Offset = UnsafeEx.CalculateOffset(end, ref hull.FacesBlob);
                     hull.FacesBlob.Length = tempHull.Faces.Count;
                     end += sizeof(ConvexHull.Face) * tempHull.Faces.Count;
 
-                    hull.FaceVertexIndicesBlob.Offset = (int)(end - (byte*)UnsafeUtility.AddressOf(ref hull.FaceVertexIndicesBlob.Offset));
+                    hull.FaceVertexIndicesBlob.Offset = UnsafeEx.CalculateOffset(end, ref hull.FaceVertexIndicesBlob);
                     hull.FaceVertexIndicesBlob.Length = tempHull.FaceVertexIndices.Count;
                     end += sizeof(byte) * tempHull.FaceVertexIndices.Count;
 
-                    hull.VertexEdgesBlob.Offset = (int)(end - (byte*)UnsafeUtility.AddressOf(ref hull.VertexEdgesBlob.Offset));
+                    hull.VertexEdgesBlob.Offset = UnsafeEx.CalculateOffset(end, ref hull.VertexEdgesBlob);
                     hull.VertexEdgesBlob.Length = tempHull.VertexEdges.Count;
                     end += sizeof(ConvexHull.Edge) * tempHull.VertexEdges.Count;
 
-                    hull.FaceLinksBlob.Offset = (int)(end - (byte*)UnsafeUtility.AddressOf(ref hull.FaceLinksBlob.Offset));
+                    hull.FaceLinksBlob.Offset = UnsafeEx.CalculateOffset(end, ref hull.FaceLinksBlob);
                     hull.FaceLinksBlob.Length = tempHull.FaceLinks.Count;
                     end += sizeof(ConvexHull.Edge) * tempHull.FaceLinks.Count;
                 }
@@ -191,12 +191,9 @@ namespace Unity.Physics
             }
 
             // Copy it into blob
-            // TODO: Allocate it directly into blob instead
-            byte[] bytes = new byte[totalSize];
-            Marshal.Copy((IntPtr)collider, bytes, 0, totalSize);
-            UnsafeUtility.Free(collider, Allocator.Temp);
-            var asset = BlobAssetReference<Collider>.Create(bytes);
+            var asset = BlobAssetReference<Collider>.Create(collider, totalSize);
 
+            UnsafeUtility.Free(collider, Allocator.Temp);
             UnsafeUtility.Free(vertices, Allocator.Temp);
             UnsafeUtility.Free(triangles, Allocator.Temp);
 

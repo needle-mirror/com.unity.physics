@@ -21,6 +21,22 @@ namespace Unity.Physics.Tests.Authoring
         }
 
         [Test]
+        public void GetPrimaryBody_WhenFirstParentPhysicsBodyIsDisabled_ReturnsFirstEnabledAncestor(
+            [Values(typeof(Rigidbody), typeof(PhysicsBody))]Type rootBodyType,
+            [Values(typeof(Rigidbody), typeof(PhysicsBody))]Type parentBodyType
+        )
+        {
+            CreateHierarchy(new[] { rootBodyType }, new[] { parentBodyType }, new[] { typeof(PhysicsBody) });
+            // if root is PhysicsBody, test assumes it is enabled; Rigidbody is Component and cannot be disabled
+            Assume.That(Root.GetComponent<PhysicsBody>()?.enabled ?? true, Is.True);
+            Child.GetComponent<PhysicsBody>().enabled = false;
+
+            var primaryBody = PhysicsShapeExtensions.GetPrimaryBody(Child);
+
+            Assert.That(primaryBody, Is.EqualTo(Parent));
+        }
+
+        [Test]
         public void GetPrimaryBody_WhenHierarchyContainsNoBodies_ReturnsTopMostShape(
             [Values(typeof(UnityEngine.BoxCollider), typeof(PhysicsShape))]Type rootShapeType,
             [Values(typeof(UnityEngine.BoxCollider), typeof(PhysicsShape))]Type parentShapeType,

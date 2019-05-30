@@ -36,7 +36,7 @@ namespace Unity.Physics
 
         #region Construction
 
-        public static BlobAssetReference<Collider> Create(
+        unsafe public static BlobAssetReference<Collider> Create(
             float3 center, float height, float radius, quaternion orientation, float convexRadius,
             CollisionFilter? filter = null, Material? material = null)
         {
@@ -56,12 +56,10 @@ namespace Unity.Physics
             {
                 throw new System.ArgumentOutOfRangeException("Tried to create CylinderCollider with convex radius larger than shape dimensions");
             }
-            using (var allocator = new BlobAllocator(-1))
-            {
-                ref CylinderCollider collider = ref allocator.ConstructRoot<CylinderCollider>();
-                collider.Init(center, height, radius, orientation, convexRadius, filter ?? CollisionFilter.Default, material ?? Material.Default);
-                return allocator.CreateBlobAssetReference<Collider>(Allocator.Persistent);
-            }
+
+            var collider = default(CylinderCollider);
+            collider.Init(center, height, radius, orientation, convexRadius, filter ?? CollisionFilter.Default, material ?? Material.Default);
+            return BlobAssetReference<Collider>.Create(&collider, sizeof(CylinderCollider));
         }
 
         private unsafe void Init(float3 center, float height, float radius, quaternion orientation, float convexRadius, CollisionFilter filter, Material material)
@@ -77,16 +75,16 @@ namespace Unity.Physics
             // Build immutable convex data
             fixed (CylinderCollider* collider = &this)
             {
-                ConvexHull.VerticesBlob.Offset = (int)((byte*)UnsafeUtility.AddressOf(ref collider->m_Vertices[0]) - (byte*)UnsafeUtility.AddressOf(ref ConvexHull.VerticesBlob.Offset));
+                ConvexHull.VerticesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_Vertices[0], ref ConvexHull.VerticesBlob);
                 ConvexHull.VerticesBlob.Length = 0;
 
-                ConvexHull.FacePlanesBlob.Offset = (int)((byte*)UnsafeUtility.AddressOf(ref collider->m_FacePlanes[0]) - (byte*)UnsafeUtility.AddressOf(ref ConvexHull.FacePlanesBlob.Offset));
+                ConvexHull.FacePlanesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_FacePlanes[0], ref ConvexHull.FacePlanesBlob);
                 ConvexHull.FacePlanesBlob.Length = 0;
 
-                ConvexHull.FacesBlob.Offset = (int)((byte*)UnsafeUtility.AddressOf(ref collider->m_Faces[0]) - (byte*)UnsafeUtility.AddressOf(ref ConvexHull.FacesBlob.Offset));
+                ConvexHull.FacesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_Faces[0], ref ConvexHull.FacesBlob);
                 ConvexHull.FacesBlob.Length = 0;
 
-                ConvexHull.FaceVertexIndicesBlob.Offset = (int)((byte*)UnsafeUtility.AddressOf(ref collider->m_FaceVertexIndices[0]) - (byte*)UnsafeUtility.AddressOf(ref ConvexHull.FaceVertexIndicesBlob.Offset));
+                ConvexHull.FaceVertexIndicesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_FaceVertexIndices[0], ref ConvexHull.FaceVertexIndicesBlob);
                 ConvexHull.FaceVertexIndicesBlob.Length = 0;
 
                 // No connectivity

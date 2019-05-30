@@ -93,6 +93,14 @@ namespace Unity.Physics
         public static BodyIndexPair Invalid => new BodyIndexPair() { BodyBIndex = -1, BodyAIndex = -1 };
     }
 
+    // A pair of entities
+    public struct EntityPair
+    {
+        // B before A for consistency with other pairs
+        public Entity EntityB;
+        public Entity EntityA;
+    }
+
     // A pair of custom rigid body datas
     public struct CustomDataPair
     {

@@ -49,7 +49,7 @@ namespace Unity.Physics.Tests.Base.Containers
             }
 
             // Iterate over written events and make sure they are all read
-            CollisionEvents collisionEvents = new CollisionEvents(collisionEventStream);
+            LowLevel.CollisionEvents collisionEvents = new LowLevel.CollisionEvents(collisionEventStream);
             int readCount = 0;
             foreach(var collisionEvent in collisionEvents)
             {
@@ -59,7 +59,7 @@ namespace Unity.Physics.Tests.Base.Containers
             Assert.IsTrue(readCount == writeCount);
 
             // Cleanup
-            var disposeJob = collisionEventStream.ScheduleDispose(default);
+            var disposeJob = collisionEventStream.Dispose(default);
             disposeJob.Complete();
         }
 
@@ -107,7 +107,7 @@ namespace Unity.Physics.Tests.Base.Containers
             }
 
             // Iterate over written events and make sure they are all read
-            TriggerEvents triggerEvents = new TriggerEvents(triggerEventStream);
+            LowLevel.TriggerEvents triggerEvents = new LowLevel.TriggerEvents(triggerEventStream);
             int readCount = 0;
             foreach (var triggerEvent in triggerEvents)
             {
@@ -117,7 +117,7 @@ namespace Unity.Physics.Tests.Base.Containers
             Assert.IsTrue(readCount == writeCount);
 
             // Cleanup
-            var disposeJob = triggerEventStream.ScheduleDispose(default);
+            var disposeJob = triggerEventStream.Dispose(default);
             disposeJob.Complete();
         }
     }

@@ -1,5 +1,7 @@
 using NUnit.Framework;
+using Unity.Collections;
 using Unity.Entities;
+using Unity.Jobs;
 using UnityEngine;
 using Assert = UnityEngine.Assertions.Assert;
 
@@ -54,11 +56,16 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         {
             Physics.PhysicsWorld world = createTestWorld(1);
             addStaticBoxToWorld(world, 0, new Vector3(0, 0, 0), Quaternion.identity, new Vector3(10, 0.1f, 10));
-            Unity.Jobs.JobHandle handle = new Unity.Jobs.JobHandle();
-            Unity.Jobs.JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, 1, true, handle);
+            JobHandle handle = new JobHandle();
+            StaticLayerChangeInfo staticLayerChangeInfo = new StaticLayerChangeInfo();
+            staticLayerChangeInfo.Init(Allocator.TempJob);
+            staticLayerChangeInfo.NumStaticBodies = 1;
+            staticLayerChangeInfo.HaveStaticBodiesChanged = 1;
+            JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, 1, ref staticLayerChangeInfo, handle);
             result.Complete();
             Assert.IsTrue(result.IsCompleted);
             world.Dispose();
+            staticLayerChangeInfo.Deallocate();
         }
 
         //Tests ScheduleBuildJobs with 10 static boxes
@@ -70,11 +77,16 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             {
                 addStaticBoxToWorld(world, i, new Vector3(i*11, 0, 0), Quaternion.identity, new Vector3(10, 0.1f, 10));
             }
-            Unity.Jobs.JobHandle handle = new Unity.Jobs.JobHandle();
-            Unity.Jobs.JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, 1, true, handle);
+            JobHandle handle = new JobHandle();
+            StaticLayerChangeInfo staticLayerChangeInfo = new StaticLayerChangeInfo();
+            staticLayerChangeInfo.Init(Allocator.TempJob);
+            staticLayerChangeInfo.NumStaticBodies = 10;
+            staticLayerChangeInfo.HaveStaticBodiesChanged = 1;
+            JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, 1, ref staticLayerChangeInfo, handle);
             result.Complete();
             Assert.IsTrue(result.IsCompleted);
             world.Dispose();
+            staticLayerChangeInfo.Deallocate();
         }
 
         //Tests ScheduleBuildJobs with 100 static boxes
@@ -86,11 +98,16 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             {
                 addStaticBoxToWorld(world, i, new Vector3(i*11, 0, 0), Quaternion.identity, new Vector3(10, 0.1f, 10));
             }
-            Unity.Jobs.JobHandle handle = new Unity.Jobs.JobHandle();
-            Unity.Jobs.JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, 1, true, handle);
+            JobHandle handle = new JobHandle();
+            StaticLayerChangeInfo staticLayerChangeInfo = new StaticLayerChangeInfo();
+            staticLayerChangeInfo.Init(Allocator.TempJob);
+            staticLayerChangeInfo.NumStaticBodies = 100;
+            staticLayerChangeInfo.HaveStaticBodiesChanged = 1;
+            JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, 1, ref staticLayerChangeInfo, handle);
             result.Complete();
             Assert.IsTrue(result.IsCompleted);
             world.Dispose();
+            staticLayerChangeInfo.Deallocate();
         }
 
         //Tests ScheduleBuildJobs with one Dynamic box in the world
@@ -99,8 +116,8 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         {
             //Physics.World world = createTestWorld(0,1);
             //addDynamicBoxToWorld(world, 0, new Vector3(0, 0, 0), Quaternion.identity, new Vector3(10, 10, 10));
-            //Unity.Jobs.JobHandle handle = new Unity.Jobs.JobHandle();
-            //Unity.Jobs.JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, 1, handle);
+            //JobHandle handle = new JobHandle();
+            //JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, 1, handle);
             //result.Complete();
             //Assert.IsTrue(result.IsCompleted);
             //world.Dispose();
@@ -115,8 +132,8 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             //{
             //    addDynamicBoxToWorld(world, i, new Vector3(i*11, 0, 0), Quaternion.identity, new Vector3(10, 10, 10));
             //}
-            //Unity.Jobs.JobHandle handle = new Unity.Jobs.JobHandle();
-            //Unity.Jobs.JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, 1, handle);
+            //JobHandle handle = new JobHandle();
+            //JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, 1, handle);
             //result.Complete();
             //Assert.IsTrue(result.IsCompleted);
             //world.Dispose();
@@ -131,8 +148,8 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             //{
             //    addDynamicBoxToWorld(world, i, new Vector3(i*11, 0, 0), Quaternion.identity, new Vector3(10, 10, 10));
             //}
-            //Unity.Jobs.JobHandle handle = new Unity.Jobs.JobHandle();
-            //Unity.Jobs.JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, 1, handle);
+            //JobHandle handle = new JobHandle();
+            //JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, 1, handle);
             //result.Complete();
             //Assert.IsTrue(result.IsCompleted);
             //world.Dispose();
@@ -147,8 +164,8 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             //    addStaticBoxToWorld(world, i, new Vector3(i * 11, 0, 0), Quaternion.identity, new Vector3(10, 0.1f, 10));
             //    addDynamicBoxToWorld(world, i, new Vector3(i * 11, 5, 0), Quaternion.identity, new Vector3(1, 1, 1));
             //}
-            //Unity.Jobs.JobHandle handle = new Unity.Jobs.JobHandle();
-            //Unity.Jobs.JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, 1, handle);
+            //JobHandle handle = new JobHandle();
+            //JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, 1, handle);
             //result.Complete();
             //Assert.IsTrue(result.IsCompleted);
             //world.Dispose();
@@ -159,8 +176,8 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         public void ScheduleBuildJobsEmptyWorldTest()
         {
             //Physics.World world = createTestWorld();
-            //Unity.Jobs.JobHandle handle = new Unity.Jobs.JobHandle();
-            //Unity.Jobs.JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, 1, handle);
+            //JobHandle handle = new JobHandle();
+            //JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, 1, handle);
             //result.Complete();
             //world.Dispose();
         }

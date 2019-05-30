@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -114,6 +115,8 @@ namespace Unity.Physics
             int* stackA = binaryStackA;
             int* stackB = binaryStackB;
 
+            int4* compressedDataBuffer = stackalloc int4[4];
+
             if (treeA == treeB && rootA == rootB)
             {
                 int* unaryStack = stackalloc int[Constants.UnaryStackSize];
@@ -125,7 +128,7 @@ namespace Unity.Physics
                     int nodeIndex = *(--stack);
                     if (collisionFilterA == null || CollisionFilter.IsCollisionEnabled(collisionFilterA[nodeIndex], collisionFilterB[nodeIndex]))
                     {
-                        ProcessAA(ref treeA[nodeIndex], ref stack, ref stackA, ref stackB, ref pairWriter);
+                        ProcessAA(ref treeA[nodeIndex], compressedDataBuffer, ref stack, ref stackA, ref stackB, ref pairWriter);
                     }
                     pairWriter.FlushIfNeeded();
 
@@ -136,7 +139,7 @@ namespace Unity.Physics
 
                         if (collisionFilterA == null || CollisionFilter.IsCollisionEnabled(collisionFilterA[nodeIndexA], collisionFilterB[nodeIndexB]))
                         {
-                            ProcessAB(ref treeA[nodeIndexA], ref treeA[nodeIndexB], treeA, treeA, ref stackA, ref stackB, ref pairWriter);
+                            ProcessAB(&treeA[nodeIndexA], &treeA[nodeIndexB], treeA, treeA, compressedDataBuffer, ref stackA, ref stackB, ref pairWriter);
                         }
                         pairWriter.FlushIfNeeded();
                     }
@@ -153,7 +156,7 @@ namespace Unity.Physics
                     int nodeIndexB = *(--stackB);
                     if (collisionFilterA == null || CollisionFilter.IsCollisionEnabled(collisionFilterA[nodeIndexA], collisionFilterB[nodeIndexB]))
                     {
-                        ProcessAB(ref treeA[nodeIndexA], ref treeB[nodeIndexB], treeA, treeB, ref stackA, ref stackB, ref pairWriter);
+                        ProcessAB(&treeA[nodeIndexA], &treeB[nodeIndexB], treeA, treeB, compressedDataBuffer, ref stackA, ref stackB, ref pairWriter);
                     }
 
                     pairWriter.FlushIfNeeded();
@@ -161,7 +164,8 @@ namespace Unity.Physics
             }
         }
 
-        private static unsafe void ProcessAA<T>(ref Node node, ref int* stack, ref int* stackA, ref int* stackB, ref T pairWriter) where T : struct, ITreeOverlapCollector
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static unsafe void ProcessAA<T>(ref Node node, int4* compressedData, ref int* stack, ref int* stackA, ref int* stackB, ref T pairWriter) where T : struct, ITreeOverlapCollector
         {
             int4 nodeData = node.Data;
             FourTransposedAabbs nodeBounds = node.Bounds;
@@ -171,120 +175,121 @@ namespace Unity.Physics
             aabbT[1] = nodeBounds.GetAabbT(1);
             aabbT[2] = nodeBounds.GetAabbT(2);
 
-            bool4x3 masks = new bool4x3(
-                new bool4(false, true, true, true),
-                new bool4(false, false, true, true),
-                new bool4(false, false, false, true));
+            bool4* masks = stackalloc bool4[3];
+            masks[0] = new bool4(false, true, true, true);
+            masks[1] = new bool4(false, false, true, true);
+            masks[2] = new bool4(false, false, false, true);
 
-            int4* compressedValues = stackalloc int4[3];
-            int* compressedCounts = stackalloc int[3];
-
-            for (int i = 0; i < 3; i++)
-            {
-                bool4 overlap = aabbT[i].Overlap1Vs4(ref nodeBounds) & masks[i];
-                compressedCounts[i] = math.compress((int*)(compressedValues + i), 0, nodeData, overlap);
-            }
+            int3 compressedCounts = int3.zero;
+            compressedCounts[0] = math.compress((int*)(compressedData)    , 0, nodeData, aabbT[0].Overlap1Vs4(ref nodeBounds) & masks[0]);
+            compressedCounts[1] = math.compress((int*)(compressedData + 1), 0, nodeData, aabbT[1].Overlap1Vs4(ref nodeBounds) & masks[1]);
+            compressedCounts[2] = math.compress((int*)(compressedData + 2), 0, nodeData, aabbT[2].Overlap1Vs4(ref nodeBounds) & masks[2]);
 
             if (node.IsLeaf)
             {
                 for (int i = 0; i < 3; i++)
                 {
-                    pairWriter.AddPairs(nodeData[i], compressedValues[i], compressedCounts[i]);
+                    pairWriter.AddPairs(nodeData[i], compressedData[i], compressedCounts[i]);
                 }
             }
             else
             {
-                int4* internalNodes = stackalloc int4[1];
-                int numInternals = math.compress((int*)internalNodes, 0, nodeData, node.AreInternalsValid);
-                *((int4*)stack) = *internalNodes;
+                int4 internalNodes;
+                int numInternals = math.compress((int*)&internalNodes, 0, nodeData, node.AreInternalsValid);
+                *((int4*)stack) = internalNodes;
                 stack += numInternals;
 
                 for (int i = 0; i < 3; i++)
                 {
                     *((int4*)stackA) = new int4(nodeData[i]);
-                    *((int4*)stackB) = compressedValues[i];
+                    *((int4*)stackB) = compressedData[i];
                     stackA += compressedCounts[i];
                     stackB += compressedCounts[i];
                 }
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static unsafe void ProcessAB<T>(
-            ref Node nodeA, ref Node nodeB,
+            Node* nodeA, Node* nodeB,
             Node* treeA, Node* treeB,
-            ref int* stackA, ref int* stackB,
-            ref T pairWriter) where T : struct, ITreeOverlapCollector
+            int4* compressedData,
+            ref int* stackA, ref int* stackB, ref T pairWriter) where T : struct, ITreeOverlapCollector
         {
-            int4 nodeAdata = nodeA.Data;
-            int4 nodeBdata = nodeB.Data;
+            if (nodeA->IsInternal && nodeB->IsLeaf)
+            {
+                Node* tmp = nodeA;
+                nodeA = nodeB;
+                nodeB = tmp;
 
-            FourTransposedAabbs nodeABounds = nodeA.Bounds;
-            FourTransposedAabbs nodeBBounds = nodeB.Bounds;
+                treeB = treeA;
+            }
 
-            bool4x4 overlapMask = new bool4x4(
-                nodeBBounds.Overlap1Vs4(ref nodeABounds, 0),
-                nodeBBounds.Overlap1Vs4(ref nodeABounds, 1),
-                nodeBBounds.Overlap1Vs4(ref nodeABounds, 2),
-                nodeBBounds.Overlap1Vs4(ref nodeABounds, 3));
+            bool4* overlapMask = stackalloc bool4[4];
+            FourTransposedAabbs aabbTA = nodeA->Bounds.GetAabbT(0);
+            overlapMask[0] = aabbTA.Overlap1Vs4(ref nodeB->Bounds);
+            aabbTA = nodeA->Bounds.GetAabbT(1);
+            overlapMask[1] = aabbTA.Overlap1Vs4(ref nodeB->Bounds);
+            aabbTA = nodeA->Bounds.GetAabbT(2);
+            overlapMask[2] = aabbTA.Overlap1Vs4(ref nodeB->Bounds);
+            aabbTA = nodeA->Bounds.GetAabbT(3);
+            overlapMask[3] = aabbTA.Overlap1Vs4(ref nodeB->Bounds);
 
-            int4 compressedData;
+            int4 compressedCount = int4.zero;
 
-            if (nodeA.IsLeaf && nodeB.IsLeaf)
+            compressedCount[0] = math.compress((int*)&compressedData[0], 0, nodeB->Data, overlapMask[0]);
+            compressedCount[1] = math.compress((int*)&compressedData[1], 0, nodeB->Data, overlapMask[1]);
+            compressedCount[2] = math.compress((int*)&compressedData[2], 0, nodeB->Data, overlapMask[2]);
+            compressedCount[3] = math.compress((int*)&compressedData[3], 0, nodeB->Data, overlapMask[3]);
+
+            if (nodeA->IsLeaf && nodeB->IsLeaf)
             {
                 for (int i = 0; i < 4; i++)
                 {
-                    int count = math.compress((int*)&compressedData, 0, nodeBdata, overlapMask[i]);
-                    pairWriter.AddPairs(nodeAdata[i], compressedData, count);
+                    pairWriter.AddPairs(nodeA->Data[i], compressedData[i], compressedCount[i]);
                 }
             }
-            else if (nodeA.IsInternal && nodeB.IsInternal)
+            else if (nodeA->IsInternal && nodeB->IsInternal)
             {
                 for (int i = 0; i < 4; i++)
                 {
-                    int count = math.compress(stackB, 0, nodeBdata, overlapMask[i]);
-                    *((int4*)stackA) = new int4(nodeAdata[i]);
-                    stackA += count;
-                    stackB += count;
+                    *((int4*)stackA) = new int4(nodeA->Data[i]);
+                    *((int4*)stackB) = compressedData[i];
+                    stackA += compressedCount[i];
+                    stackB += compressedCount[i];
                 }
             }
             else
             {
-                int* stack = stackB;
-                if (nodeA.IsInternal)
-                {
-                    overlapMask = math.transpose(overlapMask);
-                    Swap(ref nodeAdata, ref nodeBdata);
-                    Swap(ref nodeABounds, ref nodeBBounds);
-                    stack = stackA;
-                    treeB = treeA;
-                }
-
                 for (int i = 0; i < 4; i++)
                 {
-                    if (math.any(overlapMask[i]))
+                    if (compressedCount[i] > 0)
                     {
-                        int internalsCount = math.compress(stack, 0, nodeBdata, overlapMask[i]);
-                        int* internalStack = stack + internalsCount;
-
-                        FourTransposedAabbs aabbT = nodeABounds.GetAabbT(i);
-                        int4 leafA = new int4(nodeAdata[i]);
+                        *((int4*)stackA) = compressedData[i];
+                        int* internalStack = stackA + compressedCount[i];
+                        FourTransposedAabbs aabbT = nodeA->Bounds.GetAabbT(i);
+                        int4 leafA = new int4(nodeA->Data[i]);
 
                         do
                         {
                             Node* internalNode = treeB + *(--internalStack);
-                            int compressedCount = math.compress((int*)&compressedData, 0, internalNode->Data, aabbT.Overlap1Vs4(ref internalNode->Bounds));
-
-                            if (internalNode->IsLeaf)
+                            int4 internalCompressedData;
+                            int internalCount = math.compress((int*)&internalCompressedData, 0, internalNode->Data, aabbT.Overlap1Vs4(ref internalNode->Bounds));
+                            if (internalCount > 0)
                             {
-                                pairWriter.AddPairs(leafA, compressedData, compressedCount);
-                                pairWriter.FlushIfNeeded();
+                                if (internalNode->IsLeaf)
+                                {
+                                    pairWriter.AddPairs(leafA, internalCompressedData, internalCount);
+                                    pairWriter.FlushIfNeeded();
+                                }
+                                else
+                                {
+                                    *((int4*)internalStack) = internalCompressedData;
+                                    internalStack += internalCount;
+                                }
                             }
-                            else
-                            {
-                                *((int4*)internalStack) = compressedData;
-                                internalStack += compressedCount;
-                            }
-                        } while (internalStack != stack);
+                        }
+                        while (internalStack != stackA);
                     }
                 }
             }
@@ -395,7 +400,7 @@ namespace Unity.Physics
             float3 aabbExtents;
             Ray aabbRay;
             {
-                Aabb aabb = input.Collider->CalculateAabb(new RigidTransform(input.Orientation, input.Position));
+                Aabb aabb = input.Collider->CalculateAabb(new RigidTransform(input.Orientation, input.Start));
                 aabbExtents = aabb.Extents;
                 aabbRay = input.Ray;
                 aabbRay.Origin = aabb.Min;

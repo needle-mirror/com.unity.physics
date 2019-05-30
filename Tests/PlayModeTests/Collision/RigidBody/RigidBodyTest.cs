@@ -57,9 +57,8 @@ namespace Unity.Physics.Tests.Collision.RigidBody
             var allHits = new NativeList<RaycastHit>(Allocator.Temp);
 
             // OK case : Ray hits the box collider
-            float3 rayDir = rayEndOK - rayStartOK;
-            raycastInput.Ray.Origin = rayStartOK;
-            raycastInput.Ray.Direction = rayDir;
+            raycastInput.Start = rayStartOK;
+            raycastInput.End = rayEndOK;
             raycastInput.Filter = CollisionFilter.Default;
 
             Assert.IsTrue(rigidbody.CastRay(raycastInput));
@@ -67,9 +66,8 @@ namespace Unity.Physics.Tests.Collision.RigidBody
             Assert.IsTrue(rigidbody.CastRay(raycastInput, ref allHits));
 
             // Fail Case : wrong direction
-            rayDir = rayEndFail - rayStartFail;
-            raycastInput.Ray.Origin = rayStartFail;
-            raycastInput.Ray.Direction = rayDir;
+            raycastInput.Start = rayStartFail;
+            raycastInput.End = rayEndFail;
 
             Assert.IsFalse(rigidbody.CastRay(raycastInput));
             Assert.IsFalse(rigidbody.CastRay(raycastInput, out closestHit));
@@ -98,9 +96,8 @@ namespace Unity.Physics.Tests.Collision.RigidBody
             var allHits = new NativeList<ColliderCastHit>(Allocator.Temp);
 
             // OK case : Sphere hits the box collider
-            float3 rayDir = rayEndOK - rayStartOK;
-            colliderCastInput.Position = rayStartOK;
-            colliderCastInput.Direction = rayDir;
+            colliderCastInput.Start = rayStartOK;
+            colliderCastInput.End = rayEndOK;
             colliderCastInput.Collider = (Collider*)SphereCollider.Create(float3.zero, sphereRadius).GetUnsafePtr();
 
             Assert.IsTrue(rigidbody.CastCollider(colliderCastInput));
@@ -108,9 +105,8 @@ namespace Unity.Physics.Tests.Collision.RigidBody
             Assert.IsTrue(rigidbody.CastCollider(colliderCastInput, ref allHits));
 
             // Fail case : wrong direction
-            rayDir = rayEndFail - rayStartFail;
-            colliderCastInput.Position = rayStartFail;
-            colliderCastInput.Direction = rayDir;
+            colliderCastInput.Start = rayStartFail;
+            colliderCastInput.End = rayEndFail;
 
             Assert.IsFalse(rigidbody.CastCollider(colliderCastInput));
             Assert.IsFalse(rigidbody.CastCollider(colliderCastInput, out closestHit));

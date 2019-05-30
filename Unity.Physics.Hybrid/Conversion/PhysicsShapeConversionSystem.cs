@@ -6,8 +6,6 @@ using UnityEngine;
 
 namespace Unity.Physics.Authoring
 {
-    [UpdateAfter(typeof(FirstPassPhysicsBodyConversionSystem))]
-    [UpdateAfter(typeof(FirstPassLegacyRigidbodyConversionSystem))]
     public class PhysicsShapeConversionSystem : BaseShapeConversionSystem<PhysicsShape>
     {
         static Material ProduceMaterial(PhysicsShape shape)
@@ -38,8 +36,8 @@ namespace Unity.Physics.Authoring
             // TODO: determine optimal workflow for specifying group index
             return new CollisionFilter
             {
-                CategoryBits = unchecked((uint)shape.BelongsTo),
-                MaskBits = unchecked((uint)shape.CollidesWith),
+                BelongsTo = unchecked((uint)shape.BelongsTo),
+                CollidesWith = unchecked((uint)shape.CollidesWith),
             };
         }
 
@@ -53,55 +51,53 @@ namespace Unity.Physics.Authoring
             var collisionFilter = ProduceCollisionFilter(shape);
 
             var blob = new BlobAssetReference<Collider>();
-            shape.GetBakeTransformation(out var linearScalar, out var radiusScalar);
             switch (shape.ShapeType)
             {
                 case ShapeType.Box:
-                    shape.GetBoxProperties(out var center, out var size, out quaternion orientation);
+                    shape.GetBakedBoxProperties(out var center, out var size, out var orientation, out var convexRadius);
                     blob = BoxCollider.Create(
-                        center * linearScalar,
+                        center,
                         orientation,
-                        math.abs(size * linearScalar),
-                        shape.ConvexRadius * radiusScalar,
+                        size,
+                        convexRadius,
                         collisionFilter,
                         material);
                     break;
                 case ShapeType.Capsule:
-                    shape.GetCapsuleProperties(out var v0, out var v1, out var radius);
+                    shape.GetBakedCapsuleProperties(out center, out var height, out var radius, out orientation, out var v0, out var v1);
                     blob = CapsuleCollider.Create(
-                        v0 * linearScalar,
-                        v1 * linearScalar,
-                        radius * radiusScalar,
+                        v0,
+                        v1,
+                        radius,
                         collisionFilter,
                         material);
                     break;
                 case ShapeType.Sphere:
-                    shape.GetSphereProperties(out center, out radius, out orientation);
+                    shape.GetBakedSphereProperties(out center, out radius, out orientation);
                     blob = SphereCollider.Create(
-                        center * linearScalar,
-                        radius * radiusScalar,
+                        center,
+                        radius,
                         collisionFilter,
                         material);
                     break;
                 case ShapeType.Cylinder:
-                    shape.GetCylinderProperties(out center, out var height, out radius, out orientation);
-                    var s = math.abs(math.mul(math.inverse(orientation), linearScalar));
+                    shape.GetBakedCylinderProperties(out center, out height, out radius, out orientation, out convexRadius);
                     blob = CylinderCollider.Create(
-                        center * linearScalar,
-                        height * s.z,
-                        radius * math.cmax(s.xy),
+                        center,
+                        height,
+                        radius,
                         orientation,
-                        shape.ConvexRadius * radiusScalar,
+                        convexRadius,
                         collisionFilter,
                         material);
                     break;
                 case ShapeType.Plane:
-                    shape.GetPlaneProperties(out v0, out v1, out var v2, out var v3);
+                    shape.GetBakedPlaneProperties(out v0, out v1, out var v2, out var v3);
                     blob = PolygonCollider.CreateQuad(
-                        v0 * linearScalar,
-                        v1 * linearScalar,
-                        v2 * linearScalar,
-                        v3 * linearScalar,
+                        v0,
+                        v1,
+                        v2,
+                        v3,
                         collisionFilter,
                         material);
                     break;
@@ -115,10 +111,11 @@ namespace Unity.Physics.Authoring
                             $"No vertices associated with {shape.name}. Add a {typeof(MeshFilter)} component or assign {nameof(PhysicsShape.CustomMesh)}."
                         );
                     }
+                    shape.GetBakedConvexProperties(pointCloud, out radius);
                     blob = ConvexCollider.Create(
                         pointCloud,
-                        shape.ConvexRadius * radiusScalar,
-                        linearScalar,
+                        radius,
+                        1f,
                         collisionFilter,
                         material);
                     pointCloud.Dispose();
@@ -134,7 +131,12 @@ namespace Unity.Physics.Authoring
                     }
                     else
                     {
-                        blob = MeshCollider.Create(mesh.GetScaledVertices(linearScalar), mesh.triangles, collisionFilter, material);
+                        pointCloud = new NativeList<float3>(mesh.vertexCount, Allocator.Temp);
+                        var triangles = new NativeList<int>(mesh.vertexCount, Allocator.Temp);
+                        shape.GetBakedMeshProperties(pointCloud, triangles);
+                        blob = MeshCollider.Create(pointCloud.ToArray(), triangles.ToArray(), collisionFilter, material);
+                        pointCloud.Dispose();
+                        triangles.Dispose();
                     }
                     break;
                 default:

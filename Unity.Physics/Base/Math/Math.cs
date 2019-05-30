@@ -1,8 +1,7 @@
-﻿using System;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Unity.Mathematics;
-using Debug = UnityEngine.Debug;
+using UnityEngine.Assertions;
 
 namespace Unity.Physics
 {
@@ -211,8 +210,8 @@ namespace Unity.Physics
         // Returns a quaternion q with q * from = to
         public static quaternion FromToRotation(float3 from, float3 to)
         {
-            Debug.Assert(math.abs(math.lengthsq(from) - 1.0f) < 1e-4f);
-            Debug.Assert(math.abs(math.lengthsq(to) - 1.0f) < 1e-4f);
+            Assert.IsTrue(math.abs(math.lengthsq(from) - 1.0f) < 1e-4f);
+            Assert.IsTrue(math.abs(math.lengthsq(to) - 1.0f) < 1e-4f);
             float3 cross = math.cross(from, to);
             CalculatePerpendicularNormalized(from, out float3 safeAxis, out float3 unused); // for when angle ~= 180
             float dot = math.dot(from, to);

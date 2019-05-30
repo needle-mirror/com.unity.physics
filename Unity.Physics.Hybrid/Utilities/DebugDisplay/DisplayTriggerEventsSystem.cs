@@ -5,6 +5,8 @@ using Unity.Entities;
 using Unity.Jobs;
 using UnityEngine;
 using Collider = Unity.Physics.Collider;
+using Unity.Mathematics;
+using Unity.Burst;
 
 namespace Unity.Physics.Authoring
 {
@@ -25,7 +27,7 @@ namespace Unity.Physics.Authoring
             m_DebugStreamSystem = World.GetOrCreateSystem<DebugStream>();
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDeps)
+        protected unsafe override JobHandle OnUpdate(JobHandle inputDeps)
         {
             if (!(HasSingleton<PhysicsDebugDisplayData>() && GetSingleton<PhysicsDebugDisplayData>().DrawTriggerEvents != 0))
             {
@@ -34,60 +36,59 @@ namespace Unity.Physics.Authoring
 
             inputDeps = JobHandle.CombineDependencies(inputDeps, m_BuildPhysicsWorldSystem.FinalJobHandle, m_StepPhysicsWorldSystem.FinalSimulationJobHandle);
 
+            DebugStream.Context debugOutput = m_DebugStreamSystem.GetContext(1);
+            debugOutput.Begin(0);
+            // Allocate a NativeArray to store our debug output, so it can be shared across the display/finish jobs
+            NativeArray<DebugStream.Context> sharedOutput = new NativeArray<DebugStream.Context>(1, Allocator.TempJob);
+            sharedOutput[0] = debugOutput;
+
+            // Explicitly call ScheduleImpl here, to avoid a dependency on Havok.Physics
             JobHandle handle = new DisplayTriggerEventsJob
             {
                 World = m_BuildPhysicsWorldSystem.PhysicsWorld,
-                TriggerEvents = m_StepPhysicsWorldSystem.Simulation.TriggerEvents,
-                OutputStream = m_DebugStreamSystem.GetContext(1)
-            }.Schedule(1, 1, inputDeps);
+                OutputStream = sharedOutput,
+            }.ScheduleImpl(m_StepPhysicsWorldSystem.Simulation, ref m_BuildPhysicsWorldSystem.PhysicsWorld, inputDeps);
 
-            m_EndFramePhysicsSystem.HandlesToWaitFor.Add(handle);
+            JobHandle finishHandle = new FinishDisplayTriggerEventsJob
+            {
+                OutputStream = sharedOutput
+            }.Schedule(handle);
+
+            m_EndFramePhysicsSystem.HandlesToWaitFor.Add(finishHandle);
 
             return handle;
         }
 
         // Job which iterates over trigger events and writes display info to a DebugStream.
-        //[BurstCompile]
-        struct DisplayTriggerEventsJob : IJobParallelFor
+        [BurstCompile]
+        unsafe struct DisplayTriggerEventsJob : ITriggerEventsJob
         {
             [ReadOnly] public PhysicsWorld World;
-            [ReadOnly] public TriggerEvents TriggerEvents;
-            public DebugStream.Context OutputStream;
+            public NativeArray<DebugStream.Context> OutputStream;
 
-            public unsafe void Execute(int workItemIndex)
+            public unsafe void Execute(TriggerEvent triggerEvent)
             {
-                OutputStream.Begin(workItemIndex);
-                foreach (TriggerEvent triggerEvent in TriggerEvents)
-                {
-                    RigidBody bodyA = World.Bodies[triggerEvent.BodyIndices.BodyAIndex];
-                    RigidBody bodyB = World.Bodies[triggerEvent.BodyIndices.BodyBIndex];
+                DebugStream.Context outputContext = OutputStream[0];
 
-                    bool IsTrigger(Collider* collider, ColliderKey key)
-                    {
-                        if (collider->CollisionType == CollisionType.Convex)
-                        {
-                            return ((ConvexColliderHeader*)collider)->Material.IsTrigger;
-                        }
-                        else
-                        {
-                            collider->GetLeaf(key, out ChildCollider child);
-                            collider = child.Collider;
-                            UnityEngine.Assertions.Assert.IsTrue(collider->CollisionType == CollisionType.Convex);
-                            return ((ConvexColliderHeader*)collider)->Material.IsTrigger;
-                        }
-                    }
+                RigidBody bodyA = World.Bodies[triggerEvent.BodyIndices.BodyAIndex];
+                RigidBody bodyB = World.Bodies[triggerEvent.BodyIndices.BodyBIndex];
 
-                    char[] text = "Triggered".ToCharArray();
-                    if (IsTrigger(bodyA.Collider, triggerEvent.ColliderKeys.ColliderKeyA))
-                    {
-                        OutputStream.Text(text, bodyA.WorldFromBody.pos, Color.green);
-                    }
-                    if (IsTrigger(bodyB.Collider, triggerEvent.ColliderKeys.ColliderKeyB))
-                    {
-                        OutputStream.Text(text, bodyB.WorldFromBody.pos, Color.green);
-                    }
-                }
-                OutputStream.End();
+                Aabb aabbA = bodyA.Collider->CalculateAabb(bodyA.WorldFromBody);
+                Aabb aabbB = bodyB.Collider->CalculateAabb(bodyB.WorldFromBody);
+                outputContext.Line(aabbA.Center, aabbB.Center, Color.yellow);
+
+                OutputStream[0] = outputContext;
+            }
+        }
+
+        public unsafe struct FinishDisplayTriggerEventsJob : IJob
+        {
+            [DeallocateOnJobCompletion]
+            public NativeArray<DebugStream.Context> OutputStream;
+
+            public void Execute()
+            {
+                OutputStream[0].End();
             }
         }
     }

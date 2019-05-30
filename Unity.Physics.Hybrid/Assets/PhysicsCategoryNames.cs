@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace Unity.Physics.Authoring
 {
-    [CreateAssetMenu(menuName = "DOTS Physics/Physics Category Names", fileName = "Physics Category Names")]
+    [CreateAssetMenu(menuName = "DOTS/Physics/Physics Category Names", fileName = "Physics Category Names")]
     public sealed class PhysicsCategoryNames : ScriptableObject, IFlagNames
     {
         IReadOnlyList<string> IFlagNames.FlagNames => CategoryNames;

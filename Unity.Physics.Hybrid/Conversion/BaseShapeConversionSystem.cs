@@ -51,6 +51,8 @@ namespace Unity.Physics.Authoring
                 DstEntityManager.SetComponentData(entity, collider);
                 if (customFlags != 0)
                     DstEntityManager.AddOrSetComponent(entity, new PhysicsCustomData { Value = customFlags });
+
+                DstEntityManager.RemoveParentAndSetWorldTranslationAndRotation(entity, body.transform);
             }
             else
             {

@@ -1,38 +1,39 @@
-using Unity.Physics;
-using Unity.Physics.Systems;
 using Unity.Burst;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
+using Unity.Physics;
+using Unity.Physics.Systems;
 using UnityEngine;
 
 namespace Unity.Physics.Authoring
 {
     // Job which iterates over contacts from narrowphase and writes display info to a DebugStream.
     [BurstCompile]
-    public struct DisplayContactsJob : IJobParallelFor
+    public unsafe struct DisplayContactsJob : IContactsJob
     {
-        public SimulationData.Contacts.Iterator ManifoldIterator;
-        public DebugStream.Context OutputStream;
+        public NativeArray<DebugStream.Context> OutputStream;
 
-        public void Execute(int workItemIndex)
+        public void Execute(ref ModifiableContactHeader header, ref ModifiableContactPoint point)
         {
-            OutputStream.Begin(workItemIndex);
+            DebugStream.Context output = OutputStream[0];
+            float3 x0 = point.Position;
+            float3 x1 = header.Normal * point.Distance;
+            Color color = Color.green;
+            output.Arrow(x0, x1, color);
+            OutputStream[0] = output;
+        }
+    }
 
-            while (ManifoldIterator.HasItemsLeft())
-            {
-                ContactHeader contactHeader = ManifoldIterator.GetNextContactHeader();
-                for (int c = 0; c < contactHeader.NumContacts; c++)
-                {
-                    Unity.Physics.ContactPoint contact = ManifoldIterator.GetNextContact();
-                    float3 x0 = contact.Position;
-                    float3 x1 = contactHeader.Normal * contact.Distance;
-                    Color color = Color.green;
-                    OutputStream.Arrow(x0, x1, color);
-                }
-            }
+    public unsafe struct FinishDisplayContactsJob : IJob
+    {
+        [DeallocateOnJobCompletion]
+        public NativeArray<DebugStream.Context> OutputStream;
 
-            OutputStream.End();
+        public void Execute()
+        {
+            OutputStream[0].End();
         }
     }
 
@@ -49,28 +50,35 @@ namespace Unity.Physics.Authoring
             m_DebugStreamSystem = World.GetOrCreateSystem<DebugStream>();
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDeps)
+        protected unsafe override JobHandle OnUpdate(JobHandle inputDeps)
         {
             if (!(HasSingleton<PhysicsDebugDisplayData>() && GetSingleton<PhysicsDebugDisplayData>().DrawContacts != 0))
             {
                 return inputDeps;
             }
 
-            SimulationCallbacks.Callback callback = (ref ISimulation simulation, JobHandle inDeps) =>
+            SimulationCallbacks.Callback callback = (ref ISimulation simulation, ref PhysicsWorld world, JobHandle inDeps) =>
             {
-                inDeps.Complete(); //<todo Necessary to initialize the modifier
+                DebugStream.Context debugOutput = m_DebugStreamSystem.GetContext(1);
+                debugOutput.Begin(0);
+                // Allocate a NativeArray to store our debug output, so it can be shared across the display/finish jobs
+                NativeArray<DebugStream.Context> sharedOutput = new NativeArray<DebugStream.Context>(1, Allocator.TempJob);
+                sharedOutput[0] = debugOutput;
 
-                SimulationData.Contacts contacts = simulation.Contacts;
-                int numWorkItems = contacts.NumWorkItems;
-                if (numWorkItems > 0)
+                var gatherJob = new DisplayContactsJob
                 {
-                    return new DisplayContactsJob
-                    {
-                        ManifoldIterator = contacts.GetIterator(),
-                        OutputStream = m_DebugStreamSystem.GetContext(numWorkItems)
-                    }.Schedule(numWorkItems, 1, inDeps);
-                }
-                return inDeps;
+                    OutputStream = sharedOutput
+                };
+
+                // Explicitly call ScheduleImpl here, to avoid a dependency on Havok.Physics
+                JobHandle gatherJobHandle = gatherJob.ScheduleImpl(simulation, ref world, inDeps);
+
+                var finishJob = new FinishDisplayContactsJob
+                {
+                    OutputStream = sharedOutput
+                };
+
+                return finishJob.Schedule(gatherJobHandle);
             };
 
             m_StepWorld.EnqueueCallback(SimulationCallbacks.Phase.PostCreateContacts, callback);

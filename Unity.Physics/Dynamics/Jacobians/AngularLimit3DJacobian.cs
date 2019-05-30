@@ -10,17 +10,19 @@ namespace Unity.Physics
         public float MinAngle;
         public float MaxAngle;
 
-        // Relative orientation before solving
+        // Relative orientation of motions before solving
         public quaternion BFromA;
 
-        // Rotation to joint space from motion space
-        public quaternion MotionAFromJoint;
-        public quaternion MotionBFromJoint;
+        // Angle is zero when BFromA = RefBFromA
+        public quaternion RefBFromA;
 
         // Error before solving
         public float InitialError;
 
+        // Fraction of the position error to correct per step
         public float Tau;
+
+        // Fraction of the velocity error to correct per step
         public float Damping;
 
         // Build the Jacobian
@@ -33,14 +35,14 @@ namespace Unity.Physics
             this = default(AngularLimit3DJacobian);
 
             BFromA = math.mul(math.inverse(motionB.WorldFromMotion.rot), motionA.WorldFromMotion.rot);
-            MotionAFromJoint = new quaternion(aFromConstraint.Rotation);
-            MotionBFromJoint = new quaternion(bFromConstraint.Rotation);
+            RefBFromA = new quaternion(math.mul(bFromConstraint.Rotation, aFromConstraint.InverseRotation));
             MinAngle = constraint.Min;
             MaxAngle = constraint.Max;
             Tau = tau;
             Damping = damping;
 
-            float initialAngle = math.atan2(math.length(BFromA.value.xyz), BFromA.value.w) * 2.0f;
+            quaternion jointOrientation = math.mul(math.inverse(RefBFromA), BFromA);
+            float initialAngle = math.asin(math.length(jointOrientation.value.xyz)) * 2.0f;
             InitialError = JacobianUtilities.CalculateError(initialAngle, MinAngle, MaxAngle);
         }
 
@@ -55,17 +57,17 @@ namespace Unity.Physics
             float futureAngle;
             {
                 // Calculate the relative rotation between joint spaces
-                quaternion motionAFromJointB = math.mul(math.inverse(futureBFromA), MotionBFromJoint);
-                quaternion jointBFromAInA = math.mul(math.inverse(motionAFromJointB), MotionAFromJoint);
+                quaternion jointOrientation = math.mul(math.inverse(RefBFromA), futureBFromA);
 
                 // Find the axis and angle of rotation
-                jacA0 = jointBFromAInA.value.xyz;
+                jacA0 = jointOrientation.value.xyz;
                 float sinHalfAngleSq = math.lengthsq(jacA0);
                 float invSinHalfAngle = Math.RSqrtSafe(sinHalfAngleSq);
                 float sinHalfAngle = sinHalfAngleSq * invSinHalfAngle;
-                futureAngle = math.atan2(sinHalfAngle, futureBFromA.value.w) * 2.0f;
+                futureAngle = math.asin(sinHalfAngle) * 2.0f;
 
                 jacA0 = math.select(jacA0 * invSinHalfAngle, new float3(1, 0, 0), invSinHalfAngle == 0.0f);
+                jacA0 = math.select(jacA0, -jacA0, jointOrientation.value.w < 0.0f);
                 Math.CalculatePerpendicularNormalized(jacA0, out jacA1, out jacA2);
 
                 jacB0 = math.mul(futureBFromA, -jacA0);

@@ -5,15 +5,21 @@ using Unity.Jobs;
 namespace Unity.Physics.Systems
 {
     // A system which waits for any remaining physics jobs to finish
-    [UpdateAfter(typeof(BuildPhysicsWorld)), UpdateAfter(typeof(StepPhysicsWorld)),
-     UpdateAfter(typeof(ExportPhysicsWorld))]
-    public class EndFramePhysicsSystem : ComponentSystem
+    [UpdateAfter(typeof(BuildPhysicsWorld)), UpdateAfter(typeof(StepPhysicsWorld)), UpdateAfter(typeof(ExportPhysicsWorld))]
+    public class EndFramePhysicsSystem : JobComponentSystem
     {
         public NativeList<JobHandle> HandlesToWaitFor;
 
         BuildPhysicsWorld m_BuildPhysicsWorld;
         StepPhysicsWorld m_StepPhysicsWorld;
         ExportPhysicsWorld m_ExportPhysicsWorld;
+
+        void AddHandles()
+        {
+            HandlesToWaitFor.Add(m_BuildPhysicsWorld.FinalJobHandle);
+            HandlesToWaitFor.Add(m_StepPhysicsWorld.FinalJobHandle);
+            HandlesToWaitFor.Add(m_ExportPhysicsWorld.FinalJobHandle);
+        }
 
         protected override void OnCreate()
         {
@@ -26,18 +32,20 @@ namespace Unity.Physics.Systems
 
         protected override void OnDestroyManager()
         {
+            AddHandles();
+            JobHandle.CompleteAll(HandlesToWaitFor);
             HandlesToWaitFor.Dispose();
         }
 
-        protected override void OnUpdate()
+        protected override JobHandle OnUpdate(JobHandle jobs)
         {
-            HandlesToWaitFor.Add(m_BuildPhysicsWorld.FinalJobHandle);
-            HandlesToWaitFor.Add(m_StepPhysicsWorld.FinalJobHandle);
-            HandlesToWaitFor.Add(m_ExportPhysicsWorld.FinalJobHandle);
-
-            JobHandle handle = JobHandle.CombineDependencies(HandlesToWaitFor);
+            // Wait for previous frame jobs
+            JobHandle.CompleteAll(HandlesToWaitFor);
+            
             HandlesToWaitFor.Clear();
-            handle.Complete();
+            AddHandles();
+
+            return jobs;
         }
     }
 }

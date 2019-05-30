@@ -92,7 +92,6 @@ namespace Unity.Physics
 
             // Solve normal impulses
             float sumImpulses = 0.0f;
-            float frictionFactor = 1.0f;
             float4 totalAccumulatedImpulses = float4.zero;
             bool forceCollisionEvent = false;
             for (int j = 0; j < BaseJacobian.NumContacts; j++)
@@ -102,24 +101,6 @@ namespace Unity.Physics
                 // Solve velocity so that predicted contact distance is greater than or equal to zero
                 float relativeVelocity = BaseContactJacobian.GetJacVelocity(BaseJacobian.Normal, jacAngular.Jac, tempVelocityA, tempVelocityB);
                 float dv = jacAngular.VelToReachCp - relativeVelocity;
-
-                // Restitution (typically set to zero)
-                if (dv > 0.0f && CoefficientOfRestitution > 0.0f)
-                {
-                    float negContactRestingVelocity = -stepInput.GravityLength * stepInput.Timestep * 1.5f;
-                    if (relativeVelocity < negContactRestingVelocity)
-                    {
-                        float invMassA = tempVelocityA.InverseInertiaAndMass.w;
-                        float invMassB = tempVelocityB.InverseInertiaAndMass.w;
-                        float effInvMassAtCenter = invMassA + invMassB;
-                        jacAngular.VelToReachCp = -(CoefficientOfRestitution * (relativeVelocity - negContactRestingVelocity)) *
-                            (jacAngular.Jac.EffectiveMass * effInvMassAtCenter);
-                        dv = jacAngular.VelToReachCp - relativeVelocity;
-
-                        // reduce friction to 1/4 of the impulse
-                        frictionFactor = 0.25f;
-                    }
-                }
 
                 float impulse = dv * jacAngular.Jac.EffectiveMass;
                 bool clipped = impulse > maxImpulseToApply;
@@ -145,7 +126,7 @@ namespace Unity.Physics
             // Export collision event
             if (stepInput.IsLastIteration && (math.any(totalAccumulatedImpulses > 0.0f) || forceCollisionEvent) && jacHeader.HasColliderKeys)
             {
-                collisionEventsWriter.Write(new CollisionEvent
+                collisionEventsWriter.Write(new LowLevel.CollisionEvent
                 {
                     BodyIndices = jacHeader.BodyPair,
                     ColliderKeys = jacHeader.AccessColliderKeys(),
@@ -175,7 +156,6 @@ namespace Unity.Physics
 
                     // Calculate the impulse
                     imp = math.mul(effectiveMass, new float3(dv0, dv1, dva));
-                    imp *= frictionFactor;
                 }
 
                 // Clip TODO.ma calculate some contact radius and use it to influence balance between linear and angular friction
@@ -242,7 +222,7 @@ namespace Unity.Physics
                 if (accumulatedImpulse != jacAngular.Jac.Impulse || jacAngular.VelToReachCp > 0.0f)
                 {
                     // Export trigger event only if impulse is applied, or objects are penetrating
-                    triggerEventsWriter.Write(new TriggerEvent
+                    triggerEventsWriter.Write(new LowLevel.TriggerEvent
                     {
                         BodyIndices = jacHeader.BodyPair,
                         ColliderKeys = ColliderKeys,

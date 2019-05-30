@@ -1,8 +1,91 @@
+using System;
+using System.Linq;
+using System.Text;
+using NUnit.Framework.Constraints;
 using Unity.Mathematics;
 using Assert = UnityEngine.Assertions.Assert;
 using Unity.Entities;
 using Unity.Collections;
 using Unity.Jobs;
+using Random = Unity.Mathematics.Random;
+
+namespace Unity.Physics.Tests
+{
+    static class TestExtensions
+    {
+        public static string ToReadableString(this EntityQueryDesc query)
+        {
+            var sb = new StringBuilder();
+
+            if (query.All.Any())
+                sb.Append($"with [{string.Join(", ", query.All)}]");
+
+            if (query.Any.Any())
+            {
+                if (sb.Length > 0) sb.Append(", ");
+                sb.Append($"with any of [{string.Join(", ", query.Any)}]");
+            }
+            if (query.None.Any())
+            {
+                if (sb.Length > 0) sb.Append(", ");
+                sb.Append($"without [{string.Join(", ", query.None)}]");
+            }
+
+            if (query.Options != EntityQueryOptions.Default)
+                sb.Append($" ({string.Join(", ", Enum.GetValues(typeof(EntityQueryOptions)).Cast<EntityQueryOptions>().Where(v => (query.Options & v) == v))})");
+
+            return sb.ToString();
+        }
+
+        static MatrixPrettyCloseConstraint PrettyClose(
+            this ConstraintExpression expression,
+            float4x4 expected, float tolerance = MatrixPrettyCloseConstraint.DefaultTolerance
+        )
+        {
+            var constraint = new MatrixPrettyCloseConstraint(expected, tolerance);
+            expression.Append(constraint);
+            return constraint;
+        }
+    }
+
+    class Is : NUnit.Framework.Is
+    {
+        public static MatrixPrettyCloseConstraint PrettyCloseTo(
+            float4x4 actual, float tolerance = MatrixPrettyCloseConstraint.DefaultTolerance
+        )
+        {
+            return new MatrixPrettyCloseConstraint(actual, tolerance);
+        }
+    }
+
+    class MatrixPrettyCloseConstraint : NUnit.Framework.Constraints.Constraint
+    {
+        public const float DefaultTolerance = 0.0001f;
+
+        readonly float4x4 m_Expected;
+        readonly float m_ToleranceSq;
+
+        public MatrixPrettyCloseConstraint(float4x4 expected, float tolerance = DefaultTolerance)
+            : base((object)expected, (object)tolerance)
+        {
+            m_Expected = expected;
+            m_ToleranceSq = tolerance * tolerance;
+        }
+
+        public override string Description => $"each column to be within {math.sqrt(m_ToleranceSq)} of {m_Expected}";
+
+        public override ConstraintResult ApplyTo(object actual)
+        {
+            var m = (float4x4)actual;
+            var cmp =
+                math.lengthsq(m.c0 - m_Expected.c0) < m_ToleranceSq
+                && math.lengthsq(m.c1 - m_Expected.c1) < m_ToleranceSq
+                && math.lengthsq(m.c2 - m_Expected.c2) < m_ToleranceSq
+                && math.lengthsq(m.c3 - m_Expected.c3) < m_ToleranceSq;
+            return new ConstraintResult(this, actual, cmp);
+        }
+    }
+}
 
 namespace Unity.Physics.Tests.Utils
 {
@@ -988,8 +1071,14 @@ namespace Unity.Physics.Tests.Utils
                 };
             }
 
+            StaticLayerChangeInfo staticLayerChangeInfo = new StaticLayerChangeInfo();
+            staticLayerChangeInfo.Init(Allocator.TempJob);
+            staticLayerChangeInfo.NumStaticBodies = numBodies;
+            staticLayerChangeInfo.HaveStaticBodiesChanged = 1;
+
             // Build the broadphase
-            world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, timeStep: 1.0f, numThreadsHint: 1, haveStaticBodiesChanged: true, inputDeps: new JobHandle()).Complete();
+            world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, timeStep: 1.0f, numThreadsHint: 1, ref staticLayerChangeInfo, inputDeps: new JobHandle()).Complete();
+            staticLayerChangeInfo.Deallocate();
 
             return world;
         }

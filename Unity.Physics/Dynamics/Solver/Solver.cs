@@ -16,11 +16,10 @@ namespace Unity.Physics
             public bool IsLastIteration;
             public float InvNumSolverIterations;
             public float Timestep;
-            public float GravityLength;
         }
 
         // Schedule some jobs to build Jacobians from the contacts stored in the simulation context
-        public static JobHandle ScheduleBuildContactJacobiansJobs(ref DynamicsWorld world, float timeStep, ref Simulation.Context context, JobHandle inputDeps)
+        public static JobHandle ScheduleBuildContactJacobiansJobs(ref DynamicsWorld world, float timeStep, float gravityAcceleration, ref Simulation.Context context, JobHandle inputDeps)
         {
             var buildJob = new BuildContactJacobiansJob
             {
@@ -28,55 +27,56 @@ namespace Unity.Physics
                 JointJacobianReader = context.JointJacobians,
                 JacobianWriter = context.Jacobians,
                 TimeStep = timeStep,
+                GravityAcceleration = gravityAcceleration,
                 MotionDatas = world.MotionDatas,
                 MotionVelocities = world.MotionVelocities
             };
 
-            int numWorkItems = context.SolverSchedulerInfo.NumWorkItems;
-            JobHandle handle = buildJob.Schedule(numWorkItems, 1, inputDeps);
+            
+            JobHandle handle = buildJob.ScheduleUnsafeIndex0(context.SolverSchedulerInfo.NumWorkItems, 1, inputDeps);
 
-            context.DisposeContacts = context.Contacts.ScheduleDispose(handle);
+            context.DisposeContacts = context.Contacts.Dispose(handle);
 
             return handle;
         }
 
         // Schedule some jobs to solve the Jacobians stored in the simulation context
-        public static unsafe JobHandle ScheduleSolveJacobiansJobs(ref DynamicsWorld dynamicsWorld, float timestep, float3 gravity, int numIterations, ref Simulation.Context context, JobHandle inputDeps)
+        public static unsafe JobHandle ScheduleSolveJacobiansJobs(ref DynamicsWorld dynamicsWorld, float timestep, int numIterations, ref Simulation.Context context, JobHandle inputDeps)
         {
-            JobHandle handle = inputDeps;
+            JobHandle handle;
 
             int numPhases = context.SolverSchedulerInfo.NumPhases;
 
             // Use persistent allocator to allow these to live until the start of next step
-            int numWorkItems = math.max(context.SolverSchedulerInfo.NumWorkItems, 1); // Need at least one work item if user is going to add contacts
             {
-                context.CollisionEventStream = new BlockStream(numWorkItems, 0xb17b474f, Allocator.Persistent);
-                context.TriggerEventStream = new BlockStream(numWorkItems, 0x43875d8f, Allocator.Persistent);
+                var workItemList = context.SolverSchedulerInfo.NumWorkItems;
+                
+                //TODO: Change this to Allocator.TempJob when https://github.com/Unity-Technologies/Unity.Physics/issues/7 is resolved
+                var collisionEventStreamHandle = BlockStream.ScheduleConstruct(out context.CollisionEventStream, workItemList, 0xb17b474f, inputDeps, Allocator.Persistent);
+                var triggerEventStreamHandle = BlockStream.ScheduleConstruct(out context.TriggerEventStream, workItemList, 0x43875d8f, inputDeps, Allocator.Persistent);
 
+                handle = JobHandle.CombineDependencies(collisionEventStreamHandle, triggerEventStreamHandle);
+                
                 float invNumIterations = math.rcp(numIterations);
-                float gravityLength = math.length(gravity);
+
+                var phaseInfoPtrs = (Scheduler.SolverSchedulerInfo.SolvePhaseInfo*)NativeArrayUnsafeUtility.GetUnsafeBufferPointerWithoutChecks(context.SolverSchedulerInfo.PhaseInfo);
+
                 for (int solverIterationId = 0; solverIterationId < numIterations; solverIterationId++)
                 {
                     bool lastIteration = solverIterationId == numIterations - 1;
                     for (int phaseId = 0; phaseId < numPhases; phaseId++)
                     {
-                        int numWorkItemsPerPhase = context.SolverSchedulerInfo.NumWorkItemsPerPhase(phaseId);
-                        if (numWorkItemsPerPhase == 0)
-                        {
-                            continue;
-                        }
-
                         var job = new SolverJob
                         {
                             JacobianReader = context.Jacobians,
-                            WorkItemStartIndexOffset = context.SolverSchedulerInfo.FirstWorkItemsPerPhase(phaseId),
+                            PhaseIndex = phaseId,
+                            Phases = context.SolverSchedulerInfo.PhaseInfo,
                             MotionVelocities = dynamicsWorld.MotionVelocities,
                             StepInput = new StepInput
                             {
                                 InvNumSolverIterations = invNumIterations,
                                 IsLastIteration = lastIteration,
-                                Timestep = timestep,
-                                GravityLength = gravityLength
+                                Timestep = timestep
                             }
                         };
 
@@ -87,16 +87,20 @@ namespace Unity.Physics
                             job.TriggerEventsWriter = context.TriggerEventStream;
                         }
 
+                        // NOTE: The last phase must be executed on a single job since it  
+                        // int.MaxValue can't be used as batchSize since 19.1 overflows in that case... 
                         bool isLastPhase = phaseId == numPhases - 1;
-                        int batchSize = isLastPhase ? numWorkItemsPerPhase : 1;
-                        handle = job.Schedule(numWorkItemsPerPhase, batchSize, handle);
+                        int batchSize = isLastPhase ? (int.MaxValue / 2) : 1;
+                        
+                        int* numWorkItems = &(phaseInfoPtrs[phaseId].NumWorkItems);
+                        handle = job.Schedule(numWorkItems, batchSize, handle);
                     }
                 }
             }
 
             // Dispose processed data
-            context.DisposeJacobians = context.Jacobians.ScheduleDispose(handle);
-            context.DisposeJointJacobians = context.JointJacobians.ScheduleDispose(handle);
+            context.DisposeJacobians = context.Jacobians.Dispose(handle);
+            context.DisposeJointJacobians = context.JointJacobians.Dispose(handle);
             context.DisposeSolverSchedulerData = context.SolverSchedulerInfo.ScheduleDisposeJob(handle);
 
             return handle;
@@ -105,7 +109,7 @@ namespace Unity.Physics
         #region Jobs
 
         [BurstCompile]
-        private struct BuildContactJacobiansJob : IJobParallelFor
+        private struct BuildContactJacobiansJob : IJobParallelForDefer
         {
             [ReadOnly] public NativeSlice<MotionData> MotionDatas;
             [ReadOnly] public NativeSlice<MotionVelocity> MotionVelocities;
@@ -114,18 +118,19 @@ namespace Unity.Physics
             public BlockStream.Reader JointJacobianReader;
             public BlockStream.Writer JacobianWriter;
             public float TimeStep;
+            public float GravityAcceleration;
 
             public void Execute(int workItemIndex)
             {
                 BuildContactJacobians(ref MotionDatas, ref MotionVelocities, ref ContactReader, ref JointJacobianReader, ref JacobianWriter,
-                    TimeStep, workItemIndex);
+                    TimeStep, GravityAcceleration, workItemIndex);
             }
         }
 
         [BurstCompile]
-        private struct SolverJob : IJobParallelFor
+        private struct SolverJob : IJobParallelForDefer
         {
-            [NativeDisableContainerSafetyRestriction]
+            [NativeDisableParallelForRestriction]
             public NativeSlice<MotionVelocity> MotionVelocities;
 
             public BlockStream.Reader JacobianReader;
@@ -137,12 +142,19 @@ namespace Unity.Physics
             [NativeDisableContainerSafetyRestriction]
             public BlockStream.Writer TriggerEventsWriter;
             
-            public int WorkItemStartIndexOffset;
+            [ReadOnly]
+            public NativeArray<Scheduler.SolverSchedulerInfo.SolvePhaseInfo> Phases;
+            public int PhaseIndex;
             public StepInput StepInput;
 
             public void Execute(int workItemIndex)
             {
-                Solve(MotionVelocities, ref JacobianReader, ref CollisionEventsWriter, ref TriggerEventsWriter, workItemIndex + WorkItemStartIndexOffset, StepInput);
+                var workItemStartIndexOffset = Phases[PhaseIndex].FirstWorkItemIndex;
+
+                CollisionEventsWriter.PatchMinMaxRange(workItemIndex + workItemStartIndexOffset);
+                TriggerEventsWriter.PatchMinMaxRange(workItemIndex + workItemStartIndexOffset);
+                
+                Solve(MotionVelocities, ref JacobianReader, ref CollisionEventsWriter, ref TriggerEventsWriter, workItemIndex + workItemStartIndexOffset, StepInput);
             }
         }
 
@@ -350,23 +362,33 @@ namespace Unity.Physics
             ref BlockStream.Reader jointJacobianReader,
             ref BlockStream.Writer jacobianWriter,
             float timestep,
+            float gravityAcceleration,
             int workItemIndex)
         {
             float invDt = 1.0f / timestep;
+
+            // Contact resting velocity for restitution
+            float negContactRestingVelocity = -gravityAcceleration * timestep;
+            bool applyRestitution = false;
 
             contactReader.BeginForEachIndex(workItemIndex);
             jacobianWriter.BeginForEachIndex(workItemIndex);
             while (contactReader.RemainingItemCount > 0)
             {
-                // Get the motion pair
                 ref ContactHeader contactHeader = ref contactReader.Read<ContactHeader>();
+
+                JacobianType jacType = ((int)(contactHeader.JacobianFlags) & (int)(JacobianFlags.IsTrigger)) != 0 ?
+                    JacobianType.Trigger : JacobianType.Contact;
+                JacobianFlags jacFlags = contactHeader.JacobianFlags;
+
+                // Get the motion pair
                 MotionVelocity velocityA, velocityB;
                 MTransform worldFromA, worldFromB;
                 GetMotions(contactHeader.BodyPair, ref motionDatas, ref motionVelocities, out velocityA, out velocityB, out worldFromA, out worldFromB);
 
                 float sumInvMass = velocityA.InverseInertiaAndMass.w + velocityB.InverseInertiaAndMass.w;
 
-                if (sumInvMass == 0)
+                if (jacType == JacobianType.Contact && sumInvMass == 0)
                 {
                     // Skip contacts between two infinite-mass objects
                     for (int j = 0; j < contactHeader.NumContacts; j++)
@@ -375,10 +397,6 @@ namespace Unity.Physics
                     }
                     continue;
                 }
-
-                JacobianType jacType = ((int)(contactHeader.JacobianFlags) & (int)(JacobianFlags.IsTrigger)) != 0 ?
-                    JacobianType.Trigger : JacobianType.Contact;
-                JacobianFlags jacFlags = contactHeader.JacobianFlags;
 
                 // Write size before every jacobian
                 short jacobianSize = (short)JacobianHeader.CalculateSize(jacType, jacFlags, contactHeader.NumContacts);
@@ -414,6 +432,24 @@ namespace Unity.Physics
                         BuildContactJacobian(
                             j, contactJacobian.BaseJacobian.Normal, worldFromA, worldFromB, timestep, invDt, velocityA, velocityB, sumInvMass,
                             ref jacobianHeader, ref centerA, ref centerB, ref contactReader);
+
+                        // Restitution (optional)
+                        if (contactJacobian.CoefficientOfRestitution > 0.0f)
+                        {
+                            ref ContactJacAngAndVelToReachCp jacAngular = ref jacobianHeader.AccessAngularJacobian(j);
+                            float relativeVelocity = BaseContactJacobian.GetJacVelocity(baseJac.Normal, jacAngular.Jac, velocityA, velocityB);
+                            float dv = jacAngular.VelToReachCp - relativeVelocity;
+                            if (dv > 0.0f && relativeVelocity < negContactRestingVelocity)
+                            {
+                                float restitutionVelocity = (relativeVelocity - negContactRestingVelocity) * contactJacobian.CoefficientOfRestitution;
+                                jacAngular.VelToReachCp =
+                                    math.max(jacAngular.VelToReachCp + restitutionVelocity * timestep, 0.0f) -
+                                    restitutionVelocity;
+
+                                // Remember that restitution should be applied
+                                applyRestitution = true;
+                            }
+                        }
                     }
 
                     // Build friction jacobians
@@ -481,6 +517,15 @@ namespace Unity.Physics
                             contactJacobian.AngularFriction.EffectiveMass = effectiveMassDiag.z;
                             contactJacobian.FrictionEffectiveMassOffDiag = effectiveMassOffDiag;
                         }
+
+                        // Reduce friction to 1/4 of the impulse if there will be restitution
+                        if (applyRestitution)
+                        {
+                            contactJacobian.Friction0.EffectiveMass *= 0.25f;
+                            contactJacobian.Friction1.EffectiveMass *= 0.25f;
+                            contactJacobian.AngularFriction.EffectiveMass *= 0.25f;
+                            contactJacobian.FrictionEffectiveMassOffDiag *= 0.25f;
+                        }
                     }
                 }
                 // Much less data needed for triggers
@@ -507,6 +552,7 @@ namespace Unity.Physics
             // Copy joint jacobians into the main jacobian stream
             AppendJointJacobiansToContactStream(workItemIndex, ref jointJacobianReader, ref jacobianWriter);
 
+            contactReader.EndForEachIndex();
             jacobianWriter.EndForEachIndex();
         }
 

@@ -123,10 +123,9 @@ namespace Unity.Physics
             int usedSize = (int)(end - (byte*)compoundCollider);
             UnityEngine.Assertions.Assert.IsTrue(usedSize < totalSize);
             compoundCollider->MemorySize = usedSize;
-            byte[] bytes = new byte[usedSize];
-            Marshal.Copy((IntPtr)compoundCollider, bytes, 0, usedSize);
-            var blob = BlobAssetReference<Collider>.Create(bytes);
+            var blob = BlobAssetReference<Collider>.Create(compoundCollider, usedSize);
             UnsafeUtility.Free(compoundCollider, Allocator.Temp);
+            
             return blob;
         }
 

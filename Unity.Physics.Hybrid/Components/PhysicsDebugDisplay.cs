@@ -6,7 +6,7 @@ namespace Unity.Physics.Authoring
     public struct PhysicsDebugDisplayData : IComponentData
     {
         public int DrawColliders;
-        public int DrawMeshEdges;
+        public int DrawColliderEdges;
         public int DrawColliderAabbs;
         public int DrawBroadphase;
         public int DrawMassProperties;
@@ -16,13 +16,13 @@ namespace Unity.Physics.Authoring
         public int DrawJoints;
     }
 
-    [AddComponentMenu("DOTS Physics/Physics Debug Display")]
+    [AddComponentMenu("DOTS/Physics/Physics Debug Display")]
     [DisallowMultipleComponent]
     [RequiresEntityConversion]
     public class PhysicsDebugDisplay : MonoBehaviour, IConvertGameObjectToEntity
     {
         public bool DrawColliders = false;
-        public bool DrawMeshEdges = false;
+        public bool DrawColliderEdges = false;
         public bool DrawColliderAabbs = false;
         public bool DrawBroadphase = false;
         public bool DrawMassProperties = false;
@@ -38,7 +38,7 @@ namespace Unity.Physics.Authoring
             var componentData = new PhysicsDebugDisplayData
             {
                 DrawColliders = DrawColliders ? 1 : 0,
-                DrawMeshEdges = DrawMeshEdges ? 1 : 0,
+                DrawColliderEdges = DrawColliderEdges ? 1 : 0,
                 DrawColliderAabbs = DrawColliderAabbs ? 1 : 0,
                 DrawBroadphase = DrawBroadphase ? 1 : 0,
                 DrawMassProperties = DrawMassProperties ? 1 : 0,
@@ -54,7 +54,7 @@ namespace Unity.Physics.Authoring
 
         void OnValidate()
         {
-            if (!isActiveAndEnabled) return;
+            if (!enabled) return;
             if (convertedEntity == Entity.Null) return;
 
             // This requires Entity Conversion mode to be 'Convert And Inject Game Object'
@@ -63,7 +63,7 @@ namespace Unity.Physics.Authoring
             {
                 var component = entityManager.GetComponentData<PhysicsDebugDisplayData>(convertedEntity);
                 component.DrawColliders = DrawColliders ? 1 : 0;
-                component.DrawMeshEdges = DrawMeshEdges ? 1 : 0;
+                component.DrawColliderEdges = DrawColliderEdges ? 1 : 0;
                 component.DrawColliderAabbs = DrawColliderAabbs ? 1 : 0;
                 component.DrawBroadphase = DrawBroadphase ? 1 : 0;
                 component.DrawMassProperties = DrawMassProperties ? 1 : 0;

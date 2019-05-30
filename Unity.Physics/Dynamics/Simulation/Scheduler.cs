@@ -110,22 +110,15 @@ namespace Unity.Physics
 
             internal NativeArray<SolvePhaseInfo> PhaseInfo;
             internal NativeArray<int> NumActivePhases;
+            internal NativeArray<int> NumWorkItems;
 
             public int NumPhases => PhaseInfo.Length;
-            public int NumWorkItemsPerPhase(int phaseId) => PhaseInfo[phaseId].NumWorkItems;
-            public int FirstWorkItemsPerPhase(int phaseId) => PhaseInfo[phaseId].FirstWorkItemIndex;
-
-            public int NumWorkItems
+            internal static int CalculateNumWorkItems(NativeArray<SolvePhaseInfo> phaseInfos)
             {
-                get
-                {
-                    int numWorkItems = 0;
-                    for (int i = 0; i < PhaseInfo.Length; i++)
-                    {
-                        numWorkItems += PhaseInfo[i].NumWorkItems;
-                    }
-                    return numWorkItems;
-                }
+                int numWorkItems = 0;
+                for (int i = 0; i < phaseInfos.Length; i++)
+                    numWorkItems += phaseInfos[i].NumWorkItems;
+                return numWorkItems;
             }
 
             // For a given work item returns phase id.
@@ -170,6 +163,7 @@ namespace Unity.Physics
             {
                 PhaseInfo = new NativeArray<SolvePhaseInfo>(numPhases, Allocator.TempJob);
                 NumActivePhases = new NativeArray<int>(1, Allocator.TempJob);
+                NumWorkItems = new NativeArray<int>(1, Allocator.TempJob);
             }
 
             public void Dispose()
@@ -183,11 +177,16 @@ namespace Unity.Physics
                 {
                     NumActivePhases.Dispose();
                 }
+                
+                if (NumWorkItems.IsCreated)
+                {
+                    NumWorkItems.Dispose();
+                }
             }
 
             public JobHandle ScheduleDisposeJob(JobHandle inputDeps)
             {
-                return new DisposeJob { PhaseInfo = PhaseInfo, NumActivePhases = NumActivePhases }.Schedule(inputDeps);
+                return new DisposeJob { PhaseInfo = PhaseInfo, NumActivePhases = NumActivePhases, NumWorkItems = NumWorkItems }.Schedule(inputDeps);
             }
 
             // A job to dispose the phase information
@@ -200,6 +199,9 @@ namespace Unity.Physics
                 [DeallocateOnJobCompletion]
                 public NativeArray<int> NumActivePhases;
 
+                [DeallocateOnJobCompletion]
+                public NativeArray<int> NumWorkItems;
+                
                 public void Execute() { }
             }
         }
@@ -214,73 +216,53 @@ namespace Unity.Physics
         {
             m_BitLookupTable.Dispose();
         }
-
+      
         // Sort interacting pairs of bodies into phases for multi-threaded simulation
         public unsafe JobHandle ScheduleCreatePhasedDispatchPairsJob(
             ref PhysicsWorld world, ref BlockStream dynamicVsDynamicBroadphasePairsStream, ref BlockStream staticVsDynamicBroadphasePairStream,
             ref Simulation.Context context, JobHandle inputDeps)
-        {
-            JobHandle handle = inputDeps;
-
-            int numDispatchPairs = dynamicVsDynamicBroadphasePairsStream.ComputeItemCount() + staticVsDynamicBroadphasePairStream.ComputeItemCount() + world.Joints.Length;
-
+        {            
             // First build a sorted array of dispatch pairs.
-            NativeArray<DispatchPair> dispatchPairs;
-            NativeArray<byte> phaseIdPerPair;
-            NativeArray<byte> sortBuffer;
+            var unsortedPairs = new NativeList<DispatchPair>(Allocator.TempJob);
+            var sortedPairs = new NativeList<DispatchPair>(Allocator.TempJob);
+
+            JobHandle sortHandle;
             {
-                phaseIdPerPair = new NativeArray<byte>(numDispatchPairs, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-
-                // Initialize a pair of buffers
-                NativeArray<DispatchPair> unsortedPairs;
-                {
-                    int dispatchPairBufferSize = Math.NextMultipleOf16(sizeof(DispatchPair) * numDispatchPairs);
-                    sortBuffer = new NativeArray<byte>(dispatchPairBufferSize * 2, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-                    dispatchPairs = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<DispatchPair>((byte*)sortBuffer.GetUnsafePtr(), numDispatchPairs, Allocator.None);
-                    unsortedPairs = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<DispatchPair>((byte*)sortBuffer.GetUnsafePtr() + dispatchPairBufferSize, numDispatchPairs, Allocator.None);
-#if ENABLE_UNITY_COLLECTIONS_CHECKS
-                    NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref dispatchPairs, NativeArrayUnsafeUtility.GetAtomicSafetyHandle(sortBuffer));
-                    NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref unsortedPairs, NativeArrayUnsafeUtility.GetAtomicSafetyHandle(sortBuffer));
-#endif
-                }
-
                 // Merge broadphase pairs and joint pairs into the unsorted array
-                handle = new CreateDispatchPairsJob
+                var dispatchHandle = new CreateDispatchPairsJob
                 {
                     DynamicVsDynamicPairReader = dynamicVsDynamicBroadphasePairsStream,
                     StaticVsDynamicPairReader = staticVsDynamicBroadphasePairStream,
                     Joints = world.Joints,
-                    DispatchPairs = unsortedPairs
-                }.Schedule(handle);
+                    DispatchPairs = unsortedPairs, 
+                    DispatchPairsUninitialized = sortedPairs
+                }.Schedule(inputDeps);
 
                 // Dispose our broad phase pairs
-                context.DisposeBroadphasePairs = JobHandle.CombineDependencies(
-                    dynamicVsDynamicBroadphasePairsStream.ScheduleDispose(handle),
-                    staticVsDynamicBroadphasePairStream.ScheduleDispose(handle));
+                context.DisposeBroadphasePairs0 = dynamicVsDynamicBroadphasePairsStream.Dispose(dispatchHandle);
+                context.DisposeBroadphasePairs1 = staticVsDynamicBroadphasePairStream.Dispose(dispatchHandle);
 
                 // Sort into the target array
-                NativeArray<ulong> sortedPairsULong = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<ulong>(dispatchPairs.GetUnsafePtr(), dispatchPairs.Length, Allocator.None);
-#if ENABLE_UNITY_COLLECTIONS_CHECKS
-                NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref sortedPairsULong, NativeArrayUnsafeUtility.GetAtomicSafetyHandle(dispatchPairs));
-#endif
-                handle = ScheduleSortJob(world.NumBodies, unsortedPairs, sortedPairsULong, handle);
+                sortHandle = ScheduleSortJob(world.NumBodies, unsortedPairs.AsDeferredJobArray(), sortedPairs.AsDeferredJobArray(), dispatchHandle);
             }
 
             // Create phases for multi-threading
             context.SolverSchedulerInfo = new SolverSchedulerInfo(m_BitLookupTable.NumPhases);
-            context.PhasedDispatchPairsArray = new NativeArray<DispatchPair>(numDispatchPairs, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-            return new CreateDispatchPairPhasesJob   // also deallocates sortBuffer & rigidBodyMask
+            context.PhasedDispatchPairs = unsortedPairs;
+            var dispatchPairHandle = new CreateDispatchPairPhasesJob
             {
-                DispatchPairs = dispatchPairs,
-                RigidBodyMask = new NativeArray<ushort>(world.NumBodies, Allocator.TempJob, NativeArrayOptions.ClearMemory),
+                DispatchPairs = sortedPairs.AsDeferredJobArray(),
                 SolverSchedulerInfo = context.SolverSchedulerInfo,
                 NumDynamicBodies = world.NumDynamicBodies,
                 BitLookupTable = m_BitLookupTable.Table,
                 NumPhases = m_BitLookupTable.NumPhases,
-                FullBuffer = sortBuffer,
-                PhaseIdPerPair = phaseIdPerPair,
-                PhasedDispatchPairsArray = context.PhasedDispatchPairsArray
-            }.Schedule(handle);
+                PhasedDispatchPairs = unsortedPairs.AsDeferredJobArray()
+            }.Schedule(sortHandle);
+
+            // Dispose
+            context.DisposePhasedDispatchPairs = NativeListUtilityTemp.DisposeHotFix(ref sortedPairs, dispatchPairHandle);
+
+            return dispatchPairHandle;
         }
 
         #region Helpers
@@ -329,7 +311,7 @@ namespace Unity.Physics
         private static unsafe JobHandle ScheduleSortJob(
             int numBodies,
             NativeArray<DispatchPair> unsortedPairsIn,
-            NativeArray<ulong> sortedPairsOut,
+            NativeArray<DispatchPair> sortedPairsOut,
             JobHandle handle)
         {
             NativeArray<int> totalCountUpToDigit = new NativeArray<int>(numBodies + 1, Allocator.TempJob);
@@ -347,14 +329,9 @@ namespace Unity.Physics
             }
 
             // Perform single pass of single threaded radix sort.
-            NativeArray<ulong> inArray = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<ulong>(unsortedPairsIn.GetUnsafePtr(), unsortedPairsIn.Length, Allocator.None);
-#if ENABLE_UNITY_COLLECTIONS_CHECKS
-            NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref inArray, NativeArrayUnsafeUtility.GetAtomicSafetyHandle(unsortedPairsIn));
-#endif
-
             handle = new RadixSortPerBodyAJob
             {
-                InputArray = inArray,
+                InputArray = unsortedPairsIn,
                 OutputArray = sortedPairsOut,
                 MaxDigits = numDigits,
                 MaxIndex = maxBodyIndex,
@@ -389,11 +366,18 @@ namespace Unity.Physics
             [ReadOnly]
             public NativeSlice<Joint> Joints;
 
-            [NativeDisableContainerSafetyRestriction]
-            public NativeArray<DispatchPair> DispatchPairs;
+            public NativeList<DispatchPair> DispatchPairs;
+            public NativeList<DispatchPair> DispatchPairsUninitialized;
 
             public void Execute()
             {
+                int numDispatchPairs = DynamicVsDynamicPairReader.ComputeItemCount() + StaticVsDynamicPairReader.ComputeItemCount() + Joints.Length;
+                
+                DispatchPairs.ResizeUninitialized(numDispatchPairs);
+                DispatchPairsUninitialized.ResizeUninitialized(numDispatchPairs);
+
+                var pairs = DispatchPairs.AsArray();
+                
                 int counter = 0;
                 for (int i = 0; i < DynamicVsDynamicPairReader.ForEachCount; i++)
                 {
@@ -402,8 +386,9 @@ namespace Unity.Physics
                     for (int j = 0; j < rangeItemCount; j++)
                     {
                         var pair = DynamicVsDynamicPairReader.Read<BodyIndexPair>();
-                        DispatchPairs[counter++] = DispatchPair.CreateContact(pair);
+                        pairs[counter++] = DispatchPair.CreateContact(pair);
                     }
+                    DynamicVsDynamicPairReader.EndForEachIndex();
                 }
 
                 for (int i = 0; i < StaticVsDynamicPairReader.ForEachCount; i++)
@@ -413,47 +398,50 @@ namespace Unity.Physics
                     for (int j = 0; j < rangeItemCount; j++)
                     {
                         var pair = StaticVsDynamicPairReader.Read<BodyIndexPair>();
-                        DispatchPairs[counter++] = DispatchPair.CreateContact(pair);
+                        pairs[counter++] = DispatchPair.CreateContact(pair);
                     }
+                    StaticVsDynamicPairReader.EndForEachIndex();
                 }
 
                 for (int i = 0; i < Joints.Length; i++)
                 {
-                    DispatchPairs[counter++] = DispatchPair.CreateJoint(Joints[i].BodyPair, i, Joints[i].EnableCollision);
+                    pairs[counter++] = DispatchPair.CreateJoint(Joints[i].BodyPair, i, Joints[i].EnableCollision);
                 }
 
-                Assert.AreEqual(counter, DispatchPairs.Length);
+                Assert.AreEqual(counter, pairs.Length);
             }
         }
 
         // Sorts an array of dispatch pairs by Body A index
         [BurstCompile]
-        public struct RadixSortPerBodyAJob : IJob
+        unsafe public struct RadixSortPerBodyAJob : IJob
         {
             [ReadOnly]
-            public NativeArray<ulong> InputArray;
-            [NativeDisableContainerSafetyRestriction]
-            public NativeArray<ulong> OutputArray;
-            [NativeDisableContainerSafetyRestriction]
+            public NativeArray<DispatchPair> InputArray;
+            [NativeDisableParallelForRestriction]
+            public NativeArray<DispatchPair> OutputArray;
+            [NativeDisableParallelForRestriction]
             public NativeArray<int> DigitCount;
 
             public int MaxDigits;
             public int MaxIndex;
+            
+            //@TODO: Add ReinterpretCast to NativeArray
 
             public void Execute()
             {
                 const int shift = 40;
-
-                RadixSortPerBodyA(InputArray, OutputArray, DigitCount, MaxDigits, MaxIndex, shift);
+                Assert.AreEqual(InputArray.Length, OutputArray.Length);
+                RadixSortPerBodyA((ulong*)InputArray.GetUnsafeReadOnlyPtr(), (ulong*)OutputArray.GetUnsafePtr(), InputArray.Length, DigitCount, MaxDigits, MaxIndex, shift);
             }
 
             // Performs single pass of Radix sort on NativeArray<ulong> based on 16th to 40th bit. Those bits contain bodyA index in DispatchPair.
-            public static void RadixSortPerBodyA(NativeArray<ulong> inputArray, NativeArray<ulong> outputArray, NativeArray<int> digitCount, int maxDigits, int maxIndex, int shift)
+            public static void RadixSortPerBodyA(ulong* inputArray, ulong* outputArray, int length, NativeArray<int> digitCount, int maxDigits, int maxIndex, int shift)
             {
                 ulong mask = ((ulong)(1 << maxDigits) - 1) << shift;
 
                 // Count digits
-                for (int i = 0; i < inputArray.Length; i++)
+                for (int i = 0; i < length; i++)
                 {
                     ulong usIndex = inputArray[i] & mask;
                     int sIndex = (int)(usIndex >> shift);
@@ -471,13 +459,13 @@ namespace Unity.Physics
                 }
 
                 // Copy elements into buckets based on bodyA index
-                for (int i = 0; i < inputArray.Length; i++)
+                for (int i = 0; i < length; i++)
                 {
                     ulong value = inputArray[i];
                     ulong usindex = value & mask;
                     int sindex = (int)(usindex >> shift);
                     int index = digitCount[sindex]++;
-                    if (index == 1 && inputArray.Length == 1)
+                    if (index == 1 && length == 1)
                     {
                         outputArray[0] = 0;
                     }
@@ -490,14 +478,14 @@ namespace Unity.Physics
         [BurstCompile]
         public struct SortSubArraysJob : IJobParallelFor
         {
-            [NativeDisableContainerSafetyRestriction]
-            public NativeArray<ulong> InOutArray;
+            [NativeDisableParallelForRestriction]
+            public NativeArray<DispatchPair> InOutArray;
 
             // Typically lastDigitIndex is resulting RadixSortPerBodyAJob.digitCount. nextElementIndex[i] = index of first element with bodyA index == i + 1
-            [NativeDisableContainerSafetyRestriction]
+            [NativeDisableParallelForRestriction]
             [DeallocateOnJobCompletion] public NativeArray<int> NextElementIndex;
 
-            public void Execute(int workItemIndex)
+            unsafe public void Execute(int workItemIndex)
             {
                 int startIndex = 0;
                 if (workItemIndex > 0)
@@ -508,22 +496,17 @@ namespace Unity.Physics
                 if (startIndex < InOutArray.Length)
                 {
                     int length = NextElementIndex[workItemIndex] - startIndex;
-                    DefaultSortOfSubArrays(InOutArray, startIndex, length);
+                    DefaultSortOfSubArrays((ulong*)InOutArray.GetUnsafePtr(), startIndex, length);
                 }
             }
 
             // Sorts sub array using default sort
-            public static unsafe void DefaultSortOfSubArrays(NativeArray<ulong> inOutArray, int startIndex, int length)
+            unsafe public static void DefaultSortOfSubArrays(ulong* inOutArray, int startIndex, int length)
             {
                 // inOutArray[startIndex] to inOutArray[startIndex + length - 1] have the same bodyA index (16th to 40th big) so we can do a simple sorting.
                 if (length > 2)
                 {
-                    // Alias sub array as a new array
-                    NativeArray<ulong> subArray = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<ulong>((byte*)inOutArray.GetUnsafePtr() + startIndex * sizeof(ulong), length, Allocator.None);
-#if ENABLE_UNITY_COLLECTIONS_CHECKS
-                    NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref subArray, NativeArrayUnsafeUtility.GetAtomicSafetyHandle(inOutArray));
-#endif
-                    subArray.Sort();
+                    NativeSortExtension.Sort(inOutArray + startIndex, length);
                 }
                 else if (length == 2)
                 {
@@ -547,20 +530,9 @@ namespace Unity.Physics
             [ReadOnly]
             public NativeArray<ushort> BitLookupTable;
 
-            [DeallocateOnJobCompletion]
-            public NativeArray<ushort> RigidBodyMask;
-
-            [NativeDisableContainerSafetyRestriction]
-            [DeallocateOnJobCompletion]
-            public NativeArray<byte> FullBuffer;
-
-            [NativeDisableContainerSafetyRestriction]
             public SolverSchedulerInfo SolverSchedulerInfo;
 
-            [DeallocateOnJobCompletion]
-            public NativeArray<byte> PhaseIdPerPair;
-
-            public NativeArray<DispatchPair> PhasedDispatchPairsArray;
+            public NativeArray<DispatchPair> PhasedDispatchPairs;
 
             public int NumDynamicBodies;
             public int NumPhases;
@@ -568,56 +540,77 @@ namespace Unity.Physics
             const int k_MinBatchSize = 8;
             private int m_LastPhaseIndex;
 
-            public unsafe void Execute()
+            public void Execute()
             {
+                // Call function here, so that one can find it in VTune
+                CreateDispatchPairPhasesJobFunction();
+            }
+
+            public unsafe void CreateDispatchPairPhasesJobFunction()
+            {
+                var phaseIdPerPair = new NativeArray<byte>(DispatchPairs.Length, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+                var rigidBodyMask = new NativeArray<ushort>(NumDynamicBodies, Allocator.Temp);
+
                 m_LastPhaseIndex = NumPhases - 1;
                 int* numPairsPerPhase = stackalloc int[NumPhases];
-                for (int i = 0; i < NumPhases; i++)
-                {
-                    numPairsPerPhase[i] = 0;
-                }
+                numPairsPerPhase[m_LastPhaseIndex] = 0;
 
                 const byte invalidPhaseId = 0xff;
-                DispatchPair lastPair = new DispatchPair(); // Guaranteed not to be a real pair, as bodyA==bodyB==0
+
+                // Guaranteed not to be a real pair, as bodyA==bodyB==0
+                int lastPairA = 0;
+                int lastPairB = 0;
+
                 bool contactsPermitted = true; // Will avoid creating a contact (=non-joint) pair if this is false
 
-                BatchInfo* batchInfos = stackalloc BatchInfo[NumPhases];
-                for (int i = 0; i < NumPhases; i++)
+                BatchInfo* batchInfos = stackalloc BatchInfo[m_LastPhaseIndex];
+                for (int i = 0; i < m_LastPhaseIndex; i++)
                 {
                     batchInfos[i].m_NumDynamicBodies = NumDynamicBodies;
-                    batchInfos[i].m_IsLastPhase = i == m_LastPhaseIndex;
                     batchInfos[i].m_NumElements = 0;
-                    batchInfos[i].m_PhaseIndex = i;
                     batchInfos[i].m_PhaseMask = (ushort)(1 << i);
+                    batchInfos[i].m_NumBatchesProcessed = 0;
                 }
 
                 // Find phase for each pair
                 for (int i = 0; i < DispatchPairs.Length; i++)
                 {
-                    DispatchPair pair = DispatchPairs[i];
-                    int bodyAIndex = pair.BodyAIndex;
-                    int bodyBIndex = pair.BodyBIndex;
+                    int bodyAIndex = DispatchPairs[i].BodyAIndex;
+                    int bodyBIndex = DispatchPairs[i].BodyBIndex;
 
-                    bool indicesChanged = lastPair.BodyAIndex != bodyAIndex || lastPair.BodyBIndex != bodyBIndex;
+                    bool indicesChanged = !(lastPairA == bodyAIndex && lastPairB == bodyBIndex);
+                    bool isJoint = DispatchPairs[i].IsJoint;
 
-                    if (indicesChanged || contactsPermitted || pair.IsJoint)
+                    if (indicesChanged || contactsPermitted || isJoint)
                     {
-                        byte phaseIndex = (byte)FindFreePhase(bodyAIndex, bodyBIndex);
-                        numPairsPerPhase[phaseIndex]++;
-                        PhaseIdPerPair[i] = phaseIndex;
+                        int phaseIndex = FindFreePhase(rigidBodyMask, bodyAIndex, bodyBIndex);
+                        phaseIdPerPair[i] = (byte)phaseIndex;
 
-                        batchInfos[phaseIndex].Add(ref RigidBodyMask, pair.BodyAIndex, pair.BodyBIndex);
+                        if (phaseIndex != m_LastPhaseIndex)
+                        {
+                            batchInfos[phaseIndex].Add(rigidBodyMask, bodyAIndex, bodyBIndex);
+                        }
+                        else
+                        {
+                            numPairsPerPhase[m_LastPhaseIndex]++;
+                        }
 
                         // If _any_ Joint between each Pair has Enable Collision set to true, then contacts will be permitted
-                        bool thisPermitsContacts = pair.IsJoint && pair.JointAllowsCollision;
+                        bool thisPermitsContacts = isJoint && DispatchPairs[i].JointAllowsCollision;
                         contactsPermitted = (contactsPermitted && !indicesChanged) || thisPermitsContacts;
+
+                        lastPairA = bodyAIndex;
+                        lastPairB = bodyBIndex;
                     }
                     else
                     {
-                        PhaseIdPerPair[i] = invalidPhaseId;
+                        phaseIdPerPair[i] = invalidPhaseId;
                     }
+                }
 
-                    lastPair = pair;
+                for (int i = 0; i < m_LastPhaseIndex; i++)
+                {
+                    numPairsPerPhase[i] = batchInfos[i].m_NumBatchesProcessed * k_MinBatchSize + batchInfos[i].m_NumElements;
                 }
 
                 // Calculate phase start offset
@@ -631,11 +624,11 @@ namespace Unity.Physics
                 // Populate PhasedDispatchPairsArray
                 for (int i = 0; i < DispatchPairs.Length; i++)
                 {
-                    if (PhaseIdPerPair[i] != invalidPhaseId)
+                    if (phaseIdPerPair[i] != invalidPhaseId)
                     {
-                        int phaseForPair = PhaseIdPerPair[i];
+                        int phaseForPair = phaseIdPerPair[i];
                         int indexInArray = offsetInPhase[phaseForPair]++;
-                        PhasedDispatchPairsArray[indexInArray] = DispatchPairs[i];
+                        PhasedDispatchPairs[indexInArray] = DispatchPairs[i];
                     }
                 }
 
@@ -666,77 +659,60 @@ namespace Unity.Physics
                 }
 
                 SolverSchedulerInfo.NumActivePhases[0] = numActivePhases;
+
+                //<todo.eoin.usermod Can we get rid of this max()? Needed if the user wants to add contacts themselves.
+                int numWorkItems = math.max(1, SolverSchedulerInfo.CalculateNumWorkItems(SolverSchedulerInfo.PhaseInfo));
+                SolverSchedulerInfo.NumWorkItems[0] = numWorkItems;
             }
 
             private unsafe struct BatchInfo
             {
-                internal void Add(ref NativeArray<ushort> rigidBodyMasks, int bodyAIndex, int bodyBIndex)
+                internal void Add(NativeArray<ushort> rigidBodyMasks, int bodyAIndex, int bodyBIndex)
                 {
-                    fixed (int* bodyAIndices = m_BodyAIndices)
-                    {
-                        bodyAIndices[m_NumElements] = bodyAIndex;
-                    }
+                    int indexInBuffer = m_NumElements++ * 2;
 
-                    fixed (int* bodyBIndices = m_BodyBIndices)
+                    fixed (int* bodyIndices = m_BodyIndices)
                     {
-                        bodyBIndices[m_NumElements] = bodyBIndex;
-                    }
+                        bodyIndices[indexInBuffer++] = bodyAIndex;
+                        bodyIndices[indexInBuffer] = bodyBIndex;
 
-                    if (++m_NumElements == k_MinBatchSize)
-                    {
-                        Flush(ref rigidBodyMasks);
-                    }
-                }
-
-                private void Flush(ref NativeArray<ushort> rigidBodyMasks)
-                {
-                    for (int i = 0; i < m_NumElements; i++)
-                    {
-                        int bodyA;
-                        int bodyB;
-
-                        fixed (int* bodyAs = m_BodyAIndices)
+                        if (m_NumElements == k_MinBatchSize)
                         {
-                            bodyA = bodyAs[i];
-                        }
-
-                        fixed (int* bodyBs = m_BodyBIndices)
-                        {
-                            bodyB = bodyBs[i];
-                        }
-
-                        if (!m_IsLastPhase)
-                        {
-                            rigidBodyMasks[bodyA] |= m_PhaseMask;
-
-                            if (bodyB < m_NumDynamicBodies)
+                            // Flush
+                            indexInBuffer = 0;
+                            for (int i = 0; i < k_MinBatchSize; i++)
                             {
-                                rigidBodyMasks[bodyB] |= m_PhaseMask;
+                                rigidBodyMasks[bodyIndices[indexInBuffer++]] |= m_PhaseMask;
+
+                                int bIndex = bodyIndices[indexInBuffer++];
+                                if (bIndex < m_NumDynamicBodies)
+                                {
+                                    rigidBodyMasks[bIndex] |= m_PhaseMask;
+                                }
                             }
+
+                            m_NumBatchesProcessed++;
+                            m_NumElements = 0;
                         }
                     }
-
-                    m_NumElements = 0;
                 }
 
-                private fixed int m_BodyAIndices[k_MinBatchSize];
-                private fixed int m_BodyBIndices[k_MinBatchSize];
+                private fixed int m_BodyIndices[k_MinBatchSize * 2];
 
                 internal int m_NumDynamicBodies;
-                internal bool m_IsLastPhase;
-                internal int m_PhaseIndex;
+                internal int m_NumBatchesProcessed;
                 internal ushort m_PhaseMask;
                 internal int m_NumElements;
             }
 
-            private int FindFreePhase(int bodyAIndex, int bodyBIndex)
+            private int FindFreePhase(NativeArray<ushort> rigidBodyMask, int bodyAIndex, int bodyBIndex)
             {
-                int mask = RigidBodyMask[bodyAIndex];
+                int mask = rigidBodyMask[bodyAIndex];
 
                 if (bodyBIndex < NumDynamicBodies)
                 {
                     // Don't need this check for bodyA, as we can guarantee it is dynamic.
-                    mask |= RigidBodyMask[bodyBIndex];
+                    mask |= rigidBodyMask[bodyBIndex];
                 }
 
                 int phaseIndex = BitLookupTable[mask];

@@ -110,18 +110,18 @@ namespace Unity.Physics
         {
             float4 lx = Lx - new float4(ray.Origin.x);
             float4 hx = Hx - new float4(ray.Origin.x);
-            float4 nearXt = lx * new float4(ray.ReciprocalDirection.x);
-            float4 farXt = hx * new float4(ray.ReciprocalDirection.x);
+            float4 nearXt = lx * new float4(ray.ReciprocalDisplacement.x);
+            float4 farXt = hx * new float4(ray.ReciprocalDisplacement.x);
 
             float4 ly = Ly - new float4(ray.Origin.y);
             float4 hy = Hy - new float4(ray.Origin.y);
-            float4 nearYt = ly * new float4(ray.ReciprocalDirection.y);
-            float4 farYt = hy * new float4(ray.ReciprocalDirection.y);
+            float4 nearYt = ly * new float4(ray.ReciprocalDisplacement.y);
+            float4 farYt = hy * new float4(ray.ReciprocalDisplacement.y);
 
             float4 lz = Lz - new float4(ray.Origin.z);
             float4 hz = Hz - new float4(ray.Origin.z);
-            float4 nearZt = lz * new float4(ray.ReciprocalDirection.z);
-            float4 farZt = hz * new float4(ray.ReciprocalDirection.z);
+            float4 nearZt = lz * new float4(ray.ReciprocalDisplacement.z);
+            float4 farZt = hz * new float4(ray.ReciprocalDisplacement.z);
 
             float4 nearX = math.min(nearXt, farXt);
             float4 farX = math.max(nearXt, farXt);

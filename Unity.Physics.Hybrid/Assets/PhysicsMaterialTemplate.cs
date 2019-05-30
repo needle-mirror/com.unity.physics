@@ -2,7 +2,7 @@
 
 namespace Unity.Physics.Authoring
 {
-    [CreateAssetMenu(menuName = "DOTS Physics/Physics Material Template")]
+    [CreateAssetMenu(menuName = "DOTS/Physics/Physics Material Template")]
     public class PhysicsMaterialTemplate : ScriptableObject, IPhysicsMaterialProperties
     {
         public bool IsTrigger { get => m_Value.IsTrigger; set => m_Value.IsTrigger = value; }

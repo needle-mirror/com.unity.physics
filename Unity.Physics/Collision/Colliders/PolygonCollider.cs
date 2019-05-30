@@ -27,22 +27,21 @@ namespace Unity.Physics
 
         #region Construction
 
-        public static BlobAssetReference<Collider> CreateTriangle(float3 vertex0, float3 vertex1, float3 vertex2, CollisionFilter? filter = null, Material? material = null)
+        unsafe public static BlobAssetReference<Collider> CreateTriangle(float3 vertex0, float3 vertex1, float3 vertex2, CollisionFilter? filter = null, Material? material = null)
         {
             if (math.any(!math.isfinite(vertex0)) || math.any(!math.isfinite(vertex1)) || math.any(!math.isfinite(vertex2)))
             {
                 throw new System.ArgumentException("Tried to create triangle collider with nan/inf vertex");
             }
-            using (var allocator = new BlobAllocator(-1))
-            {
-                ref PolygonCollider collider = ref allocator.ConstructRoot<PolygonCollider>();
-                collider.InitAsTriangle(vertex0, vertex1, vertex2, filter ?? CollisionFilter.Default, material ?? Material.Default);
-                return allocator.CreateBlobAssetReference<Collider>(Allocator.Persistent);
-            }
+
+            var collider = new PolygonCollider();
+            collider.InitAsTriangle(vertex0, vertex1, vertex2, filter ?? CollisionFilter.Default, material ?? Material.Default);
+            
+            return BlobAssetReference<Collider>.Create(&collider, UnsafeUtility.SizeOf<PolygonCollider>());
         }
 
         // Ray casting assumes vertices are presented in clockwise order
-        public static BlobAssetReference<Collider> CreateQuad(float3 vertex0, float3 vertex1, float3 vertex2, float3 vertex3, CollisionFilter? filter = null, Material? material = null)
+        unsafe public static BlobAssetReference<Collider> CreateQuad(float3 vertex0, float3 vertex1, float3 vertex2, float3 vertex3, CollisionFilter? filter = null, Material? material = null)
         {
             if (math.any(!math.isfinite(vertex0)) || math.any(!math.isfinite(vertex1)) || math.any(!math.isfinite(vertex2)) || math.any(!math.isfinite(vertex3)))
             {
@@ -56,12 +55,9 @@ namespace Unity.Physics
                 throw new System.ArgumentException("Vertices for quad creation are not co-planar");
             }
 
-            using (var allocator = new BlobAllocator(-1))
-            {
-                ref PolygonCollider collider = ref allocator.ConstructRoot<PolygonCollider>();
-                collider.InitAsQuad(vertex0, vertex1, vertex2, vertex3, filter ?? CollisionFilter.Default, material ?? Material.Default);
-                return allocator.CreateBlobAssetReference<Collider>(Allocator.Persistent);
-            }
+            PolygonCollider collider = default(PolygonCollider);
+            collider.InitAsQuad(vertex0, vertex1, vertex2, vertex3, filter ?? CollisionFilter.Default, material ?? Material.Default);
+            return BlobAssetReference<Collider>.Create(&collider, UnsafeUtility.SizeOf<PolygonCollider>());
         }
 
         internal void InitEmpty()
@@ -149,16 +145,16 @@ namespace Unity.Physics
 
             fixed (PolygonCollider* collider = &this)
             {
-                ConvexHull.VerticesBlob.Offset = (int)((byte*)UnsafeUtility.AddressOf(ref collider->m_Vertices[0]) - (byte*)UnsafeUtility.AddressOf(ref ConvexHull.VerticesBlob.Offset));
+                ConvexHull.VerticesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_Vertices[0], ref ConvexHull.VerticesBlob);
                 ConvexHull.VerticesBlob.Length = 4;
 
-                ConvexHull.FacePlanesBlob.Offset = (int)((byte*)UnsafeUtility.AddressOf(ref collider->m_FacePlanes[0]) - (byte*)UnsafeUtility.AddressOf(ref ConvexHull.FacePlanesBlob.Offset));
+                ConvexHull.FacePlanesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_FacePlanes[0], ref ConvexHull.FacePlanesBlob);
                 ConvexHull.FacePlanesBlob.Length = 2;
 
-                ConvexHull.FacesBlob.Offset = (int)((byte*)UnsafeUtility.AddressOf(ref collider->m_Faces[0]) - (byte*)UnsafeUtility.AddressOf(ref ConvexHull.FacesBlob.Offset));
+                ConvexHull.FacesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_Faces[0], ref ConvexHull.FacesBlob);
                 ConvexHull.FacesBlob.Length = 2;
 
-                ConvexHull.FaceVertexIndicesBlob.Offset = (int)((byte*)UnsafeUtility.AddressOf(ref collider->m_FaceVertexIndices[0]) - (byte*)UnsafeUtility.AddressOf(ref ConvexHull.FaceVertexIndicesBlob.Offset));
+                ConvexHull.FaceVertexIndicesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_FaceVertexIndices[0], ref ConvexHull.FaceVertexIndicesBlob);
                 ConvexHull.FaceVertexIndicesBlob.Length = 8;
 
                 // No connectivity needed

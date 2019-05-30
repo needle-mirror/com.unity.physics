@@ -312,7 +312,7 @@ namespace Unity.Physics.Tests.Collision.Queries
         {
             // Fetch the leaf collider and convert the shape cast result into a distance result at the hit transform 
             ChildCollider leaf;
-            MTransform queryFromWorld = Math.Inverse(new MTransform(input.Orientation, input.Position + input.Direction * hit.Fraction));
+            MTransform queryFromWorld = Math.Inverse(new MTransform(input.Orientation, math.lerp(input.Start, input.End, hit.Fraction)));
             GetHitLeaf(ref world, hit.RigidBodyIndex, hit.ColliderKey, queryFromWorld, out leaf, out MTransform queryFromTarget);
             DistanceQueries.Result result = new DistanceQueries.Result
             {
@@ -345,7 +345,7 @@ namespace Unity.Physics.Tests.Collision.Queries
 
             // Check each hit and find the earliest
             float minFraction = float.MaxValue;
-            RigidTransform worldFromQuery = new RigidTransform(input.Orientation, input.Position);
+            RigidTransform worldFromQuery = new RigidTransform(input.Orientation, input.Start);
             for (int iHit = 0; iHit < hits.Length; iHit++)
             {
                 ColliderCastHit hit = hits[iHit];
@@ -362,7 +362,7 @@ namespace Unity.Physics.Tests.Collision.Queries
             }
             else
             {
-                Assert.AreEqual(closestHit.Fraction, minFraction, tolerance * math.length(input.Direction), failureMessage + ", closestHit: fraction does not match");
+                Assert.AreEqual(closestHit.Fraction, minFraction, tolerance * math.length(input.Ray.Displacement), failureMessage + ", closestHit: fraction does not match");
                 CheckColliderCastHit(ref world, input, closestHit, failureMessage + ", closestHit");
             }
 
@@ -383,7 +383,7 @@ namespace Unity.Physics.Tests.Collision.Queries
             }
 
             // Check that the hit position matches the fraction
-            float3 hitPosition = input.Ray.Origin + input.Ray.Direction * hit.Fraction;
+            float3 hitPosition = math.lerp(input.Start, input.End, hit.Fraction);
             Assert.Less(math.length(hitPosition - hit.Position), tolerance, failureMessage + ": inconsistent fraction and position");
 
             // Query the hit position and check that it's on the surface of the shape
@@ -433,7 +433,7 @@ namespace Unity.Physics.Tests.Collision.Queries
             }
             else
             {
-                Assert.AreEqual(closestHit.Fraction, minFraction, tolerance * math.length(input.Ray.Direction), failureMessage + ", closestHit: fraction does not match");
+                Assert.AreEqual(closestHit.Fraction, minFraction, tolerance * math.length(input.Ray.Displacement), failureMessage + ", closestHit: fraction does not match");
                 CheckRaycastHit(ref world, input, closestHit, failureMessage + ", closestHit");
             }
 
@@ -493,7 +493,8 @@ namespace Unity.Physics.Tests.Collision.Queries
                         pos = rnd.NextFloat3(-10.0f, 10.0f),
                         rot = (rnd.NextInt(10) > 0) ? rnd.NextQuaternionRotation() : quaternion.identity,
                     };
-                    Ray ray = new Ray(transform.pos, rnd.NextFloat3(-5.0f, 5.0f));
+                    var startPos = transform.pos;
+                    var endPos = startPos + rnd.NextFloat3(-5.0f, 5.0f);
 
                     // Distance test
                     {
@@ -511,9 +512,9 @@ namespace Unity.Physics.Tests.Collision.Queries
                         ColliderCastInput input = new ColliderCastInput
                         {
                             Collider = (Collider*)collider.GetUnsafePtr(),
-                            Position = transform.pos,
+                            Start = startPos,
+                            End = endPos,
                             Orientation = transform.rot,
-                            Direction = ray.Direction
                         };
                         WorldColliderCastTest(ref world, input, ref colliderCastHits, "WorldQueryTest failed ColliderCast " + failureMessage);
                     }
@@ -522,7 +523,8 @@ namespace Unity.Physics.Tests.Collision.Queries
                     {
                         RaycastInput input = new RaycastInput
                         {
-                            Ray = ray,
+                            Start = startPos,
+                            End = endPos,
                             Filter = CollisionFilter.Default
                         };
                         WorldRaycastTest(ref world, input, ref raycastHits, "WorldQueryTest failed Raycast " + failureMessage);

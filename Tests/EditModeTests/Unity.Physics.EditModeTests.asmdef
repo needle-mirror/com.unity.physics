@@ -3,7 +3,9 @@
     "references": [
         "Unity.Mathematics",
         "Unity.Physics",
-        "Unity.Physics.Editor"
+        "Unity.Physics.Editor",
+        "Unity.Physics.Hybrid",
+        "Unity.Physics.PlayModeTests"
     ],
     "optionalUnityReferences": [
         "TestAssemblies"

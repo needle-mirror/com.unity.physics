@@ -11,7 +11,8 @@
         "Unity.Physics",
         "Unity.Physics.Hybrid",
         "Unity.Physics.Editor",
-        "Unity.Transforms"
+        "Unity.Transforms",
+        "Unity.Jobs"
     ],
     "optionalUnityReferences": [
         "TestAssemblies"

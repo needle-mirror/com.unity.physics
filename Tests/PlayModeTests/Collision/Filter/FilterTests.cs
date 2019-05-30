@@ -5,8 +5,8 @@ namespace Unity.Physics.Tests.Collision.Filter
     public class FilterTests
     {
         //CollisionFilter expected behavior:
-        //  uint MaskBits        A bit mask describing which layers this object belongs to.
-        //  uint CategoryBits    A bit mask describing which layers this object can collide with.
+        //  uint BelongsTo       A bit mask describing which layers this object belongs to.
+        //  uint CollidesWith    A bit mask describing which layers this object can collide with.
         //  int  GroupIndex      An optional override for the bit mask checks.
         //                         If the value in both objects is equal and positive, the objects always collide.
         //                         If the value in both objects is equal and negative, the objects never collide.
@@ -18,14 +18,14 @@ namespace Unity.Physics.Tests.Collision.Filter
 
             var filter1 = new CollisionFilter
             {
-                MaskBits = 1,
-                CategoryBits = 1
+                BelongsTo = 1,
+                CollidesWith = 1
             };
 
             var filter2 = new CollisionFilter
             {
-                MaskBits = 0xffffffff,
-                CategoryBits = 0xffffffff
+                BelongsTo = 0xffffffff,
+                CollidesWith = 0xffffffff
             };
 
             Assert.IsFalse(CollisionFilter.IsCollisionEnabled(filter0, filter0));
@@ -39,18 +39,18 @@ namespace Unity.Physics.Tests.Collision.Filter
         }
 
         [Test]
-        public void CollisionFilterTestLayerAndCategoryBits()
+        public void CollisionFilterTestBelongsToAndCollidesWithBits()
         {
             var filterA = new CollisionFilter
             {
-                MaskBits = 1,
-                CategoryBits = 2
+                BelongsTo = 1,
+                CollidesWith = 2
             };
 
             var filterB = new CollisionFilter
             {
-                MaskBits = 2,
-                CategoryBits = 1
+                BelongsTo = 2,
+                CollidesWith = 1
             };
 
             Assert.IsFalse(CollisionFilter.IsCollisionEnabled(filterA, filterA));
@@ -73,8 +73,8 @@ namespace Unity.Physics.Tests.Collision.Filter
 
             var filter1 = new CollisionFilter
             {
-                MaskBits = 1,
-                CategoryBits = 1,
+                BelongsTo = 1,
+                CollidesWith = 1,
                 GroupIndex = -1
             };
 
@@ -98,22 +98,22 @@ namespace Unity.Physics.Tests.Collision.Filter
 
             var filter1 = new CollisionFilter
             {
-                MaskBits = 1,
-                CategoryBits = 1,
+                BelongsTo = 1,
+                CollidesWith = 1,
                 GroupIndex = -1
             };
 
             var filter2 = new CollisionFilter
             {
-                MaskBits = 1,
-                CategoryBits = 1,
+                BelongsTo = 1,
+                CollidesWith = 1,
                 GroupIndex = 1
             };
 
             var filter3 = new CollisionFilter
             {
-                MaskBits = 0,
-                CategoryBits = 0,
+                BelongsTo = 0,
+                CollidesWith = 0,
                 GroupIndex = -1
             };
 
@@ -139,29 +139,29 @@ namespace Unity.Physics.Tests.Collision.Filter
 
             var filter1 = new CollisionFilter
             {
-                MaskBits = 1,
-                CategoryBits = 1,
+                BelongsTo = 1,
+                CollidesWith = 1,
                 GroupIndex = -1
             };
 
             var filter2 = new CollisionFilter
             {
-                MaskBits = 1,
-                CategoryBits = 1,
+                BelongsTo = 1,
+                CollidesWith = 1,
                 GroupIndex = 1
             };
 
             var filter3 = new CollisionFilter
             {
-                MaskBits = 0,
-                CategoryBits = 0,
+                BelongsTo = 0,
+                CollidesWith = 0,
                 GroupIndex = -1
             };
 
             var filter4 = new CollisionFilter
             {
-                MaskBits = 1,
-                CategoryBits = 1,
+                BelongsTo = 1,
+                CollidesWith = 1,
                 GroupIndex = 0
             };
 

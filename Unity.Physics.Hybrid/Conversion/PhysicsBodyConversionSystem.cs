@@ -1,4 +1,5 @@
-﻿using Unity.Entities;
+﻿using System;
+using Unity.Entities;
 using Unity.Mathematics;
 
 namespace Unity.Physics.Authoring
@@ -8,23 +9,40 @@ namespace Unity.Physics.Authoring
     [UpdateAfter(typeof(LegacySphereColliderConversionSystem))]
     [UpdateAfter(typeof(LegacyMeshColliderConversionSystem))]
     [UpdateAfter(typeof(PhysicsShapeConversionSystem))]
-    [UpdateBefore(typeof(SecondPassLegacyRigidbodyConversionSystem))]
+    [UpdateBefore(typeof(LegacyRigidbodyConversionSystem))]
+    [DisableAutoCreation]
+    [Obsolete("SecondPassPhysicsBodyConversionSystem has been deprecated. Use PhysicsBodyConversionSystem instead. (RemovedAfter 2019-08-28) (UnityUpgradable) -> PhysicsBodyConversionSystem", true)]
     public class SecondPassPhysicsBodyConversionSystem : GameObjectConversionSystem
+    {
+        protected override void OnUpdate() => throw new NotImplementedException();
+    }
+
+    [UpdateAfter(typeof(LegacyBoxColliderConversionSystem))]
+    [UpdateAfter(typeof(LegacyCapsuleColliderConversionSystem))]
+    [UpdateAfter(typeof(LegacySphereColliderConversionSystem))]
+    [UpdateAfter(typeof(LegacyMeshColliderConversionSystem))]
+    [UpdateAfter(typeof(PhysicsShapeConversionSystem))]
+    [UpdateBefore(typeof(LegacyRigidbodyConversionSystem))]
+    public class PhysicsBodyConversionSystem : GameObjectConversionSystem
     {
         protected override void OnUpdate()
         {
             Entities.ForEach(
                 (PhysicsBody body) =>
                 {
-                    if (!body.enabled)
-                        return;
                     var entity = GetPrimaryEntity(body.gameObject);
+
+                    DstEntityManager.RemoveParentAndSetWorldTranslationAndRotation(entity, body.transform);
 
                     if (body.MotionType == BodyMotionType.Static)
                         return;
-                    
-                    // Build mass component
-                    var massProperties = DstEntityManager.GetComponentData<PhysicsCollider>(entity).MassProperties;
+
+                    var massProperties = MassProperties.UnitSphere;
+                    if (DstEntityManager.HasComponent<PhysicsCollider>(entity))
+                    {
+                        // Build mass component
+                        massProperties = DstEntityManager.GetComponentData<PhysicsCollider>(entity).MassProperties;
+                    }
                     if (body.OverrideDefaultMassDistribution)
                     {
                         massProperties.MassDistribution = body.CustomMassDistribution;
@@ -34,7 +52,7 @@ namespace Unity.Physics.Authoring
                     DstEntityManager.AddOrSetComponent(entity, body.MotionType == BodyMotionType.Dynamic ?
                         PhysicsMass.CreateDynamic(massProperties, body.Mass) :
                         PhysicsMass.CreateKinematic(massProperties));
-
+                    
                     DstEntityManager.AddOrSetComponent(entity, new PhysicsVelocity
                     {
                         Linear = body.InitialLinearVelocity,

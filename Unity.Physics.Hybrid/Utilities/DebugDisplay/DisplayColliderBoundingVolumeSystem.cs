@@ -61,7 +61,7 @@ namespace Unity.Physics.Authoring
                 return inputDeps;
             }
 
-            SimulationCallbacks.Callback callback = (ref ISimulation simulation, JobHandle deps) =>
+            SimulationCallbacks.Callback callback = (ref ISimulation simulation, ref PhysicsWorld world, JobHandle deps) =>
             {
                 return new DisplayColliderAabbsJob
                 {

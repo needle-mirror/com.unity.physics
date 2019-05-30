@@ -345,7 +345,7 @@ namespace Unity.Physics
         // Returns the amount of error for the solver to correct, where initialError is the pre-integration error and predictedError is the expected post-integration error
         public static float CalculateCorrection(float predictedError, float initialError, float tau, float damping)
         {
-            return (predictedError - initialError) * damping + initialError * tau;
+            return math.max(predictedError - initialError, 0.0f) * damping + math.min(predictedError, initialError) * tau;
         }
 
         // Integrate the relative orientation of a pair of bodies, faster and less memory than storing both bodies' orientations and integrating them separately

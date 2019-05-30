@@ -1,5 +1,6 @@
 using Unity.Entities;
 using Unity.Mathematics;
+using Unity.Transforms;
 using UnityEngine;
 
 namespace Unity.Physics.Authoring
@@ -15,13 +16,24 @@ namespace Unity.Physics.Authoring
                 manager.SetComponentData(entity, value);
         }
 
-        internal static float3[] GetScaledVertices(this UnityEngine.Mesh mesh, float3 scale)
+        internal static void RemoveParentAndSetWorldTranslationAndRotation(this EntityManager manager, Entity entity, Transform worldTransform)
         {
-            var source = mesh.vertices;
-            var vertices = new float3[mesh.vertices.Length]; 
-            for (int i = 0, count = vertices.Length; i < count; ++i)
-                vertices[i] = source[i] * scale;
-            return vertices;
+            manager.RemoveComponent<Parent>(entity);
+            manager.RemoveComponent<LocalToParent>(entity);
+            manager.AddOrSetComponent(entity, new Translation { Value = worldTransform.position });
+            manager.AddOrSetComponent(entity, new Rotation { Value = worldTransform.rotation });
+            if (math.lengthsq((float3)worldTransform.lossyScale - new float3(1f)) > 0f)
+            {
+                // bake in composite scale
+                var compositeScale = math.mul(
+                    math.inverse(float4x4.TRS(worldTransform.position, worldTransform.rotation, 1f)),
+                    worldTransform.localToWorldMatrix
+                );
+                manager.AddOrSetComponent(entity, new CompositeScale { Value = compositeScale });
+            }
+            // TODO: revisit whether or not NonUniformScale/Scale should be preserved along with ParentScaleInverse instead
+            manager.RemoveComponent<NonUniformScale>(entity);
+            manager.RemoveComponent<Scale>(entity);
         }
     }    
 }

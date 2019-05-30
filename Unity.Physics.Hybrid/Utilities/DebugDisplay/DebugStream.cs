@@ -349,7 +349,7 @@ public class DebugStream : ComponentSystem
                         default: return; // unknown type
                     }
                 }
-                UnityEngine.Assertions.Assert.AreEqual(reader.RemainingItemCount, 0);
+                reader.EndForEachIndex();
             }
         }
     }

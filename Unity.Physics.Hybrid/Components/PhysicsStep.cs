@@ -5,7 +5,7 @@ using static Unity.Physics.PhysicsStep;
 
 namespace Unity.Physics.Authoring
 {
-    [AddComponentMenu("DOTS Physics/Physics Step")]
+    [AddComponentMenu("DOTS/Physics/Physics Step")]
     [DisallowMultipleComponent]
     [RequiresEntityConversion]
     public class PhysicsStep : MonoBehaviour, IConvertGameObjectToEntity
@@ -36,7 +36,7 @@ namespace Unity.Physics.Authoring
             SolverIterationCount = math.max(1, SolverIterationCount);
             ThreadCountHint = math.max(1, ThreadCountHint);
 
-            if (!isActiveAndEnabled) return;
+            if (!enabled) return;
             if (convertedEntity == Entity.Null) return;
 
             // This requires Entity Conversion mode to be 'Convert And Inject Game Object'

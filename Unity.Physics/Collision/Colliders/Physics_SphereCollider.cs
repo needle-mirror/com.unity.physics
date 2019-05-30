@@ -19,7 +19,7 @@ namespace Unity.Physics
 
         #region Construction
 
-        public static BlobAssetReference<Collider> Create(float3 center, float radius, CollisionFilter? filter = null, Material? material = null)
+        unsafe public static BlobAssetReference<Collider> Create(float3 center, float radius, CollisionFilter? filter = null, Material? material = null)
         {
             if (math.any(!math.isfinite(center)))
             {
@@ -30,11 +30,11 @@ namespace Unity.Physics
                 throw new System.ArgumentException("Tried to create sphere collider with negative/inf/nan radius");
             }
 
-            var allocator = new BlobAllocator(-1);
-            ref SphereCollider collider = ref allocator.ConstructRoot<SphereCollider>();
+            
+            var collider = default(SphereCollider);
             collider.Init(center, radius, filter ?? CollisionFilter.Default, material ?? Material.Default);
-            var sphereCollider = allocator.CreateBlobAssetReference<Collider>(Allocator.Persistent);
-            allocator.Dispose();
+            
+            var sphereCollider = BlobAssetReference<Collider>.Create(&collider, sizeof(SphereCollider));
             return sphereCollider;
         }
 
@@ -48,7 +48,7 @@ namespace Unity.Physics
             m_Header.Material = material;
 
             ConvexHull.ConvexRadius = radius;
-            ConvexHull.VerticesBlob.Offset = (int)((byte*)UnsafeUtility.AddressOf(ref m_Vertex) - (byte*)UnsafeUtility.AddressOf(ref ConvexHull.VerticesBlob.Offset));
+            ConvexHull.VerticesBlob.Offset = UnsafeEx.CalculateOffset(ref m_Vertex, ref ConvexHull.VerticesBlob);
             ConvexHull.VerticesBlob.Length = 1;
             // note: no faces
 

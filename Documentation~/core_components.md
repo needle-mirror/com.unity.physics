@@ -7,7 +7,7 @@ mesh.
 
 The most important property of a `PhysicsCollider` is a `BlobAssetReference` to the collider data used by the physics simulation (which is in a format optimized for collision queries) - each of our collider types implement an `ICollider` interface, and for each collider type, we have a static `Create()` function, which takes parameters specific to the shape -- for example , a `SphereCollider` is built from a position and a radius, while a `ConvexCollider` is built from a point cloud.
 
-_Note_ that it is possible to create a collider which has a null `BlobAssetReference``. We'll still simulate the body, but the results may not be what you expect. This can be useful in some particular scenarios, where you only have joints.
+_Note_ that it is possible to create a collider which has a null `BlobAssetReference``. We'll still simulate the body, but it cannot collide with anything. This can be useful in some particular scenarios, for example you can connect such a body to another body using a joint, and feed the simulated positions into your skinning system for example.
 
 ### Collider materials
 
@@ -38,7 +38,7 @@ Adding a `PhysicsVelocity` component makes the physics simulation aware that the
 
 # Mass
 
-So now, suppose you have a scene with two physics colliders; one of which has a velocity pointing towards the static bollider. When you press play, the moving collider moves right through the static one. You haven't changed the collision filter, or made one a trigger, so what happened? This is a case of an unstoppable force meeting an immovable object. As we discussed before, the collider without a velocity cannot move. When the two collide, we would expect forces to be applied between them.
+So now, suppose you have a scene with two physics colliders; one of which has a velocity pointing towards the static collider. When you press play, the moving collider moves right through the static one. You haven't changed the collision filter, or made one a trigger, so what happened? This is a case of an unstoppable force meeting an immovable object. As we discussed before, the collider without a velocity cannot move. When the two collide, we would expect forces to be applied between them.
 
 The problem is that, even though one collider is moving, the simulation does not know how _heavy_ it is, so does not know how it would respond to collisions. In this case, we treat the moving collidable as if it had _infinite_ mass, so it will just push every object out of the way.
 

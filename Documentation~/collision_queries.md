@@ -10,13 +10,11 @@ You can choose to create you own collision worlds which are entirely independent
 
 ## Query Types
 
-
-
 | Query Type | Input |Description |
 | -- | -- | -- |
-| Ray cast | Origin, Direction, Filter | Finds all (or closest) intersections for an oriented line segment |
-| Collider cast | Collider, Origin, Direction | Find all (or closest)  intersection for the given shape swept along the given line segment in the given context |
-| Collider Distance | Collider, Origin, Max distance | Finds the closest point between the given shape and any others within a specified maximum radius |
+| Ray cast | Start, End, Filter | Finds all (or closest) intersections for an oriented line segment |
+| Collider cast | Collider, Start, End | Find all (or closest)  intersection for the given shape swept along the given line segment in the given context |
+| Collider Distance | Collider, Position, Max distance | Finds the closest point between the given shape and any others within a specified maximum radius |
 | Point Distance | Point, Filter, Max distance | Finds the closest point to any shapes within a given maximum radius of the specified point |
 | Overlap query | AABB, Filter | Find all the bodies with bounding boxes overlapping a given area |
 
@@ -37,39 +35,35 @@ Many queries produce similar outputs or hits as they are referred to in the code
 
 ### Ray Cast
 
-Ray cast queries use a point and direction as their input and produce a set of hit results. 
+Ray cast queries use start and end points as their input and produce a set of hit results. 
 
-Lower level ray cast routines against surfaces have a slightly different output. They do not compute the surface intersection point explicitly for efficiency reasons. Instead, for a ray of origin,`O`, and direction (including distance), `D`, they return a hit fraction, `f`, which can be used later to compute the hit position if needed using `O + (D * f)`. See [RayCast.cs](..\Unity.Physics\Collision\Queries\Raycast.cs) for more details 
+Lower level ray cast routines against primitives have a slightly different input. They do not compute the surface intersection point explicitly for efficiency reasons. Instead, given a ray of origin,`O`, and displacement (combining direction & distance), `D`, they return a hit fraction, `f`, which can be used later to compute the hit position if needed using `O + (D * f)`. See [RayCast.cs](..\Unity.Physics\Collision\Queries\Raycast.cs) for more details 
 
-Ray intersection starting inside spheres, capsules, box and convex shapes do not report an intersection as the ray leaves the volume. 
+Note: Rays starting inside primitives (spheres, capsules, box and convex shapes) confirm a hit at the starting point, but do not report another intersection as the ray leaves the volume. 
 
 ### Collider Cast
 
-Collider casts sweep a collider along a ray stopping at the first point of contact with another collider. These queries can be significantly more expensive than performing a ray cast. In the image below you can see the results (magenta) of casting a collider (orange) against other colliders in the world (yellow)
+Collider casts sweep a collider along a line segment stopping at the first point of contact with another collider. These queries can be significantly more expensive than performing a ray cast. In the image below you can see the results (magenta) of casting a collider (orange) against other colliders in the world (yellow)
 
 ![collider_cast](images/collider_cast_queries.gif)
 
 Collider cast inputs are 
 - **Collider** : A reference to the collider to cast
-- **Position** : The initial position of the collider 
-- **Orientation** : The initial orientation of the collider
-- **Direction** : The direction to cast and distance. 
+- **Orientation** : The orientation of the collider
+- **Start** : The initial position of the collider 
+- **End** : The final position the collider should be swept to
 
 
 ### Distance query
 
-Distance queries or closest point queries are often used to determine proximity to surfaces. The image below shows the results (magenta points) of a distance query between the query collider (orange) and the rest of the collision world (yellow). You can see that not all queries return a result for all shapes. This is because the query has specified a maximum range which helps control the computational cost of the query.
+Distance queries, or closest point queries, are often used to determine proximity to surfaces. The image below shows the results (magenta points) of a distance query between the query collider (orange) and the rest of the collision world (yellow). You can see that not all queries return a result for all shapes. This is because the query has specified a maximum range which helps control the computational cost of the query.
 
 ![Closest_Points](images/closest_points_all_hits.gif)
 
-
 Distance query inputs include
 
-- **Collider** : (Optional) If present then this distance query is between pairs of surfaces. If absent then we are performing a closest point query to a fixed point in world space.
-- **Position** : The position of the collider to use as the source of the query or the point in world space to query from.
-- **Orientation** : The initial orientation of the collider.
-- **Filter** : For point queries this allows you to specify a collision filter
-- **MaxDistance** : points further than this range are not considered. Try to keep this value as small as possible for your needs for best performance.
+You can perform a distance query with a collider positioned and orientated in space, or simply from a specific point.
+See [Distance.cs](..\Unity.Physics\Collision\Queries\Distance.cs) for more details about the input structures.
 
 ## Region queries
 
@@ -87,11 +81,11 @@ The default collision filter is designed around a concept of collision layers an
 
 | Member | Type | Purpose |
 | --- | --- | --- |
-| MaskBits | uint | A bitmask which describes which layers a collider belongs too. |
-| CategoryBits | uint | A bitmask which describes which layers this collider should interact with |
+| BelongsTo | uint | A bit mask describing which layers this collider belongs to. |
+| CollidesWith | uint | A bit mask describing which layers this collider can collide with. |
 | GroupIndex | int | An override for the bit mask checks.  If the value in both objects is equal and positive, the objects always collide. If the value in both objects is equal and negative, the objects never collide. | 
 
-When determining if two colliders should collide or a query should be performed we check the mask bits of one against the category bots of the other.
+When determining if two colliders should collide or a query should be performed we check the belongs to bits of one against the collides with bits of the other. Both objects must want to collide with each other for the collision to happen.
 
 ```csharp
 public static bool IsCollisionEnabled(CollisionFilter filterA, CollisionFilter filterB)
@@ -105,12 +99,12 @@ public static bool IsCollisionEnabled(CollisionFilter filterA, CollisionFilter f
         return false;
     }
     return
-        (filterA.MaskBits & filterB.CategoryBits) != 0 &&
-        (filterB.MaskBits & filterA.CategoryBits) != 0;
+        (filterA.BelongsTo & filterB.CollidesWith) != 0 &&
+        (filterB.BelongsTo & filterA.CollidesWith) != 0;
 }
 ```
 
-Currently the editor view of the Collision Filter just exposes the Category and Mask as 'Belongs To' and 'Collides With'. Think of each layer listed in those drop downs as being or-d together so that   CategoryBits = (1u << belongLayer1) | (1u << belongLayer2) etc. Similarly for the' Collides With' for the mask.  The groupIndex is not exposed currently in the editor, but do use at runtime if you have the need (eg, '-1' for a few objects you dont want to collide with each other but dont want to change the general settings for layers )
+Currently the editor view of the Collision Filter just exposes the 'Belongs To' and 'Collides With' masks as a set of layers. Think of each layer listed in those drop downs as being or-d together so that BelongsTo = (1u << belongLayer1) | (1u << belongLayer2) etc. Similarly for the' Collides With' for the mask.  The groupIndex is not exposed currently in the editor, but do use at runtime if you have the need (eg, '-1' for a few objects you dont want to collide with each other but dont want to change the general settings for layers )
 
 # Code examples
 
@@ -123,15 +117,12 @@ Currently the editor view of the Collision Filter just exposes the Category and 
         var collisionWorld = physicsWorldSystem.PhysicsWorld.CollisionWorld;
         RaycastInput input = new RaycastInput()
         {
-            Ray = new Ray()
-            {
-                Origin = RayFrom,
-                Direction = RayTo - RayFrom
-            },
+            Start = RayFrom,
+            End = RayTo,
             Filter = new CollisionFilter()
             {
-                CategoryBits = ~0u, // all 1s, so all layers, collide with everything 
-                MaskBits = ~0u,
+                BelongsTo = ~0u,
+                CollidesWith = ~0u, // all 1s, so all layers, collide with everything 
                 GroupIndex = 0
             }
         };
@@ -162,8 +153,8 @@ ColliderCasts are very similar tio the ray casts, just that we need to make (or 
 
         var filter = new CollisionFilter()
         {
-            CategoryBits = ~0u, // all 1s, so all layers, collide with everything 
-            MaskBits = ~0u,
+            BelongsTo = ~0u,
+            CollidesWith = ~0u, // all 1s, so all layers, collide with everything 
             GroupIndex = 0
         };
 
@@ -171,10 +162,10 @@ ColliderCasts are very similar tio the ray casts, just that we need to make (or 
 
         ColliderCastInput input = new ColliderCastInput()
         {
-            Position  = RayFrom,
+            Collider = (Collider*)sphereCollider.GetUnsafePtr(),
             Orientation = quaternion.identity,
-            Direction = RayTo - RayFrom,
-            Collider = (Collider*)sphereCollider.GetUnsafePtr()
+            Start = RayFrom,
+            End = RayTo
         };
 
         ColliderCastHit hit = new ColliderCastHit();
@@ -219,7 +210,7 @@ The above code all calls into Unity.Physics through normal C#. That is fine, wil
             results = results,
             world = world
 
-        }.Schedule(inputs.Length, 5);
+        }.Schedule(inputs.Length, 4);
         return rcj;
     }
 ```

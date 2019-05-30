@@ -321,7 +321,7 @@ namespace Unity.Physics
             byte* end = (byte*)UnsafeUtility.AddressOf(ref this) + sizeof(Mesh);
             end = (byte*)Math.NextMultipleOf16((ulong)end);   
 
-            m_BvhNodesBlob.Offset = (int)(end - (byte*)(UnsafeUtility.AddressOf(ref m_BvhNodesBlob)));
+            m_BvhNodesBlob.Offset = UnsafeEx.CalculateOffset(end, ref m_BvhNodesBlob);
             m_BvhNodesBlob.Length = nodeCount;
             int sizeOfNodes = sizeof(BoundingVolumeHierarchy.Node) * nodeCount;
             UnsafeUtility.MemCpy(end, nodes, sizeOfNodes);
@@ -329,7 +329,7 @@ namespace Unity.Physics
 
             Section* section = (Section*)end;
 
-            m_SectionsBlob.Offset = (int)(end - (byte*)(UnsafeUtility.AddressOf(ref m_SectionsBlob)));
+            m_SectionsBlob.Offset = UnsafeEx.CalculateOffset(end, ref m_SectionsBlob);
             m_SectionsBlob.Length = tempSections.Count;
 
             end += Math.NextMultipleOf(sizeof(Section) * tempSections.Count, 16);
@@ -338,15 +338,15 @@ namespace Unity.Physics
             {
                 MeshBuilder.TempSection tempSection = tempSections[sectionIndex];
 
-                section->PrimitiveFlagsBlob.Offset = (int)(end - (byte*)(UnsafeUtility.AddressOf(ref section->PrimitiveFlagsBlob)));
+                section->PrimitiveFlagsBlob.Offset = UnsafeEx.CalculateOffset(end, ref section->PrimitiveFlagsBlob);
                 section->PrimitiveFlagsBlob.Length = tempSection.PrimitivesFlags.Count;
                 end += Math.NextMultipleOf(section->PrimitiveFlagsBlob.Length * sizeof(PrimitiveFlags), 4);
 
-                section->PrimitiveVertexIndicesBlob.Offset = (int)(end - (byte*)(UnsafeUtility.AddressOf(ref section->PrimitiveVertexIndicesBlob)));
+                section->PrimitiveVertexIndicesBlob.Offset = UnsafeEx.CalculateOffset(end, ref section->PrimitiveVertexIndicesBlob);
                 section->PrimitiveVertexIndicesBlob.Length = tempSection.Primitives.Count;
                 end += Math.NextMultipleOf(section->PrimitiveVertexIndicesBlob.Length * sizeof(PrimitiveVertexIndices), 4);
 
-                section->VerticesBlob.Offset = (int)(end - (byte*)(UnsafeUtility.AddressOf(ref section->VerticesBlob)));
+                section->VerticesBlob.Offset = UnsafeEx.CalculateOffset(end, ref section->VerticesBlob);
                 section->VerticesBlob.Length = tempSection.Vertices.Count;
                 end += Math.NextMultipleOf(section->VerticesBlob.Length * sizeof(float3), 4);
 
@@ -363,11 +363,11 @@ namespace Unity.Physics
 
                 // Filters
 
-                section->PrimitiveFilterIndicesBlob.Offset = (int)(end - (byte*)(UnsafeUtility.AddressOf(ref section->PrimitiveFilterIndicesBlob)));
+                section->PrimitiveFilterIndicesBlob.Offset = UnsafeEx.CalculateOffset(end, ref section->PrimitiveFilterIndicesBlob);
                 section->PrimitiveFilterIndicesBlob.Length = tempSection.Primitives.Count;
                 end += Math.NextMultipleOf(section->PrimitiveFilterIndicesBlob.Length * sizeof(short), 4);
 
-                section->FiltersBlob.Offset = (int)(end - (byte*)(UnsafeUtility.AddressOf(ref section->FiltersBlob)));
+                section->FiltersBlob.Offset = UnsafeEx.CalculateOffset(end, ref section->FiltersBlob);
                 section->FiltersBlob.Length = 1;
                 end += Math.NextMultipleOf(section->FiltersBlob.Length * sizeof(CollisionFilter), 4);
 
@@ -379,11 +379,11 @@ namespace Unity.Physics
 
                 // Materials
 
-                section->PrimitiveMaterialIndicesBlob.Offset = (int)(end - (byte*)(UnsafeUtility.AddressOf(ref section->PrimitiveMaterialIndicesBlob)));
+                section->PrimitiveMaterialIndicesBlob.Offset = UnsafeEx.CalculateOffset(end, ref section->PrimitiveMaterialIndicesBlob);
                 section->PrimitiveMaterialIndicesBlob.Length = tempSection.Primitives.Count;
                 end += Math.NextMultipleOf(section->PrimitiveMaterialIndicesBlob.Length * sizeof(short), 4);
 
-                section->MaterialsBlob.Offset = (int)(end - (byte*)(UnsafeUtility.AddressOf(ref section->MaterialsBlob)));
+                section->MaterialsBlob.Offset = UnsafeEx.CalculateOffset(end, ref section->MaterialsBlob);
                 section->MaterialsBlob.Length = 1;
                 end += Math.NextMultipleOf(section->FiltersBlob.Length * sizeof(Material), 4);
 

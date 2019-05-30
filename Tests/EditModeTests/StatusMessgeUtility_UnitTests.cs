@@ -6,7 +6,7 @@ using UnityEditor;
 
 namespace Unity.Physics.EditModeTests
 {
-    class MatrixGUIUtility_UnitTests
+    class StatusMessageUtility_UnitTests
     {
         static IEnumerable k_GetMatrixStatusMessageTestCases = new[]
         {
@@ -21,7 +21,7 @@ namespace Unity.Physics.EditModeTests
             IReadOnlyList<MatrixState> matrixStates, string keywords
         )
         {
-            var result = MatrixGUIUtility.GetMatrixStatusMessage(matrixStates, out var message);
+            var result = StatusMessageUtility.GetMatrixStatusMessage(matrixStates, out var message);
 
             Assert.That(message, Does.Match(keywords));
 

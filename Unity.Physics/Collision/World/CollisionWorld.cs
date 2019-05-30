@@ -63,6 +63,12 @@ namespace Unity.Physics
 
         #region Jobs
 
+        internal struct DiposeArrayJob : IJob
+        {
+            [DeallocateOnJobCompletion] public NativeArray<int> Array;
+            public void Execute() {}
+        }
+
         // Schedule a set of jobs to synchronize the collision world with the dynamics world.
         public JobHandle ScheduleUpdateDynamicLayer(ref PhysicsWorld world, float timeStep, int numThreadsHint, JobHandle inputDeps)
         {
@@ -73,9 +79,16 @@ namespace Unity.Physics
                 RigidBodies = m_Bodies
             }.Schedule(world.MotionDatas.Length, 32, inputDeps);
 
+            StaticLayerChangeInfo staticLayerChangeInfo = new StaticLayerChangeInfo();
+            staticLayerChangeInfo.Init(Allocator.TempJob);
+
             // TODO: Instead of a full build we could probably incrementally update the existing broadphase,
             // since the number of bodies will be the same and their positions should be similar.
-            return Broadphase.ScheduleBuildJobs(ref world, timeStep, numThreadsHint, haveStaticBodiesChanged: false, inputDeps: handle);
+            handle = Broadphase.ScheduleBuildJobs(ref world, timeStep, numThreadsHint, ref staticLayerChangeInfo, inputDeps: handle);
+
+            return JobHandle.CombineDependencies(
+                new DiposeArrayJob { Array = staticLayerChangeInfo.HaveStaticBodiesChangedArray }.Schedule(handle),
+                new DiposeArrayJob { Array = staticLayerChangeInfo.NumStaticBodiesArray }.Schedule(handle));
         }
 
         [BurstCompile]
