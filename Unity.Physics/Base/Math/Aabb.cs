@@ -61,7 +61,7 @@ namespace Unity.Physics
             Max += distance;
         }
 
-        public static Aabb CreateFromPoints(float3x4 points)
+        internal static Aabb CreateFromPoints(float3x4 points)
         {
             Aabb aabb;
             aabb.Min = points.c0;

@@ -1,5 +1,4 @@
-﻿using System;
-using Unity.Mathematics;
+﻿using Unity.Mathematics;
 
 namespace Unity.Physics
 {
@@ -87,7 +86,21 @@ namespace Unity.Physics
             py = math.min(py, Hy) - tranposedPoint.Y;
 
             float4 pz = math.max(tranposedPoint.Z, Lz);
-            pz = math.min(pz, Hz) - pz;
+            pz = math.min(pz, Hz) - tranposedPoint.Z;
+
+            return px * px + py * py + pz * pz;
+        }
+
+        public float4 DistanceFromPointSquared(ref Math.FourTransposedPoints tranposedPoint, float3 scale)
+        {
+            float4 px = math.max(tranposedPoint.X, Lx);
+            px = (math.min(px, Hx) - tranposedPoint.X) * scale.x;
+
+            float4 py = math.max(tranposedPoint.Y, Ly);
+            py = (math.min(py, Hy) - tranposedPoint.Y) * scale.y;
+
+            float4 pz = math.max(tranposedPoint.Z, Lz);
+            pz = (math.min(pz, Hz) - tranposedPoint.Z) * scale.z;
 
             return px * px + py * py + pz * pz;
         }
@@ -102,6 +115,20 @@ namespace Unity.Physics
 
             float4 pz = math.max(float4.zero, tranposedAabb.Lz - Hz);
             pz = math.min(pz, tranposedAabb.Hz - Lz);
+
+            return px * px + py * py + pz * pz;
+        }
+
+        public float4 DistanceFromAabbSquared(ref FourTransposedAabbs tranposedAabb, float3 scale)
+        {
+            float4 px = math.max(float4.zero, tranposedAabb.Lx - Hx);
+            px = math.min(px, tranposedAabb.Hx - Lx) * scale.x;
+
+            float4 py = math.max(float4.zero, tranposedAabb.Ly - Hy);
+            py = math.min(py, tranposedAabb.Hy - Ly) * scale.y;
+
+            float4 pz = math.max(float4.zero, tranposedAabb.Lz - Hz);
+            pz = math.min(pz, tranposedAabb.Hz - Lz) * scale.z;
 
             return px * px + py * py + pz * pz;
         }

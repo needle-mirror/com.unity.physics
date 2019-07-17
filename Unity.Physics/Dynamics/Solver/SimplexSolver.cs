@@ -4,7 +4,7 @@ using UnityEngine.Assertions;
 
 namespace Unity.Physics
 {
-    public struct SurfaceConstraintInfo
+    public struct SurfaceConstraintInfo // TODO: Move into SimplexSolver
     {
         // Info of interest for the character
         public Plane Plane;
@@ -25,7 +25,7 @@ namespace Unity.Physics
         public const float c_SimplexSolverEpsilon = 0.0001f;
 
         public static unsafe void Solve(PhysicsWorld world, float deltaTime, float3 up, int numConstraints,
-            ref NativeArray<SurfaceConstraintInfo> constraints, ref float3 position, ref float3 velocity, out float integratedTime)
+            ref NativeArray<SurfaceConstraintInfo> constraints, ref float3 position, ref float3 velocity, out float integratedTime, bool respectMinDeltaTime = true)
         {
             // List of planes to solve against (up to 4)
             SurfaceConstraintInfo* supportPlanes = stackalloc SurfaceConstraintInfo[4];
@@ -37,8 +37,15 @@ namespace Unity.Physics
             float minDeltaTime = 0.0f;
             if (math.lengthsq(velocity) > c_SimplexSolverEpsilon)
             {
-                // Min delta time to travel at least 1cm
-                minDeltaTime = 0.01f / math.length(velocity);
+                if (respectMinDeltaTime)
+                {
+                    // Min delta time to travel at least 1cm
+                    minDeltaTime = 0.01f / math.length(velocity);
+                }
+                else
+                {
+                    minDeltaTime = deltaTime;
+                }
             }
 
             while (remainingTime > 0.0f)

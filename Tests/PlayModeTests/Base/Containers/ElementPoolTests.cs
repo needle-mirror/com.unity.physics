@@ -1,15 +1,12 @@
-﻿using System.Runtime.InteropServices;
+﻿using System;
 using NUnit.Framework;
 using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
-using Unity.Jobs;
-using Unity.Jobs.LowLevel.Unsafe;
 using UnityEngine;
 using Assert = UnityEngine.Assertions.Assert;
 
 namespace Unity.Physics.Tests.Base.Containers
 {
-    public class ElementPoolTests
+    class ElementPoolTests
     {
         // must be blittable, so we cannot use bool as member,
         //see https://docs.microsoft.com/en-us/dotnet/framework/interop/blittable-and-non-blittable-types

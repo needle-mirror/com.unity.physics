@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 using Unity.Collections;
 using Unity.Entities;
@@ -7,7 +8,7 @@ using Assert = UnityEngine.Assertions.Assert;
 
 namespace Unity.Physics.Tests.Collision.PhysicsWorld
 {
-    public class BroadPhaseTests
+    class BroadPhaseTests
     {
         /// Util functions
         //Creates a world

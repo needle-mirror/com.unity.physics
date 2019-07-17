@@ -1,19 +1,31 @@
 ﻿using System;
 using System.Linq;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Physics.Authoring;
 using UnityEngine;
+using UnityEngine.TestTools;
 using PxBox = UnityEngine.BoxCollider;
 using PxCapsule = UnityEngine.CapsuleCollider;
 using PxSphere = UnityEngine.SphereCollider;
 using PxMesh = UnityEngine.MeshCollider;
+using UnityMesh = UnityEngine.Mesh;
 
 namespace Unity.Physics.Tests.Authoring
 {
     class PhysicsShapeConversionSystem_IntegrationTests : BaseHierarchyConversionTest
     {
+        [OneTimeSetUp]
+        public void OneTimeSetUp()
+        {
+            NonReadableMesh = Resources.LoadAll<UnityMesh>("not-readable").Single();
+            Assume.That(NonReadableMesh.isReadable, Is.False, $"{NonReadableMesh} was readable.");
+        }
+
+        UnityMesh NonReadableMesh { get; set; }
+
         [Test]
         public void PhysicsShapeConversionSystem_WhenBodyHasOneSiblingShape_CreatesPrimitive()
         {
@@ -108,6 +120,44 @@ namespace Unity.Physics.Tests.Authoring
                     }
                 }
             );
+        }
+
+        static readonly Regex k_NonReadableMeshPattern = new Regex(@"\b((un)?readable|Read\/Write|(non-)?accessible)\b");
+
+        [Test]
+        public void PhysicsShapeConversionSystem_WhenShapeHasNonReadableConvex_ThrowsException()
+        {
+            CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { typeof(PhysicsShape) });
+            Child.GetComponent<PhysicsShape>().SetConvexHull(NonReadableMesh);
+
+            VerifyLogsException<InvalidOperationException>(k_NonReadableMeshPattern);
+        }
+
+        [Test]
+        public void PhysicsShapeConversionSystem_WhenShapeHasNonReadableMesh_ThrowsException()
+        {
+            CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { typeof(PhysicsShape) });
+            Child.GetComponent<PhysicsShape>().SetMesh(NonReadableMesh);
+
+            VerifyLogsException<InvalidOperationException>(k_NonReadableMeshPattern);
+        }
+
+        [Test]
+        public void LegacyMeshColliderConversionSystem_WhenMeshColliderHasNonReadableMesh_ThrowsException(
+            [Values]bool convex
+        )
+        {
+            CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { typeof(PxMesh) });
+#if !UNITY_EDITOR
+            // legacy components log error messages in the player for non-readable meshes
+            // once for each property access
+            LogAssert.Expect(LogType.Error, k_NonReadableMeshPattern);
+            LogAssert.Expect(LogType.Error, k_NonReadableMeshPattern);
+#endif
+            Child.GetComponent<PxMesh>().sharedMesh = NonReadableMesh;
+            Child.GetComponent<PxMesh>().convex = convex;
+
+            VerifyLogsException<InvalidOperationException>(k_NonReadableMeshPattern);
         }
 
         [Test]

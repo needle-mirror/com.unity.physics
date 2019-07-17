@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace Unity.Physics.Authoring
 {
-    public class PhysicsShapeConversionSystem : BaseShapeConversionSystem<PhysicsShape>
+    public sealed class PhysicsShapeConversionSystem : BaseShapeConversionSystem<PhysicsShape>
     {
         static Material ProduceMaterial(PhysicsShape shape)
         {
@@ -27,7 +27,8 @@ namespace Unity.Physics.Authoring
                 FrictionCombinePolicy = shape.Friction.CombineMode,
                 Restitution = shape.Restitution.Value,
                 RestitutionCombinePolicy = shape.Restitution.CombineMode,
-                Flags = flags
+                Flags = flags,
+                CustomTags = shape.CustomTags.Value
             };
         }
 
@@ -36,8 +37,8 @@ namespace Unity.Physics.Authoring
             // TODO: determine optimal workflow for specifying group index
             return new CollisionFilter
             {
-                BelongsTo = unchecked((uint)shape.BelongsTo),
-                CollidesWith = unchecked((uint)shape.CollidesWith),
+                BelongsTo = shape.BelongsTo.Value,
+                CollidesWith = shape.CollidesWith.Value
             };
         }
 
@@ -108,7 +109,7 @@ namespace Unity.Physics.Authoring
                     {
                         pointCloud.Dispose();
                         throw new InvalidOperationException(
-                            $"No vertices associated with {shape.name}. Add a {typeof(MeshFilter)} component or assign {nameof(PhysicsShape.CustomMesh)}."
+                            $"No vertices associated with {shape.name}. Add a {typeof(MeshFilter)} component or assign a readable {nameof(PhysicsShape.CustomMesh)}."
                         );
                     }
                     shape.GetBakedConvexProperties(pointCloud, out radius);
@@ -126,7 +127,13 @@ namespace Unity.Physics.Authoring
                     if (mesh == null)
                     {
                         throw new InvalidOperationException(
-                            $"No mesh associated with {shape.name}. Add a {typeof(MeshFilter)} component or assign {nameof(PhysicsShape.CustomMesh)}."
+                            $"No mesh associated with {shape.name}. Add a {typeof(MeshFilter)} component or assign a readable {nameof(PhysicsShape.CustomMesh)}."
+                        );
+                    }
+                    else if (!mesh.IsValidForConversion(shape.gameObject))
+                    {
+                        throw new InvalidOperationException(
+                            $"Mesh '{mesh}' associated with {typeof(PhysicsShape)} on {shape.name} is not readable. Ensure that you have enabled Read/Write on its import settings."
                         );
                     }
                     else
@@ -134,6 +141,15 @@ namespace Unity.Physics.Authoring
                         pointCloud = new NativeList<float3>(mesh.vertexCount, Allocator.Temp);
                         var triangles = new NativeList<int>(mesh.vertexCount, Allocator.Temp);
                         shape.GetBakedMeshProperties(pointCloud, triangles);
+                        if (triangles.Length == 0)
+                        {
+                            pointCloud.Dispose();
+                            triangles.Dispose();
+
+                            throw new InvalidOperationException(
+                                $"No triangles associated with {shape.name}. Ensure mesh import settings enables Read/Write");
+                        }
+
                         blob = MeshCollider.Create(pointCloud.ToArray(), triangles.ToArray(), collisionFilter, material);
                         pointCloud.Dispose();
                         triangles.Dispose();
@@ -144,7 +160,5 @@ namespace Unity.Physics.Authoring
             }
             return blob;
         }
-
-        protected override byte GetCustomFlags(PhysicsShape shape) => shape.CustomFlags;
     }
 }

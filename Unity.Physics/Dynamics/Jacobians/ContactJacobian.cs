@@ -1,4 +1,5 @@
-﻿using Unity.Collections;
+﻿using System;
+using Unity.Collections;
 using Unity.Mathematics;
 
 namespace Unity.Physics
@@ -11,7 +12,7 @@ namespace Unity.Physics
         public float Impulse; // Accumulated impulse
     }
 
-    public struct ContactJacAngAndVelToReachCp
+    public struct ContactJacAngAndVelToReachCp  // TODO: better name
     {
         public ContactJacobianAngular Jac;
 
@@ -22,8 +23,9 @@ namespace Unity.Physics
 
     public struct SurfaceVelocity
     {
-        // 0 and 1 for linear, 2 for angular
-        public float3 ExtraFrictionDv;
+        // Velocities between the two contacting objects
+        public float3 LinearVelocity;
+        public float3 AngularVelocity;
     }
 
     public struct MassFactors
@@ -39,7 +41,7 @@ namespace Unity.Physics
         };
     }
 
-    public struct BaseContactJacobian
+    struct BaseContactJacobian
     {
         public int NumContacts;
         public float3 Normal;
@@ -54,11 +56,9 @@ namespace Unity.Physics
     }
 
     // A Jacobian representing a set of contact points that apply impulses
-    public struct ContactJacobian
+    struct ContactJacobian
     {
         public BaseContactJacobian BaseJacobian;
-        public float CoefficientOfFriction;
-        public float CoefficientOfRestitution;
 
         // Linear friction jacobians.  Only store the angular part, linear part can be recalculated from BaseJacobian.Normal 
         public ContactJacobianAngular Friction0; // EffectiveMass stores friction effective mass matrix element (0, 0)
@@ -68,8 +68,26 @@ namespace Unity.Physics
         public ContactJacobianAngular AngularFriction; // EffectiveMass stores friction effective mass matrix element (2, 2)
         public float3 FrictionEffectiveMassOffDiag; // Effective mass matrix (0, 1), (0, 2), (1, 2) == (1, 0), (2, 0), (2, 1)
 
-        // Solve the Jacobian
+        public float CoefficientOfFriction;
+
+        // Generic solve method that dispatches to specific ones
         public void Solve(
+            ref JacobianHeader jacHeader, ref MotionVelocity velocityA, ref MotionVelocity velocityB,
+            Solver.StepInput stepInput, ref BlockStream.Writer collisionEventsWriter)
+        {
+            bool bothBodiesWithInfInertiaAndMass = math.all(velocityA.InverseInertiaAndMass == float4.zero) && math.all(velocityB.InverseInertiaAndMass == float4.zero);
+            if (bothBodiesWithInfInertiaAndMass)
+            {
+                SolveInfMassPair(ref jacHeader, velocityA, velocityB, stepInput, ref collisionEventsWriter);
+            }
+            else
+            {
+                SolveContact(ref jacHeader, ref velocityA, ref velocityB, stepInput, ref collisionEventsWriter);
+            }
+        }
+
+        // Solve the Jacobian
+        public void SolveContact(
             ref JacobianHeader jacHeader, ref MotionVelocity velocityA, ref MotionVelocity velocityB,
             Solver.StepInput stepInput, ref BlockStream.Writer collisionEventsWriter)
         {
@@ -82,13 +100,6 @@ namespace Unity.Physics
                 tempVelocityA.InverseInertiaAndMass *= jacMod.InvInertiaAndMassFactorA;
                 tempVelocityB.InverseInertiaAndMass *= jacMod.InvInertiaAndMassFactorB;
             }
-
-            // Calculate maximum impulse per sub step
-            float maxImpulseToApply;
-            if (jacHeader.HasMaxImpulse)
-                maxImpulseToApply = jacHeader.AccessMaxImpulse() * stepInput.Timestep * stepInput.InvNumSolverIterations;
-            else
-                maxImpulseToApply = float.MaxValue;
 
             // Solve normal impulses
             float sumImpulses = 0.0f;
@@ -103,8 +114,6 @@ namespace Unity.Physics
                 float dv = jacAngular.VelToReachCp - relativeVelocity;
 
                 float impulse = dv * jacAngular.Jac.EffectiveMass;
-                bool clipped = impulse > maxImpulseToApply;
-                impulse = math.min(impulse, maxImpulseToApply);
                 float accumulatedImpulse = math.max(jacAngular.Jac.Impulse + impulse, 0.0f);
                 if (accumulatedImpulse != jacAngular.Jac.Impulse)
                 {
@@ -119,8 +128,7 @@ namespace Unity.Physics
                 totalAccumulatedImpulses[math.min(j, 3)] += jacAngular.Jac.Impulse;
 
                 // Force contact event even when no impulse is applied, but there is penetration.
-                // Also force when impulse was clipped, even if clipped to 0.
-                forceCollisionEvent |= jacAngular.VelToReachCp > 0.0f || clipped;
+                forceCollisionEvent |= jacAngular.VelToReachCp > 0.0f;
             }
 
             // Export collision event
@@ -144,8 +152,20 @@ namespace Unity.Physics
                 // Calculate impulses for full stop
                 float3 imp;
                 {
+                    float3 extraFrictionDv = float3.zero;
+                    if (jacHeader.HasSurfaceVelocity)
+                    {
+                        var surfVel = jacHeader.AccessSurfaceVelocity();
+
+                        Math.CalculatePerpendicularNormalized(BaseJacobian.Normal, out float3 dir0, out float3 dir1);
+                        float linVel0 = math.dot(surfVel.LinearVelocity, dir0);
+                        float linVel1 = math.dot(surfVel.LinearVelocity, dir1);
+
+                        float angVelProj = math.dot(surfVel.AngularVelocity, BaseJacobian.Normal);
+                        extraFrictionDv = new float3(linVel0, linVel1, angVelProj);
+                    }
+
                     // Calculate the jacobian dot velocity for each of the friction jacobians
-                    float3 extraFrictionDv = jacHeader.HasSurfaceVelocity ? jacHeader.AccessSurfaceVelocity().ExtraFrictionDv : float3.zero;
                     float dv0 = extraFrictionDv.x - BaseContactJacobian.GetJacVelocity(frictionDir0, Friction0, tempVelocityA, tempVelocityB);
                     float dv1 = extraFrictionDv.y - BaseContactJacobian.GetJacVelocity(frictionDir1, Friction1, tempVelocityA, tempVelocityB);
                     float dva = extraFrictionDv.z - math.csum(AngularFriction.AngularA * tempVelocityA.AngularVelocity + AngularFriction.AngularB * tempVelocityB.AngularVelocity);
@@ -181,6 +201,42 @@ namespace Unity.Physics
             velocityB = tempVelocityB;
         }
 
+        // Solve the infinite mass pair Jacobian
+        public void SolveInfMassPair(
+            ref JacobianHeader jacHeader, MotionVelocity velocityA, MotionVelocity velocityB,
+            Solver.StepInput stepInput, ref BlockStream.Writer collisionEventsWriter)
+        {
+            // Infinite mass pairs are only interested in collision events,
+            // so only last iteration is performed in that case
+            if (!stepInput.IsLastIteration)
+            {
+                return;
+            }
+
+            // Calculate normal impulses and fire collision event
+            // if at least one contact point would have an impulse applied
+            for (int j = 0; j < BaseJacobian.NumContacts; j++)
+            {
+                ref ContactJacAngAndVelToReachCp jacAngular = ref jacHeader.AccessAngularJacobian(j);
+
+                float relativeVelocity = BaseContactJacobian.GetJacVelocity(BaseJacobian.Normal, jacAngular.Jac, velocityA, velocityB);
+                float dv = jacAngular.VelToReachCp - relativeVelocity;
+                if (jacAngular.VelToReachCp > 0 || dv > 0)
+                {
+                    // Export collision event only if impulse would be applied, or objects are penetrating
+                    collisionEventsWriter.Write(new LowLevel.CollisionEvent
+                    {
+                        BodyIndices = jacHeader.BodyPair,
+                        ColliderKeys = jacHeader.AccessColliderKeys(),
+                        Normal = BaseJacobian.Normal,
+                        AccumulatedImpulses = float4.zero
+                    });
+
+                    return;
+                }
+            }
+        }
+
         // Helper function
         private static void ApplyImpulse(
             float impulse, float3 linear, ContactJacobianAngular jacAngular,
@@ -194,7 +250,7 @@ namespace Unity.Physics
     }
 
     // A Jacobian representing a set of contact points that export trigger events
-    public struct TriggerJacobian
+    struct TriggerJacobian
     {
         public BaseContactJacobian BaseJacobian;
         public ColliderKeyPair ColliderKeys;
@@ -217,11 +273,9 @@ namespace Unity.Physics
                 // Solve velocity so that predicted contact distance is greater than or equal to zero
                 float relativeVelocity = BaseContactJacobian.GetJacVelocity(BaseJacobian.Normal, jacAngular.Jac, velocityA, velocityB);
                 float dv = jacAngular.VelToReachCp - relativeVelocity;
-                float impulse = dv * jacAngular.Jac.EffectiveMass;
-                float accumulatedImpulse = math.max(jacAngular.Jac.Impulse + impulse, 0.0f);
-                if (accumulatedImpulse != jacAngular.Jac.Impulse || jacAngular.VelToReachCp > 0.0f)
+                if (jacAngular.VelToReachCp > 0 || dv > 0)
                 {
-                    // Export trigger event only if impulse is applied, or objects are penetrating
+                    // Export trigger event only if impulse would be applied, or objects are penetrating
                     triggerEventsWriter.Write(new LowLevel.TriggerEvent
                     {
                         BodyIndices = jacHeader.BodyPair,

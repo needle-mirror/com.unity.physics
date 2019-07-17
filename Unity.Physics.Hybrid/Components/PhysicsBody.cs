@@ -17,6 +17,8 @@ namespace Unity.Physics.Authoring
     [RequiresEntityConversion]
     public sealed class PhysicsBody : MonoBehaviour
     {
+        PhysicsBody() { }
+
         public BodyMotionType MotionType { get => m_MotionType; set => m_MotionType = value; }
         [SerializeField]
         [Tooltip("Specifies whether the body should be fully physically simulated, moved directly, or fixed in place.")]
@@ -63,12 +65,14 @@ namespace Unity.Physics.Authoring
 
         public bool OverrideDefaultMassDistribution
         {
+#pragma warning disable 618
             get => m_OverrideDefaultMassDistribution;
             set => m_OverrideDefaultMassDistribution = value;
+#pragma warning restore 618
         }
         [SerializeField]
         [Tooltip("Default mass distribution is based on the shapes associated with this body.")]
-        public bool m_OverrideDefaultMassDistribution;
+        bool m_OverrideDefaultMassDistribution;
 
         public MassDistribution CustomMassDistribution
         {
@@ -83,7 +87,9 @@ namespace Unity.Physics.Authoring
                 m_CenterOfMass = value.Transform.pos;
                 m_Orientation.SetValue(value.Transform.rot);
                 m_InertiaTensor = value.InertiaTensor;
+#pragma warning disable 618
                 m_OverrideDefaultMassDistribution = true;
+#pragma warning restore 618
             }
         }
 
@@ -95,7 +101,11 @@ namespace Unity.Physics.Authoring
 
         [SerializeField]
         // Default value to solid unit sphere : https://en.wikipedia.org/wiki/List_of_moments_of_inertia
-        float3 m_InertiaTensor = new float3(2f/5f); 
+        float3 m_InertiaTensor = new float3(2f/5f);
+
+        public CustomPhysicsBodyTags CustomTags { get => m_CustomTags; set => m_CustomTags = value; }
+        [SerializeField]
+        CustomPhysicsBodyTags m_CustomTags = CustomPhysicsBodyTags.Nothing;
 
         void OnEnable()
         {

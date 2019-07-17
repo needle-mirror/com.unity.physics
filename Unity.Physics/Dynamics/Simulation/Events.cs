@@ -6,7 +6,7 @@ using Unity.Mathematics;
 namespace Unity.Physics.LowLevel
 {
     // An event raised when a pair of bodies have collided during solving.
-    public struct CollisionEvent
+    struct CollisionEvent
     {
         public BodyIndexPair BodyIndices;
         public ColliderKeyPair ColliderKeys;
@@ -15,15 +15,15 @@ namespace Unity.Physics.LowLevel
     }
 
     // An event raised when a pair of bodies involving a trigger material have overlapped during solving.
-    public struct TriggerEvent
+    struct TriggerEvent
     {
         public BodyIndexPair BodyIndices;
         public ColliderKeyPair ColliderKeys;
     }
 
-    // Collision event reader, for both Unity.Physics and Havok.Physics.
+    // A stream of collision events.
     // This is a value type, which means it can be used in Burst jobs (unlike IEnumerable<CollisionEvent>).
-    public unsafe struct CollisionEvents /* : IEnumerable<CollisionEvent> */
+    struct CollisionEvents /* : IEnumerable<CollisionEvent> */
     {
         //@TODO: Unity should have a Allow null safety restriction
         [NativeDisableContainerSafetyRestriction]
@@ -44,17 +44,14 @@ namespace Unity.Physics.LowLevel
             private BlockStream.Reader m_Reader;
             private int m_CurrentWorkItem;
             private readonly int m_NumWorkItems;
-
-            private CollisionEvent m_Current;
-            public CollisionEvent Current => m_Current;
+            public CollisionEvent Current { get; private set; }
 
             public Enumerator(BlockStream stream)
             {
                 m_Reader = stream.IsCreated ? stream : new BlockStream.Reader();
                 m_CurrentWorkItem = 0;
                 m_NumWorkItems = stream.IsCreated ? stream.ForEachCount : 0;
-
-                m_Current = default(CollisionEvent);
+                Current = default;
 
                 AdvanceReader();
             }
@@ -63,16 +60,11 @@ namespace Unity.Physics.LowLevel
             {
                 if (m_Reader.RemainingItemCount > 0)
                 {
-                    m_Current = m_Reader.Read<CollisionEvent>();
+                    Current = m_Reader.Read<CollisionEvent>();
                     AdvanceReader();
                     return true;
                 }
                 return false;
-            }
-
-            public void Reset()
-            {
-                throw new NotImplementedException();
             }
 
             private void AdvanceReader()
@@ -86,11 +78,10 @@ namespace Unity.Physics.LowLevel
         }
     }
 
-    // Trigger event reader, for both Unity.Physics and Havok.Physics.
+    // A stream of trigger events.
     // This is a value type, which means it can be used in Burst jobs (unlike IEnumerable<TriggerEvent>).
-    public unsafe struct TriggerEvents /* : IEnumerable<TriggerEvent> */
+    struct TriggerEvents /* : IEnumerable<TriggerEvent> */
     {
-
         //@TODO: Unity should have a Allow null safety restriction
         [NativeDisableContainerSafetyRestriction]
         private readonly BlockStream m_EventStream;
@@ -110,16 +101,14 @@ namespace Unity.Physics.LowLevel
             private BlockStream.Reader m_Reader;
             private int m_CurrentWorkItem;
             private readonly int m_NumWorkItems;
-
-            private TriggerEvent m_Current;
-            public TriggerEvent Current => m_Current;
+            public TriggerEvent Current { get; private set; }
 
             public Enumerator(BlockStream stream)
             {
                 m_Reader = stream.IsCreated ? stream : new BlockStream.Reader();
                 m_CurrentWorkItem = 0;
                 m_NumWorkItems = stream.IsCreated ? stream.ForEachCount : 0;
-                m_Current = default(TriggerEvent);
+                Current = default;
 
                 AdvanceReader();
             }
@@ -128,16 +117,11 @@ namespace Unity.Physics.LowLevel
             {
                 if (m_Reader.RemainingItemCount > 0)
                 {
-                    m_Current = m_Reader.Read<TriggerEvent>();
+                    Current = m_Reader.Read<TriggerEvent>();
                     AdvanceReader();
                     return true;
                 }
                 return false;
-            }
-
-            public void Reset()
-            {
-                throw new NotImplementedException();
             }
 
             private void AdvanceReader()

@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 using Unity.Mathematics;
 using UnityEngine;
@@ -5,7 +6,7 @@ using Assert = UnityEngine.Assertions.Assert;
 
 namespace Unity.Physics.Tests.Collision.PhysicsWorld
 {
-    public class CollisionWorldTests
+    class CollisionWorldTests
     {
         //Tests creating a Zero body world
         [Test]

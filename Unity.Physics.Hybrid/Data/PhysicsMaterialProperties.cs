@@ -1,6 +1,7 @@
-﻿using System;
+using System;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace Unity.Physics.Authoring
 {
@@ -12,13 +13,9 @@ namespace Unity.Physics.Authoring
 
         PhysicsMaterialCoefficient Restitution { get; set; }
 
-        int BelongsTo { get; set; }
-        bool GetBelongsTo(int categoryIndex);
-        void SetBelongsTo(int categoryIndex, bool value);
+        PhysicsCategoryTags BelongsTo { get; set; }
 
-        int CollidesWith { get; set; }
-        bool GetCollidesWith(int categoryIndex);
-        void SetCollidesWith(int categoryIndex, bool value);
+        PhysicsCategoryTags CollidesWith { get; set; }
 
         bool RaisesCollisionEvents { get; set; }
 
@@ -26,9 +23,7 @@ namespace Unity.Physics.Authoring
         // TODO: Surface Velocity?
         // TODO: Max Impulse?
 
-        byte CustomFlags { get; set; }
-        bool GetCustomFlag(int customFlagIndex);
-        void SetCustomFlag(int customFlagIndex, bool value);
+        CustomPhysicsMaterialTags CustomTags { get; set; }
     }
 
     interface IInheritPhysicsMaterialProperties : IPhysicsMaterialProperties
@@ -40,7 +35,7 @@ namespace Unity.Physics.Authoring
         bool OverrideBelongsTo { get; set; }
         bool OverrideCollidesWith { get; set; }
         bool OverrideRaisesCollisionEvents { get; set; }
-        bool OverrideCustomFlags { get; set; }
+        bool OverrideCustomTags { get; set; }
     }
 
     [Serializable]
@@ -87,18 +82,18 @@ namespace Unity.Physics.Authoring
     }
 
     [Serializable]
-    class OverridableFlags : OverridableValue
+    class OverridableTags : OverridableValue
     {
-        public OverridableFlags(int capacity) => m_Value = new bool[capacity];
+        public OverridableTags(int capacity) => m_Value = new bool[capacity];
 
-        public int Value
+        public uint Value
         {
             get
             {
                 var result = 0;
                 for (var i = 0; i < m_Value.Length; ++i)
                     result |= (m_Value[i] ? 1 : 0) << i;
-                return result;
+                return unchecked((uint)result);
             }
             set
             {
@@ -107,6 +102,7 @@ namespace Unity.Physics.Authoring
                 Override = true;
             }
         }
+
         public bool this[int index]
         {
             get => m_Value[index];
@@ -178,30 +174,26 @@ namespace Unity.Physics.Authoring
             Override = false
         };
 
-        static int Get(OverridableFlags flags, int? templateValue) =>
-            flags.Override || templateValue == null ? flags.Value : templateValue.Value;
+        static uint Get(OverridableTags tags, uint? templateValue) =>
+            tags.Override || templateValue == null ? tags.Value : templateValue.Value;
 
         public bool OverrideBelongsTo { get => m_BelongsTo.Override; set => m_BelongsTo.Override = value; }
-        public int BelongsTo { get => Get(m_BelongsTo, m_Template?.BelongsTo); set => m_BelongsTo.Value = value; }
-        public bool GetBelongsTo(int categoryIndex) => m_BelongsTo.Override || m_Template == null
-            ? m_BelongsTo[categoryIndex]
-            : m_Template.GetBelongsTo(categoryIndex);
-        public void SetBelongsTo(int categoryIndex, bool value) => m_BelongsTo[categoryIndex] = value;
+        public PhysicsCategoryTags BelongsTo
+        {
+            get => new PhysicsCategoryTags { Value = Get(m_BelongsTo, m_Template?.BelongsTo.Value) };
+            set => m_BelongsTo.Value = value.Value;
+        }
         [SerializeField]
-        OverridableFlags m_BelongsTo = new OverridableFlags(32) { Value = ~0, Override = false};
+        OverridableTags m_BelongsTo = new OverridableTags(32) { Value = unchecked((uint)~0), Override = false};
 
         public bool OverrideCollidesWith { get => m_CollidesWith.Override; set => m_CollidesWith.Override = value; }
-        public int CollidesWith
+        public PhysicsCategoryTags CollidesWith
         {
-            get => Get(m_CollidesWith, m_Template?.CollidesWith);
-            set => m_CollidesWith.Value = value;
+            get => new PhysicsCategoryTags { Value = Get(m_CollidesWith, m_Template?.CollidesWith.Value) };
+            set => m_CollidesWith.Value = value.Value;
         }
-        public bool GetCollidesWith(int categoryIndex) => m_CollidesWith.Override || m_Template == null
-            ? m_CollidesWith[categoryIndex]
-            : m_Template.GetCollidesWith(categoryIndex);
-        public void SetCollidesWith(int categoryIndex, bool value) => m_CollidesWith[categoryIndex] = value;
         [SerializeField]
-        OverridableFlags m_CollidesWith = new OverridableFlags(32) { Value = ~0, Override = false };
+        OverridableTags m_CollidesWith = new OverridableTags(32) { Value = unchecked((uint)~0), Override = false };
 
         public bool OverrideRaisesCollisionEvents { get => m_RaisesCollisionEvents.Override; set => m_RaisesCollisionEvents.Override = value; }
         public bool RaisesCollisionEvents
@@ -212,18 +204,15 @@ namespace Unity.Physics.Authoring
         [SerializeField]
         OverridableBool m_RaisesCollisionEvents = new OverridableBool();
 
-        public bool OverrideCustomFlags { get => m_CustomFlags.Override; set => m_CustomFlags.Override = value; }
-        public byte CustomFlags
+        public bool OverrideCustomTags { get => m_CustomTags.Override; set => m_CustomTags.Override = value; }
+        public CustomPhysicsMaterialTags CustomTags
         {
-            get => (byte)Get(m_CustomFlags, m_Template?.CustomFlags);
-            set => m_CustomFlags.Value = value;
+            get => new CustomPhysicsMaterialTags { Value = unchecked((byte)Get(m_CustomTags, m_Template?.CustomTags.Value)) };
+            set => m_CustomTags.Value= value.Value;
         }
-        public bool GetCustomFlag(int customFlagIndex) => m_CustomFlags.Override || m_Template == null
-            ? m_CustomFlags[customFlagIndex]
-            : m_Template.GetCustomFlag(customFlagIndex);
-        public void SetCustomFlag(int customFlagIndex, bool value) => m_CustomFlags[customFlagIndex] = value;
         [SerializeField]
-        OverridableFlags m_CustomFlags = new OverridableFlags(8);
+        [FormerlySerializedAs("m_CustomFlags")]
+        OverridableTags m_CustomTags = new OverridableTags(8);
 
         internal static void OnValidate(ref PhysicsMaterialProperties material, bool supportsTemplate)
         {
@@ -237,13 +226,13 @@ namespace Unity.Physics.Authoring
                 material.m_BelongsTo.Override = true;
                 material.m_CollidesWith.Override = true;
                 material.m_RaisesCollisionEvents.Override = true;
-                material.m_CustomFlags.Override = true;
+                material.m_CustomTags.Override = true;
             }
             material.m_Friction.OnValidate();
             material.m_Restitution.OnValidate();
             material.m_BelongsTo.OnValidate(32);
             material.m_CollidesWith.OnValidate(32);
-            material.m_CustomFlags.OnValidate(8);
+            material.m_CustomTags.OnValidate(8);
         }
     }
 }

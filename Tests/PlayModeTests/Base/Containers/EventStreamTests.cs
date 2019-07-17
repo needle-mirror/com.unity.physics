@@ -1,9 +1,10 @@
-﻿using NUnit.Framework;
+﻿using System;
+using NUnit.Framework;
 using Unity.Collections;
 
 namespace Unity.Physics.Tests.Base.Containers
 {
-    public class EventStreamTests
+    class EventStreamTests
     {
         [Test]
         public void ReadCollisionEvents()

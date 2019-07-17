@@ -1,11 +1,12 @@
-﻿using NUnit.Framework;
+﻿using System;
+using NUnit.Framework;
 using Unity.Mathematics;
 using UnityEngine;
 using Assert = UnityEngine.Assertions.Assert;
 
 namespace Unity.Physics.Tests.Dynamics.Integrator
 {
-    public class IntegratorTests
+    class IntegratorTests
     {
         [Test]
         public void IntegrateOrientationTest()

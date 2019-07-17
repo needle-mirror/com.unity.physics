@@ -18,6 +18,7 @@ namespace Unity.Physics.Authoring
         //< system or jobify this system, since we couldn't guarantee the lifetime of the debug
         //< display objects. Caching those objects across frames should allow for improving this
         //< and some reuse of the DebugDraw code.
+        [Obsolete("This type will be made internal in a future release. (RemovedAfter 2019-10-15)")]
         public unsafe class DrawComponent : MonoBehaviour
         {
             public NativeSlice<RigidBody> Bodies;
@@ -200,6 +201,7 @@ namespace Unity.Physics.Authoring
                 }
 
                 var displayMesh = new UnityEngine.Mesh();
+                displayMesh.indexFormat = vertices.Count > UInt16.MaxValue ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16;
                 displayMesh.vertices = vertices.ToArray();
                 displayMesh.normals = normals.ToArray();
                 displayMesh.triangles = triangles.ToArray();
@@ -221,6 +223,68 @@ namespace Unity.Physics.Authoring
                     RigidTransform worldFromChild = math.mul(worldFromCollider, child.CompoundFromChild);
                     AppendCollider(child.Collider, worldFromChild, ref results);
                 }
+            }
+
+            public static void AppendTerrain(TerrainCollider* terrainCollider, RigidTransform worldFromCollider, ref List<DisplayResult> results)
+            {
+                ref var terrain = ref terrainCollider->Terrain;
+
+                var vertices = new List<Vector3>();
+                var normals = new List<Vector3>();
+                var triangles = new List<int>();
+
+                int vertexIndex = 0;
+                for (int i = 0; i < terrain.Size.x - 1; i++)
+                {
+                    for (int j = 0; j < terrain.Size.y - 1; j++)
+                    {
+                        int i0 = i;
+                        int i1 = i + 1;
+                        int j0 = j;
+                        int j1 = j + 1;
+                        float3 v0 = new float3(i0, terrain.Heights[i0 + terrain.Size.x * j0], j0) * terrain.Scale;
+                        float3 v1 = new float3(i1, terrain.Heights[i1 + terrain.Size.x * j0], j0) * terrain.Scale;
+                        float3 v2 = new float3(i0, terrain.Heights[i0 + terrain.Size.x * j1], j1) * terrain.Scale;
+                        float3 v3 = new float3(i1, terrain.Heights[i1 + terrain.Size.x * j1], j1) * terrain.Scale;
+                        float3 n0 = math.normalize(new float3(v0.y - v1.y, 1.0f, v0.y - v2.y));
+                        float3 n1 = math.normalize(new float3(v2.y - v3.y, 1.0f, v1.y - v3.y));
+
+                        vertices.Add(v1);
+                        vertices.Add(v0);
+                        vertices.Add(v2);
+                        vertices.Add(v1);
+                        vertices.Add(v2);
+                        vertices.Add(v3);
+
+                        normals.Add(n0);
+                        normals.Add(n0);
+                        normals.Add(n0);
+                        normals.Add(n1);
+                        normals.Add(n1);
+                        normals.Add(n1);
+
+                        triangles.Add(vertexIndex++);
+                        triangles.Add(vertexIndex++);
+                        triangles.Add(vertexIndex++);
+                        triangles.Add(vertexIndex++);
+                        triangles.Add(vertexIndex++);
+                        triangles.Add(vertexIndex++);
+                    }
+                }
+
+                var displayMesh = new UnityEngine.Mesh();
+                displayMesh.indexFormat = vertices.Count > UInt16.MaxValue ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16;
+                displayMesh.vertices = vertices.ToArray();
+                displayMesh.normals = normals.ToArray();
+                displayMesh.triangles = triangles.ToArray();
+
+                results.Add(new DisplayResult
+                {
+                    Mesh = displayMesh,
+                    Scale = Vector3.one,
+                    Position = worldFromCollider.pos,
+                    Orientation = worldFromCollider.rot
+                });
             }
 
             public static void AppendCollider(Collider* collider, RigidTransform worldFromCollider, ref List<DisplayResult> results)
@@ -246,6 +310,9 @@ namespace Unity.Physics.Authoring
                     case ColliderType.Compound:
                         AppendCompound((CompoundCollider*)collider, worldFromCollider, ref results);
                         break;
+                    case ColliderType.Terrain:
+                        AppendTerrain((TerrainCollider*)collider, worldFromCollider, ref results);
+                        break;
                 }
             }
 
@@ -256,17 +323,13 @@ namespace Unity.Physics.Authoring
                 return results;
             }
 
-            public void DrawConnectivity(RigidBody body, bool drawVertices = false)
+            void DrawColliderEdges(ConvexCollider* collider, RigidTransform worldFromConvex, bool drawVertices = false)
             {
-                if (body.Collider->CollisionType != CollisionType.Convex)
-                {
-                    return;
-                }
-
                 Matrix4x4 originalMatrix = Gizmos.matrix;
-                Gizmos.matrix = math.float4x4(body.WorldFromBody);
+                Color originalColor = Gizmos.color;
+                Gizmos.matrix = math.float4x4(worldFromConvex);
 
-                ref ConvexHull hull = ref ((ConvexCollider*)body.Collider)->ConvexHull;
+                ref ConvexHull hull = ref collider->ConvexHull;
 
                 void GetEdge(ref ConvexHull hullIn, ConvexHull.Face faceIn, int edgeIndex, out float3 from, out float3 to)
                 {
@@ -291,6 +354,44 @@ namespace Unity.Physics.Authoring
                         }
                     }
                 }
+                else
+                {
+                    // TODO: Remove this code when connectivity to the other collider types #386
+                    Gizmos.color = new Color(0.0f, 1.0f, 0.0f);
+                    switch (collider->Type)
+                    {
+                        case ColliderType.Capsule:
+                            Gizmos.DrawLine(hull.Vertices[0], hull.Vertices[1]);
+                            break;
+                        case ColliderType.Cylinder:
+                            for (int f = 0; f < hull.Faces.Length; f++)
+                            {
+                                var face = hull.Faces[f];
+                                for (int v = 0; v < face.NumVertices-1; v++)
+                                {
+                                    byte i = hull.FaceVertexIndices[face.FirstIndex + v];
+                                    byte j = hull.FaceVertexIndices[face.FirstIndex + v + 1];
+                                    Gizmos.DrawLine(hull.Vertices[i], hull.Vertices[j]);
+                                }
+                                // Draw final line between first and last vertices
+                                {
+                                    byte i = hull.FaceVertexIndices[face.FirstIndex + face.NumVertices - 1];
+                                    byte j = hull.FaceVertexIndices[face.FirstIndex];
+                                    Gizmos.DrawLine(hull.Vertices[i], hull.Vertices[j]);
+                                }
+                            }
+                            break;
+                        case ColliderType.Sphere:
+                            // No edges on sphere but nice to see center
+                            float3 offset = new float3(0.01f);
+                            for (int i = 0; i < 3; i++)
+                            {
+                                offset[i] = -offset[i];
+                                Gizmos.DrawLine(hull.Vertices[0] - offset, hull.Vertices[0] + offset);
+                            }
+                            break;
+                    }
+                }
 
                 if (drawVertices && hull.VertexEdges.Length > 0)
                 {
@@ -305,6 +406,8 @@ namespace Unity.Physics.Authoring
                         Gizmos.DrawRay(from, direction);
                     }
                 }
+
+                Gizmos.color = originalColor;
                 Gizmos.matrix = originalMatrix;
             }
 
@@ -314,17 +417,12 @@ namespace Unity.Physics.Authoring
                 internal Vector3 B;
             }
 
-            public void DrawMeshEdges(RigidBody body)
+            void DrawColliderEdges(MeshCollider* meshCollider, RigidTransform worldFromCollider)
             {
-                if (body.Collider->Type != ColliderType.Mesh)
-                {
-                    return;
-                }
-
                 Matrix4x4 originalMatrix = Gizmos.matrix;
-                Gizmos.matrix = math.float4x4(body.WorldFromBody);
+                Color originalColor = Gizmos.color;
+                Gizmos.matrix = math.float4x4(worldFromCollider);
 
-                MeshCollider* meshCollider = (MeshCollider*)body.Collider;
                 ref Mesh mesh = ref meshCollider->Mesh;
 
                 var triangleEdges = new List<Edge>();
@@ -388,8 +486,49 @@ namespace Unity.Physics.Authoring
                     Gizmos.DrawLine(edge.A, edge.B);
                 }
 
+                Gizmos.color = originalColor;
                 Gizmos.matrix = originalMatrix;
             }
+
+            void DrawColliderEdges(CompoundCollider* compoundCollider, RigidTransform worldFromCompound, bool drawVertices = false)
+            {
+                for (int i = 0; i < compoundCollider->NumChildren; i++)
+                {
+                    ref CompoundCollider.Child child = ref compoundCollider->Children[i];
+                    var childCollider = child.Collider;
+                    var worldFromChild = math.mul(worldFromCompound, child.CompoundFromChild);
+                    DrawColliderEdges(childCollider, worldFromChild);
+                }
+            }
+
+            void DrawColliderEdges(Collider* collider, RigidTransform worldFromCollider, bool drawVertices = false)
+            {
+                switch (collider->CollisionType)
+                {
+                    case CollisionType.Convex:
+                        DrawColliderEdges((ConvexCollider*)collider, worldFromCollider, drawVertices);
+                        break;
+                    case CollisionType.Composite:
+                        switch (collider->Type)
+                        {
+                            case ColliderType.Compound:
+                                DrawColliderEdges((CompoundCollider*)collider, worldFromCollider, drawVertices);
+                                break;
+                            case ColliderType.Mesh:
+                                DrawColliderEdges((MeshCollider*)collider, worldFromCollider);
+                                break;
+                        }
+                        break;
+                }
+            }
+
+            public void DrawConnectivity(RigidBody body, bool drawVertices = false)
+            {
+                if (body.Collider->Type == ColliderType.Convex)
+                    DrawColliderEdges((ConvexCollider*)body.Collider, body.WorldFromBody, drawVertices);
+            }
+
+            public void DrawMeshEdges(RigidBody body) => DrawColliderEdges((MeshCollider*)body.Collider, body.WorldFromBody);
 
             public void OnDrawGizmos()
             {
@@ -439,14 +578,7 @@ namespace Unity.Physics.Authoring
 
                             if (EnableEdges != 0)
                             {
-                                if (body.Collider->Type == ColliderType.Mesh)
-                                {
-                                    DrawMeshEdges(body);
-                                }
-                                else
-                                {
-                                    DrawConnectivity(body);
-                                }
+                                DrawColliderEdges(body.Collider, body.WorldFromBody);
                             }
                         }
                     }
@@ -454,7 +586,9 @@ namespace Unity.Physics.Authoring
             }
         }
 
-        private DrawComponent m_DrawComponent;
+#pragma warning disable 618
+        DrawComponent m_DrawComponent;
+#pragma warning restore 618
 
         protected override void OnCreate()
         {
@@ -473,10 +607,12 @@ namespace Unity.Physics.Authoring
 
             if (m_DrawComponent == null)
             {
-                /// Need to make a GO and attach our DrawComponent MonoBehaviour
-                /// so that the rendering can happen on the main thread.
+                // Need to make a GO and attach our DrawComponent MonoBehaviour
+                // so that the rendering can happen on the main thread.
                 GameObject drawObject = new GameObject();
+#pragma warning disable 618
                 m_DrawComponent = drawObject.AddComponent<DrawComponent>();
+#pragma warning restore 618
                 drawObject.name = "DebugColliderDisplay";
             }
 

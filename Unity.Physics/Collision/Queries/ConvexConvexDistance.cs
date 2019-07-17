@@ -1,13 +1,11 @@
 ﻿using System.Diagnostics;
 using Unity.Mathematics;
 using static Unity.Physics.Math;
-using Debug = UnityEngine.Debug;
-using UnityEngine.Assertions;
 
 namespace Unity.Physics
 {
     // Low level convex-convex distance query implementations
-    internal static class ConvexConvexDistanceQueries
+    static class ConvexConvexDistanceQueries
     {
         // Convex distance result
         public struct Result
@@ -399,6 +397,7 @@ namespace Unity.Physics
                             float crossLengthSq = math.lengthsq(cross);
                             if (crossLengthSq < 1e-8f) // hull builder can accept extremely thin triangles for which we cannot compute an accurate normal
                             {
+                                simplex.NumVertices = 2;
                                 goto case 2;
                             }
                             float3 normal = cross * math.rsqrt(crossLengthSq);

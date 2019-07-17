@@ -51,10 +51,8 @@ namespace Unity.Physics
 
             public bool IsInternal { get => Flags == 0; set => Flags = value ? 0 : 1; }
             public bool IsLeaf { get => Flags != 0; set => Flags = value ? 1 : 0; }
-
-            private static readonly int4 minusOne4i = new int4(-1);
-
-            public bool4 AreLeavesValid => (Data != minusOne4i);
+            
+            public bool4 AreLeavesValid => (Data != new int4(-1));
             public bool4 AreInternalsValid => (Data != int4.zero);
 
             public bool IsChildValid(int index)

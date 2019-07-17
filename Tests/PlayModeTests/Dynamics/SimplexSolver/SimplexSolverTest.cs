@@ -1,4 +1,5 @@
-﻿using NUnit.Framework;
+﻿using System;
+using NUnit.Framework;
 using Unity.Mathematics;
 using static Unity.Physics.SimplexSolver;
 using Assert = UnityEngine.Assertions.Assert;
@@ -6,7 +7,7 @@ using Assert = UnityEngine.Assertions.Assert;
 namespace Unity.Physics.Tests.Dynamics.SimplexSolver
 {
     // Tests to validate simplex solver implementation
-    public class SimplexSolverTests
+    class SimplexSolverTests
     {
         private static SurfaceConstraintInfo CreateConstraint(
             ColliderKey colliderKey, float3 hitPosition, float3 normal, float distance,

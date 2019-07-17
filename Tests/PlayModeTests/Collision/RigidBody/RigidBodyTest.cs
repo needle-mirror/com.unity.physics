@@ -1,15 +1,14 @@
+using System;
 using NUnit.Framework;
 using Unity.Collections;
 using Unity.Mathematics;
 using Unity.Entities;
 
 using Assert = UnityEngine.Assertions.Assert;
-using float3 = Unity.Mathematics.float3;
-using quaternion = Unity.Mathematics.quaternion;
 
 namespace Unity.Physics.Tests.Collision.RigidBody
 {
-    public class RigidBodyTest
+    class RigidBodyTest
     {
         [Test]
         public unsafe void RigidBodyCalculateAabb_BoxColliderTest()

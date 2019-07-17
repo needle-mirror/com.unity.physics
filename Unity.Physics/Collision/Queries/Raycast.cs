@@ -1,6 +1,6 @@
-﻿using System;
+using System;
+using System.ComponentModel;
 using Unity.Mathematics;
-using UnityEngine.Assertions;
 using static Unity.Physics.Math;
 
 namespace Unity.Physics
@@ -19,7 +19,7 @@ namespace Unity.Physics
             set
             {
                 m_Displacement = value;
-                ReciprocalDisplacement = math.all(m_Displacement == float3.zero) ? float3.zero : math.rcp(m_Displacement);
+                ReciprocalDisplacement = math.select(math.rcp(m_Displacement), math.sqrt(float.MaxValue), m_Displacement == float3.zero);
             }
         }
 
@@ -27,13 +27,18 @@ namespace Unity.Physics
         // Performance optimization used in the BoundingVolumeHierarchy casting functions
         internal float3 ReciprocalDisplacement { get; private set; }
 
-        #region Obsolete members
+        #region Obsolete
+        [EditorBrowsable(EditorBrowsableState.Never)]
         [Obsolete("Direction has been deprecated. Use Displacement instead (RemovedAfter 2019-07-29) (UnityUpgradable) -> Displacement")]
         public float3 Direction { get => Displacement; set => Displacement = value; }
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
         [Obsolete("ReciprocalDirection has been deprecated. (RemovedAfter 2019-07-29)")]
         public float3 ReciprocalDirection => ReciprocalDisplacement;
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
         [Obsolete("Ray(float3, float3) has been deprecated. (RemovedAfter 2019-07-29)")]
-        public Ray(float3 origin, float3 direction):this() => new Ray { Origin = origin, Displacement = direction };
+        public Ray(float3 origin, float3 direction) : this() => new Ray { Origin = origin, Displacement = direction };
         #endregion
     }
 
@@ -62,11 +67,22 @@ namespace Unity.Physics
 
         internal Ray Ray;
 
-        #region Obsolete members
+        #region Obsolete
+        [EditorBrowsable(EditorBrowsableState.Never)]
         [Obsolete("Position has been deprecated. Use Start Instead (RemovedAfter 2019-07-29) (UnityUpgradable) -> Start")]
-        public float3 Position { get => Ray.Origin; set => Ray.Origin = value; }
+        public float3 Position
+        {
+            get => Ray.Origin;
+            set => Ray.Origin = value;
+        }
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
         [Obsolete("Direction has been deprecated. Use End Instead (RemovedAfter 2019-07-29)")]
-        public float3 Direction { get => Ray.Direction; set => Ray.Direction = value; }
+        public float3 Direction
+        {
+            get => Ray.Direction;
+            set => Ray.Direction = value;
+        }
         #endregion
     }
 
@@ -96,7 +112,7 @@ namespace Unity.Physics
     }
 
     // Raycast query implementations
-    public static class RaycastQueries
+    static class RaycastQueries
     {
         #region Ray vs primitives
 
@@ -242,9 +258,8 @@ namespace Unity.Physics
                 dots.z = math.dot(r2, c2);
             }
 
-            bool3 notOutSide = dots < 0;
-            // hit if all bits have the same sign
-            return math.all(notOutSide) || !math.any(notOutSide);
+            // hit if all dots have the same sign
+            return math.all(dots <= 0) || math.all(dots >= 0);
         }
 
         public static bool RayQuad(
@@ -295,8 +310,8 @@ namespace Unity.Physics
             }
 
             bool4 notOutSide = dots < 0;
-            // hit if all bits have the same sign
-            return math.all(notOutSide) || !math.any(notOutSide);
+            // hit if all dots have the same sign
+            return math.all(dots <= 0) || math.all(dots >= 0);
         }
 
         public static bool RayConvex(
@@ -400,6 +415,8 @@ namespace Unity.Physics
                     return RayMesh(input, (MeshCollider*)collider, ref collector);
                 case ColliderType.Compound:
                     return RayCompound(input, (CompoundCollider*)collider, ref collector);
+                case ColliderType.Terrain:
+                    return RayTerrain(input, (TerrainCollider*)collider, ref collector);
                 default:
                     throw new NotImplementedException();
             }
@@ -533,6 +550,83 @@ namespace Unity.Physics
 
             var leafProcessor = new RayCompoundLeafProcessor(compoundCollider);
             return compoundCollider->BoundingVolumeHierarchy.Raycast(input, ref leafProcessor, ref collector);
+        }
+
+        private static unsafe bool RayTerrain<T>(RaycastInput input, TerrainCollider* terrainCollider, ref T collector) where T : struct, ICollector<RaycastHit>
+        {
+            ref var terrain = ref terrainCollider->Terrain;
+
+            bool hadHit = false;
+
+            // Transform the ray into heightfield space
+            var ray = new Ray
+            {
+                Origin = input.Ray.Origin * terrain.InverseScale,
+                Displacement = input.Ray.Displacement * terrain.InverseScale
+            };
+            Terrain.QuadTreeWalker walker;
+            {
+                float3 maxDisplacement = ray.Displacement * collector.MaxFraction;
+                var rayAabb = new Aabb
+                {
+                    Min = ray.Origin + math.min(maxDisplacement, float3.zero),
+                    Max = ray.Origin + math.max(maxDisplacement, float3.zero),
+                };
+                walker = new Terrain.QuadTreeWalker(&terrainCollider->Terrain, rayAabb);
+            }
+
+            // Traverse the tree
+            while (walker.Pop())
+            {
+                bool4 hitMask = walker.Bounds.Raycast(ray, collector.MaxFraction, out float4 hitFractions);
+                hitMask &= (walker.Bounds.Ly <= walker.Bounds.Hy); // Mask off empty children
+                if (walker.IsLeaf)
+                {
+                    // Leaf node, raycast against hit child quads
+                    int4 hitIndex;
+                    int hitCount = math.compress((int*)(&hitIndex), 0, new int4(0, 1, 2, 3), hitMask);
+                    for (int iHit = 0; iHit < hitCount; iHit++)
+                    {
+                        // Get the quad vertices
+                        walker.GetQuad(hitIndex[iHit], out int2 quadIndex, out float3 a, out float3 b, out float3 c, out float3 d);
+
+                        // Test each triangle in the quad
+                        for (int iTriangle = 0; iTriangle < 2; iTriangle++)
+                        {
+                            // Cast
+                            float fraction = collector.MaxFraction;
+                            bool triangleHit = RayTriangle(input.Ray.Origin, input.Ray.Displacement, a, b, c, ref fraction, out float3 unnormalizedNormal);
+                            if (triangleHit && fraction < collector.MaxFraction)
+                            {
+                                hadHit |= collector.AddHit(new RaycastHit
+                                {
+                                    Fraction = fraction,
+                                    Position = input.Ray.Origin + input.Ray.Displacement * fraction,
+                                    SurfaceNormal = math.normalize(unnormalizedNormal),
+                                    RigidBodyIndex = -1,
+                                    ColliderKey = terrain.GetColliderKey(quadIndex, iTriangle)
+                                });
+
+                                if (collector.EarlyOutOnFirstHit && hadHit)
+                                {
+                                    return true;
+                                }
+                            }
+
+                            // Next triangle
+                            a = c;
+                            c = d;
+                        }
+                    }
+                }
+                else
+                {
+                    // Interior node, add hit child nodes to the stack
+                    walker.Push(hitMask);
+                }
+            }
+
+            return hadHit;
         }
 
         #endregion

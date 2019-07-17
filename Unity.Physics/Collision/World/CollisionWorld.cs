@@ -14,7 +14,7 @@ namespace Unity.Physics
         private NativeArray<RigidBody> m_Bodies;    // storage for the rigid bodies
         private int m_NumBodies;                    // number of rigid bodies currently in use
 
-        public Broadphase Broadphase;               // a bounding volume hierarchy around the rigid bodies
+        internal Broadphase Broadphase;               // a bounding volume hierarchy around the rigid bodies
 
         public NativeSlice<RigidBody> Bodies => new NativeSlice<RigidBody>(m_Bodies, 0, m_NumBodies);
 
@@ -51,7 +51,7 @@ namespace Unity.Physics
         // Clone the world (except the colliders)
         public object Clone()
         {
-            CollisionWorld clone = new CollisionWorld
+            var clone = new CollisionWorld
             {
                 m_Bodies = new NativeArray<RigidBody>(m_Bodies.Length, Allocator.Persistent, NativeArrayOptions.UninitializedMemory),
                 m_NumBodies = m_NumBodies,
@@ -66,7 +66,7 @@ namespace Unity.Physics
         internal struct DiposeArrayJob : IJob
         {
             [DeallocateOnJobCompletion] public NativeArray<int> Array;
-            public void Execute() {}
+            public void Execute() { }
         }
 
         // Schedule a set of jobs to synchronize the collision world with the dynamics world.
@@ -79,7 +79,7 @@ namespace Unity.Physics
                 RigidBodies = m_Bodies
             }.Schedule(world.MotionDatas.Length, 32, inputDeps);
 
-            StaticLayerChangeInfo staticLayerChangeInfo = new StaticLayerChangeInfo();
+            var staticLayerChangeInfo = new StaticLayerChangeInfo();
             staticLayerChangeInfo.Init(Allocator.TempJob);
 
             // TODO: Instead of a full build we could probably incrementally update the existing broadphase,
@@ -153,7 +153,7 @@ namespace Unity.Physics
         }
 
         #endregion
-        
+
         // Test input against the broadphase tree, filling allHits with the body indices of every overlap.
         // Returns true if there was at least overlap.
         public bool OverlapAabb(OverlapAabbInput input, ref NativeList<int> allHits)

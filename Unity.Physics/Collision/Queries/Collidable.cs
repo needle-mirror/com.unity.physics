@@ -89,7 +89,7 @@ namespace Unity.Physics
 
 
     // Wrappers around generic ICollidable queries
-    public static class QueryWrappers
+    static class QueryWrappers
     {
         #region Ray casts
 

@@ -33,10 +33,10 @@ namespace Unity.Physics
         public float SpringDamping;
 
         // Number of affected degrees of freedom.  1, 2, or 3.
-        public int Dimension => math.select(math.select(2, 1, ConstrainedAxes.x ^ ConstrainedAxes.y ^ ConstrainedAxes.z), 3, math.all(ConstrainedAxes));
+        internal int Dimension => math.select(math.select(2, 1, ConstrainedAxes.x ^ ConstrainedAxes.y ^ ConstrainedAxes.z), 3, math.all(ConstrainedAxes));
 
         // Selects the free axis from a constraint with Dimension == 1
-        public int FreeAxis2D
+        internal int FreeAxis2D
         {
             get
             {
@@ -46,7 +46,7 @@ namespace Unity.Physics
         }
 
         // Selects the constrained axis from a constraint with Dimension == 2
-        public int ConstrainedAxis1D
+        internal int ConstrainedAxis1D
         {
             get
             {

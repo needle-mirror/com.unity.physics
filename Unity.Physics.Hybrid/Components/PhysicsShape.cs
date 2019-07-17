@@ -52,8 +52,10 @@ namespace Unity.Physics.Authoring
     [AddComponentMenu("DOTS/Physics/Physics Shape")]
     [DisallowMultipleComponent]
     [RequiresEntityConversion]
-    public sealed class PhysicsShape : MonoBehaviour, IInheritPhysicsMaterialProperties
+    public sealed partial class PhysicsShape : MonoBehaviour, IInheritPhysicsMaterialProperties
     {
+        PhysicsShape() { }
+
         [Serializable]
         struct CylindricalProperties
         {
@@ -138,7 +140,7 @@ namespace Unity.Physics.Authoring
                     default:
                         throw new UnimplementedShapeException(m_ShapeType);
                 }
-                m_ConvexRadius = math.clamp(m_ConvexRadius, 0f, maxRadius);
+                m_ConvexRadius = math.clamp(value, 0f, maxRadius);
             }
         }
         [SerializeField]
@@ -180,18 +182,22 @@ namespace Unity.Physics.Authoring
             get => m_Material.OverrideBelongsTo;
             set => m_Material.OverrideBelongsTo = value;
         }
-        public int BelongsTo { get => m_Material.BelongsTo; set => m_Material.BelongsTo = value; }
-        public bool GetBelongsTo(int categoryIndex) => m_Material.GetBelongsTo(categoryIndex);
-        public void SetBelongsTo(int categoryIndex, bool value) => m_Material.SetBelongsTo(categoryIndex, value);
+        public PhysicsCategoryTags BelongsTo
+        {
+            get => m_Material.BelongsTo;
+            set => m_Material.BelongsTo = value;
+        }
 
         public bool OverrideCollidesWith
         {
             get => m_Material.OverrideCollidesWith;
             set => m_Material.OverrideCollidesWith = value;
         }
-        public int CollidesWith { get => m_Material.CollidesWith; set => m_Material.CollidesWith = value; }
-        public bool GetCollidesWith(int categoryIndex) => m_Material.GetCollidesWith(categoryIndex);
-        public void SetCollidesWith(int categoryIndex, bool value) => m_Material.SetCollidesWith(categoryIndex, value);
+        public PhysicsCategoryTags CollidesWith
+        {
+            get => m_Material.CollidesWith;
+            set => m_Material.CollidesWith = value;
+        }
 
         public bool OverrideRaisesCollisionEvents
         {
@@ -204,14 +210,12 @@ namespace Unity.Physics.Authoring
             set => m_Material.RaisesCollisionEvents = value;
         }
 
-        public bool OverrideCustomFlags
+        public bool OverrideCustomTags
         {
-            get => m_Material.OverrideCustomFlags;
-            set => m_Material.OverrideCustomFlags = value;
+            get => m_Material.OverrideCustomTags;
+            set => m_Material.OverrideCustomTags = value;
         }
-        public byte CustomFlags { get => m_Material.CustomFlags; set => m_Material.CustomFlags = value; }
-        public bool GetCustomFlag(int customFlagIndex) => m_Material.GetCustomFlag(customFlagIndex);
-        public void SetCustomFlag(int customFlagIndex, bool value) => m_Material.SetCustomFlag(customFlagIndex, value);
+        public CustomPhysicsMaterialTags CustomTags { get => m_Material.CustomTags; set => m_Material.CustomTags = value; }
 
         [SerializeField]
         PhysicsMaterialProperties m_Material = new PhysicsMaterialProperties(true);
@@ -227,21 +231,6 @@ namespace Unity.Physics.Authoring
             center = m_PrimitiveCenter;
             size = m_PrimitiveSize;
             orientation = m_PrimitiveOrientation;
-            // prefer identity and shuffle size if aligned with basis vectors
-            const float tolerance = 0.00001f;
-            var fwd = new float3 { z = 1f };
-            var dotFwd = math.abs(math.dot(math.mul(orientation, fwd), fwd));
-            var up = new float3 { y = 1f };
-            var dotUp = math.abs(math.dot(math.mul(orientation, up), up));
-            if (
-                math.abs(math.dot(orientation, quaternion.identity)) > tolerance
-                && (dotFwd < tolerance || 1f - dotFwd < tolerance)
-                && (dotUp < tolerance || 1f - dotUp < tolerance)
-            )
-            {
-                size = math.abs(math.mul(orientation, size)); // TODO: handle floating point error
-                orientation.SetValue(quaternion.identity);
-            }
         }
 
         void GetCylindricalProperties(
@@ -276,17 +265,6 @@ namespace Unity.Physics.Authoring
             GetCylindricalProperties(
                 m_Capsule, out center, out height, out radius, out orientation, m_ShapeType != ShapeType.Capsule
             );
-        }
-
-        [Obsolete("RemovedAfter 2019-08-10")]
-        public void GetCapsuleProperties(out float3 vertex0, out float3 vertex1, out float radius)
-        {
-            UpdateCapsuleAxis();
-            var axis = math.mul(m_PrimitiveOrientation, new float3 { z = 1f });
-            radius = m_Capsule.Radius;
-            var endPoint = axis * (0.5f * m_Capsule.Height - radius);
-            vertex0 = m_PrimitiveCenter + endPoint;
-            vertex1 = m_PrimitiveCenter - endPoint;
         }
 
         public void GetCylinderProperties(
@@ -349,22 +327,23 @@ namespace Unity.Physics.Authoring
             orientation.SetValue(math.mul(m_PrimitiveOrientation, offset));
         }
 
-        [Obsolete("RemovedAfter 2019-08-10")]
-        public void GetPlaneProperties(out float3 vertex0, out float3 vertex1, out float3 vertex2, out float3 vertex3)
-        {
-            this.GetPlanePoints(out vertex0, out vertex1, out vertex2, out vertex3);
-        }
-
         static readonly List<MeshFilter> s_MeshFilters = new List<MeshFilter>(8);
         static readonly List<PhysicsShape> s_PhysicsShapes = new List<PhysicsShape>(8);
         static readonly List<Vector3> s_Vertices = new List<Vector3>(65535);
 
         public void GetConvexHullProperties(NativeList<float3> pointCloud)
         {
+            GetConvexHullProperties(pointCloud, true);
+        }
+
+        internal void GetConvexHullProperties(NativeList<float3> pointCloud, bool validate)
+        {
             pointCloud.Clear();
 
             if (m_CustomMesh != null)
             {
+                if (validate && !m_CustomMesh.IsValidForConversion(gameObject))
+                    return;
                 m_CustomMesh.GetVertices(s_Vertices);
                 foreach (var v in s_Vertices)
                     pointCloud.Add(v);
@@ -384,12 +363,14 @@ namespace Unity.Physics.Authoring
 
                 // do not simply use GameObject.activeInHierarchy because it will be false when instantiating a prefab
                 var t = meshFilter.transform;
-                while (t != transform)
+                var activeInHierarchy = t.gameObject.activeSelf;
+                while (activeInHierarchy && t != transform)
                 {
-                    if (!t.gameObject.activeSelf)
-                        continue;
                     t = t.parent;
+                    activeInHierarchy &= t.gameObject.activeSelf;
                 }
+                if (!activeInHierarchy)
+                    continue;
 
                 var renderer = meshFilter.GetComponent<MeshRenderer>();
                 if (renderer == null || !renderer.enabled)
@@ -398,6 +379,9 @@ namespace Unity.Physics.Authoring
                 s_PhysicsShapes.Clear();
                 meshFilter.gameObject.GetComponentsInParent(true, s_PhysicsShapes);
                 if (s_PhysicsShapes[0] != this)
+                    continue;
+
+                if (validate && !meshFilter.sharedMesh.IsValidForConversion(gameObject))
                     continue;
 
                 meshFilter.sharedMesh.GetVertices(s_Vertices);
@@ -640,9 +624,6 @@ namespace Unity.Physics.Authoring
                 points[i] = math.mul(localToShape, new float4(points[i], 1f)).xyz;
         }
 
-        [Obsolete("FitToGeometry() has been deprecated. Use FitToEnabledRenderMeshes() instead. (RemovedAfter 2019-08-27) (UnityUpgradable) -> FitToEnabledRenderMeshes(*)")]
-        public void FitToGeometry() => FitToEnabledRenderMeshes();
-
         public void FitToEnabledRenderMeshes()
         {
             var shapeType = m_ShapeType;
@@ -652,7 +633,7 @@ namespace Unity.Physics.Authoring
                 // temporarily un-assign custom mesh and assume this shape is a convex hull
                 var customMesh = m_CustomMesh;
                 m_CustomMesh = null;
-                GetConvexHullProperties(points);
+                GetConvexHullProperties(points, Application.isPlaying);
                 m_CustomMesh = customMesh;
                 if (points.Length == 0)
                     return;

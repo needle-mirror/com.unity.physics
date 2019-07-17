@@ -1,7 +1,7 @@
 ﻿using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
-using Unity.Mathematics;
 using Unity.Entities;
+using Unity.Mathematics;
 
 namespace Unity.Physics
 {
@@ -17,7 +17,7 @@ namespace Unity.Physics
 
         public float3 Vertex0 { get => m_Vertex0; set { m_Vertex0 = value; Update(); } }
         public float3 Vertex1 { get => m_Vertex1; set { m_Vertex1 = value; Update(); } }
-        public float Radius { get => ConvexHull.ConvexRadius; set => ConvexHull.ConvexRadius = value; }
+        public float Radius { get => ConvexHull.ConvexRadius; set { ConvexHull.ConvexRadius = value; Update(); } }
 
         #region Construction
 
@@ -62,6 +62,8 @@ namespace Unity.Physics
 
         private void Update()
         {
+            m_Header.Version++;
+
             // Treat as sphere if degenerate
             ConvexHull.VerticesBlob.Length = m_Vertex0.Equals(m_Vertex1) ? 1 : 2;
         }

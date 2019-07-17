@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 using Unity.Mathematics;
 using UnityEngine;
@@ -10,7 +11,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
     /// <summary>
     /// Class collecting all tests for the <see cref="CapsuleCollider"/>
     /// </summary>
-    public class CapsuleColliderTests
+    class CapsuleColliderTests
     {
         #region Construction
 

@@ -5,7 +5,7 @@ using UnityEngine.Assertions;
 
 namespace Unity.Collections
 {
-    public interface IPoolElement
+    internal interface IPoolElement
     {
         bool IsAllocated { get; }
         void MarkFree(int nextFree);
@@ -13,7 +13,7 @@ namespace Unity.Collections
     }
 
     // A fixed capacity array acting as a pool of allocated/free structs referenced by indices
-    public struct ElementPool<T> : IDisposable where T : struct, IPoolElement
+    internal struct ElementPool<T> : IDisposable where T : struct, IPoolElement
     {
         private NativeArray<T> m_Elements;    // storage for all elements (allocated and free)
         private readonly bool m_DisposeArray; // whether to dispose the storage on destruction

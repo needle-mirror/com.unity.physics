@@ -5,7 +5,7 @@ using Unity.Mathematics;
 
 namespace Unity.Physics
 {
-    public static class Integrator
+    static class Integrator
     {
         // Schedule a job to integrate the world's motions forward by the given time step.
         public static JobHandle ScheduleIntegrateJobs(ref DynamicsWorld world, float timeStep, float3 gravity, JobHandle inputDeps)

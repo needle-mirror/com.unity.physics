@@ -1,12 +1,12 @@
-﻿using NUnit.Framework;
+﻿using System;
+using NUnit.Framework;
 using Unity.Collections;
 using Unity.Mathematics;
-using static Unity.Physics.Math;
 using Assert = UnityEngine.Assertions.Assert;
 
 namespace Unity.Physics.Tests.Dynamics.Jacobians
 {
-    public class JacobiansTests
+    class JacobiansTests
     {
         [Test]
         public void JacobianUtilitiesCalculateTauAndDampingTest()

@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 using Unity.Mathematics;
 using UnityEngine;
@@ -10,7 +11,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
     /// <summary>
     /// Contains all tests for the <see cref="SphereCollider"/>
     /// </summary>
-    public class SphereColliderTests
+    class SphereColliderTests
     {
         #region Construction
 

@@ -1,17 +1,19 @@
+using System;
+using System.ComponentModel;
 using Unity.Entities;
 using Unity.Mathematics;
 
 namespace Unity.Physics
 {
     // The collision geometry of a rigid body.
-    // This causes the entity to appear in the physics world.
+    // If not present, the rigid body cannot collide with anything.
     public struct PhysicsCollider : IComponentData
     {
         public BlobAssetReference<Collider> Value;  // null is allowed
 
-        public unsafe bool IsValid => Value.GetUnsafePtr() != null;
+        public bool IsValid => Value.IsCreated;
         public unsafe Collider* ColliderPtr => (Collider*)Value.GetUnsafePtr();
-        public unsafe MassProperties MassProperties => Value.GetUnsafePtr() != null ? Value.Value.MassProperties : MassProperties.UnitSphere;
+        public MassProperties MassProperties => Value.IsCreated ? Value.Value.MassProperties : MassProperties.UnitSphere;
     }
     
     // The mass properties of a rigid body.
@@ -23,8 +25,8 @@ namespace Unity.Physics
         public float3 InverseInertia;           // zero is allowed, for infinite inertia
         public float AngularExpansionFactor;    // see MassProperties.AngularExpansionFactor
 
-        public float3 CenterOfMass => Transform.pos;
-        public quaternion InertiaOrientation => Transform.rot;
+        public float3 CenterOfMass { get => Transform.pos; set => Transform.pos = value; }
+        public quaternion InertiaOrientation { get => Transform.rot; set => Transform.rot = value; }
 
         public static PhysicsMass CreateDynamic(MassProperties massProperties, float mass)
         {
@@ -75,10 +77,10 @@ namespace Unity.Physics
         public float Value;
     }
 
-    // Optional custom data attached to a rigid body.
+    // Optional custom tags attached to a rigid body.
     // This will be copied to any contacts and Jacobians involving this rigid body,
     // providing additional context to any user logic operating on those structures.
-    public struct PhysicsCustomData : IComponentData
+    public struct PhysicsCustomTags : IComponentData
     {
         public byte Value;
     }
@@ -99,6 +101,9 @@ namespace Unity.Physics
         public SimulationType SimulationType;
         public float3 Gravity;
         public int SolverIterationCount;
+
+        // DOTS doesn't yet expose the number of worker threads, which is needed for tuning the simulation.
+        // For optimal physics performance set this to the number of physical CPU cores on your target device.
         public int ThreadCountHint;
 
         public static readonly PhysicsStep Default = new PhysicsStep
@@ -106,10 +111,7 @@ namespace Unity.Physics
             SimulationType = SimulationType.UnityPhysics,
             Gravity = -9.81f * math.up(),
             SolverIterationCount = 4,
-            // Unity DOTS framework doesn't expose number worker threads in current version,
-            // For this reason we have to make a guess.
-            // For optimal physics performance set ThreadCountHint to number of physical CPU cores on your target device.
-            ThreadCountHint = 4
+            ThreadCountHint = 8 // This is a guess. Prefer to overestimate than underestimate.
         };
     }
 }

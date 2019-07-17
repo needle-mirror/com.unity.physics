@@ -19,14 +19,18 @@ namespace Unity.Physics
 
         // Composite types
         Mesh = 7,
-        Compound = 8
+        Compound = 8,
+
+        // Terrain types
+        Terrain = 9
     }
 
     // The base type of a collider
     public enum CollisionType : byte
     {
         Convex = 0,
-        Composite = 1
+        Composite = 1,
+        Terrain = 2
     }
 
     // Interface for colliders
@@ -114,6 +118,8 @@ namespace Unity.Physics
                             return ((MeshCollider*)collider)->MemorySize;
                         case ColliderType.Compound:
                             return ((CompoundCollider*)collider)->MemorySize;
+                        case ColliderType.Terrain:
+                            return ((TerrainCollider*)collider)->MemorySize;
                         default:
                             //Assert.IsTrue(Enum.IsDefined(typeof(ColliderType), collider->Type));
                             return 0;
@@ -160,6 +166,8 @@ namespace Unity.Physics
                             return ((MeshCollider*)collider)->MassProperties;
                         case ColliderType.Compound:
                             return ((CompoundCollider*)collider)->MassProperties;
+                        case ColliderType.Terrain:
+                            return ((TerrainCollider*)collider)->MassProperties;
                         default:
                             //Assert.IsTrue(Enum.IsDefined(typeof(ColliderType), collider->Type));
                             return MassProperties.UnitSphere;
@@ -184,6 +192,8 @@ namespace Unity.Physics
                             return ((MeshCollider*)collider)->NumColliderKeyBits;
                         case ColliderType.Compound:
                             return ((CompoundCollider*)collider)->NumColliderKeyBits;
+                        case ColliderType.Terrain:
+                            return ((TerrainCollider*)collider)->NumColliderKeyBits;
                         default:
                             //Assert.IsTrue(Enum.IsDefined(typeof(ColliderType), collider->Type));
                             return 0;
@@ -202,6 +212,8 @@ namespace Unity.Physics
                         return ((MeshCollider*)collider)->GetChild(ref key, out child);
                     case ColliderType.Compound:
                         return ((CompoundCollider*)collider)->GetChild(ref key, out child);
+                    case ColliderType.Terrain:
+                        return ((TerrainCollider*)collider)->GetChild(ref key, out child);
                     default:
                         //Assert.IsTrue(Enum.IsDefined(typeof(ColliderType), collider->Type));
                         child = new ChildCollider();
@@ -230,12 +242,16 @@ namespace Unity.Physics
                     case ColliderType.Compound:
                         ((CompoundCollider*)collider)->GetLeaves(ref collector);
                         break;
+                    case ColliderType.Terrain:
+                        ((TerrainCollider*)collider)->GetLeaves(ref collector);
+                        break;
                 }
             }
         }
 
         // Get a leaf of a collider hierarchy.
         // Return false if the key is not valid for the collider.
+        // TODO: Make internal, add RigidTransform parameter to GetLeaf() & GetLeaves()
         public static unsafe bool GetLeafCollider(Collider* root, RigidTransform rootTransform, ColliderKey key, out ChildCollider leaf)
         {
             leaf = new ChildCollider(root, rootTransform);
@@ -284,6 +300,8 @@ namespace Unity.Physics
                         return ((MeshCollider*)collider)->CalculateAabb(transform);
                     case ColliderType.Compound:
                         return ((CompoundCollider*)collider)->CalculateAabb(transform);
+                    case ColliderType.Terrain:
+                        return ((TerrainCollider*)collider)->CalculateAabb(transform);
                     default:
                         //Assert.IsTrue(Enum.IsDefined(typeof(ColliderType), collider->Type));
                         return Aabb.Empty;
@@ -419,30 +437,30 @@ namespace Unity.Physics
 
         public ColliderKey Key => m_Key;
 
-        public static ColliderKeyPath Empty => new ColliderKeyPath(ColliderKey.Empty, 0);
+        internal static ColliderKeyPath Empty => new ColliderKeyPath(ColliderKey.Empty, 0);
 
-        public ColliderKeyPath(ColliderKey key, uint numKeyBits)
+        internal ColliderKeyPath(ColliderKey key, uint numKeyBits)
         {
             m_Key = key;
             m_NumKeyBits = numKeyBits;
         }
 
         // Append the local key for a child of the shape referenced by this path
-        public void PushChildKey(ColliderKeyPath child)
+        internal void PushChildKey(ColliderKeyPath child)
         {
             m_Key.Value &= (uint)(child.m_Key.Value >> (int)m_NumKeyBits | (ulong)0xffffffff << (int)(32 - m_NumKeyBits));
             m_NumKeyBits += child.m_NumKeyBits;
         }
 
         // Remove the most leafward shape's key from this path
-        public void PopChildKey(uint numChildKeyBits)
+        internal void PopChildKey(uint numChildKeyBits)
         {
             m_NumKeyBits -= numChildKeyBits;
             m_Key.Value |= (uint)((ulong)0xffffffff >> (int)m_NumKeyBits);
         }
 
         // Get the collider key for a leaf shape that is a child of the shape referenced by this path
-        public ColliderKey GetLeafKey(ColliderKey leafKeyLocal)
+        internal ColliderKey GetLeafKey(ColliderKey leafKeyLocal)
         {
             ColliderKeyPath leafPath = this;
             leafPath.PushChildKey(new ColliderKeyPath(leafKeyLocal, 0));
@@ -467,7 +485,7 @@ namespace Unity.Physics
         private PolygonCollider m_Polygon;
 
         // The transform of the child collider in whatever space it was queried from
-        public RigidTransform TransformFromChild;
+        public RigidTransform TransformFromChild { get; internal set; }
 
         public unsafe Collider* Collider
         {
@@ -476,13 +494,13 @@ namespace Unity.Physics
                 //Assert.IsTrue(m_Collider != null || m_Polygon.Vertices.Length > 0, "Accessing uninitialized Collider");
                 fixed (ChildCollider* self = &this)
                 {
-                    return (self->m_Collider != null) ? (Collider*)self->m_Collider : (Collider*)&self->m_Polygon;
+                    return (self->m_Collider != null) ? self->m_Collider : (Collider*)&self->m_Polygon;
                 }
             }
         }
 
         // Create from collider
-        public ChildCollider(Collider* collider)
+        internal ChildCollider(Collider* collider)
         {
             m_Collider = collider;
             m_Polygon = new PolygonCollider();
@@ -490,7 +508,7 @@ namespace Unity.Physics
         }
 
         // Create from body
-        public ChildCollider(Collider* collider, RigidTransform transform)
+        internal ChildCollider(Collider* collider, RigidTransform transform)
         {
             m_Collider = collider;
             m_Polygon = new PolygonCollider();
@@ -498,7 +516,7 @@ namespace Unity.Physics
         }
 
         // Create as triangle, from 3 vertices
-        public ChildCollider(float3 a, float3 b, float3 c, CollisionFilter filter, Material material)
+        internal ChildCollider(float3 a, float3 b, float3 c, CollisionFilter filter, Material material)
         {
             m_Collider = null;
             m_Polygon = new PolygonCollider();
@@ -507,7 +525,7 @@ namespace Unity.Physics
         }
 
         // Create as quad, from 4 coplanar vertices
-        public ChildCollider(float3 a, float3 b, float3 c, float3 d, CollisionFilter filter, Material material)
+        internal ChildCollider(float3 a, float3 b, float3 c, float3 d, CollisionFilter filter, Material material)
         {
             m_Collider = null;
             m_Polygon = new PolygonCollider();
@@ -516,7 +534,7 @@ namespace Unity.Physics
         }
 
         // Combine a parent ChildCollider with another ChildCollider describing one of its children
-        public ChildCollider(ChildCollider parent, ChildCollider child)
+        internal ChildCollider(ChildCollider parent, ChildCollider child)
         {
             m_Collider = child.m_Collider;
             m_Polygon = child.m_Polygon;

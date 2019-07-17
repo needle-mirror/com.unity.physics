@@ -2,12 +2,11 @@
 using NUnit.Framework;
 using Unity.Collections;
 using Unity.Jobs;
-using Unity.Jobs.LowLevel.Unsafe;
 using UnityEngine;
 
 namespace Unity.Physics.Tests.Base.Containers
 {
-    public class BlockStreamTests
+    class BlockStreamTests
     {
         struct WriteInts : IJobParallelFor
         {

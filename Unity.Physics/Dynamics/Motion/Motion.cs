@@ -110,7 +110,7 @@ namespace Unity.Physics
 
         // Calculate the distances by which to expand collision tolerances based on the speed of the object.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public MotionExpansion CalculateExpansion(float timeStep) => new MotionExpansion
+        internal MotionExpansion CalculateExpansion(float timeStep) => new MotionExpansion
         {
             Linear = LinearVelocity * timeStep,
             Uniform = math.min(math.length(AngularVelocity) * timeStep, (float)math.PI / 2.0f) * AngularExpansionFactor
@@ -119,7 +119,7 @@ namespace Unity.Physics
 
     // Provides an upper bound on change in a body's extents in any direction during a step.
     // Used to determine how far away from the body to look for collisions.
-    public struct MotionExpansion
+    struct MotionExpansion
     {
         public float3 Linear;   // how far to look ahead of the object
         public float Uniform;   // how far to look around the object

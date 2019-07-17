@@ -1,4 +1,5 @@
-﻿using NUnit.Framework;
+﻿using System;
+using NUnit.Framework;
 using System.Collections.Generic;
 using Unity.Burst;
 using Unity.Collections;
@@ -14,7 +15,7 @@ using Random = UnityEngine.Random;
 
 namespace Unity.Physics.Tests.Collision.Geometry
 {
-    public class BoundingVolumeHierarchyBuilderTests
+    class BoundingVolumeHierarchyBuilderTests
     {
         public void InitInputArrays(NativeArray<PointAndIndex> points, NativeArray<Aabb> aabbs, NativeArray<CollisionFilter> filters)
         {

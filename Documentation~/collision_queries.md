@@ -37,7 +37,7 @@ Many queries produce similar outputs or hits as they are referred to in the code
 
 Ray cast queries use start and end points as their input and produce a set of hit results. 
 
-Lower level ray cast routines against primitives have a slightly different input. They do not compute the surface intersection point explicitly for efficiency reasons. Instead, given a ray of origin,`O`, and displacement (combining direction & distance), `D`, they return a hit fraction, `f`, which can be used later to compute the hit position if needed using `O + (D * f)`. See [RayCast.cs](..\Unity.Physics\Collision\Queries\Raycast.cs) for more details 
+Lower level ray cast routines against primitives have a slightly different input. They do not compute the surface intersection point explicitly for efficiency reasons. Instead, given a ray of origin,`O`, and displacement (combining direction & distance), `D`, they return a hit fraction, `f`, which can be used later to compute the hit position if needed using `O + (D * f)`. See [RayCast.cs](../Unity.Physics/Collision/Queries/Raycast.cs) for more details 
 
 Note: Rays starting inside primitives (spheres, capsules, box and convex shapes) confirm a hit at the starting point, but do not report another intersection as the ray leaves the volume. 
 
@@ -63,7 +63,7 @@ Distance queries, or closest point queries, are often used to determine proximit
 Distance query inputs include
 
 You can perform a distance query with a collider positioned and orientated in space, or simply from a specific point.
-See [Distance.cs](..\Unity.Physics\Collision\Queries\Distance.cs) for more details about the input structures.
+See [Distance.cs](../Unity.Physics/Collision/Queries/Distance.cs) for more details about the input structures.
 
 ## Region queries
 

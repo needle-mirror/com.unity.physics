@@ -9,10 +9,11 @@ namespace Unity.Physics.Editor
 {
     static class StatusMessageUtility
     {
-        public static string GetHierarchyStatusMessage(IReadOnlyList<UnityObject> targets)
+        public static MessageType GetHierarchyStatusMessage(IReadOnlyList<UnityObject> targets, out string statusMessage)
         {
+            statusMessage = string.Empty;
             if (targets.Count == 0)
-                return string.Empty;
+                return MessageType.None;
 
             var numChildTargets = 0;
             foreach (Component c in targets)
@@ -38,11 +39,15 @@ namespace Unity.Physics.Editor
             switch (numChildTargets)
             {
                 case 0:
-                    return string.Empty;
+                    return MessageType.None;
                 case 1:
-                    return L10n.Tr("Target will be un-parented during the conversion process in order to take part in physics simulation.");
+                    statusMessage =
+                        L10n.Tr("Target will be un-parented during the conversion process in order to take part in physics simulation.");
+                    return MessageType.Warning;
                 default:
-                    return L10n.Tr("One or more targets will be un-parented during the conversion process in order to take part in physics simulation.");
+                    statusMessage =
+                        L10n.Tr("One or more targets will be un-parented during the conversion process in order to take part in physics simulation.");
+                    return MessageType.Warning;
             }
         }
 
@@ -72,8 +77,8 @@ namespace Unity.Physics.Editor
             {
                 statusMessage = L10n.Tr(
                     matrixStates.Count == 1
-                        ? "Target has non-uniform scale. Scale will be baked into the shape data during conversion."
-                        : "One or more targets has non-uniform scale. Scale will be baked into the shape data during conversion."
+                        ? "Target has non-uniform scale. Shape data will be transformed during conversion in order to bake scale into the run-time format."
+                        : "One or more targets has non-uniform scale. Shape data will be transformed during conversion in order to bake scale into the run-time format."
                 );
                 return MessageType.Warning;
             }

@@ -266,7 +266,7 @@ namespace Unity.Physics.Extensions
         public static void ApplyImpulse(ref this PhysicsVelocity pv, PhysicsMass pm, Translation t, Rotation r, float3 impulse, float3 point)
         {
             // Linear
-            pv.Linear += impulse;
+            pv.ApplyLinearImpulse(pm, impulse);
 
             // Angular
             {
@@ -276,7 +276,7 @@ namespace Unity.Physics.Extensions
                 float3 angularImpulseWorldSpace = math.cross(point - worldFromMotion.pos, impulse);
                 float3 angularImpulseInertiaSpace = math.rotate(math.inverse(worldFromMotion.rot), angularImpulseWorldSpace);
 
-                pv.Angular += angularImpulseInertiaSpace * pm.InverseInertia;
+                pv.ApplyAngularImpulse(pm, angularImpulseInertiaSpace);
             }
         }
 

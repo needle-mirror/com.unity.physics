@@ -1,4 +1,4 @@
-﻿using Unity.Burst;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -9,7 +9,7 @@ using UnityEngine.Assertions;
 
 namespace Unity.Physics
 {
-    public struct StaticLayerChangeInfo
+    struct StaticLayerChangeInfo
     {
         public void Init(Allocator allocator = Allocator.Persistent)
         {
@@ -35,8 +35,8 @@ namespace Unity.Physics
         /// </summary>
         public int NumStaticBodies
         {
-            get { return NumStaticBodiesArray[0]; }
-            set { NumStaticBodiesArray[0] = value; }
+            get => NumStaticBodiesArray[0];
+            set => NumStaticBodiesArray[0] = value;
         }
 
         /// <summary>
@@ -44,8 +44,8 @@ namespace Unity.Physics
         /// </summary>
         public int HaveStaticBodiesChanged
         {
-            get { return HaveStaticBodiesChangedArray[0]; }
-            set { HaveStaticBodiesChangedArray[0] = value; }
+            get => HaveStaticBodiesChangedArray[0];
+            set => HaveStaticBodiesChangedArray[0] = value;
         }
 
         public NativeArray<int> NumStaticBodiesArray;
@@ -72,7 +72,9 @@ namespace Unity.Physics.Systems
         // First element is a number of static bodies in current frame if static broad-phase layer need to be updated, zero otherwise.
         // Second element is "bool" flag indicating if static broad-phase layer needs to be updated.
         //public NativeArray<int> StaticBodiesChangedInfo;
-        public StaticLayerChangeInfo m_StaticLayerChangeInfo;
+        StaticLayerChangeInfo m_StaticLayerChangeInfo;
+
+        EndFramePhysicsSystem m_EndFramePhysicsSystem;
 
         protected override void OnCreate()
         {
@@ -111,6 +113,8 @@ namespace Unity.Physics.Systems
             });
 
             m_StaticLayerChangeInfo.Init();
+
+            m_EndFramePhysicsSystem = World.GetOrCreateSystem<EndFramePhysicsSystem>();
         }
 
         protected override void OnDestroyManager()
@@ -123,6 +127,9 @@ namespace Unity.Physics.Systems
 
         protected override JobHandle OnUpdate(JobHandle inputDeps)
         {
+            // Make sure last frame's physics jobs are complete
+            inputDeps = JobHandle.CombineDependencies(inputDeps, m_EndFramePhysicsSystem.FinalJobHandle);
+
             // Extract types used by initialize jobs
             var entityType = GetArchetypeChunkEntityType();
             var positionType = GetArchetypeChunkComponentType<Translation>(true);
@@ -132,7 +139,7 @@ namespace Unity.Physics.Systems
             var physicsMassType = GetArchetypeChunkComponentType<PhysicsMass>(true);
             var physicsDampingType = GetArchetypeChunkComponentType<PhysicsDamping>(true);
             var physicsGravityFactorType = GetArchetypeChunkComponentType<PhysicsGravityFactor>(true);
-            var physicsCustomDataType = GetArchetypeChunkComponentType<PhysicsCustomData>(true);
+            var physicsCustomTagsType = GetArchetypeChunkComponentType<PhysicsCustomTags>(true);
             var physicsJointType = GetArchetypeChunkComponentType<PhysicsJoint>(true);
 
             int numDynamicBodies = DynamicEntityGroup.CalculateLength();
@@ -151,7 +158,7 @@ namespace Unity.Physics.Systems
             {
                 // Make a job to test for changes
                 int numChunks; // There has to be a better way of doing this...
-                using (var chunks = StaticEntityGroup.CreateArchetypeChunkArray(Allocator.TempJob))
+                using (NativeArray<ArchetypeChunk> chunks = StaticEntityGroup.CreateArchetypeChunkArray(Allocator.TempJob))
                 {
                     numChunks = chunks.Length;
                 }
@@ -202,7 +209,7 @@ namespace Unity.Physics.Systems
                         PositionType = positionType,
                         RotationType = rotationType,
                         PhysicsColliderType = physicsColliderType,
-                        PhysicsCustomDataType = physicsCustomDataType,
+                        PhysicsCustomTagsType = physicsCustomTagsType,
 
                         FirstBodyIndex = 0,
                         RigidBodies = PhysicsWorld.Bodies
@@ -232,7 +239,7 @@ namespace Unity.Physics.Systems
                         PositionType = positionType,
                         RotationType = rotationType,
                         PhysicsColliderType = physicsColliderType,
-                        PhysicsCustomDataType = physicsCustomDataType,
+                        PhysicsCustomTagsType = physicsCustomTagsType,
 
                         FirstBodyIndex = numDynamicBodies,
                         RigidBodies = PhysicsWorld.Bodies
@@ -241,7 +248,7 @@ namespace Unity.Physics.Systems
 
                 var handle = JobHandle.CombineDependencies(jobHandles);
                 jobHandles.Clear();
-                
+
                 // Build joints
                 if (numJoints > 0)
                 {
@@ -298,6 +305,7 @@ namespace Unity.Physics.Systems
                 }
             }
 
+            [BurstCompile]
             internal struct CheckStaticBodyChangesReduceJob : IJob
             {
                 [ReadOnly] [DeallocateOnJobCompletion] public NativeArray<int> ChunkHasChangesOutput;
@@ -308,7 +316,7 @@ namespace Unity.Physics.Systems
                 {
                     for (int i = 0; i < ChunkHasChangesOutput.Length; i++)
                     {
-                        if (ChunkHasChangesOutput[0] > 0)
+                        if (ChunkHasChangesOutput[i] > 0)
                         {
                             HaveStaticBodiesChanged[0] = 1;
                             return;
@@ -334,7 +342,7 @@ namespace Unity.Physics.Systems
                         WorldFromBody = new RigidTransform(quaternion.identity, float3.zero),
                         Collider = null,
                         Entity = Entity.Null,
-                        CustomData = 0
+                        CustomTags = 0
                     };
                 }
             }
@@ -346,24 +354,24 @@ namespace Unity.Physics.Systems
                 [ReadOnly] public ArchetypeChunkComponentType<Translation> PositionType;
                 [ReadOnly] public ArchetypeChunkComponentType<Rotation> RotationType;
                 [ReadOnly] public ArchetypeChunkComponentType<PhysicsCollider> PhysicsColliderType;
-                [ReadOnly] public ArchetypeChunkComponentType<PhysicsCustomData> PhysicsCustomDataType;
+                [ReadOnly] public ArchetypeChunkComponentType<PhysicsCustomTags> PhysicsCustomTagsType;
                 [ReadOnly] public int FirstBodyIndex;
 
                 [NativeDisableContainerSafetyRestriction] public NativeSlice<RigidBody> RigidBodies;
 
                 public unsafe void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
                 {
-                    var chunkColliders = chunk.GetNativeArray(PhysicsColliderType);
-                    var chunkPositions = chunk.GetNativeArray(PositionType);
-                    var chunkRotations = chunk.GetNativeArray(RotationType);
-                    var chunkEntities = chunk.GetNativeArray(EntityType);
-                    var chunkCustomDatas = chunk.GetNativeArray(PhysicsCustomDataType);
+                    NativeArray<PhysicsCollider> chunkColliders = chunk.GetNativeArray(PhysicsColliderType);
+                    NativeArray<Translation> chunkPositions = chunk.GetNativeArray(PositionType);
+                    NativeArray<Rotation> chunkRotations = chunk.GetNativeArray(RotationType);
+                    NativeArray<Entity> chunkEntities = chunk.GetNativeArray(EntityType);
+                    NativeArray<PhysicsCustomTags> chunkCustomTags = chunk.GetNativeArray(PhysicsCustomTagsType);
 
                     int instanceCount = chunk.Count;
                     int rbIndex = FirstBodyIndex + firstEntityIndex;
 
                     bool hasChunkPhysicsColliderType = chunk.Has(PhysicsColliderType);
-                    bool hasChunkPhysicsCustomDataType = chunk.Has(PhysicsCustomDataType);
+                    bool hasChunkPhysicsCustomTagsType = chunk.Has(PhysicsCustomTagsType);
 
                     for (int i = 0; i < instanceCount; i++, rbIndex++)
                     {
@@ -372,17 +380,16 @@ namespace Unity.Physics.Systems
                             WorldFromBody = new RigidTransform(chunkRotations[i].Value, chunkPositions[i].Value),
                             Collider = hasChunkPhysicsColliderType ? chunkColliders[i].ColliderPtr : null,
                             Entity = chunkEntities[i],
-                            CustomData = hasChunkPhysicsCustomDataType ? chunkCustomDatas[i].Value : (byte)0,
+                            CustomTags = hasChunkPhysicsCustomTagsType ? chunkCustomTags[i].Value : (byte)0
                         };
                     }
                 }
             }
 
-
             [BurstCompile]
             private static MotionData CreateMotionData(
-                Translation position, Rotation orientation, 
-                PhysicsMass physicsMass, PhysicsDamping damping, 
+                Translation position, Rotation orientation,
+                PhysicsMass physicsMass, PhysicsDamping damping,
                 float gravityFactor)
             {
                 return new MotionData
@@ -413,12 +420,12 @@ namespace Unity.Physics.Systems
 
                 public unsafe void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
                 {
-                    var chunkPositions = chunk.GetNativeArray(PositionType);
-                    var chunkRotations = chunk.GetNativeArray(RotationType);
-                    var chunkVelocities = chunk.GetNativeArray(PhysicsVelocityType);
-                    var chunkMasses = chunk.GetNativeArray(PhysicsMassType);
-                    var chunkDampings = chunk.GetNativeArray(PhysicsDampingType);
-                    var chunkGravityFactors = chunk.GetNativeArray(PhysicsGravityFactorType);
+                    NativeArray<Translation> chunkPositions = chunk.GetNativeArray(PositionType);
+                    NativeArray<Rotation> chunkRotations = chunk.GetNativeArray(RotationType);
+                    NativeArray<PhysicsVelocity> chunkVelocities = chunk.GetNativeArray(PhysicsVelocityType);
+                    NativeArray<PhysicsMass> chunkMasses = chunk.GetNativeArray(PhysicsMassType);
+                    NativeArray<PhysicsDamping> chunkDampings = chunk.GetNativeArray(PhysicsDampingType);
+                    NativeArray<PhysicsGravityFactor> chunkGravityFactors = chunk.GetNativeArray(PhysicsGravityFactorType);
 
                     int motionStart = firstEntityIndex;
                     int instanceCount = chunk.Count;
@@ -460,13 +467,13 @@ namespace Unity.Physics.Systems
                     };
 
                     // Note: if a dynamic body infinite mass then assume no gravity should be applied
-                    var defaultGravityFactor = hasChunkPhysicsMassType ? 1.0f : 0.0f;
+                    float defaultGravityFactor = hasChunkPhysicsMassType ? 1.0f : 0.0f;
 
                     // Create motion datas
                     for (int i = 0, motionIndex = motionStart; i < instanceCount; i++, motionIndex++)
                     {
                         MotionDatas[motionIndex] = CreateMotionData(
-                            chunkPositions[i], chunkRotations[i], 
+                            chunkPositions[i], chunkRotations[i],
                             hasChunkPhysicsMassType ? chunkMasses[i] : defaultPhysicsMass,
                             hasChunkPhysicsDampingType ? chunkDampings[i] : defaultPhysicsDamping,
                             hasChunkPhysicsGravityFactorType ? chunkGravityFactors[i].Value : defaultGravityFactor);
@@ -488,8 +495,8 @@ namespace Unity.Physics.Systems
 
                 public unsafe void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
                 {
-                    var chunkJoint = chunk.GetNativeArray(JointComponentType);
-                    var chunkEntities = chunk.GetNativeArray(EntityType);
+                    NativeArray<PhysicsJoint> chunkJoint = chunk.GetNativeArray(JointComponentType);
+                    NativeArray<Entity> chunkEntities = chunk.GetNativeArray(EntityType);
 
                     int instanceCount = chunk.Count;
                     for (int i = 0; i < instanceCount; i++)

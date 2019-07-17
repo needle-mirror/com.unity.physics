@@ -1,10 +1,9 @@
-﻿using NUnit.Framework;
+﻿using System;
+using NUnit.Framework;
 using Unity.Mathematics;
 using Unity.Collections;
 using Unity.Entities;
 using Random = Unity.Mathematics.Random;
-using static Unity.Physics.Math;
-using Unity.Physics.Tests.Utils;
 
 namespace Unity.Physics.Tests.Joints
 {
@@ -13,7 +12,7 @@ namespace Unity.Physics.Tests.Joints
     /// Passing test does not necessarily mean good-looking joint behavior or stability for systems of multiple constraints, but the test
     /// will catch a lot of basic mathematical errors in the solver.
     /// </summary>
-    public class JointTests
+    class JointTests
     {
         //
         // Tiny simulation for a single body pair and joint, used by all of the tests

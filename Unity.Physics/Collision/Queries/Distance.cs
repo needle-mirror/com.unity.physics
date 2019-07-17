@@ -48,7 +48,7 @@ namespace Unity.Physics
     }
 
     // Distance query implementations
-    public static class DistanceQueries
+    static class DistanceQueries
     {
         // Distance queries have edge cases where distance = 0, eg. consider choosing the correct normal for a point that is exactly on a triangle surface.
         // Additionally, with floating point numbers there are often numerical accuracy problems near distance = 0.  Some routines handle this with special
@@ -639,6 +639,8 @@ namespace Unity.Physics
                     return PointMesh(input, (MeshCollider*)target, ref collector);
                 case ColliderType.Compound:
                     return PointCompound(input, (CompoundCollider*)target, ref collector);
+                case ColliderType.Terrain:
+                    return PointTerrain(input, (TerrainCollider*)target, ref collector);
                 default:
                     throw new NotImplementedException();
             }
@@ -694,10 +696,13 @@ namespace Unity.Physics
                             return ConvexMesh(input, (MeshCollider*)target, ref collector);
                         case ColliderType.Compound:
                             return ConvexCompound(input, (CompoundCollider*)target, ref collector);
+                        case ColliderType.Terrain:
+                            return ConvexTerrain(input, (TerrainCollider*)target, ref collector);
                         default:
                             throw new NotImplementedException();
                     }
                 case CollisionType.Composite:
+                case CollisionType.Terrain:
                     // no support for composite query shapes
                     throw new NotImplementedException();
                 default:
@@ -729,7 +734,7 @@ namespace Unity.Physics
                 int numPolygons = Mesh.GetNumPolygonsInPrimitive(flags);
                 bool isQuad = Mesh.IsPrimitveFlagSet(flags, Mesh.PrimitiveFlags.IsQuad);
 
-                float3 normalDirection = math.cross(vertices[1] - vertices[0], vertices[2] - vertices[0]);
+                float3 triangleNormal = math.normalize(math.cross(vertices[1] - vertices[0], vertices[2] - vertices[0]));
                 bool acceptHit = false;
 
                 for (int polygonIndex = 0; polygonIndex < numPolygons; polygonIndex++)
@@ -738,13 +743,13 @@ namespace Unity.Physics
                     if (isQuad)
                     {
                         result = QuadSphere(
-                            vertices[0], vertices[1], vertices[2], vertices[3], normalDirection,
+                            vertices[0], vertices[1], vertices[2], vertices[3], triangleNormal,
                             input.Position, 0.0f, MTransform.Identity);
                     }
                     else
                     {
                         result = TriangleSphere(
-                            vertices[0], vertices[1], vertices[2], normalDirection,
+                            vertices[0], vertices[1], vertices[2], triangleNormal,
                             input.Position, 0.0f, MTransform.Identity);
                     }
 
@@ -910,6 +915,156 @@ namespace Unity.Physics
         {
             var leafProcessor = new ConvexCompoundLeafProcessor(compoundCollider);
             return compoundCollider->BoundingVolumeHierarchy.Distance(input, ref leafProcessor, ref collector);
+        }
+
+        public static unsafe bool ConvexTerrain<T>(ColliderDistanceInput input, TerrainCollider* terrainCollider, ref T collector)
+            where T : struct, ICollector<DistanceHit>
+        {
+            ref var terrain = ref terrainCollider->Terrain;
+
+            bool hadHit = false;
+
+            // Get the collider AABB in heightfield space
+            var aabbT = new FourTransposedAabbs();
+            Terrain.QuadTreeWalker walker;
+            {
+                Aabb colliderAabb = input.Collider->CalculateAabb(input.Transform);
+                Aabb aabb = new Aabb
+                {
+                    Min = colliderAabb.Min * terrain.InverseScale,
+                    Max = colliderAabb.Max * terrain.InverseScale
+                };
+                aabbT.SetAllAabbs(aabb);
+
+                Aabb queryAabb = new Aabb
+                {
+                    Min = (colliderAabb.Min - input.MaxDistance) * terrain.InverseScale,
+                    Max = (colliderAabb.Max + input.MaxDistance) * terrain.InverseScale
+                };
+                walker = new Terrain.QuadTreeWalker(&terrainCollider->Terrain, queryAabb);
+            }
+            float maxDistanceSquared = collector.MaxFraction * collector.MaxFraction;
+            ref ConvexHull inputHull = ref ((ConvexCollider*)input.Collider)->ConvexHull;
+            MTransform targetFromQuery = new MTransform(input.Transform);
+
+            // Traverse the tree
+            float3* vertices = stackalloc float3[4];
+            while (walker.Pop())
+            {
+                float4 distanceToNodesSquared = walker.Bounds.DistanceFromAabbSquared(ref aabbT, terrain.Scale);
+                bool4 hitMask = (walker.Bounds.Ly <= walker.Bounds.Hy) & (distanceToNodesSquared <= maxDistanceSquared);
+                if (walker.IsLeaf)
+                {
+                    // Leaf node, distance test against hit child quads
+                    int4 hitIndex;
+                    int hitCount = math.compress((int*)(&hitIndex), 0, new int4(0, 1, 2, 3), hitMask);
+                    for (int iHit = 0; iHit < hitCount; iHit++)
+                    {
+                        // Get the quad vertices
+                        walker.GetQuad(hitIndex[iHit], out int2 quadIndex, out vertices[0], out vertices[1], out vertices[2], out vertices[3]);
+
+                        // Test each triangle in the quad
+                        for (int iTriangle = 0; iTriangle < 2; iTriangle++)
+                        {
+                            // Convex-triangle
+                            Result result = ConvexConvex(vertices, 3, 0.0f, inputHull.VerticesPtr, inputHull.NumVertices, inputHull.ConvexRadius, targetFromQuery);
+                            if (result.Distance < collector.MaxFraction)
+                            {
+                                hadHit |= collector.AddHit(new DistanceHit
+                                {
+                                    Fraction = result.Distance,
+                                    Position = result.PositionOnAinA,
+                                    SurfaceNormal = -result.NormalInA,
+                                    ColliderKey = terrain.GetColliderKey(quadIndex, iTriangle)
+                                });
+                            }
+
+                            // Next triangle
+                            vertices[0] = vertices[2];
+                            vertices[2] = vertices[3];
+                        }
+                    }
+                }
+                else
+                {
+                    // Interior node, add hit child nodes to the stack
+                    walker.Push(hitMask);
+                }
+            }
+
+            return hadHit;
+        }
+
+        public static unsafe bool PointTerrain<T>(PointDistanceInput input, TerrainCollider* terrainCollider, ref T collector)
+            where T : struct, ICollector<DistanceHit>
+        {
+            ref var terrain = ref terrainCollider->Terrain;
+
+            bool hadHit = false;
+
+            // Get the point in heightfield space
+            float3 position = input.Position * terrain.InverseScale;
+            float maxDistanceSquared = collector.MaxFraction * collector.MaxFraction;
+            Terrain.QuadTreeWalker walker;
+            {
+                var queryAabb = new Aabb
+                {
+                    Min = position - collector.MaxFraction * terrain.InverseScale,
+                    Max = position + collector.MaxFraction * terrain.InverseScale
+                };
+                walker = new Terrain.QuadTreeWalker(&terrainCollider->Terrain, queryAabb);
+            }
+
+            // Traverse the tree
+            while (walker.Pop())
+            {
+                var position4 = new FourTransposedPoints(position);
+                float4 distanceToNodesSquared = walker.Bounds.DistanceFromPointSquared(ref position4, terrain.Scale);
+                bool4 hitMask = (walker.Bounds.Ly <= walker.Bounds.Hy) & (distanceToNodesSquared <= maxDistanceSquared);
+                if (walker.IsLeaf)
+                {
+                    // Leaf node, point query hit child quads
+                    int4 hitIndex;
+                    int hitCount = math.compress((int*)(&hitIndex), 0, new int4(0, 1, 2, 3), hitMask);
+                    for (int iHit = 0; iHit < hitCount; iHit++)
+                    {
+                        // Get the quad vertices
+                        walker.GetQuad(hitIndex[iHit], out int2 quadIndex, out float3 a, out float3 b, out float3 c, out float3 d);
+
+                        // Test each triangle in the quad
+                        var polygon = new PolygonCollider();
+                        polygon.InitEmpty();
+                        for (int iTriangle = 0; iTriangle < 2; iTriangle++)
+                        {
+                            // Point-triangle
+                            polygon.SetAsTriangle(a, b, c);
+                            float3 triangleNormal = math.normalize(math.cross(b - a, c - a));
+                            Result result = TriangleSphere(a, b, c, triangleNormal, input.Position, 0.0f, MTransform.Identity);
+                            if (result.Distance < collector.MaxFraction)
+                            {
+                                hadHit |= collector.AddHit(new DistanceHit
+                                {
+                                    Fraction = result.Distance,
+                                    Position = result.PositionOnAinA,
+                                    SurfaceNormal = -result.NormalInA,
+                                    ColliderKey = terrain.GetColliderKey(quadIndex, iTriangle)
+                                });
+                            }
+
+                            // Next triangle
+                            a = c;
+                            c = d;
+                        }
+                    }
+                }
+                else
+                {
+                    // Interior node, add hit child nodes to the stack
+                    walker.Push(hitMask);
+                }
+            }
+
+            return hadHit;
         }
     }
 }

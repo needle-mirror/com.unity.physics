@@ -9,7 +9,7 @@ using static Unity.Physics.Math;
 
 namespace Unity.Physics
 {
-    public static class Solver
+    static class Solver
     {
         public struct StepInput
         {
@@ -19,7 +19,7 @@ namespace Unity.Physics
         }
 
         // Schedule some jobs to build Jacobians from the contacts stored in the simulation context
-        public static JobHandle ScheduleBuildContactJacobiansJobs(ref DynamicsWorld world, float timeStep, float gravityAcceleration, ref Simulation.Context context, JobHandle inputDeps)
+        internal static JobHandle ScheduleBuildContactJacobiansJobs(ref DynamicsWorld world, float timeStep, float gravityAcceleration, ref Simulation.Context context, JobHandle inputDeps)
         {
             var buildJob = new BuildContactJacobiansJob
             {
@@ -32,7 +32,7 @@ namespace Unity.Physics
                 MotionVelocities = world.MotionVelocities
             };
 
-            
+
             JobHandle handle = buildJob.ScheduleUnsafeIndex0(context.SolverSchedulerInfo.NumWorkItems, 1, inputDeps);
 
             context.DisposeContacts = context.Contacts.Dispose(handle);
@@ -41,7 +41,7 @@ namespace Unity.Physics
         }
 
         // Schedule some jobs to solve the Jacobians stored in the simulation context
-        public static unsafe JobHandle ScheduleSolveJacobiansJobs(ref DynamicsWorld dynamicsWorld, float timestep, int numIterations, ref Simulation.Context context, JobHandle inputDeps)
+        internal static unsafe JobHandle ScheduleSolveJacobiansJobs(ref DynamicsWorld dynamicsWorld, float timestep, int numIterations, ref Simulation.Context context, JobHandle inputDeps)
         {
             JobHandle handle;
 
@@ -49,14 +49,14 @@ namespace Unity.Physics
 
             // Use persistent allocator to allow these to live until the start of next step
             {
-                var workItemList = context.SolverSchedulerInfo.NumWorkItems;
-                
+                NativeArray<int> workItemList = context.SolverSchedulerInfo.NumWorkItems;
+
                 //TODO: Change this to Allocator.TempJob when https://github.com/Unity-Technologies/Unity.Physics/issues/7 is resolved
-                var collisionEventStreamHandle = BlockStream.ScheduleConstruct(out context.CollisionEventStream, workItemList, 0xb17b474f, inputDeps, Allocator.Persistent);
-                var triggerEventStreamHandle = BlockStream.ScheduleConstruct(out context.TriggerEventStream, workItemList, 0x43875d8f, inputDeps, Allocator.Persistent);
+                JobHandle collisionEventStreamHandle = BlockStream.ScheduleConstruct(out context.CollisionEventStream, workItemList, 0xb17b474f, inputDeps, Allocator.Persistent);
+                JobHandle triggerEventStreamHandle = BlockStream.ScheduleConstruct(out context.TriggerEventStream, workItemList, 0x43875d8f, inputDeps, Allocator.Persistent);
 
                 handle = JobHandle.CombineDependencies(collisionEventStreamHandle, triggerEventStreamHandle);
-                
+
                 float invNumIterations = math.rcp(numIterations);
 
                 var phaseInfoPtrs = (Scheduler.SolverSchedulerInfo.SolvePhaseInfo*)NativeArrayUnsafeUtility.GetUnsafeBufferPointerWithoutChecks(context.SolverSchedulerInfo.PhaseInfo);
@@ -91,7 +91,7 @@ namespace Unity.Physics
                         // int.MaxValue can't be used as batchSize since 19.1 overflows in that case... 
                         bool isLastPhase = phaseId == numPhases - 1;
                         int batchSize = isLastPhase ? (int.MaxValue / 2) : 1;
-                        
+
                         int* numWorkItems = &(phaseInfoPtrs[phaseId].NumWorkItems);
                         handle = job.Schedule(numWorkItems, batchSize, handle);
                     }
@@ -134,14 +134,14 @@ namespace Unity.Physics
             public NativeSlice<MotionVelocity> MotionVelocities;
 
             public BlockStream.Reader JacobianReader;
-            
+
             //@TODO: Unity should have a Allow null safety restriction
             [NativeDisableContainerSafetyRestriction]
             public BlockStream.Writer CollisionEventsWriter;
             //@TODO: Unity should have a Allow null safety restriction
             [NativeDisableContainerSafetyRestriction]
             public BlockStream.Writer TriggerEventsWriter;
-            
+
             [ReadOnly]
             public NativeArray<Scheduler.SolverSchedulerInfo.SolvePhaseInfo> Phases;
             public int PhaseIndex;
@@ -149,11 +149,11 @@ namespace Unity.Physics
 
             public void Execute(int workItemIndex)
             {
-                var workItemStartIndexOffset = Phases[PhaseIndex].FirstWorkItemIndex;
+                int workItemStartIndexOffset = Phases[PhaseIndex].FirstWorkItemIndex;
 
                 CollisionEventsWriter.PatchMinMaxRange(workItemIndex + workItemStartIndexOffset);
                 TriggerEventsWriter.PatchMinMaxRange(workItemIndex + workItemStartIndexOffset);
-                
+
                 Solve(MotionVelocities, ref JacobianReader, ref CollisionEventsWriter, ref TriggerEventsWriter, workItemIndex + workItemStartIndexOffset, StepInput);
             }
         }
@@ -180,8 +180,7 @@ namespace Unity.Physics
             float3 normal,
             MTransform worldFromA,
             MTransform worldFromB,
-            float timestep,
-            float invDt,
+            float invTimestep,
             MotionVelocity velocityA,
             MotionVelocity velocityB,
             float sumInvMass,
@@ -196,14 +195,13 @@ namespace Unity.Physics
             float3 pointOnA = contact.Position + normal * contact.Distance;
             float3 armA = pointOnA - worldFromA.Translation;
             float3 armB = pointOnB - worldFromB.Translation;
-            float invEffectiveMass;
             BuildJacobian(worldFromA, worldFromB, normal, armA, armB, velocityA.InverseInertiaAndMass.xyz, velocityB.InverseInertiaAndMass.xyz, sumInvMass,
-                out jacAngular.Jac.AngularA, out jacAngular.Jac.AngularB, out invEffectiveMass);
+                out jacAngular.Jac.AngularA, out jacAngular.Jac.AngularB, out float invEffectiveMass);
             jacAngular.Jac.EffectiveMass = 1.0f / invEffectiveMass;
             jacAngular.Jac.Impulse = 0.0f;
 
             float solveDistance = contact.Distance;
-            float solveVelocity = solveDistance * invDt;
+            float solveVelocity = solveDistance * invTimestep;
 
             // If contact distance is negative, use an artificially reduced penetration depth to prevent the contact from depenetrating too quickly
             const float maxDepenetrationVelocity = 3.0f; // meter/seconds time step independent
@@ -225,10 +223,6 @@ namespace Unity.Physics
             if (jacobianHeader.HasSurfaceVelocity)
             {
                 jacobianHeader.AccessSurfaceVelocity() = new SurfaceVelocity();
-            }
-            if (jacobianHeader.HasMaxImpulse)
-            {
-                jacobianHeader.AccessMaxImpulse() = float.MaxValue;
             }
             if (jacobianHeader.HasMassFactors)
             {
@@ -270,7 +264,7 @@ namespace Unity.Physics
             {
                 velocityA = motionVelocities[pair.BodyAIndex];
                 velocityB = MotionVelocity.Zero;
-                
+
                 worldFromA = new MTransform(motionDatas[pair.BodyAIndex].WorldFromMotion);
                 worldFromB = MTransform.Identity;
             }
@@ -278,7 +272,7 @@ namespace Unity.Physics
             {
                 velocityA = motionVelocities[pair.BodyAIndex];
                 velocityB = motionVelocities[pair.BodyBIndex];
-                
+
                 worldFromA = new MTransform(motionDatas[pair.BodyAIndex].WorldFromMotion);
                 worldFromB = new MTransform(motionDatas[pair.BodyBIndex].WorldFromMotion);
             }
@@ -297,7 +291,10 @@ namespace Unity.Physics
             {
                 if (bodyBIsStatic)
                 {
-                    Assert.IsTrue(false); // static-static pairs should have been filtered during broadphase overlap test
+                    // Static-Static pairs may be filtered during broadphase overlap test
+                    // However, some usecases may lead here e.g.:
+                    //   - a Joint between two Static bodies
+                    //   - using solver directly without the broadphase
                     velocityA = MotionVelocity.Zero;
                     velocityB = MotionVelocity.Zero;
                     return;
@@ -321,17 +318,20 @@ namespace Unity.Physics
         private static unsafe void AppendJointJacobiansToContactStream(
             int workItemIndex, ref BlockStream.Reader jointJacobianReader, ref BlockStream.Writer jacobianWriter)
         {
-            JacobianIterator jacIterator = new JacobianIterator(jointJacobianReader, workItemIndex);
+            var jacIterator = new JacobianIterator(jointJacobianReader, workItemIndex);
             while (jacIterator.HasJacobiansLeft())
             {
-                short jacobianSize;
-                ref JacobianHeader jacHeader = ref jacIterator.ReadJacobianHeader(out jacobianSize);
+                ref JacobianHeader jacHeader = ref jacIterator.ReadJacobianHeader(out int jacobianSize);
                 if ((jacHeader.Flags & JacobianFlags.Disabled) == 0)
                 {
                     // Allocate enough memory and copy the data
                     jacobianWriter.Write(jacobianSize);
-                    byte* jacDataPtr = jacobianWriter.Allocate(jacobianSize);
-                    ref JacobianHeader copiedJacobianHeader = ref UnsafeUtilityEx.AsRef<JacobianHeader>(jacDataPtr);
+                    byte* jacobianPtr = jacobianWriter.Allocate(jacobianSize);
+#if DEVELOPMENT_BUILD
+                    if (((long)jacobianPtr & 0x3) != 0)
+                        throw new InvalidOperationException("Jacobians must be 4 byte aligned");
+#endif
+                    ref JacobianHeader copiedJacobianHeader = ref UnsafeUtilityEx.AsRef<JacobianHeader>(jacobianPtr);
                     copiedJacobianHeader = jacHeader;
 
                     switch (jacHeader.Type)
@@ -365,86 +365,115 @@ namespace Unity.Physics
             float gravityAcceleration,
             int workItemIndex)
         {
-            float invDt = 1.0f / timestep;
+            float invTimestep = 1.0f / timestep;
 
             // Contact resting velocity for restitution
             float negContactRestingVelocity = -gravityAcceleration * timestep;
-            bool applyRestitution = false;
 
             contactReader.BeginForEachIndex(workItemIndex);
             jacobianWriter.BeginForEachIndex(workItemIndex);
             while (contactReader.RemainingItemCount > 0)
             {
                 ref ContactHeader contactHeader = ref contactReader.Read<ContactHeader>();
+                GetMotions(contactHeader.BodyPair, ref motionDatas, ref motionVelocities, out MotionVelocity velocityA, out MotionVelocity velocityB, out MTransform worldFromA, out MTransform worldFromB);
+
+                float sumInvMass = velocityA.InverseInertiaAndMass.w + velocityB.InverseInertiaAndMass.w;
+                bool bodiesHaveInfiniteMass = !(math.any(velocityA.InverseInertiaAndMass) || math.any(velocityB.InverseInertiaAndMass));
+
+                // Skip contact between infinite mass bodies which don't want to raise events. These cannot have any effect during solving.
+                // These should not normally appear, because the collision detector doesn't generate such contacts.
+                if (bodiesHaveInfiniteMass)
+                {
+                    if ((contactHeader.JacobianFlags & (JacobianFlags.IsTrigger | JacobianFlags.EnableCollisionEvents)) == 0)
+                    {
+                        for (int j = 0; j < contactHeader.NumContacts; j++)
+                        {
+                            contactReader.Read<ContactPoint>();
+                        }
+                        continue;
+                    }
+                }
 
                 JacobianType jacType = ((int)(contactHeader.JacobianFlags) & (int)(JacobianFlags.IsTrigger)) != 0 ?
                     JacobianType.Trigger : JacobianType.Contact;
-                JacobianFlags jacFlags = contactHeader.JacobianFlags;
-
-                // Get the motion pair
-                MotionVelocity velocityA, velocityB;
-                MTransform worldFromA, worldFromB;
-                GetMotions(contactHeader.BodyPair, ref motionDatas, ref motionVelocities, out velocityA, out velocityB, out worldFromA, out worldFromB);
-
-                float sumInvMass = velocityA.InverseInertiaAndMass.w + velocityB.InverseInertiaAndMass.w;
-
-                if (jacType == JacobianType.Contact && sumInvMass == 0)
-                {
-                    // Skip contacts between two infinite-mass objects
-                    for (int j = 0; j < contactHeader.NumContacts; j++)
-                    {
-                        contactReader.Read<ContactPoint>();
-                    }
-                    continue;
-                }
 
                 // Write size before every jacobian
-                short jacobianSize = (short)JacobianHeader.CalculateSize(jacType, jacFlags, contactHeader.NumContacts);
+                int jacobianSize = JacobianHeader.CalculateSize(jacType, contactHeader.JacobianFlags, contactHeader.NumContacts);
                 jacobianWriter.Write(jacobianSize);
 
                 // Allocate all necessary data for this jacobian
-                byte* jacDataPtr = jacobianWriter.Allocate(jacobianSize);
-                ref JacobianHeader jacobianHeader = ref UnsafeUtilityEx.AsRef<JacobianHeader>(jacDataPtr);
+                byte* jacobianPtr = jacobianWriter.Allocate(jacobianSize);
+#if DEVELOPMENT_BUILD
+                if (((long)jacobianPtr & 0x3) != 0)
+                    throw new InvalidOperationException("Jacobians must be 4 byte aligned");
+#endif
+                ref JacobianHeader jacobianHeader = ref UnsafeUtilityEx.AsRef<JacobianHeader>(jacobianPtr);
                 jacobianHeader.BodyPair = contactHeader.BodyPair;
                 jacobianHeader.Type = jacType;
-                jacobianHeader.Flags = jacFlags;
+                jacobianHeader.Flags = contactHeader.JacobianFlags;
 
-                BaseContactJacobian baseJac = new BaseContactJacobian();
-                baseJac.NumContacts = contactHeader.NumContacts;
-                baseJac.Normal = contactHeader.Normal;
+                var baseJac = new BaseContactJacobian
+                {
+                    NumContacts = contactHeader.NumContacts,
+                    Normal = contactHeader.Normal
+                };
 
                 if (jacobianHeader.Type == JacobianType.Contact)
                 {
                     ref ContactJacobian contactJacobian = ref jacobianHeader.AccessBaseJacobian<ContactJacobian>();
                     contactJacobian.BaseJacobian = baseJac;
                     contactJacobian.CoefficientOfFriction = contactHeader.CoefficientOfFriction;
-                    contactJacobian.CoefficientOfRestitution = contactHeader.CoefficientOfRestitution;
+
+                    // Indicator whether restitution will be applied,
+                    // used to scale down friction on bounce.
+                    bool applyRestitution = false;
 
                     // Initialize modifier data (in order from JacobianModifierFlags) before angular jacobians
                     InitModifierData(ref jacobianHeader, contactHeader.ColliderKeys);
 
                     // Build normal jacobians
-                    float3 centerA = new float3(0.0f);
-                    float3 centerB = new float3(0.0f);
+                    var centerA = new float3(0.0f);
+                    var centerB = new float3(0.0f);
                     for (int j = 0; j < contactHeader.NumContacts; j++)
                     {
                         // Build the jacobian
                         BuildContactJacobian(
-                            j, contactJacobian.BaseJacobian.Normal, worldFromA, worldFromB, timestep, invDt, velocityA, velocityB, sumInvMass,
+                            j, contactJacobian.BaseJacobian.Normal, worldFromA, worldFromB, invTimestep, velocityA, velocityB, sumInvMass,
                             ref jacobianHeader, ref centerA, ref centerB, ref contactReader);
 
                         // Restitution (optional)
-                        if (contactJacobian.CoefficientOfRestitution > 0.0f)
+                        if (contactHeader.CoefficientOfRestitution > 0.0f)
                         {
                             ref ContactJacAngAndVelToReachCp jacAngular = ref jacobianHeader.AccessAngularJacobian(j);
                             float relativeVelocity = BaseContactJacobian.GetJacVelocity(baseJac.Normal, jacAngular.Jac, velocityA, velocityB);
                             float dv = jacAngular.VelToReachCp - relativeVelocity;
                             if (dv > 0.0f && relativeVelocity < negContactRestingVelocity)
                             {
-                                float restitutionVelocity = (relativeVelocity - negContactRestingVelocity) * contactJacobian.CoefficientOfRestitution;
+                                // Restitution impulse is applied as if contact point is on the contact plane.
+                                // However, it can (and will) be slightly away from contact plane at the moment restitution is applied.
+                                // So we have to apply vertical shot equation to make sure we don't gain energy:
+                                // effectiveRestitutionVelocity^2 = restitutionVelocity^2 - 2.0f * gravityAcceleration * distanceToGround
+                                // From this formula we calculate the effective restitution velocity, which is the velocity 
+                                // that the contact point needs to reach the same height from current position
+                                // as if it was shot with the restitutionVelocity from the contact plane.
+                                // ------------------------------------------------------------
+                                // This is still an approximation for 2 reasons:
+                                // - We are assuming the contact point will hit the contact plane with its current velocity,
+                                // while actually it would have a portion of gravity applied before the actual hit. However,
+                                // that velocity increase is quite small (less than gravity in one step), so it's safe
+                                // to use current velocity instead.
+                                // - gravityAcceleration is the actual value of gravity applied only when contact plane is
+                                // directly opposite to gravity direction. Otherwise, this value will only be smaller.
+                                // However, since this can only result in smaller bounce than the "correct" one, we can
+                                // safely go with the default gravity value in all cases.
+                                float restitutionVelocity = (relativeVelocity - negContactRestingVelocity) * contactHeader.CoefficientOfRestitution;
+                                float distanceToGround = math.max(-jacAngular.VelToReachCp * timestep, 0.0f);
+                                float effectiveRestitutionVelocity =
+                                    math.sqrt(math.max(restitutionVelocity * restitutionVelocity - 2.0f * gravityAcceleration * distanceToGround, 0.0f));
+
                                 jacAngular.VelToReachCp =
-                                    math.max(jacAngular.VelToReachCp + restitutionVelocity * timestep, 0.0f) -
-                                    restitutionVelocity;
+                                    math.max(jacAngular.VelToReachCp - effectiveRestitutionVelocity, 0.0f) +
+                                    effectiveRestitutionVelocity;
 
                                 // Remember that restitution should be applied
                                 applyRestitution = true;
@@ -453,6 +482,8 @@ namespace Unity.Physics
                     }
 
                     // Build friction jacobians
+                    // (skip friction between two infinite-mass objects)
+                    if (!bodiesHaveInfiniteMass)
                     {
                         // Clear accumulated impulse
                         contactJacobian.Friction0.Impulse = 0.0f;
@@ -491,8 +522,8 @@ namespace Unity.Physics
                         // Build effective mass
                         {
                             // Build the inverse effective mass matrix
-                            float3 invEffectiveMassDiag = new float3(invEffectiveMass0, invEffectiveMass1, invEffectiveMassAngular);
-                            float3 invEffectiveMassOffDiag = new float3( // (0, 1), (0, 2), (1, 2)
+                            var invEffectiveMassDiag = new float3(invEffectiveMass0, invEffectiveMass1, invEffectiveMassAngular);
+                            var invEffectiveMassOffDiag = new float3( // (0, 1), (0, 2), (1, 2)
                                 JacobianUtilities.CalculateInvEffectiveMassOffDiag(contactJacobian.Friction0.AngularA, contactJacobian.Friction1.AngularA, velocityA.InverseInertiaAndMass.xyz,
                                 contactJacobian.Friction0.AngularB, contactJacobian.Friction1.AngularB, velocityB.InverseInertiaAndMass.xyz),
                                 JacobianUtilities.CalculateInvEffectiveMassOffDiag(contactJacobian.Friction0.AngularA, contactJacobian.AngularFriction.AngularA, velocityA.InverseInertiaAndMass.xyz,
@@ -501,8 +532,7 @@ namespace Unity.Physics
                                 contactJacobian.Friction1.AngularB, contactJacobian.AngularFriction.AngularB, velocityB.InverseInertiaAndMass.xyz));
 
                             // Invert the matrix and store it to the jacobians
-                            float3 effectiveMassDiag, effectiveMassOffDiag;
-                            if (!JacobianUtilities.InvertSymmetricMatrix(invEffectiveMassDiag, invEffectiveMassOffDiag, out effectiveMassDiag, out effectiveMassOffDiag))
+                            if (!JacobianUtilities.InvertSymmetricMatrix(invEffectiveMassDiag, invEffectiveMassOffDiag, out float3 effectiveMassDiag, out float3 effectiveMassOffDiag))
                             {
                                 // invEffectiveMass can be singular if the bodies have infinite inertia about the normal.
                                 // In that case angular friction does nothing so we can regularize the matrix, set col2 = row2 = (0, 0, 1)
@@ -537,13 +567,13 @@ namespace Unity.Physics
                     triggerJacobian.ColliderKeys = contactHeader.ColliderKeys;
 
                     // Build normal jacobians
-                    float3 centerA = new float3(0.0f);
-                    float3 centerB = new float3(0.0f);
+                    var centerA = new float3(0.0f);
+                    var centerB = new float3(0.0f);
                     for (int j = 0; j < contactHeader.NumContacts; j++)
                     {
                         // Build the jacobian
                         BuildContactJacobian(
-                            j, triggerJacobian.BaseJacobian.Normal, worldFromA, worldFromB, timestep, invDt, velocityA, velocityB, sumInvMass,
+                            j, triggerJacobian.BaseJacobian.Normal, worldFromA, worldFromB, invTimestep, velocityA, velocityB, sumInvMass,
                             ref jacobianHeader, ref centerA, ref centerB, ref contactReader);
                     }
                 }
@@ -556,14 +586,14 @@ namespace Unity.Physics
             jacobianWriter.EndForEachIndex();
         }
 
-        public static unsafe void BuildJointJacobian(JointData* jointData, BodyIndexPair pair,
+        internal static unsafe void BuildJointJacobian(JointData* jointData, BodyIndexPair pair,
             MotionVelocity velocityA, MotionVelocity velocityB, MotionData motionA, MotionData motionB,
             float timestep, int numIterations, ref BlockStream.Writer jacobianWriter)
         {
-            MTransform bodyAFromMotionA = new MTransform(motionA.BodyFromMotion);
+            var bodyAFromMotionA = new MTransform(motionA.BodyFromMotion);
             MTransform motionAFromJoint = Mul(Inverse(bodyAFromMotionA), jointData->AFromJoint);
 
-            MTransform bodyBFromMotionB = new MTransform(motionB.BodyFromMotion);
+            var bodyBFromMotionB = new MTransform(motionB.BodyFromMotion);
             MTransform motionBFromJoint = Mul(Inverse(bodyBFromMotionB), jointData->BFromJoint);
 
             for (int i = 0; i < jointData->NumConstraints; i++)
@@ -598,12 +628,16 @@ namespace Unity.Physics
 
                 // Write size before every jacobian
                 JacobianFlags jacFlags = 0;
-                short jacobianSize = (short)JacobianHeader.CalculateSize(jacType, jacFlags);
+                int jacobianSize = JacobianHeader.CalculateSize(jacType, jacFlags);
                 jacobianWriter.Write(jacobianSize);
 
                 // Allocate all necessary data for this jacobian
-                byte* jacDataPtr = jacobianWriter.Allocate(jacobianSize);
-                ref JacobianHeader header = ref UnsafeUtilityEx.AsRef<JacobianHeader>(jacDataPtr);
+                byte* jacobianPtr = jacobianWriter.Allocate(jacobianSize);
+#if DEVELOPMENT_BUILD
+                if (((long)jacobianPtr & 0x3) != 0)
+                    throw new InvalidOperationException("Jacobians must be 4 byte aligned");
+#endif
+                ref JacobianHeader header = ref UnsafeUtilityEx.AsRef<JacobianHeader>(jacobianPtr);
                 header.BodyPair = pair;
                 header.Type = jacType;
                 header.Flags = jacFlags;
@@ -660,7 +694,7 @@ namespace Unity.Physics
                 triggerEventsWriter.BeginForEachIndex(workItemIndex);
             }
 
-            JacobianIterator jacIterator = new JacobianIterator(jacobianReader, workItemIndex);
+            var jacIterator = new JacobianIterator(jacobianReader, workItemIndex);
             while (jacIterator.HasJacobiansLeft())
             {
                 ref JacobianHeader header = ref jacIterator.ReadJacobianHeader();
@@ -689,6 +723,6 @@ namespace Unity.Physics
             }
         }
 
-        #endregion
+#endregion
     }
 }

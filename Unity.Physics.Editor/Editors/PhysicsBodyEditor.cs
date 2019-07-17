@@ -36,6 +36,7 @@ namespace Unity.Physics.Editor
         [AutoPopulate] SerializedProperty m_CenterOfMass;
         [AutoPopulate] SerializedProperty m_Orientation;
         [AutoPopulate] SerializedProperty m_InertiaTensor;
+        [AutoPopulate] SerializedProperty m_CustomTags;
         #pragma warning restore 649
 
         public override void OnInspectorGUI()
@@ -109,24 +110,31 @@ namespace Unity.Physics.Editor
                 }
             }
 
+            EditorGUILayout.PropertyField(m_CustomTags);
+
             if (EditorGUI.EndChangeCheck())
                 serializedObject.ApplyModifiedProperties();
 
             DisplayStatusMessages();
         }
 
+        MessageType m_Status;
         List<string> m_StatusMessages = new List<string>(8);
 
         void DisplayStatusMessages()
         {
+            m_Status = MessageType.None;
             m_StatusMessages.Clear();
 
-            var hierarchyStatusMessage = StatusMessageUtility.GetHierarchyStatusMessage(targets);
+            var hierarchyStatus = StatusMessageUtility.GetHierarchyStatusMessage(targets, out var hierarchyStatusMessage);
             if (!string.IsNullOrEmpty(hierarchyStatusMessage))
+            {
                 m_StatusMessages.Add(hierarchyStatusMessage);
+                m_Status = (MessageType)math.max((int)m_Status, (int)hierarchyStatus);
+            }
 
             if (m_StatusMessages.Count > 0)
-                EditorGUILayout.HelpBox(string.Join("\n\n", m_StatusMessages), MessageType.None);
+                EditorGUILayout.HelpBox(string.Join("\n\n", m_StatusMessages), m_Status);
         }
     }
 }

@@ -4,7 +4,7 @@ using NUnit.Framework;
 using Unity.Physics.Editor;
 using UnityEditor;
 
-namespace Unity.Physics.EditModeTests
+namespace Unity.Physics.Tests.Editor
 {
     class StatusMessageUtility_UnitTests
     {

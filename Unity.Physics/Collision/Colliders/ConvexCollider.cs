@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -16,7 +15,7 @@ namespace Unity.Physics
     {
         // Header
         private ConvexColliderHeader m_Header;
-        public ConvexHull ConvexHull;
+        internal ConvexHull ConvexHull;
 
         // followed by variable sized convex hull data
 

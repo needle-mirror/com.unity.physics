@@ -5,12 +5,14 @@ using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
+using Unity.Burst;
 
 namespace Unity.Physics.Authoring
 {
     /// Job to iterate over all the bodies in a scene, for any
     /// which have a collider, calculate the bounding box and
     /// write it to a debug stream.
+    [BurstCompile]
     public unsafe struct DisplayColliderAabbsJob : IJob //<todo.eoin.udebug This can be a parallelfor job
     {
         public DebugStream.Context OutputStream;

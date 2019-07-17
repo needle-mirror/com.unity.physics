@@ -1,15 +1,15 @@
+using System;
 using NUnit.Framework;
 using Unity.Collections;
 using Unity.Mathematics;
 using Unity.Physics.Tests.Utils;
-using Assert = UnityEngine.Assertions.Assert;
 
 namespace Unity.Physics.Tests.Collision.Colliders
 {
     /// <summary>
     /// Test class containing tests for the <see cref="CompoundCollider"/>
     /// </summary>
-    public class CompoundColliderTests
+    class CompoundColliderTests
     {
         [Test]
         public void MassProperties_BuiltFromChildren_MatchesExpected()

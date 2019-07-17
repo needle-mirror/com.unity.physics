@@ -1,4 +1,5 @@
-﻿using NUnit.Framework;
+﻿using System;
+using NUnit.Framework;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
@@ -9,7 +10,7 @@ using Random = UnityEngine.Random;
 
 namespace Unity.Physics.Tests.PerformanceTests
 {
-    public class RadixSortTests
+    class RadixSortTests
     {
         //@TODO: Make part of NativeArray API
         unsafe static NativeArray<U> ReinterpretCast<T, U>(NativeArray<T> array)

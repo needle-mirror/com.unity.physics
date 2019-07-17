@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using Unity.Entities;
 using Unity.Jobs;
 
@@ -104,9 +105,9 @@ namespace Unity.Physics.Systems
                 NumSolverIterations = stepComponent.SolverIterationCount,
                 Callbacks = m_Callbacks
             };
-            Simulation.ScheduleStepJobs(stepInput, handle, out JobHandle finalSimulationJobHandle, out JobHandle finalJobHandle);
-            FinalSimulationJobHandle = finalSimulationJobHandle;
-            FinalJobHandle = finalJobHandle;
+            Simulation.ScheduleStepJobs(stepInput, handle);
+            FinalSimulationJobHandle = Simulation.FinalSimulationJobHandle;
+            FinalJobHandle = Simulation.FinalJobHandle;
 
             // Clear the callbacks. User must enqueue them again before the next step.
             m_Callbacks.Clear();
@@ -115,18 +116,22 @@ namespace Unity.Physics.Systems
         }
 
         // A simulation which does nothing
-        private class DummySimulation : ISimulation
+        class DummySimulation : ISimulation
         {
             public SimulationType Type => SimulationType.NoPhysics;
 
             public void Dispose() { }
             public void Step(SimulationStepInput input) { }
-            public void ScheduleStepJobs(SimulationStepInput input, JobHandle inputDeps,
-                out JobHandle finalSimulationJobHandle, out JobHandle finalJobHandle)
-            {
-                finalSimulationJobHandle = new JobHandle();
-                finalJobHandle = new JobHandle();
-            }
+            public void ScheduleStepJobs(SimulationStepInput input, JobHandle inputDeps) { }
+            public JobHandle FinalSimulationJobHandle => new JobHandle();
+            public JobHandle FinalJobHandle => new JobHandle();
+
+            #region Obsolete
+            [EditorBrowsable(EditorBrowsableState.Never)]
+            [Obsolete("ScheduleStepJobs(SimulationStepInput, JobHandle, out JobHandle, out JobHandle) has been deprecated. Use ScheduleStepJobs(SimulationStepInput, JobHandle) instead. (RemovedAfter 2019-10-15)", true)]
+            void ISimulation.ScheduleStepJobs(SimulationStepInput input, JobHandle inputDeps, out JobHandle finalSimulationJobHandle, out JobHandle finalJobHandle) =>
+                throw new NotImplementedException();
+            #endregion
         }
     }
 }

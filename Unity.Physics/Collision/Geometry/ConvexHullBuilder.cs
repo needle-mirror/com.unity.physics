@@ -13,7 +13,7 @@ namespace Unity.Physics
     /// <summary>
     /// Convex hull builder.
     /// </summary>
-    public struct ConvexHullBuilder : IDisposable
+    struct ConvexHullBuilder : IDisposable
     {
         public ElementPool<Vertex> Vertices;
         public ElementPool<Triangle> Triangles;
@@ -169,30 +169,24 @@ namespace Unity.Physics
         /// </summary>
         private struct IntegerSpace
         {
+            // int * Scale + Offset = float
             public readonly float3 Offset;
-            public readonly float3 Scale;
-            public readonly float3 InvScale;
+            public readonly float Scale;
+            public readonly float InvScale;
 
-            public IntegerSpace(Aabb aabb, int resolution, bool uniform, float minExtent)
+            public IntegerSpace(Aabb aabb, int resolution, float minExtent)
             {
-                if (uniform)
-                {
-                    float3 c = aabb.Center;
-                    var m = new float3(math.cmax(aabb.Max - c));
-                    aabb.Min = c - m;
-                    aabb.Max = c + m;
-                }
-                float3 extents = math.max(minExtent, (aabb.Max - aabb.Min));
-                Offset = aabb.Min;
-                Scale = extents / resolution;
-                InvScale = math.select(resolution / extents, new float3(0), Scale <= 0);
+                float extent = math.cmax(aabb.Extents);
+                Scale = extent / resolution;
+                InvScale = math.select(resolution / extent, 0, extent <= 0);
+                Offset = aabb.Center - (extent / 2);
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public int3 ToIntegerSpace(float3 x) => new int3((x - Offset) * InvScale + 0.5f);
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public float3 ToFloatSpace(int3 x) => x * Scale + Offset;
+            public float3 ToFloatSpace(int3 x) => x * new float3(Scale) + Offset;
         }
 
         /// <summary>
@@ -1219,7 +1213,7 @@ namespace Unity.Physics
         {
             const int quantizationBits = 16;
             const float minExtent = 1e-5f;
-            m_IntegerSpace = new IntegerSpace(m_IntegerSpaceAabb, (1 << quantizationBits) - 1, true, minExtent);
+            m_IntegerSpace = new IntegerSpace(m_IntegerSpaceAabb, (1 << quantizationBits) - 1, minExtent);
             foreach (int i in Vertices.Indices)
             {
                 Vertex v = Vertices[i];
@@ -1554,21 +1548,29 @@ namespace Unity.Physics
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private Plane ComputePlane(int vertex0, int vertex1, int vertex2, bool fromIntCoordinates)
         {
-            float3 o, a, b;
+            float3 cross; // non-normalized plane direction
+            float3 point; // point on the plane
             if (fromIntCoordinates)
             {
-                o = m_IntegerSpace.ToFloatSpace(Vertices[vertex0].IntPosition);
-                a = m_IntegerSpace.ToFloatSpace(Vertices[vertex1].IntPosition) - o;
-                b = m_IntegerSpace.ToFloatSpace(Vertices[vertex2].IntPosition) - o;
+                int3 o = Vertices[vertex0].IntPosition;
+                int3 a = Vertices[vertex1].IntPosition - o;
+                int3 b = Vertices[vertex2].IntPosition - o;
+                long cx = (long)a.y * b.z - (long)a.z * b.y;
+                long cy = (long)a.z * b.x - (long)a.x * b.z;
+                long cz = (long)a.x * b.y - (long)a.y * b.x;
+                float scaleSq = m_IntegerSpace.Scale * m_IntegerSpace.Scale; // scale down to avoid overflow normalizing
+                cross = new float3(cx * scaleSq, cy * scaleSq, cz * scaleSq);
+                point = m_IntegerSpace.ToFloatSpace(o);
             }
             else
             {
-                o = Vertices[vertex0].Position;
-                a = Vertices[vertex1].Position - o;
-                b = Vertices[vertex2].Position - o;
+                point = Vertices[vertex0].Position;
+                float3 a = Vertices[vertex1].Position - point;
+                float3 b = Vertices[vertex2].Position - point;
+                cross = math.cross(a, b);
             }
-            float3 n = math.normalize(math.cross(a, b));
-            return new Plane(n, -math.dot(n, o));
+            float3 n = math.normalize(cross);
+            return new Plane(n, -math.dot(n, point));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1617,7 +1619,7 @@ namespace Unity.Physics
 
 
     // Extensions, not part of the core functionality (yet)
-    public static class ConvexHullBuilderExtensions
+    static class ConvexHullBuilderExtensions
     {
         /// <summary>
         /// For 3D convex hulls, vertex indices are not always continuous, this methods compact them.

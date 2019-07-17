@@ -10,20 +10,7 @@ namespace Unity.Physics.Authoring
     [UpdateAfter(typeof(LegacyMeshColliderConversionSystem))]
     [UpdateAfter(typeof(PhysicsShapeConversionSystem))]
     [UpdateBefore(typeof(LegacyRigidbodyConversionSystem))]
-    [DisableAutoCreation]
-    [Obsolete("SecondPassPhysicsBodyConversionSystem has been deprecated. Use PhysicsBodyConversionSystem instead. (RemovedAfter 2019-08-28) (UnityUpgradable) -> PhysicsBodyConversionSystem", true)]
-    public class SecondPassPhysicsBodyConversionSystem : GameObjectConversionSystem
-    {
-        protected override void OnUpdate() => throw new NotImplementedException();
-    }
-
-    [UpdateAfter(typeof(LegacyBoxColliderConversionSystem))]
-    [UpdateAfter(typeof(LegacyCapsuleColliderConversionSystem))]
-    [UpdateAfter(typeof(LegacySphereColliderConversionSystem))]
-    [UpdateAfter(typeof(LegacyMeshColliderConversionSystem))]
-    [UpdateAfter(typeof(PhysicsShapeConversionSystem))]
-    [UpdateBefore(typeof(LegacyRigidbodyConversionSystem))]
-    public class PhysicsBodyConversionSystem : GameObjectConversionSystem
+    public sealed class PhysicsBodyConversionSystem : GameObjectConversionSystem
     {
         protected override void OnUpdate()
         {
@@ -33,6 +20,10 @@ namespace Unity.Physics.Authoring
                     var entity = GetPrimaryEntity(body.gameObject);
 
                     DstEntityManager.RemoveParentAndSetWorldTranslationAndRotation(entity, body.transform);
+
+                    var customTags = body.CustomTags;
+                    if (!customTags.Equals(CustomPhysicsBodyTags.Nothing))
+                        DstEntityManager.AddOrSetComponent(entity, new PhysicsCustomTags { Value = customTags.Value });
 
                     if (body.MotionType == BodyMotionType.Static)
                         return;

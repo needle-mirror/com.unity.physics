@@ -10,7 +10,7 @@ using UnityEngine.Assertions;
 namespace Unity.Physics
 {
     // Builds phased pairs of interacting bodies, used to parallelize work items during the simulation step.
-    public class Scheduler : IDisposable
+    class Scheduler : IDisposable
     {
         private readonly BitLookupTable m_BitLookupTable;
 
@@ -34,7 +34,7 @@ namespace Unity.Physics
             public bool IsContact => JointIndex == k_InvalidJointIndex;
             public bool IsJoint => JointIndex != k_InvalidJointIndex;
 
-            public static DispatchPair Invalid = new DispatchPair { m_Data = 0xffffffffffffffff };
+            public static DispatchPair Invalid => new DispatchPair { m_Data = 0xffffffffffffffff };
 
             public int BodyAIndex
             {
@@ -140,7 +140,7 @@ namespace Unity.Physics
             // For a given work item returns index into PhasedDispatchPairs and number of pairs to read.
             internal int GetWorkItemReadOffset(int workItemIndex, out int pairReadCount)
             {
-                var phaseInfo = PhaseInfo[FindPhaseId(workItemIndex)];
+                SolvePhaseInfo phaseInfo = PhaseInfo[FindPhaseId(workItemIndex)];
 
                 int numItemsToRead = phaseInfo.BatchSize;
                 int readStartOffset = phaseInfo.FirstDispatchPairIndex + (workItemIndex - phaseInfo.FirstWorkItemIndex) * phaseInfo.BatchSize;
@@ -177,7 +177,7 @@ namespace Unity.Physics
                 {
                     NumActivePhases.Dispose();
                 }
-                
+
                 if (NumWorkItems.IsCreated)
                 {
                     NumWorkItems.Dispose();
@@ -201,27 +201,26 @@ namespace Unity.Physics
 
                 [DeallocateOnJobCompletion]
                 public NativeArray<int> NumWorkItems;
-                
+
                 public void Execute() { }
             }
         }
 
         public Scheduler()
         {
-            int numPhases = 17;
-            m_BitLookupTable = new BitLookupTable(numPhases);
+            m_BitLookupTable = new BitLookupTable(numPhases: 17);
         }
 
         public void Dispose()
         {
             m_BitLookupTable.Dispose();
         }
-      
+
         // Sort interacting pairs of bodies into phases for multi-threaded simulation
         public unsafe JobHandle ScheduleCreatePhasedDispatchPairsJob(
             ref PhysicsWorld world, ref BlockStream dynamicVsDynamicBroadphasePairsStream, ref BlockStream staticVsDynamicBroadphasePairStream,
             ref Simulation.Context context, JobHandle inputDeps)
-        {            
+        {
             // First build a sorted array of dispatch pairs.
             var unsortedPairs = new NativeList<DispatchPair>(Allocator.TempJob);
             var sortedPairs = new NativeList<DispatchPair>(Allocator.TempJob);
@@ -229,12 +228,12 @@ namespace Unity.Physics
             JobHandle sortHandle;
             {
                 // Merge broadphase pairs and joint pairs into the unsorted array
-                var dispatchHandle = new CreateDispatchPairsJob
+                JobHandle dispatchHandle = new CreateDispatchPairsJob
                 {
                     DynamicVsDynamicPairReader = dynamicVsDynamicBroadphasePairsStream,
                     StaticVsDynamicPairReader = staticVsDynamicBroadphasePairStream,
                     Joints = world.Joints,
-                    DispatchPairs = unsortedPairs, 
+                    DispatchPairs = unsortedPairs,
                     DispatchPairsUninitialized = sortedPairs
                 }.Schedule(inputDeps);
 
@@ -249,7 +248,7 @@ namespace Unity.Physics
             // Create phases for multi-threading
             context.SolverSchedulerInfo = new SolverSchedulerInfo(m_BitLookupTable.NumPhases);
             context.PhasedDispatchPairs = unsortedPairs;
-            var dispatchPairHandle = new CreateDispatchPairPhasesJob
+            JobHandle dispatchPairHandle = new CreateDispatchPairPhasesJob
             {
                 DispatchPairs = sortedPairs.AsDeferredJobArray(),
                 SolverSchedulerInfo = context.SolverSchedulerInfo,
@@ -277,8 +276,8 @@ namespace Unity.Physics
             {
                 NumPhases = numPhases;
 
-                Table = new NativeArray<ushort>(UInt16.MaxValue + 1, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
-                const ushort end = UInt16.MaxValue;
+                Table = new NativeArray<ushort>(ushort.MaxValue + 1, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+                const ushort end = ushort.MaxValue;
                 ushort numBits = (ushort)(numPhases - 1);
                 for (ushort value = 0; value < end; value++)
                 {
@@ -314,7 +313,7 @@ namespace Unity.Physics
             NativeArray<DispatchPair> sortedPairsOut,
             JobHandle handle)
         {
-            NativeArray<int> totalCountUpToDigit = new NativeArray<int>(numBodies + 1, Allocator.TempJob);
+            var totalCountUpToDigit = new NativeArray<int>(numBodies + 1, Allocator.TempJob);
 
             // Calculate number digits needed to encode all body indices
             int numDigits = 0;
@@ -372,12 +371,12 @@ namespace Unity.Physics
             public void Execute()
             {
                 int numDispatchPairs = DynamicVsDynamicPairReader.ComputeItemCount() + StaticVsDynamicPairReader.ComputeItemCount() + Joints.Length;
-                
+
                 DispatchPairs.ResizeUninitialized(numDispatchPairs);
                 DispatchPairsUninitialized.ResizeUninitialized(numDispatchPairs);
 
-                var pairs = DispatchPairs.AsArray();
-                
+                NativeArray<DispatchPair> pairs = DispatchPairs.AsArray();
+
                 int counter = 0;
                 for (int i = 0; i < DynamicVsDynamicPairReader.ForEachCount; i++)
                 {
@@ -385,7 +384,7 @@ namespace Unity.Physics
                     int rangeItemCount = DynamicVsDynamicPairReader.RemainingItemCount;
                     for (int j = 0; j < rangeItemCount; j++)
                     {
-                        var pair = DynamicVsDynamicPairReader.Read<BodyIndexPair>();
+                        BodyIndexPair pair = DynamicVsDynamicPairReader.Read<BodyIndexPair>();
                         pairs[counter++] = DispatchPair.CreateContact(pair);
                     }
                     DynamicVsDynamicPairReader.EndForEachIndex();
@@ -397,7 +396,7 @@ namespace Unity.Physics
                     int rangeItemCount = StaticVsDynamicPairReader.RemainingItemCount;
                     for (int j = 0; j < rangeItemCount; j++)
                     {
-                        var pair = StaticVsDynamicPairReader.Read<BodyIndexPair>();
+                        BodyIndexPair pair = StaticVsDynamicPairReader.Read<BodyIndexPair>();
                         pairs[counter++] = DispatchPair.CreateContact(pair);
                     }
                     StaticVsDynamicPairReader.EndForEachIndex();
@@ -425,7 +424,7 @@ namespace Unity.Physics
 
             public int MaxDigits;
             public int MaxIndex;
-            
+
             //@TODO: Add ReinterpretCast to NativeArray
 
             public void Execute()
@@ -707,11 +706,17 @@ namespace Unity.Physics
 
             private int FindFreePhase(NativeArray<ushort> rigidBodyMask, int bodyAIndex, int bodyBIndex)
             {
-                int mask = rigidBodyMask[bodyAIndex];
-
+                // TODO #383: originally we assumed bodyA was dynamic, as it was 'guaranteed'.
+                //     int mask = rigidBodyMask[bodyAIndex];
+                // However, it is possible to create a Joint between 2 static bodies.
+                // To go back to that assumption BuildPhysicsWorld really needs to filter the JointEntityGroup
+                int mask = 0;
+                if (bodyAIndex < NumDynamicBodies)
+                {
+                    mask |= rigidBodyMask[bodyAIndex];
+                }
                 if (bodyBIndex < NumDynamicBodies)
                 {
-                    // Don't need this check for bodyA, as we can guarantee it is dynamic.
                     mask |= rigidBodyMask[bodyBIndex];
                 }
 

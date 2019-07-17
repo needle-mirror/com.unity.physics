@@ -1,15 +1,14 @@
-﻿using Unity.Physics;
-using Unity.Physics.Systems;
+﻿using System;
+﻿using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
-using UnityEngine;
-using Collider = Unity.Physics.Collider;
+using Unity.Physics.Systems;
 
 namespace Unity.Physics.Authoring
 {
-    // A systems which draws any collision events produced by the physics step system
+    // A system which draws any collision events produced by the physics step system
     [UpdateAfter(typeof(StepPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
     public class DisplayCollisionEventsSystem : JobComponentSystem
     {
@@ -26,46 +25,53 @@ namespace Unity.Physics.Authoring
             m_DebugStreamSystem = World.GetOrCreateSystem<DebugStream>();
         }
 
-        protected unsafe override JobHandle OnUpdate(JobHandle inputDeps)
+        protected override JobHandle OnUpdate(JobHandle inputDeps)
         {
             if (!(HasSingleton<PhysicsDebugDisplayData>() && GetSingleton<PhysicsDebugDisplayData>().DrawCollisionEvents != 0))
             {
                 return inputDeps;
             }
 
-            inputDeps = JobHandle.CombineDependencies(inputDeps, m_BuildPhysicsWorldSystem.FinalJobHandle, m_StepPhysicsWorldSystem.FinalSimulationJobHandle);
-
             DebugStream.Context debugOutput = m_DebugStreamSystem.GetContext(1);
             debugOutput.Begin(0);
             // Allocate a NativeArray to store our debug output, so it can be shared across the display/finish jobs
-            NativeArray<DebugStream.Context> sharedOutput = new NativeArray<DebugStream.Context>(1, Allocator.TempJob);
+            var sharedOutput = new NativeArray<DebugStream.Context>(1, Allocator.TempJob);
             sharedOutput[0] = debugOutput;
 
-            // Explicitly call ScheduleImpl here, to avoid a dependency on Havok.Physics
-            JobHandle handle = new DisplayCollisionEventsJob
+            var job = new DisplayCollisionEventsJob
             {
                 World = m_BuildPhysicsWorldSystem.PhysicsWorld,
                 OutputStream = sharedOutput
-            }.ScheduleImpl(m_StepPhysicsWorldSystem.Simulation, ref m_BuildPhysicsWorldSystem.PhysicsWorld, inputDeps);
+            };
 
+            JobHandle handle = ScheduleCollisionEventsJob(job, m_StepPhysicsWorldSystem.Simulation, ref m_BuildPhysicsWorldSystem.PhysicsWorld, inputDeps);
+
+#pragma warning disable 618
             JobHandle finishHandle = new FinishDisplayCollisionEventsJob
             {
                 OutputStream = sharedOutput
             }.Schedule(handle);
+#pragma warning restore 618
 
             m_EndFramePhysicsSystem.HandlesToWaitFor.Add(finishHandle);
 
             return handle;
         }
 
+        protected virtual JobHandle ScheduleCollisionEventsJob(DisplayCollisionEventsJob job, ISimulation simulation, ref PhysicsWorld world, JobHandle inDeps)
+        {
+            // Explicitly call ScheduleImpl here, to avoid a dependency on Havok.Physics
+            return job.ScheduleImpl(simulation, ref world, inDeps);
+        }
+
         // Job which iterates over collision events and writes display info to a DebugStream.
         //[BurstCompile]
-        unsafe struct DisplayCollisionEventsJob : ICollisionEventsJob
+        protected struct DisplayCollisionEventsJob : ICollisionEventsJob
         {
             [ReadOnly] public PhysicsWorld World;
             public NativeArray<DebugStream.Context> OutputStream;
 
-            public void Execute(CollisionEvent collisionEvent)
+            public unsafe void Execute(CollisionEvent collisionEvent)
             {
                 DebugStream.Context outputContext = OutputStream[0];
 
@@ -92,15 +98,17 @@ namespace Unity.Physics.Authoring
                 bool areBodyBCollisionEventsEnabled = AreCollisionEventsEnabled(bodyB.Collider, collisionEvent.ColliderKeys.ColliderKeyB);
                 if (areBodyACollisionEventsEnabled || areBodyBCollisionEventsEnabled)
                 {
-                    outputContext.Text(totalImpulse.ToString().ToCharArray(), 
-                        math.lerp(bodyA.WorldFromBody.pos, bodyB.WorldFromBody.pos, 0.5f), Color.blue);
+                    outputContext.Text(totalImpulse.ToString().ToCharArray(),
+                        math.lerp(bodyA.WorldFromBody.pos, bodyB.WorldFromBody.pos, 0.5f), UnityEngine.Color.blue);
                 }
 
                 OutputStream[0] = outputContext;
             }
         }
 
-        public unsafe struct FinishDisplayCollisionEventsJob : IJob
+        [BurstCompile]
+        [Obsolete("This type will be made protected in a future release. (RemovedAfter 2019-10-15)")]
+        public struct FinishDisplayCollisionEventsJob : IJob
         {
             [DeallocateOnJobCompletion]
             public NativeArray<DebugStream.Context> OutputStream;

@@ -18,6 +18,11 @@ namespace Unity.Physics
         internal static unsafe List<TempSection> BuildSections(BoundingVolumeHierarchy.Node* nodes, int nodeCount, List<MeshConnectivityBuilder.Primitive> primitives)
         {
             var tempSections = new List<TempSection>();
+            if (primitives.Count == 0)
+            {
+                // Early-out in the case of no input primitives
+                return tempSections;
+            }
 
             // Traverse the tree and break out geometry into sections
             int* nodesIndexStack = stackalloc int[BoundingVolumeHierarchy.Constants.UnaryStackSize];

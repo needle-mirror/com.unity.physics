@@ -5,15 +5,7 @@ using UnityEngine;
 namespace Unity.Physics.Authoring
 {
     [UpdateAfter(typeof(PhysicsBodyConversionSystem))]
-    [DisableAutoCreation]
-    [Obsolete("SecondPassLegacyRigidbodyConversionSystem has been deprecated. Use LegacyRigidbodyConversionSystem instead. (RemovedAfter 2019-08-28) (UnityUpgradable) -> LegacyRigidbodyConversionSystem", true)]
-    public class SecondPassLegacyRigidbodyConversionSystem : GameObjectConversionSystem
-    {
-        protected override void OnUpdate() => throw new NotImplementedException();
-    }
-
-    [UpdateAfter(typeof(PhysicsBodyConversionSystem))]
-    public class LegacyRigidbodyConversionSystem : GameObjectConversionSystem
+    public sealed class LegacyRigidbodyConversionSystem : GameObjectConversionSystem
     {
         protected override void OnUpdate()
         {

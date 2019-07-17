@@ -1,15 +1,16 @@
-using Unity.Physics;
-using Unity.Physics.Systems;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
-using UnityEngine;
+using Unity.Physics;
+using Unity.Physics.Systems;
 
 namespace Unity.Physics.Authoring
 {
     /// Job which walks the broadphase tree and writes the
     /// bounding box of leaf nodes to a DebugStream.
+    [BurstCompile]
     public struct DisplayBroadphaseJob : IJob //<todo.eoin.udebug This can be a parallelfor job
     {
         public DebugStream.Context OutputStream;
@@ -20,7 +21,7 @@ namespace Unity.Physics.Authoring
         [ReadOnly]
         public NativeArray<BoundingVolumeHierarchy.Node> DynamicNodes;
 
-        public void DrawLeavesRecursive(NativeArray<BoundingVolumeHierarchy.Node> nodes, Color color, int nodeIndex)
+        public void DrawLeavesRecursive(NativeArray<BoundingVolumeHierarchy.Node> nodes, UnityEngine.Color color, int nodeIndex)
         {
             if (nodes[nodeIndex].IsLeaf)
             {
@@ -31,7 +32,7 @@ namespace Unity.Physics.Authoring
                     {
                         Aabb aabb = nodes[nodeIndex].Bounds.GetAabb(l);
                         float3 center = aabb.Center;
-                        OutputStream.Box(aabb.Extents, center, Quaternion.identity, color);
+                        OutputStream.Box(aabb.Extents, center, quaternion.identity, color);
                     }
                 }
 
@@ -49,8 +50,8 @@ namespace Unity.Physics.Authoring
         public void Execute()
         {
             OutputStream.Begin(0);
-            DrawLeavesRecursive(StaticNodes, Color.yellow, 1);
-            DrawLeavesRecursive(DynamicNodes, Color.red, 1);
+            DrawLeavesRecursive(StaticNodes, UnityEngine.Color.yellow, 1);
+            DrawLeavesRecursive(DynamicNodes, UnityEngine.Color.red, 1);
             OutputStream.End();
         }
     }

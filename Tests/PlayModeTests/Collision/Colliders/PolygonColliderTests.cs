@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 using Unity.Mathematics;
 using Assert = UnityEngine.Assertions.Assert;
@@ -9,7 +10,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
     /// <summary>
     /// Contains all test for the <see cref=" PolygonCollider"/>
     /// </summary>
-    public class PolygonColliderTests
+    class PolygonColliderTests
     {
         #region Construction
 

@@ -27,7 +27,7 @@ namespace Unity.Physics
     }
 
     // Overlap query implementations
-    public static class OverlapQueries
+    static class OverlapQueries
     {
         #region AABB vs colliders
 
@@ -47,13 +47,16 @@ namespace Unity.Physics
                 case ColliderType.Compound:
                     AabbCompound(input, (CompoundCollider*)collider, ref collector);
                     break;
+                case ColliderType.Terrain:
+                    AabbTerrain(input, (TerrainCollider*)collider, ref collector);
+                    break;
                 default:
                     throw new NotImplementedException();
             }
         }
 
         // Mesh
-        private unsafe struct MeshLeafProcessor : BoundingVolumeHierarchy.IAabbOverlapLeafProcessor
+        internal unsafe struct MeshLeafProcessor : BoundingVolumeHierarchy.IAabbOverlapLeafProcessor
         {
             readonly Mesh* m_Mesh;
             readonly uint m_NumColliderKeyBits;
@@ -110,7 +113,7 @@ namespace Unity.Physics
 
 
         // Compound
-        private unsafe struct CompoundLeafProcessor : BoundingVolumeHierarchy.IAabbOverlapLeafProcessor
+        internal unsafe struct CompoundLeafProcessor : BoundingVolumeHierarchy.IAabbOverlapLeafProcessor
         {
             readonly CompoundCollider* m_CompoundCollider;
             readonly uint m_NumColliderKeyBits;
@@ -168,6 +171,55 @@ namespace Unity.Physics
             var leafProcessor = new CompoundLeafProcessor(compound);
             compound->BoundingVolumeHierarchy.AabbOverlap(input, ref leafProcessor, ref collector);
             leafProcessor.Flush(ref collector);
+        }
+
+        private static unsafe void AabbTerrain<T>(OverlapAabbInput input, TerrainCollider* terrainCollider, ref T collector)
+            where T : struct, IOverlapCollector
+        {
+            ref var terrain = ref terrainCollider->Terrain;
+
+            // Get the collider AABB in heightfield space
+            var aabbT = new FourTransposedAabbs();
+            Terrain.QuadTreeWalker walker;
+            {
+                Aabb aabb = new Aabb
+                {
+                    Min = input.Aabb.Min * terrain.InverseScale,
+                    Max = input.Aabb.Max * terrain.InverseScale
+                };
+                aabbT.SetAllAabbs(aabb);
+                walker = new Terrain.QuadTreeWalker(&terrainCollider->Terrain, aabb);
+            }
+
+            // Traverse the tree
+            ColliderKey* keys = stackalloc ColliderKey[8];
+            while (walker.Pop())
+            {
+                bool4 hitMask = walker.Bounds.Overlap1Vs4(ref aabbT);
+                hitMask &= (walker.Bounds.Ly <= walker.Bounds.Hy); // Mask off empty children
+                if (walker.IsLeaf)
+                {
+                    // Leaf node, distance test against hit child quads
+                    if (math.any(hitMask))
+                    {
+                        int4 hitIndex;
+                        int hitCount = math.compress((int*)(&hitIndex), 0, new int4(0, 1, 2, 3), hitMask);
+                        int numKeys = 0;
+                        for (int iHit = 0; iHit < hitCount; iHit++)
+                        {
+                            int2 quadIndex = walker.GetQuadIndex(hitIndex[iHit]);
+                            keys[numKeys++] = terrain.GetColliderKey(quadIndex, 0);
+                            keys[numKeys++] = terrain.GetColliderKey(quadIndex, 1);
+                        }
+                        collector.AddColliderKeys(keys, numKeys);
+                    }
+                }
+                else
+                {
+                    // Interior node, add hit child nodes to the stack
+                    walker.Push(hitMask);
+                }
+            }
         }
 
         #endregion

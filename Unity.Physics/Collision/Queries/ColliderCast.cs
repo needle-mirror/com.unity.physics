@@ -1,4 +1,5 @@
 ﻿using System;
+using System.ComponentModel;
 using Unity.Mathematics;
 using static Unity.Physics.BoundingVolumeHierarchy;
 using static Unity.Physics.Math;
@@ -30,9 +31,12 @@ namespace Unity.Physics
 
         internal Ray Ray;
 
-        #region Obsolete members
+        #region Obsolete
+        [EditorBrowsable(EditorBrowsableState.Never)]
         [Obsolete("Position has been deprecated. Use Start Instead (RemovedAfter 2019-07-29) (UnityUpgradable) -> Start")]
         public float3 Position { get => Ray.Origin; set => Ray.Origin = value; }
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
         [Obsolete("Direction has been deprecated. Use End Instead (RemovedAfter 2019-07-29)")]
         public float3 Direction { get => Ray.Direction; set => Ray.Direction = value; }
         #endregion
@@ -64,7 +68,7 @@ namespace Unity.Physics
     }
 
     // Collider cast query implementations
-    public static class ColliderCastQueries
+    static class ColliderCastQueries
     {
         public static unsafe bool ColliderCollider<T>(ColliderCastInput input, Collider* target, ref T collector) where T : struct, ICollector<ColliderCastHit>
         {
@@ -90,10 +94,13 @@ namespace Unity.Physics
                             return ConvexMesh(input, (MeshCollider*)target, ref collector);
                         case ColliderType.Compound:
                             return ConvexCompound(input, (CompoundCollider*)target, ref collector);
+                        case ColliderType.Terrain:
+                            return ConvexTerrain(input, (TerrainCollider*)target, ref collector);
                         default:
                             throw new NotImplementedException();
                     }
                 case CollisionType.Composite:
+                case CollisionType.Terrain:
                     // no support for casting composite shapes
                     throw new NotImplementedException();
                 default:
@@ -158,7 +165,7 @@ namespace Unity.Physics
             }
         }
 
-        private unsafe struct ConvexMeshLeafProcessor : IColliderCastLeafProcessor
+        internal unsafe struct ConvexMeshLeafProcessor : IColliderCastLeafProcessor
         {
             private readonly Mesh* m_Mesh;
             private readonly uint m_NumColliderKeyBits;
@@ -219,7 +226,7 @@ namespace Unity.Physics
             return meshCollider->Mesh.BoundingVolumeHierarchy.ColliderCast(input, ref leafProcessor, ref collector);
         }
 
-        private unsafe struct ConvexCompoundLeafProcessor : IColliderCastLeafProcessor
+        internal unsafe struct ConvexCompoundLeafProcessor : IColliderCastLeafProcessor
         {
             private readonly CompoundCollider* m_CompoundCollider;
 
@@ -262,6 +269,90 @@ namespace Unity.Physics
         {
             var leafProcessor = new ConvexCompoundLeafProcessor(compoundCollider);
             return compoundCollider->BoundingVolumeHierarchy.ColliderCast(input, ref leafProcessor, ref collector);
+        }
+
+        private static unsafe bool ConvexTerrain<T>(ColliderCastInput input, TerrainCollider* terrainCollider, ref T collector)
+            where T : struct, ICollector<ColliderCastHit>
+        {
+            ref Terrain terrain = ref terrainCollider->Terrain;
+
+            bool hadHit = false;
+
+            // Get a ray for the min corner of the AABB in tree-space and the extents of the AABB in tree-space
+            float3 aabbExtents;
+            Ray aabbRay;
+            Terrain.QuadTreeWalker walker;
+            {
+                Aabb aabb = input.Collider->CalculateAabb(new RigidTransform(input.Orientation, input.Start));
+                Aabb aabbInTree = new Aabb
+                {
+                    Min = aabb.Min * terrain.InverseScale,
+                    Max = aabb.Max * terrain.InverseScale
+                };
+                aabbExtents = aabbInTree.Extents;
+                aabbRay = new Ray
+                {
+                    Origin = aabbInTree.Min,
+                    Displacement = input.Ray.Displacement * terrain.InverseScale
+                };
+
+                float3 maxDisplacement = aabbRay.Displacement * collector.MaxFraction;
+                Aabb queryAabb = new Aabb
+                {
+                    Min = aabbInTree.Min + math.min(maxDisplacement, float3.zero),
+                    Max = aabbInTree.Max + math.max(maxDisplacement, float3.zero)
+                };
+                walker = new Terrain.QuadTreeWalker(&terrainCollider->Terrain, queryAabb);
+            }
+
+            // Traverse the tree
+            int numHits = collector.NumHits;
+            while (walker.Pop())
+            {
+                FourTransposedAabbs bounds = walker.Bounds;
+                bounds.Lx -= aabbExtents.x;
+                bounds.Ly -= aabbExtents.y;
+                bounds.Lz -= aabbExtents.z;
+                bool4 hitMask = bounds.Raycast(aabbRay, collector.MaxFraction, out float4 hitFractions);
+                hitMask &= (walker.Bounds.Ly <= walker.Bounds.Hy); // Mask off empty children
+                if (walker.IsLeaf)
+                {
+                    // Leaf node, collidercast against hit child quads
+                    int4 hitIndex;
+                    int hitCount = math.compress((int*)(&hitIndex), 0, new int4(0, 1, 2, 3), hitMask);
+                    for (int iHit = 0; iHit < hitCount; iHit++)
+                    {
+                        // Get the quad vertices
+                        walker.GetQuad(hitIndex[iHit], out int2 quadIndex, out float3 a, out float3 b, out float3 c, out float3 d);
+
+                        // Test each triangle in the quad
+                        var polygon = new PolygonCollider();
+                        polygon.InitEmpty();
+                        for (int iTriangle = 0; iTriangle < 2; iTriangle++)
+                        {
+                            // Cast
+                            float fraction = collector.MaxFraction;
+                            polygon.SetAsTriangle(a, b, c);
+                            if (ConvexConvex(input, (Collider*)&polygon, ref collector))
+                            {
+                                hadHit = true;
+                                collector.TransformNewHits(numHits++, fraction, MTransform.Identity, terrain.NumColliderKeyBits, terrain.GetSubKey(quadIndex, iTriangle));
+                            }
+
+                            // Next triangle
+                            a = c;
+                            c = d;
+                        }
+                    }
+                }
+                else
+                {
+                    // Interior node, add hit child nodes to the stack
+                    walker.Push(hitMask);
+                }
+            }
+
+            return hadHit;
         }
     }
 }

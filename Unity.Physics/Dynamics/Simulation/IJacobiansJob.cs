@@ -4,10 +4,13 @@ using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Jobs.LowLevel.Unsafe;
 using Unity.Mathematics;
+using EditorBrowsableAttribute = System.ComponentModel.EditorBrowsableAttribute;
+using EditorBrowsableState = System.ComponentModel.EditorBrowsableState;
 
 namespace Unity.Physics
 {
     // Interface for jobs that iterate through the list of Jacobians before they are solved
+    [JobProducerType(typeof(IJacobiansJobExtensions.JacobiansJobProcess<>))]
     public interface IJacobiansJob
     {
         // Note, multiple Jacobians can share the same header.
@@ -34,7 +37,7 @@ namespace Unity.Physics
                 byte userFlags = (byte)value;
                 byte alreadySet = (byte)m_Header->Flags;
 
-                if((notPermitted & (userFlags ^ alreadySet)) != 0)
+                if ((notPermitted & (userFlags ^ alreadySet)) != 0)
                 {
                     throw new NotSupportedException("Cannot change flags which alter jacobian size");
                 }
@@ -67,17 +70,6 @@ namespace Unity.Physics
             }
         }
 
-        public bool HasMaxImpulse => m_Header->HasMaxImpulse;
-        public float MaxImpulse
-        {
-            get => m_Header->MaxImpulse;
-            set
-            {
-                m_Header->MaxImpulse = value;
-                ModifiersChanged = true;
-            }
-        }
-
         public ContactJacAngAndVelToReachCp GetAngularJacobian(int i)
         {
             return m_Header->AccessAngularJacobian(i);
@@ -88,6 +80,16 @@ namespace Unity.Physics
             m_Header->AccessAngularJacobian(i) = j;
             AngularChanged = true;
         }
+
+        #region Obsolete
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("HasMaxImpulse has been deprecated. (RemovedAfter 2019-10-15)", true)]
+        public bool HasMaxImpulse => throw new NotImplementedException();
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("MaxImpulse has been deprecated. (RemovedAfter 2019-10-15)", true)]
+        public float MaxImpulse { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+        #endregion
     }
 
     public unsafe struct ModifiableContactJacobian
@@ -113,27 +115,6 @@ namespace Unity.Physics
             set
             {
                 m_ContactJacobian->CoefficientOfFriction = value;
-                Modified = true;
-            }
-        }
-
-        public float CoefficientOfRestitution
-        {
-            get => m_ContactJacobian->CoefficientOfRestitution;
-            set
-            {
-                m_ContactJacobian->CoefficientOfRestitution = value;
-                Modified = true;
-            }
-        }
-
-        // Angular friction about the contact normal, no linear part
-        public float3 FrictionEffectiveMassOffDiag
-        {
-            get => m_ContactJacobian->FrictionEffectiveMassOffDiag;
-            set
-            {
-                m_ContactJacobian->FrictionEffectiveMassOffDiag = value;
                 Modified = true;
             }
         }
@@ -167,6 +148,16 @@ namespace Unity.Physics
                 Modified = true;
             }
         }
+
+        #region Obsolete
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("CoefficientOfRestitution has been deprecated. (RemovedAfter 2019-10-15)", true)]
+        public float CoefficientOfRestitution { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("FrictionEffectiveMassOffDiag has been deprecated. (RemovedAfter 2019-10-15)", true)]
+        public float3 FrictionEffectiveMassOffDiag { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+        #endregion
     }
 
     public struct ModifiableTriggerJacobian
@@ -221,16 +212,15 @@ namespace Unity.Physics
             return inputDeps;
         }
 
-        private unsafe struct JacobiansJobData<T> where T : struct
+        internal unsafe struct JacobiansJobData<T> where T : struct
         {
             public T UserJobData;
             public BlockStream.Reader StreamReader;
 
-            [ReadOnly]
-            public NativeArray<int> NumWorkItems;
-            
-            //Need to disable aliasing restriction in case T has a NativeSlice of PhysicsWorld.Bodies:
-            [ReadOnly] [NativeDisableContainerSafetyRestriction] public NativeSlice<RigidBody> Bodies;
+            [ReadOnly] public NativeArray<int> NumWorkItems;
+
+            // Disable aliasing restriction in case T has a NativeSlice of PhysicsWorld.Bodies
+            [ReadOnly, NativeDisableContainerSafetyRestriction] public NativeSlice<RigidBody> Bodies;
 
             int m_CurrentWorkItem;
 
@@ -238,7 +228,7 @@ namespace Unity.Physics
 
             public JacobianHeader* ReadJacobianHeader()
             {
-                short readSize = Read<short>();
+                int readSize = Read<int>();
                 return (JacobianHeader*)Read(readSize);
             }
 
@@ -266,7 +256,7 @@ namespace Unity.Physics
             }
         }
 
-        private struct JacobiansJobProcess<T> where T : struct, IJacobiansJob
+        internal struct JacobiansJobProcess<T> where T : struct, IJacobiansJob
         {
             static IntPtr jobReflectionData;
 

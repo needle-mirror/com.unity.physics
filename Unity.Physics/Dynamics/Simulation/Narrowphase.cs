@@ -7,10 +7,9 @@ using Unity.Mathematics;
 namespace Unity.Physics
 {
     // Body pair processor / dispatcher
-    public static class NarrowPhase // TODO: rename
+    static class NarrowPhase // TODO: rename
     {
-    
-        unsafe public static JobHandle ScheduleProcessBodyPairsJobs(ref PhysicsWorld world, float timeStep, int numIterations, ref Simulation.Context context, JobHandle inputDeps)
+        internal static JobHandle ScheduleProcessBodyPairsJobs(ref PhysicsWorld world, float timeStep, int numIterations, ref Simulation.Context context, JobHandle inputDeps)
         {
             var numWorkItems = context.SolverSchedulerInfo.NumWorkItems;
             var contactsHandle = BlockStream.ScheduleConstruct(out context.Contacts, numWorkItems, 0xcf97529c, inputDeps);
@@ -35,7 +34,7 @@ namespace Unity.Physics
         }
         
         [BurstCompile]
-        private struct ProcessBodyPairsJob : IJobParallelForDefer
+        struct ProcessBodyPairsJob : IJobParallelForDefer
         {
             [ReadOnly] public PhysicsWorld World;
             [ReadOnly] public float TimeStep;

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using Unity.Collections;
 using Unity.Jobs;
 
 namespace Unity.Physics
@@ -20,7 +19,7 @@ namespace Unity.Physics
 
         private static readonly int k_NumPhases = Enum.GetValues(typeof(Phase)).Length;
 
-        struct CallbackAndDependency
+        private struct CallbackAndDependency
         {
             public Callback Callback;
             public JobHandle Dependency;
@@ -41,12 +40,12 @@ namespace Unity.Physics
             m_Callbacks[(int)phase].Add(new CallbackAndDependency { Callback = cb, Dependency = dependency });
         }
 
-        public bool Any(Phase phase)
+        internal bool Any(Phase phase)
         {
             return m_Callbacks[(int)phase].Count > 0;
         }
 
-        public JobHandle Execute(Phase phase, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)
+        internal JobHandle Execute(Phase phase, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)
         {
             ref List<CallbackAndDependency> cbs = ref m_Callbacks[(int)phase];
             if (m_Callbacks[(int)phase].Count > 0)

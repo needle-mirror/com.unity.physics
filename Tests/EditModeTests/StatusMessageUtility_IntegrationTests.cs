@@ -9,7 +9,7 @@ using PxCapsule = UnityEngine.CapsuleCollider;
 using PxMesh = UnityEngine.MeshCollider;
 using PxSphere = UnityEngine.SphereCollider;
 
-namespace Unity.Physics.EditModeTests
+namespace Unity.Physics.Tests.Editor
 {
     class StatusMessageUtility_IntegrationTests : BaseHierarchyConversionTest
     {
@@ -18,7 +18,7 @@ namespace Unity.Physics.EditModeTests
         {
             CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), Array.Empty<Type>());
 
-            var msg = StatusMessageUtility.GetHierarchyStatusMessage(new[] { Root.transform });
+            StatusMessageUtility.GetHierarchyStatusMessage(new[] { Root.transform }, out var msg);
 
             Assert.That(msg, Is.Null.Or.Empty);
         }
@@ -34,7 +34,7 @@ namespace Unity.Physics.EditModeTests
             CreateHierarchy(Array.Empty<Type>(), new[] { parentComponentType }, new[] { childComponentType });
             Assume.That(PhysicsShapeExtensions.GetPrimaryBody(Child), Is.EqualTo(Parent));
 
-            var msg = StatusMessageUtility.GetHierarchyStatusMessage(new[] { Child.GetComponent(childComponentType) });
+            StatusMessageUtility.GetHierarchyStatusMessage(new[] { Child.GetComponent(childComponentType) }, out var msg);
 
             Assert.That(msg, Is.Null.Or.Empty);
         }
@@ -48,7 +48,7 @@ namespace Unity.Physics.EditModeTests
             CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { childComponentType });
             Assume.That(PhysicsShapeExtensions.GetPrimaryBody(Child), Is.EqualTo(Child));
 
-            var msg = StatusMessageUtility.GetHierarchyStatusMessage(new[] { Child.GetComponent(childComponentType) });
+            StatusMessageUtility.GetHierarchyStatusMessage(new[] { Child.GetComponent(childComponentType) }, out var msg);
 
             Assert.That(msg, Is.Not.Null.Or.Empty);
         }
@@ -64,7 +64,7 @@ namespace Unity.Physics.EditModeTests
             CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { bodyType, shapeType });
             Assume.That(PhysicsShapeExtensions.GetPrimaryBody(Child), Is.EqualTo(Child));
 
-            var msg = StatusMessageUtility.GetHierarchyStatusMessage(new[] { Child.GetComponent(bodyType) });
+            StatusMessageUtility.GetHierarchyStatusMessage(new[] { Child.GetComponent(bodyType) }, out var msg);
 
             Assert.That(msg, Is.Not.Null.Or.Empty);
         }
@@ -80,7 +80,7 @@ namespace Unity.Physics.EditModeTests
             CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { bodyType, shapeType });
             Assume.That(PhysicsShapeExtensions.GetPrimaryBody(Child), Is.EqualTo(Child));
 
-            var msg = StatusMessageUtility.GetHierarchyStatusMessage(new[] { Child.GetComponent(shapeType) });
+            StatusMessageUtility.GetHierarchyStatusMessage(new[] { Child.GetComponent(shapeType) }, out var msg);
 
             Assert.That(msg, Is.Null.Or.Empty);
         }

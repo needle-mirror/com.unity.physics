@@ -7,7 +7,7 @@ namespace Unity.Physics
     // A convex hull.
     // Warning: This is just the header, the hull's variable sized data follows it in memory.
     // Therefore this struct must always be passed by reference, never by value.
-    public struct ConvexHull
+    struct ConvexHull
     {
         public struct Face : IEquatable<Face>
         {

@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 using Unity.Mathematics;
 using UnityEngine;
@@ -10,7 +11,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
     /// <summary>
     /// Test class containing tests for the <see cref="BoxCollider"/>
     /// </summary>
-    public class BoxColliderTests
+    class BoxColliderTests
     {
         #region Construction
 

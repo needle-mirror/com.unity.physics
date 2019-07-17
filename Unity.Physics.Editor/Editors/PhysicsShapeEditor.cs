@@ -16,12 +16,27 @@ namespace Unity.Physics.Editor
     {
         static class Styles
         {
+            static readonly string k_Plural =
+                $"One or more selected {ObjectNames.NicifyVariableName(typeof(PhysicsShape).Name)}s";
+            static readonly string k_Singular =
+                $"This {ObjectNames.NicifyVariableName(typeof(PhysicsShape).Name)}";
+
             public static readonly string GenericUndoMessage = L10n.Tr("Change Shape");
             public static readonly string MultipleShapeTypesLabel =
                 L10n.Tr("Multiple shape types in current selection.");
 
-            public static readonly GUIContent FitToRenderMeshesLabel =
+            static readonly GUIContent k_FitToRenderMeshesLabel =
                 EditorGUIUtility.TrTextContent("Fit to Enabled Render Meshes");
+            static readonly GUIContent k_FitToRenderMeshesWarningLabelSg = new GUIContent(
+                k_FitToRenderMeshesLabel.text,
+                EditorGUIUtility.Load("console.warnicon") as Texture,
+                L10n.Tr($"{k_Singular} has non-uniform scale. Trying to fit the shape to render meshes might produce unexpected results.")
+            );
+            static readonly GUIContent k_FitToRenderMeshesWarningLabelPl = new GUIContent(
+                k_FitToRenderMeshesLabel.text,
+                EditorGUIUtility.Load("console.warnicon") as Texture,
+                L10n.Tr($"{k_Plural} has non-uniform scale. Trying to fit the shape to render meshes might produce unexpected results.")
+            );
             public static readonly GUIContent CenterLabel = EditorGUIUtility.TrTextContent("Center");
             public static readonly GUIContent SizeLabel = EditorGUIUtility.TrTextContent("Size");
             public static readonly GUIContent OrientationLabel = EditorGUIUtility.TrTextContent(
@@ -30,19 +45,10 @@ namespace Unity.Physics.Editor
             public static readonly GUIContent RadiusLabel = EditorGUIUtility.TrTextContent("Radius");
             public static readonly GUIContent MaterialLabel = EditorGUIUtility.TrTextContent("Material");
 
-            static readonly string k_Plural =
-                $"One or more selected {ObjectNames.NicifyVariableName(typeof(PhysicsShape).Name)}s";
-            static readonly string k_Singular =
-                $"This {ObjectNames.NicifyVariableName(typeof(PhysicsShape).Name)}";
-
-            static readonly string[] k_FitToRenderMeshes =
-            {
-                L10n.Tr($"{k_Singular} has non-uniform scale. Trying to fit the shape to render meshes might produce unexpected results."),
-                L10n.Tr($"{k_Plural} has non-uniform scale. Trying to fit the shape to render meshes might produce unexpected results.")
-            };
-
-            public static string GetFitToRenderMeshesWarning(int numTargets) =>
-                numTargets == 1 ? k_FitToRenderMeshes[0] : k_FitToRenderMeshes[1];
+            public static GUIContent GetFitToRenderMeshesLabel(int numTargets, MessageType status) =>
+                status >= MessageType.Warning
+                    ? numTargets == 1 ? k_FitToRenderMeshesWarningLabelSg : k_FitToRenderMeshesWarningLabelPl
+                    : k_FitToRenderMeshesLabel;
 
             static readonly string[] k_NoGeometryWarning =
             {
@@ -53,6 +59,15 @@ namespace Unity.Physics.Editor
             public static string GetNoGeometryWarning(int numTargets) =>
                 numTargets == 1 ? k_NoGeometryWarning[0] : k_NoGeometryWarning[1];
 
+            static readonly string[] k_NonReadableGeometryWarning =
+            {
+                L10n.Tr($"{k_Singular} has a non-readable mesh, but is not part of a sub-scene. Assign a custom mesh with Read/Write enabled in its import settings if it needs to be converted at run-time."),
+                L10n.Tr($"{k_Plural} has a non-readable mesh, but is not part of a sub-scene. Assign a custom mesh with Read/Write enabled in its import settings if it needs to be converted at run-time.")
+            };
+
+            public static string GetNonReadableGeometryWarning(int numTargets) =>
+                numTargets == 1 ? k_NonReadableGeometryWarning[0] : k_NonReadableGeometryWarning[1];
+
             static readonly string[] k_StaticColliderStatusMessage =
             {
                 L10n.Tr($"{k_Singular} will be considered static. Add a {ObjectNames.NicifyVariableName(typeof(PhysicsBody).Name)} component if you will move it at run-time."),
@@ -61,6 +76,22 @@ namespace Unity.Physics.Editor
 
             public static string GetStaticColliderStatusMessage(int numTargets) =>
                 numTargets == 1 ? k_StaticColliderStatusMessage[0] : k_StaticColliderStatusMessage[1];
+
+            public static readonly string BoxCapsuleSuggestion =
+                L10n.Tr($"Target {ShapeType.Box} has uniform size on its two short axes and a large convex radius. Consider using a {ShapeType.Capsule} instead.");
+            public static readonly string BoxPlaneSuggestion =
+                L10n.Tr($"Target {ShapeType.Box} is flat. Consider using a {ShapeType.Plane} instead.");
+            public static readonly string BoxSphereSuggestion =
+                L10n.Tr($"Target {ShapeType.Box} has uniform size and large convex radius. Consider using a {ShapeType.Sphere} instead.");
+            public static readonly string CapsuleSphereSuggestion =
+                L10n.Tr($"Target {ShapeType.Capsule}'s diameter is equal to its height. Consider using a {ShapeType.Sphere} instead.");
+            public static readonly string CylinderCapsuleSuggestion =
+                L10n.Tr($"Target {ShapeType.Cylinder} has a large convex radius. Consider using a {ShapeType.Capsule} instead.");
+            public static readonly string CylinderSphereSuggestion =
+                L10n.Tr($"Target {ShapeType.Cylinder} has a large convex radius and its diameter is equal to its height. Consider using a {ShapeType.Sphere} instead.");
+
+            public static readonly GUIStyle Button =
+                new GUIStyle(EditorStyles.miniButton) { padding = new RectOffset() };
         }
 
         #pragma warning disable 649
@@ -76,23 +107,22 @@ namespace Unity.Physics.Editor
         [AutoPopulate] SerializedProperty m_Material;
         #pragma warning restore 649
 
-        bool m_HasGeometry;
+        [Flags]
+        enum GeometryState
+        {
+            Okay = 0,
+            NoGeometry = 1,
+            NonReadableGeometry = 2
+        }
+
+        GeometryState m_GeometryState;
         int m_NumImplicitStatic;
 
         protected override void OnEnable()
         {
             base.OnEnable();
 
-            m_HasGeometry = true;
-            var pointCloud = new NativeList<float3>(65535, Allocator.Temp);
-            foreach (PhysicsShape shape in targets)
-            {
-                shape.GetConvexHullProperties(pointCloud);
-                m_HasGeometry &= pointCloud.Length > 0;
-                if (!m_HasGeometry)
-                    break;
-            }
-            pointCloud.Dispose();
+            CheckGeometry();
 
             m_NumImplicitStatic = targets.Cast<PhysicsShape>().Count(
                 shape => shape.GetPrimaryBody() == shape.gameObject
@@ -102,6 +132,50 @@ namespace Unity.Physics.Editor
 
             var wireframeShader = Shader.Find("Hidden/Physics/ShapeHandle");
             m_PreviewMeshMaterial = new UnityEngine.Material(wireframeShader) { hideFlags = HideFlags.HideAndDontSave };
+
+            Undo.postprocessModifications += CheckForMeshReassignment;
+            Undo.undoRedoPerformed += CheckGeometry;
+            Undo.undoRedoPerformed += Repaint;
+        }
+
+        void CheckGeometry()
+        {
+            m_GeometryState = GeometryState.Okay;
+            var pointCloud = new NativeList<float3>(65535, Allocator.Temp);
+            foreach (PhysicsShape shape in targets)
+            {
+                shape.GetConvexHullProperties(pointCloud, false);
+
+                if (pointCloud.Length == 0)
+                {
+                    m_GeometryState |= GeometryState.NoGeometry;
+                    continue;
+                }
+
+                var mesh = shape.GetMesh();
+                if (mesh != null && !mesh.IsValidForConversion(shape.gameObject))
+                    m_GeometryState |= GeometryState.NonReadableGeometry;
+            }
+            pointCloud.Dispose();
+        }
+
+        UndoPropertyModification[] CheckForMeshReassignment(UndoPropertyModification[] modifications)
+        {
+            foreach (var modification in modifications)
+            {
+                var targetType = modification.currentValue.target.GetType();
+                if (
+                    targetType == typeof(MeshFilter)
+                    || targetType == typeof(MeshRenderer)
+                    || targetType == typeof(SkinnedMeshRenderer)
+                )
+                {
+                    CheckGeometry();
+                    Repaint();
+                    break;
+                }
+            }
+            return modifications;
         }
 
         void OnDisable()
@@ -113,6 +187,10 @@ namespace Unity.Physics.Editor
             }
             if (m_PreviewMeshMaterial != null)
                 DestroyImmediate(m_PreviewMeshMaterial);
+
+            Undo.postprocessModifications -= CheckForMeshReassignment;
+            Undo.undoRedoPerformed -= CheckGeometry;
+            Undo.undoRedoPerformed -= Repaint;
         }
 
         class PreviewMeshData
@@ -147,7 +225,7 @@ namespace Unity.Physics.Editor
                 else
                 {
                     // TODO: populate with the actual collision data
-                    if (preview.SourceMesh != null)
+                    if (preview.SourceMesh != null && preview.SourceMesh.IsValidForConversion(shape.gameObject))
                     {
                         preview.Mesh.vertices = preview.SourceMesh.vertices;
                         preview.Mesh.normals = preview.SourceMesh.normals;
@@ -215,26 +293,68 @@ namespace Unity.Physics.Editor
             --EditorGUI.indentLevel;
 
             if (m_StatusMessages.Count > 0)
-                EditorGUILayout.HelpBox(string.Join("\n\n", m_StatusMessages), MessageType.None);
+                EditorGUILayout.HelpBox(string.Join("\n\n", m_StatusMessages), m_Status);
 
             if (EditorGUI.EndChangeCheck())
                 serializedObject.ApplyModifiedProperties();
         }
 
+        MessageType m_GeometryStatus;
+        List<string> m_GeometryStatusMessages = new List<string>();
+        HashSet<string> m_ShapeSuggestions = new HashSet<string>();
+        MessageType m_Status;
+        List<string> m_StatusMessages = new List<string>(8);
         MessageType m_MatrixStatus;
         List<MatrixState> m_MatrixStates = new List<MatrixState>();
-        List<string> m_StatusMessages = new List<string>(8);
 
         void UpdateStatusMessages()
         {
+            m_Status = MessageType.None;
             m_StatusMessages.Clear();
 
             if (m_NumImplicitStatic != 0)
                 m_StatusMessages.Add(Styles.GetStaticColliderStatusMessage(targets.Length));
 
-            var hierarchyStatusMessage = StatusMessageUtility.GetHierarchyStatusMessage(targets);
+            m_ShapeSuggestions.Clear();
+            foreach (PhysicsShape shape in targets)
+            {
+                switch (shape.ShapeType)
+                {
+                    case ShapeType.Box:
+                        shape.GetBakedBoxProperties(out var c, out var s, out var o, out var cr);
+                        var max = math.cmax(s);
+                        var min = math.cmin(s);
+                        if (min == 0f)
+                            m_ShapeSuggestions.Add(Styles.BoxPlaneSuggestion);
+                        else if (cr == min * 0.5f)
+                        {
+                            if (min == max)
+                                m_ShapeSuggestions.Add(Styles.BoxSphereSuggestion);
+                            else if (math.lengthsq(s - new float3(min)) == math.pow(max - min, 2f))
+                                m_ShapeSuggestions.Add(Styles.BoxCapsuleSuggestion);
+                        }
+                        break;
+                    case ShapeType.Capsule:
+                        shape.GetBakedCapsuleProperties(out c, out var h, out var r, out o, out var v0, out var v1);
+                        if (h == 2f * r)
+                            m_ShapeSuggestions.Add(Styles.CapsuleSphereSuggestion);
+                        break;
+                    case ShapeType.Cylinder:
+                        shape.GetBakedCylinderProperties(out c, out h, out r, out o, out cr);
+                        if (cr == r)
+                            m_ShapeSuggestions.Add(h == 2f * r ? Styles.CylinderSphereSuggestion : Styles.CylinderCapsuleSuggestion);
+                        break;
+                }
+            }
+            foreach (var suggestion in m_ShapeSuggestions)
+                m_StatusMessages.Add(suggestion);
+
+            var hierarchyStatus = StatusMessageUtility.GetHierarchyStatusMessage(targets, out var hierarchyStatusMessage);
             if (!string.IsNullOrEmpty(hierarchyStatusMessage))
+            {
                 m_StatusMessages.Add(hierarchyStatusMessage);
+                m_Status = (MessageType)math.max((int)m_Status, (int)hierarchyStatus);
+            }
 
             m_MatrixStates.Clear();
             foreach (var t in targets)
@@ -245,7 +365,23 @@ namespace Unity.Physics.Editor
 
             m_MatrixStatus = StatusMessageUtility.GetMatrixStatusMessage(m_MatrixStates, out var matrixStatusMessage);
             if (m_MatrixStatus != MessageType.None)
+            {
                 m_StatusMessages.Add(matrixStatusMessage);
+                m_Status = (MessageType)math.max((int)m_Status, (int)m_MatrixStatus);
+            }
+
+            m_GeometryStatus = MessageType.None;
+            m_GeometryStatusMessages.Clear();
+            if ((m_GeometryState & GeometryState.NoGeometry) == GeometryState.NoGeometry)
+            {
+                m_GeometryStatusMessages.Add(Styles.GetNoGeometryWarning(targets.Length));
+                m_GeometryStatus = (MessageType)math.max((int)m_GeometryStatus, (int)MessageType.Error);
+            }
+            if ((m_GeometryState & GeometryState.NonReadableGeometry) == GeometryState.NonReadableGeometry)
+            {
+                m_GeometryStatusMessages.Add(Styles.GetNonReadableGeometryWarning(targets.Length));
+                m_GeometryStatus = (MessageType)math.max((int)m_GeometryStatus, (int)MessageType.Warning);
+            }
         }
 
         void DisplayShapeSelector()
@@ -294,21 +430,22 @@ namespace Unity.Physics.Editor
 
         void FitToRenderMeshesButton()
         {
-            EditorGUI.BeginDisabledGroup(!m_HasGeometry || EditorUtility.IsPersistent(target));
+            EditorGUI.BeginDisabledGroup(
+                (m_GeometryState & GeometryState.NoGeometry) == GeometryState.NoGeometry || EditorUtility.IsPersistent(target)
+            );
             var rect = EditorGUI.IndentedRect(
                 EditorGUILayout.GetControlRect(false, EditorGUIUtility.singleLineHeight, EditorStyles.miniButton)
             );
-            if (GUI.Button(rect, Styles.FitToRenderMeshesLabel, EditorStyles.miniButton))
+            var buttonLabel = Styles.GetFitToRenderMeshesLabel(targets.Length, m_MatrixStatus);
+            if (GUI.Button(rect, buttonLabel, Styles.Button))
             {
-                Undo.RecordObjects(targets, Styles.FitToRenderMeshesLabel.text);
+                Undo.RecordObjects(targets, buttonLabel.text);
                 foreach (PhysicsShape shape in targets)
                 {
                     shape.FitToEnabledRenderMeshes();
                     EditorUtility.SetDirty(shape);
                 }
             }
-            if (GUI.enabled && m_MatrixStatus > MessageType.Info)
-                EditorGUILayout.HelpBox(Styles.GetFitToRenderMeshesWarning(targets.Length), m_MatrixStatus);
             EditorGUI.EndDisabledGroup();
         }
 
@@ -405,9 +542,17 @@ namespace Unity.Physics.Editor
 
         void DisplayMeshControls()
         {
+            EditorGUI.BeginChangeCheck();
             EditorGUILayout.PropertyField(m_CustomMesh);
-            if (!m_HasGeometry && m_CustomMesh.objectReferenceValue == null)
-                EditorGUILayout.HelpBox(Styles.GetNoGeometryWarning(targets.Length), MessageType.Error);
+            if (EditorGUI.EndChangeCheck())
+            {
+                serializedObject.ApplyModifiedProperties();
+                serializedObject.Update();
+                CheckGeometry();
+            }
+
+            if (m_GeometryStatusMessages.Count > 0)
+                EditorGUILayout.HelpBox(string.Join("\n\n", m_GeometryStatusMessages), m_GeometryStatus);
         }
 
         // TODO: implement interactive tool modes

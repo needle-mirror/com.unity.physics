@@ -11,11 +11,13 @@ namespace Unity.Physics
     {
         internal LowLevel.TriggerEvent EventData;
         public EntityPair Entities { get; internal set; }
+
         public BodyIndexPair BodyIndices => EventData.BodyIndices;
         public ColliderKeyPair ColliderKeys => EventData.ColliderKeys;
     }
 
     // Interface for jobs that iterate through the list of trigger events produced by the solver.
+    [JobProducerType(typeof(ITriggerEventJobExtensions.TriggerEventJobProcess<>))]
     public interface ITriggerEventsJob
     {
         void Execute(TriggerEvent triggerEvent);
@@ -24,14 +26,14 @@ namespace Unity.Physics
     public static class ITriggerEventJobExtensions
     {
 #if !HAVOK_PHYSICS_EXISTS
-        // Default IContactsJob.Schedule() implementation.
+        // Default ITriggerEventsJob.Schedule() implementation.
         public static unsafe JobHandle Schedule<T>(this T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)
             where T : struct, ITriggerEventsJob
         {
             return ScheduleImpl(jobData, simulation, ref world, inputDeps);
         }
 #else
-        // In this case IContactsJob.Schedule() is provided by the Havok.Physics assembly.
+        // In this case ITriggerEventsJob.Schedule() is provided by the Havok.Physics assembly.
         // This is a stub to catch when that assembly is missing.
         //<todo.eoin.modifier Put in a link to documentation for this:
         [Obsolete("This error occurs when HAVOK_PHYSICS_EXISTS is defined but Havok.Physics is missing from your package's asmdef references", true)]
@@ -59,21 +61,25 @@ namespace Unity.Physics
                     EventReader = ((Simulation)simulation).TriggerEvents,
                     Bodies = world.Bodies
                 };
+
+                // Ensure the input dependencies include the end-of-simulation job, so events will have been generated
+                inputDeps = JobHandle.CombineDependencies(inputDeps, simulation.FinalSimulationJobHandle);
+
                 var parameters = new JobsUtility.JobScheduleParameters(UnsafeUtility.AddressOf(ref data), TriggerEventJobProcess<T>.Initialize(), inputDeps, ScheduleMode.Batched);
                 return JobsUtility.Schedule(ref parameters);
             }
             return inputDeps;
         }
 
-        private unsafe struct TriggerEventJobData<T> where T : struct
+        internal unsafe struct TriggerEventJobData<T> where T : struct
         {
             public T UserJobData;
             [NativeDisableContainerSafetyRestriction] public LowLevel.TriggerEvents EventReader;
-            //Need to disable aliasing restriction in case T has a NativeSlice of PhysicsWorld.Bodies:
-            [ReadOnly] [NativeDisableContainerSafetyRestriction] public NativeSlice<RigidBody> Bodies;
+            // Disable aliasing restriction in case T has a NativeSlice of PhysicsWorld.Bodies
+            [ReadOnly, NativeDisableContainerSafetyRestriction] public NativeSlice<RigidBody> Bodies;
         }
 
-        private struct TriggerEventJobProcess<T> where T : struct, ITriggerEventsJob
+        internal struct TriggerEventJobProcess<T> where T : struct, ITriggerEventsJob
         {
             static IntPtr jobReflectionData;
 
@@ -93,18 +99,17 @@ namespace Unity.Physics
             public unsafe static void Execute(ref TriggerEventJobData<T> jobData, IntPtr additionalData,
                 IntPtr bufferRangePatchData, ref JobRanges ranges, int jobIndex)
             {
-                foreach(LowLevel.TriggerEvent te in jobData.EventReader)
+                foreach (LowLevel.TriggerEvent eventData in jobData.EventReader)
                 {
-                    TriggerEvent evt = new TriggerEvent
+                    jobData.UserJobData.Execute(new TriggerEvent
                     {
-                        EventData = te,
+                        EventData = eventData,
                         Entities = new EntityPair
                         {
-                            EntityA = jobData.Bodies[te.BodyIndices.BodyAIndex].Entity,
-                            EntityB = jobData.Bodies[te.BodyIndices.BodyBIndex].Entity
+                            EntityA = jobData.Bodies[eventData.BodyIndices.BodyAIndex].Entity,
+                            EntityB = jobData.Bodies[eventData.BodyIndices.BodyBIndex].Entity
                         }
-                    };
-                    jobData.UserJobData.Execute(evt);
+                    });
                 }
             }
         }

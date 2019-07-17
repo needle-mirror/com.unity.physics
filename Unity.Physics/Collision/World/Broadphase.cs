@@ -14,7 +14,7 @@ using static Unity.Physics.Math;
 namespace Unity.Physics
 {
     // A bounding volume around a collection of rigid bodies
-    public struct Broadphase : IDisposable, ICloneable
+    struct Broadphase : IDisposable, ICloneable
     {
         private Tree m_StaticTree;  // The tree of static rigid bodies
         private Tree m_DynamicTree; // The tree of dynamic rigid bodies
@@ -109,10 +109,11 @@ namespace Unity.Physics
                 m_StaticTree.NodeCount, m_StaticTree.Ranges, m_StaticTree.m_BranchCount);
         }
 
+        [BurstCompile]
         internal struct DisposeArrayJob : IJob
         {
             [DeallocateOnJobCompletion] public NativeArray<int> Array;
-            public void Execute() {}
+            public void Execute() { }
         }
 
         private JobHandle ScheduleDynamicTreeBuildJobs(ref PhysicsWorld world, float timeStep, int numThreadsHint, JobHandle inputDeps)
@@ -172,12 +173,12 @@ namespace Unity.Physics
 
         // Schedule a set of jobs which will write all overlapping body pairs to the given steam,
         // where at least one of the bodies is dynamic. The results are unsorted.
-        public JobHandle ScheduleFindOverlapsJobs(out BlockStream dynamicVsDynamicPairsStream, out BlockStream staticVsDynamicPairsStream, ref Simulation.Context context, JobHandle inputDeps)
+        internal JobHandle ScheduleFindOverlapsJobs(out BlockStream dynamicVsDynamicPairsStream, out BlockStream staticVsDynamicPairsStream, ref Simulation.Context context, JobHandle inputDeps)
         {
             var dynamicVsDynamicNodePairIndices = new NativeList<int2>(Allocator.TempJob);
             var staticVsDynamicNodePairIndices = new NativeList<int2>(Allocator.TempJob);
 
-            var allocateDeps = new AllocateDynamicVsStaticNodePairs
+            JobHandle allocateDeps = new AllocateDynamicVsStaticNodePairs
             {
                 dynamicVsDynamicNodePairIndices = dynamicVsDynamicNodePairIndices,
                 staticVsDynamicNodePairIndices = staticVsDynamicNodePairIndices,
@@ -232,7 +233,7 @@ namespace Unity.Physics
             // Dispose node pair lists
             context.DisposeOverlapPairs0 = NativeListUtilityTemp.DisposeHotFix(ref dynamicVsDynamicNodePairIndices, dynamicVsDynamicHandle);
             context.DisposeOverlapPairs1 = NativeListUtilityTemp.DisposeHotFix(ref staticVsDynamicNodePairIndices, staticVsDynamicHandle);
-            
+
             return JobHandle.CombineDependencies(dynamicVsDynamicHandle, staticVsDynamicHandle);
         }
 
@@ -329,10 +330,10 @@ namespace Unity.Physics
 
         #region Queries
 
-        private struct RigidBodyOverlapsCollector : IOverlapCollector
+        internal struct RigidBodyOverlapsCollector : IOverlapCollector
         {
             public NativeList<int> RigidBodyIndices;
-            
+
             public unsafe void AddRigidBodyIndices(int* indices, int count)
             {
                 RigidBodyIndices.AddRange(indices, count);
@@ -405,21 +406,13 @@ namespace Unity.Physics
             return hasHit;
         }
 
-        private struct BvhLeafProcessor :
+        internal struct BvhLeafProcessor :
             BoundingVolumeHierarchy.IRaycastLeafProcessor,
             BoundingVolumeHierarchy.IColliderCastLeafProcessor,
             BoundingVolumeHierarchy.IPointDistanceLeafProcessor,
             BoundingVolumeHierarchy.IColliderDistanceLeafProcessor,
             BoundingVolumeHierarchy.IAabbOverlapLeafProcessor
         {
-            [Obsolete("Do not call this method. It is only included to hint AOT compilation", true)]
-            static void AOTHint()
-            {
-                var p = new BvhLeafProcessor();
-                var collector = new ClosestHitCollector<RaycastHit>();
-                p.RayLeaf(default(RaycastInput), 0, ref collector);
-            }
-
             private readonly NativeSlice<RigidBody> m_Bodies;
 
             public BvhLeafProcessor(NativeSlice<RigidBody> bodies)
@@ -465,9 +458,9 @@ namespace Unity.Physics
                 RigidBody body = m_Bodies[rigidBodyIndex];
 
                 // Transform the input into body space
-                MTransform worldFromBody = new MTransform(body.WorldFromBody);
+                var worldFromBody = new MTransform(body.WorldFromBody);
                 MTransform bodyFromWorld = Inverse(worldFromBody);
-                ColliderCastInput inputLs = new ColliderCastInput
+                var inputLs = new ColliderCastInput
                 {
                     Collider = input.Collider,
                     Orientation = math.mul(math.inverse(body.WorldFromBody.rot), input.Orientation),
@@ -494,9 +487,9 @@ namespace Unity.Physics
                 RigidBody body = m_Bodies[rigidBodyIndex];
 
                 // Transform the input into body space
-                MTransform worldFromBody = new MTransform(body.WorldFromBody);
+                var worldFromBody = new MTransform(body.WorldFromBody);
                 MTransform bodyFromWorld = Inverse(worldFromBody);
-                PointDistanceInput inputLs = new PointDistanceInput
+                var inputLs = new PointDistanceInput
                 {
                     Position = Mul(bodyFromWorld, input.Position),
                     MaxDistance = input.MaxDistance,
@@ -521,9 +514,9 @@ namespace Unity.Physics
                 RigidBody body = m_Bodies[rigidBodyIndex];
 
                 // Transform the input into body space
-                MTransform worldFromBody = new MTransform(body.WorldFromBody);
+                var worldFromBody = new MTransform(body.WorldFromBody);
                 MTransform bodyFromWorld = Inverse(worldFromBody);
-                ColliderDistanceInput inputLs = new ColliderDistanceInput
+                var inputLs = new ColliderDistanceInput
                 {
                     Collider = input.Collider,
                     Transform = new RigidTransform(
@@ -581,10 +574,10 @@ namespace Unity.Physics
             }
         }
 
-        
+
         // Reads broadphase data from dynamic rigid bodies
         [BurstCompile]
-        internal struct BuildDynamicBodyDataJob : IJobParallelFor
+        struct BuildDynamicBodyDataJob : IJobParallelFor
         {
             [ReadOnly] public NativeSlice<RigidBody> RigidBodies;
             [ReadOnly] public NativeSlice<MotionVelocity> MotionVelocities;
@@ -628,7 +621,7 @@ namespace Unity.Physics
 
         // Reads broadphase data from static rigid bodies
         [BurstCompile]
-        internal struct BuildStaticBodyDataJob : IJobParallelForDefer
+        struct BuildStaticBodyDataJob : IJobParallelForDefer
         {
             [ReadOnly] public NativeSlice<RigidBody> RigidBodies;
             [ReadOnly] public int Offset;
@@ -637,7 +630,7 @@ namespace Unity.Physics
             [NativeDisableParallelForRestriction]
             public NativeArray<Aabb> Aabbs;
             public NativeArray<PointAndIndex> Lookup;
-            
+
             [NativeDisableContainerSafetyRestriction]
             public NativeSlice<CollisionFilter> FiltersOut;
 
@@ -673,7 +666,7 @@ namespace Unity.Physics
 
         // Builds a list of branch node index pairs (an input to FindOverlappingPairsJob)
         [BurstCompile]
-        public struct DynamicVsDynamicBuildBranchNodePairsJob : IJob
+        internal struct DynamicVsDynamicBuildBranchNodePairsJob : IJob
         {
             [ReadOnly] public NativeArray<Builder.Range> Ranges;
             [ReadOnly] public NativeArray<int> NumBranches;
@@ -681,7 +674,7 @@ namespace Unity.Physics
 
             public void Execute()
             {
-                var numBranches = NumBranches[0];
+                int numBranches = NumBranches[0];
 
                 int arrayIndex = 0;
 
@@ -696,7 +689,7 @@ namespace Unity.Physics
                 {
                     for (int j = i + 1; j < numBranches; j++)
                     {
-                        int2 pair = new int2 { x = Ranges[i].Root, y = Ranges[j].Root };
+                        var pair = new int2 { x = Ranges[i].Root, y = Ranges[j].Root };
                         NodePairIndices[arrayIndex++] = pair;
                     }
                 }
@@ -705,7 +698,7 @@ namespace Unity.Physics
 
         // Builds a list of branch node index pairs (an input to FindOverlappingPairsJob)
         [BurstCompile]
-        public struct StaticVsDynamicBuildBranchNodePairsJob : IJob
+        struct StaticVsDynamicBuildBranchNodePairsJob : IJob
         {
             [ReadOnly] public NativeArray<Builder.Range> StaticRanges;
             [ReadOnly] public NativeArray<Builder.Range> DynamicRanges;
@@ -715,15 +708,15 @@ namespace Unity.Physics
 
             public void Execute()
             {
-                var numStaticBranches = NumStaticBranches[0];
-                var numDynamicBranches = NumDynamicBranches[0];
+                int numStaticBranches = NumStaticBranches[0];
+                int numDynamicBranches = NumDynamicBranches[0];
 
                 int arrayIndex = 0;
                 for (int i = 0; i < numStaticBranches; i++)
                 {
                     for (int j = 0; j < numDynamicBranches; j++)
                     {
-                        int2 pair = new int2 { x = StaticRanges[i].Root, y = DynamicRanges[j].Root };
+                        var pair = new int2 { x = StaticRanges[i].Root, y = DynamicRanges[j].Root };
                         NodePairIndices[arrayIndex++] = pair;
                     }
                 }
@@ -731,7 +724,7 @@ namespace Unity.Physics
         }
 
         // An implementation of IOverlapCollector which filters and writes body pairs to a block stream
-        public unsafe struct BodyPairWriter : BoundingVolumeHierarchy.ITreeOverlapCollector
+        internal unsafe struct BodyPairWriter : ITreeOverlapCollector
         {
             const int k_Capacity = 256;
             const int k_Margin = 64;
@@ -740,8 +733,8 @@ namespace Unity.Physics
             fixed int m_PairsLeft[k_Capacity];
             fixed int m_PairsRight[k_Capacity];
 
-            private BlockStream.Writer* m_CollidingPairs;
-            private CollisionFilter* m_BodyFilters;
+            private readonly BlockStream.Writer* m_CollidingPairs;
+            private readonly CollisionFilter* m_BodyFilters;
             private int m_Count;
 
             public BodyPairWriter(BlockStream.Writer* collidingPairs, CollisionFilter* bodyFilters)
@@ -825,7 +818,7 @@ namespace Unity.Physics
 
         // Writes pairs of overlapping broadphase AABBs to a stream.
         [BurstCompile]
-        public unsafe struct DynamicVsDynamicFindOverlappingPairsJob : IJobParallelForDefer
+        internal unsafe struct DynamicVsDynamicFindOverlappingPairsJob : IJobParallelForDefer
         {
             [ReadOnly] public NativeArray<Node> DynamicNodes;
             [ReadOnly] public NativeArray<CollisionFilter> DynamicNodeFilters;
@@ -840,7 +833,7 @@ namespace Unity.Physics
 
                 int2 pair = NodePairIndices[index];
 
-                CollisionFilter* bodyFiltersPtr = (CollisionFilter*)BodyFilters.GetUnsafeReadOnlyPtr();
+                var bodyFiltersPtr = (CollisionFilter*)BodyFilters.GetUnsafeReadOnlyPtr();
                 var bufferedPairs = new BodyPairWriter((BlockStream.Writer*)UnsafeUtility.AddressOf(ref PairWriter), bodyFiltersPtr);
 
                 new BoundingVolumeHierarchy(DynamicNodes, DynamicNodeFilters).SelfBvhOverlap(ref bufferedPairs, pair.x, pair.y);
@@ -851,7 +844,7 @@ namespace Unity.Physics
         }
 
         [BurstCompile]
-        public unsafe struct StaticVsDynamicFindOverlappingPairsJob : IJobParallelForDefer
+        unsafe struct StaticVsDynamicFindOverlappingPairsJob : IJobParallelForDefer
         {
             [ReadOnly] public NativeArray<BoundingVolumeHierarchy.Node> StaticNodes;
             [ReadOnly] public NativeArray<BoundingVolumeHierarchy.Node> DynamicNodes;
@@ -870,7 +863,7 @@ namespace Unity.Physics
 
                 int2 pair = NodePairIndices[index];
 
-                CollisionFilter* bodyFiltersPtr = (CollisionFilter*)BodyFilters.GetUnsafeReadOnlyPtr();
+                var bodyFiltersPtr = (CollisionFilter*)BodyFilters.GetUnsafeReadOnlyPtr();
                 var bufferedPairs = new BodyPairWriter((BlockStream.Writer*)UnsafeUtility.AddressOf(ref PairWriter), bodyFiltersPtr);
 
                 var staticBvh = new BoundingVolumeHierarchy(StaticNodes, StaticNodeFilters);
@@ -888,7 +881,7 @@ namespace Unity.Physics
         // we need to move body filter info by an offset defined by 
         // number of dynamic bodies count diff.
         [BurstCompile]
-        public struct AdjustStaticBodyFilters : IJob
+        struct AdjustStaticBodyFilters : IJob
         {
             [ReadOnly] public int NumDynamicBodiesDiff;
             [ReadOnly] public int NumStaticBodies;
@@ -897,7 +890,7 @@ namespace Unity.Physics
             [ReadOnly] [DeallocateOnJobCompletion] public NativeArray<CollisionFilter> PreviousFrameBodyFilters;
 
             // Static & dynamic BodyFilters can be written to in parallel
-            [NativeDisableContainerSafetyRestriction]  public NativeArray<CollisionFilter> BodyFilters;
+            [NativeDisableContainerSafetyRestriction] public NativeArray<CollisionFilter> BodyFilters;
 
             public void Execute()
             {
@@ -919,7 +912,7 @@ namespace Unity.Physics
         // we can keep the static tree as it is, we just need to update
         // indices of static rigid bodies by fixed offset in all leaf nodes.
         [BurstCompile]
-        public unsafe struct AdjustBodyIndicesJob : IJob
+        unsafe struct AdjustBodyIndicesJob : IJob
         {
             [ReadOnly] public int NumDynamicBodiesDiff;
             [ReadOnly] public int NumStaticNodes;
@@ -935,7 +928,7 @@ namespace Unity.Physics
                     return;
                 }
 
-                Node* staticNodesPtr = (Node*)StaticNodes.GetUnsafePtr();
+                var staticNodesPtr = (Node*)StaticNodes.GetUnsafePtr();
 
                 for (int nodeIndex = 0; nodeIndex < NumStaticNodes; nodeIndex++)
                 {

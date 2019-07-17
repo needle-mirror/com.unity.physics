@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using Unity.Mathematics;
 
 namespace Unity.Physics
@@ -9,6 +10,7 @@ namespace Unity.Physics
         public MaterialFlags Flags;
         public CombinePolicy FrictionCombinePolicy;
         public CombinePolicy RestitutionCombinePolicy;
+        public byte CustomTags;
         public float Friction;
         public float Restitution;
 
@@ -24,9 +26,6 @@ namespace Unity.Physics
         // If true, the object can apply a surface velocity to its contact points
         public bool EnableSurfaceVelocity => (Flags & MaterialFlags.EnableSurfaceVelocity) != 0;
 
-        // If true, the object can limit the impulses applied to its contact points
-        public bool EnableMaxImpulse => (Flags & MaterialFlags.EnableMaxImpulse) != 0;
-
         [Flags]
         public enum MaterialFlags : byte
         {
@@ -34,7 +33,10 @@ namespace Unity.Physics
             EnableCollisionEvents = 1 << 1,
             EnableMassFactors = 1 << 2,
             EnableSurfaceVelocity = 1 << 3,
-            EnableMaxImpulse = 1 << 4
+
+            [EditorBrowsable(EditorBrowsableState.Never)]
+            [Obsolete("EnableMaxImpulse has been deprecated. (RemovedAfter 2019-10-15)", true)]
+            EnableMaxImpulse = 0
         }
 
         // Defines how a value from a pair of materials should be combined.
@@ -94,5 +96,11 @@ namespace Unity.Physics
                     return 0;
             }
         }
+
+        #region Obsolete
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("EnableMaxImpulse has been deprecated. (RemovedAfter 2019-10-15)", true)]
+        public bool EnableMaxImpulse => throw new NotImplementedException();
+        #endregion
     }
 }

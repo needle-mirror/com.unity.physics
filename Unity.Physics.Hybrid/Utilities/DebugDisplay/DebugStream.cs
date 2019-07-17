@@ -10,6 +10,15 @@ using UnityEngine;
 [UpdateBefore(typeof(BuildPhysicsWorld))]
 public class DebugStream : ComponentSystem
 {
+    List<BlockStream> m_DebugStreams = new List<BlockStream>();
+    DrawComponent m_DrawComponent;
+    EndFramePhysicsSystem m_EndFramePhysicsSystem;
+
+    protected override void OnCreate()
+    {
+        m_EndFramePhysicsSystem = World.Active.GetOrCreateSystem<EndFramePhysicsSystem>();
+    }
+
     public struct Context
     {
         public void Begin(int index)
@@ -357,8 +366,12 @@ public class DebugStream : ComponentSystem
     private class DrawComponent : MonoBehaviour
     {
         public DebugStream DebugDraw;
+
         public void OnDrawGizmos()
         {
+            // Make sure all potential debug display jobs are finished
+            DebugDraw.m_EndFramePhysicsSystem.FinalJobHandle.Complete();
+
             if (DebugDraw != null)
             {
                 DebugDraw.Draw();
@@ -368,6 +381,9 @@ public class DebugStream : ComponentSystem
 
     protected override void OnUpdate()
     {
+        // Make sure all potential debug display jobs are finished
+        m_EndFramePhysicsSystem.FinalJobHandle.Complete();
+
         // Reset
         for (int i = 0; i < m_DebugStreams.Count; i++)
         {
@@ -390,7 +406,4 @@ public class DebugStream : ComponentSystem
         for (int i = 0; i < m_DebugStreams.Count; i++)
             m_DebugStreams[i].Dispose();
     }
-
-    private DrawComponent m_DrawComponent;
-    List<BlockStream> m_DebugStreams = new List<BlockStream>();
 }

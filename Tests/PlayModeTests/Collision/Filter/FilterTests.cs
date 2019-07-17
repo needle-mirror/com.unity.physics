@@ -1,8 +1,9 @@
-﻿using NUnit.Framework;
+﻿using System;
+using NUnit.Framework;
 
 namespace Unity.Physics.Tests.Collision.Filter
 {
-    public class FilterTests
+    class FilterTests
     {
         //CollisionFilter expected behavior:
         //  uint BelongsTo       A bit mask describing which layers this object belongs to.

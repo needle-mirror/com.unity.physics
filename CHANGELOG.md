@@ -1,3 +1,203 @@
+## [0.2.0-preview] - 2019-07-18
+
+### Upgrade guide
+
+* If you created per-body custom data using `PhysicsShape.CustomFlags` then you should instead do it using `PhysicsBody.CustomTags`.
+* Some public API points were _removed_, either because they were not intended to be public or because they introduce other problems (see Changes below).
+    * Some of these API points may later be reintroduced on a case-by-case basis to enable customization for advanced use cases. Please provide feedback on the forums if these removals have affected current use cases so we can prioritize them.
+* Some public API points were _replaced_ with another one in a way that cannot be handled by the script updater, so they must be manually fixed in your own code (see Changes below). 
+* All public types in test assemblies were never intended to be public and have been made internal.
+* Some properties on `PhysicsMaterialTemplate` and `PhysicsShape` now return `PhysicsCategoryTags` instead of `int`. Use its `Value` property if you need to get/set a raw `int` value (see Changes below).
+
+### Changes
+
+* Run-Time API
+    * Added first draft of a new `TerrainCollider` struct. Terrain geometry is defined by a height field. It requires less memory than an equivalent mesh and is faster to query. It also offers a fast, low-quality option for collision detection.
+        * Added `ColliderType.Terrain`.
+        * Added `CollisionType.Terrain`.
+        * Added `DistanceQueries.ConvexTerrain<T>()`.
+        * Added `DistanceQueries.PointTerrain<T>()`.
+    * Shapes and bodies how have their own separate custom data.
+        * Added `Material.CustomTags` (for shapes).
+        * Replaced `PhysicsCustomData` with `PhysicsCustomTags` (for bodies).
+        * Replaced `ContactHeader.BodyCustomDatas` with `ContactHeader.BodyCustomTags`.
+        * Replaced `CustomDataPair` with `CustomTagsPair`.
+        * Replaced `RigidBody.CustomData` with `RigidBody.CustomTags`.
+    * Removed coefficient of restitution concept from Jacobians. All restitution calculations are approximated and applied before the solve, so restitution changes at this point in the simulation have no effect.
+        * `ModifiableContactJacobian.CoefficientOfRestitution` is now obsolete.
+    * `ModifiableContactJacobian.FrictionEffectiveMassOffDiag` is now obsolete. It was not possible to make any meaningful changes to it without fully understanding friction solving internals.
+    * Removed max impulse concept from Jacobians. Solver design implies impulses are pretty unpredictable, making it difficult to choose maximum impulse value in practice.
+        * `JacobianFlags.EnableMaxImpulse` is now obsolete.
+            * Underlying values of `JacobianFlags` have been changed.
+            * Added `JacobianFlags.UserFlag2`.
+        * `Material.EnableMaxImpulse` is now obsolete.
+        * `MaterialFlags.EnableMaxImpulse` is now obsolete.
+        * `ModifiableJacobianHeader.HasMaxImpulse` is now obsolete.
+        * `ModifiableJacobianHeader.MaxImpulse` is now obsolete.
+    * Removed the following members:
+        * `CollisionFilter.CategoryBits`
+        * `CollisionFilter.MaskBits`
+    * Removed the following types from public API and made them internal:
+        * `AngularLimit1DJacobian`
+        * `AngularLimit2DJacobian`
+        * `AngularLimit3DJacobian`
+        * `BaseContactJacobian`
+        * `BoundingVolumeHierarchy.BuildBranchesJob`
+        * `BoundingVolumeHierarchy.BuildFirstNLevelsJob`
+        * `BoundingVolumeHierarchy.FinalizeTreeJob`
+        * `Broadphase`
+        * `ColliderCastQueries`
+        * `CollisionEvent`
+        * `CollisionEvents`
+        * `ContactHeader`
+        * `ContactJacobian`
+        * `ConvexConvexDistanceQueries`
+        * `ConvexHull`
+        * `ConvexHullBuilder`
+        * `ConvexHullBuilderExtensions`
+        * `DistanceQueries`
+        * `ElementPool<T>` (Unity.Collections)
+        * `Integrator`
+        * `IPoolElement` (Unity.Collections)
+        * `JacobianHeader`
+        * `JacobianIterator`
+        * `JacobianUtilities`
+        * `LinearLimitJacobian`
+        * `ManifoldQueries`
+        * `Mesh`
+        * `MotionExpansion`
+        * `NarrowPhase`
+        * `OverlapQueries`
+        * `QueryWrappers`
+        * `RaycastQueries`
+        * `Scheduler`
+        * `Simulation.Context`
+        * `Solver`
+        * `StaticLayerChangeInfo`
+        * `TriggerEvent`
+        * `TriggerEvents`
+        * `TriggerJacobian`
+    * Removed the following members from public API and made them internal:
+        * Aabb.CreateFromPoints(float3x4)
+        * `BoundingVolumeHierarchy.BuildBranch()`
+        * `BoundingVolumeHierarchy.BuildCombinedCollisionFilter()`
+        * `BoundingVolumeHierarchy.BuildFirstNLevels()`
+        * `BoundingVolumeHierarchy.CheckIntegrity()`
+        * All explicit `ChildCollider` constructors
+        * `ColliderKeyPath(ColliderKey, uint)`
+        * `ColliderKeyPath.Empty`
+        * `ColliderKeyPath.GetLeafKey()`
+        * `ColliderKeyPath.PopChildKey()`
+        * `ColliderKeyPath.PushChildKey()`
+        * `CollisionWorld.Broadphase`
+        * `CompoundCollider.BoundingVolumeHierarchy`
+        * `Constraint.ConstrainedAxis1D`
+        * `Constraint.Dimension`
+        * `Constraint.FreeAxis2D`
+        * `ConvexCollider.ConvexHull`
+        * `MeshCollider.Mesh`
+        * `MotionVelocity.CalculateExpansion()`
+        * `SimulationCallbacks.Any()`
+        * `SimulationCallbacks.Execute()`
+    * `ChildCollider.TransformFromChild` is now a readonly property instead of a field.
+    * Removed `BuildPhysicsWorld.m_StaticLayerChangeInfo`.
+    * Added `FourTranposedAabbs.DistanceFromPointSquared()` signatures passing scale parameter.
+    * Changed `ISimulation` interface (i.e. `Simulation` class).
+        * Added `ISimulation.FinalJobJandle`.
+        * Added `ISimulation.FinalSimulationJobJandle`.
+        * Added simpler `ISimulation.ScheduleStepJobs()` signature and marked previous one obsolete.
+    * Added `RigidBody.HasCollider`.
+    * `SimplexSolver.Solve()` now takes an optional bool to specify whether it should respect minimum delta time.
+    * `SurfaceVelocity.ExtraFrictionDv` has been removed and replaced with more usable `LinearVelocity` and `AngularVelocity` members.
+* Authoring/Conversion API
+    * Added `CustomBodyTagNames`.
+    * Renamed `CustomMaterialTagNames.FlagNames` to `CustomMaterialTagNames.TagNames`.
+    * Renamed `CustomFlagNames` to `CustomPhysicsMaterialTagNames`.
+    * Renamed `CustomPhysicsMaterialTagNames.FlagNames` to `CustomPhysicsMaterialTagNames.TagNames`.
+    * Added `PhysicsCategoryTags`, `CustomBodyTags`, and `CustomMaterialTags` authoring structs.
+    * The following properties now return `PhysicsCategoryTags` instead of `int`:
+        * `PhysicsMaterialTemplate.BelongsTo`
+        * `PhysicsMaterialTemplate.CollidesWith`
+        * `PhysicsShape.BelongsTo`
+        * `PhysicsShape.CollidesWith`
+    * The following members on `PhysicsMaterialTemplate` are now obsolete:
+        * `GetBelongsTo()`
+        * `SetBelongsTo()`
+        * `GetCollidesWith()`
+        * `SetCollidesWith()`
+    * The following members on `PhysicsShape` are now obsolete:
+        * `GetBelongsTo()`
+        * `SetBelongsTo()`
+        * `GetCollidesWith()`
+        * `SetCollidesWith()`
+    * Added `PhysicsMaterialTemplate.CustomTags`.
+        * `CustomFlags`, `GetCustomFlag()` and `SetCustomFlag()` are now obsolete.
+    * Added `PhysicsShape.CustomTags`.
+        * `CustomFlags`, `GetCustomFlag()` and `SetCustomFlag()` are now obsolete.
+    * Added `PhysicsBody.CustomTags`.
+    * Renamed `PhysicsShape.OverrideCustomFlags` to `PhysicsShape.OverrideCustomTags`.
+    * Renamed `PhysicsShape.CustomFlags` to `PhysicsShape.CustomTags`.
+    * Renamed `PhysicsShape.GetCustomFlag()` to `PhysicsShape.GetCustomTag()`.
+    * Renamed `PhysicsShape.SetCustomFlag()` to `PhysicsShape.SetCustomTag()`.
+    * Overload of `PhysicsShape.GetCapsuleProperties()` is now obsolete.
+    * Overload of `PhysicsShape.GetPlaneProperties()` is now obsolete.
+    * Removed `PhysicsBody.m_OverrideDefaultMassDistribution` (backing field never intended to be public).
+    * `PhysicsShape.GetBoxProperties()` now returns underlying serialized data instead of reorienting/resizing when aligned to local axes.
+    * `BaseShapeConversionSystem.GetCustomFlags()` is now obsolete.
+    * Parameterless constructors have been made private for the following types because they should not be used (use instead ScriptableObjectCreateInstance<T>() or GameObject.AddComponent<T>() as applicable):
+        * `CustomPhysicsMaterialTagNames`
+        * `PhysicsCategoryNames`
+        * `PhysicsMaterialTemplate`
+        * `PhysicsBody`
+        * `PhysicsShape`
+    * The following types have been made sealed:
+        * `LegacyBoxColliderConversionSystem`
+        * `LegacyCapsuleColliderConversionSystem`
+        * `LegacySphereColliderConversionSystem`
+        * `LegacyMeshColliderConversionSystem`
+        * `LegacyRigidbodyConversionSystem`
+        * `PhysicsBodyConversionSystem`
+        * `PhysicsShapeConversionSystem`
+    * `DisplayContactsJob` has been deprecated in favor of protected `DisplayContactsSystem.DisplayContactsJob`.
+    * `FinishDisplayContactsJob` has been deprecated in favor of protected `DisplayContactsSystem.FinishDisplayContactsJob`.
+    * `DisplayJointsJob` has been deprecated in favor of protected `DisplayJointsSystem.DisplayJointsJob`.
+    * `FinishDisplayTriggerEventsJob` has been deprecated in favor of protected `DisplayTriggerEventsSystem.FinishDisplayTriggerEventsJob`.
+    * The following types have been deprecated and will be made internal in a future release:
+        * `DisplayBodyColliders.DrawComponent`
+        * `DisplayCollisionEventsSystem.FinishDisplayCollisionEventsJob`
+* Run-Time Behavior
+    * Collision events between infinite mass bodies (kinematic-kinematic and kinematic-static) are now raised. The reported impulse will be 0.
+    * The default value of `Unity.Physics.PhysicsStep.ThreadCountHint` has been increased from 4 to 8.
+    * `EndFramePhysicsSystem` no longer waits for `HandlesToWaitFor`, instead it produces a `FinalJobHandle` which is a combination of those jobs plus the built-in physics jobs. Subsequent systems that depend on all physics jobs being complete can use that as an input dependency.
+* Authoring/Conversion Behavior
+    * `PhysicsCustomData` is now converted from `PhysicsBody.CustomTags` instead of using the flags common to all leaf shapes.
+    * `PhysicsShape.CustomTags` is now converted into `Material.CustomTags`.
+    * If a shape conversion system throws an exception when producing a `PhysicsCollider`, then it is simply skipped and logs an error message, instead of causing the entire conversion process to fail.
+    * `PhysicsShape` Inspector now displays suggestions of alternative primitive shape types if a simpler shape would yield the same collision result as the current configuration.
+    * `PhysicsShape` Inspector now displays error messages if a custom mesh or discovered mesh is not compatible with run-time conversion.
+
+### Fixes
+
+* Draw Collider Edges now supports spheres, capsules, cylinders and compound colliders.
+* Fixed bug causing editor to get caught in infinite loop when adding `PhysicsShape` component to a GameObject with deactivated children with `MeshFilter` components. 
+* Fixed bug resulting in the creation of `PhysicMaterial` objects in sub-scenes when converting legacy colliders.
+* Fixed bug when scaling down friction on bounce in Jacobian building. Once a body was declared to bounce (apply restitution), all subsequent body Jacobians had their friction scaled down to 25%.
+* Fixed bug resulting in the broadphase for static bodies possibly not being updated when adding or moving a static body, causing queries and collisions to miss.
+* Fixed bug with restitution impulse during penetration recovery being too big due to wrong units used.
+* Fixed bug with energy gain coming from restitution impulse with high restitution values.
+* Fixed Jacobian structures being allocated at non 4 byte aligned addresses, which caused crashes on Android
+* Removed Solver & Scheduler asserts from Joints between two static bodies #383.
+* Fixed bug preventing the conversion of classic `BoxCollider` components with small sizes.
+* Fixed bug where `PhysicsShape.ConvexRadius` setter was clamping already serialized value instead of newly assigned value.
+* Fixed bug where `PhysicsShape` orientation, size, and convex radius values might undergo changes during conversion resulting in identical volumes; only objects inheriting non-uniform scale now exhibit this behavior. 
+* Fixed bug causing minor drawing error for cylinder `PhysicsShape` with non-zero convex radius.
+* Fixed crash when trying to run-time convert a `MeshCollider` or `PhysicsShape` with a non-readable mesh assigned. Conversion system now logs an exception instead.
+* Fixed crash when constructing a `MeshCollider` with no input triangles. A valid (empty) mesh is still created.
+* Fixed bugs building to IL2CPP resulting in unresolved external symbols in `BvhLeafProcessor`, `ConvexCompoundLeafProcessor`, and `ConvexMeshLeafProcessor`.
+* Fixed bug causing physics IJob's to not be burst compiled (ICollisionEventsJob, ITriggerEventsJob, IBodyPairsJob, IContactsJob, IJacobiansJob)
+
+
+
 ## [0.1.0-preview] - 2019-05-31
 
 ### Upgrade guide

@@ -1,11 +1,11 @@
-﻿using NUnit.Framework;
+﻿using System;
+using NUnit.Framework;
 using Unity.Mathematics;
 using UnityEngine;
-using Assert = UnityEngine.Assertions.Assert;
 
 namespace Unity.Physics.Tests.Collision.Geometry
 {
-    public class ConvexHullTests
+    class ConvexHullTests
     {
         [Test]
         public void BuildConvexHull2D()

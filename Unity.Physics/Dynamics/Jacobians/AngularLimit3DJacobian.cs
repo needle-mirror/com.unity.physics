@@ -4,7 +4,7 @@ using static Unity.Physics.Math;
 namespace Unity.Physics
 {
     // Solve data for a constraint that limits three degrees of angular freedom
-    public struct AngularLimit3DJacobian
+    struct AngularLimit3DJacobian
     {
         // Relative angle limits
         public float MinAngle;

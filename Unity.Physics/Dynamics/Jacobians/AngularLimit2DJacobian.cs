@@ -4,7 +4,7 @@ using static Unity.Physics.Math;
 namespace Unity.Physics
 {
     // Solve data for a constraint that limits two degrees of angular freedom
-    public struct AngularLimit2DJacobian
+    struct AngularLimit2DJacobian
     {
         // Free axes in motion space
         public float3 AxisAinA;

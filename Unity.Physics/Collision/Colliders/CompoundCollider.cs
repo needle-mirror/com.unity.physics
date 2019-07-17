@@ -41,7 +41,7 @@ namespace Unity.Physics
         // The bounding volume hierarchy
         // TODO: Store node filters array too, for filtering queries within the BVH
         private BlobArray m_BvhNodesBlob;
-        public unsafe BoundingVolumeHierarchy BoundingVolumeHierarchy
+        internal unsafe BoundingVolumeHierarchy BoundingVolumeHierarchy
         {
             get
             {
@@ -56,7 +56,7 @@ namespace Unity.Physics
         #region Construction
 
         // Input to Create()
-        public struct ColliderBlobInstance
+        public struct ColliderBlobInstance  // TODO: better name?
         {
             public RigidTransform CompoundFromChild;
             public BlobAssetReference<Collider> Collider;

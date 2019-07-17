@@ -9,7 +9,7 @@ namespace Unity.Physics
     // A collision mesh, containing triangles and quads.
     // Warning: This is just the header, the mesh's variable sized data follows it in memory.
     // Therefore this struct must always be passed by reference, never by value.
-    public struct Mesh
+    struct Mesh
     {
         // A set of vertex indices into the section's vertex buffer
         // TODO: "Primitive" is an overloaded term, rename?

@@ -10,7 +10,7 @@ using Debug = UnityEngine.Debug;
 
 namespace Unity.Physics.Tests.Collision.Queries
 {
-    public unsafe class ConvexConvexDistanceTest : MonoBehaviour
+    unsafe class ConvexConvexDistanceTest : MonoBehaviour
     {
         public enum DistributionType
         {
@@ -95,10 +95,10 @@ namespace Unity.Physics.Tests.Collision.Queries
             UInt32 m_x, m_y, m_z, m_w, m_c;
         }
 
-        public ConvexHullBuilder Hull = new ConvexHullBuilder(16384, 16384 * 2);
+        internal ConvexHullBuilder Hull = new ConvexHullBuilder(16384, 16384 * 2);
         public HullFaceData HullData;
 
-        public ConvexHullBuilder.MassProperties MassProperties;
+        internal ConvexHullBuilder.MassProperties MassProperties;
         public UnityEngine.Mesh SourceMesh = null;
         public bool UpdateMesh;
         public bool CollideOthers = false;
@@ -732,7 +732,7 @@ namespace Unity.Physics.Tests.Collision.Queries
 
 #if UNITY_EDITOR
     [CustomEditor(typeof(ConvexConvexDistanceTest))]
-    public class ConvexTestEditor : UnityEditor.Editor
+    class ConvexTestEditor : UnityEditor.Editor
     {
         public override void OnInspectorGUI()
         {

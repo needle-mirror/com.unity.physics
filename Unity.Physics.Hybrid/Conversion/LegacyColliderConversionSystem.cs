@@ -23,6 +23,17 @@ namespace Unity.Physics.Authoring
                 { PhysicMaterialCombine.Minimum, Material.CombinePolicy.Minimum }
             };
 
+        static PhysicMaterial DefaultMaterial
+        {
+            get
+            {
+                if (s_DefaultMaterial == null)
+                    s_DefaultMaterial = new PhysicMaterial { hideFlags = HideFlags.DontSave };
+                return s_DefaultMaterial;
+            }
+        }
+        static PhysicMaterial s_DefaultMaterial;
+
         protected static Material ProduceMaterial(LegacyCollider collider)
         {
             var material = new Material
@@ -33,27 +44,27 @@ namespace Unity.Physics.Authoring
                     : new Material.MaterialFlags()
             };
 
-            var legacyMaterial = collider.material;
-            if (legacyMaterial != null)
-            {
-                material.Friction = legacyMaterial.dynamicFriction;
-                if (k_MaterialCombineLookup.TryGetValue(legacyMaterial.frictionCombine, out var combine))
-                    material.FrictionCombinePolicy = combine;
-                else
-                    Debug.LogWarning(
-                        $"{collider.name} uses {legacyMaterial.name}, which specifies non-convertible mode {legacyMaterial.frictionCombine} for {nameof(PhysicMaterial.frictionCombine)}.",
-                        collider
-                    );
+            var legacyMaterial = collider.sharedMaterial;
+            if (legacyMaterial == null)
+                legacyMaterial = DefaultMaterial;
 
-                material.Restitution = legacyMaterial.bounciness;
-                if (k_MaterialCombineLookup.TryGetValue(legacyMaterial.bounceCombine, out combine))
-                    material.RestitutionCombinePolicy = combine;
-                else
-                    Debug.LogWarning(
-                        $"{collider.name} uses {legacyMaterial.name}, which specifies non-convertible mode {legacyMaterial.bounceCombine} for {nameof(PhysicMaterial.bounceCombine)}.",
-                        collider
-                    );
-            }
+            material.Friction = legacyMaterial.dynamicFriction;
+            if (k_MaterialCombineLookup.TryGetValue(legacyMaterial.frictionCombine, out var combine))
+                material.FrictionCombinePolicy = combine;
+            else
+                Debug.LogWarning(
+                    $"{collider.name} uses {legacyMaterial.name}, which specifies non-convertible mode {legacyMaterial.frictionCombine} for {nameof(PhysicMaterial.frictionCombine)}.",
+                    collider
+                );
+
+            material.Restitution = legacyMaterial.bounciness;
+            if (k_MaterialCombineLookup.TryGetValue(legacyMaterial.bounceCombine, out combine))
+                material.RestitutionCombinePolicy = combine;
+            else
+                Debug.LogWarning(
+                    $"{collider.name} uses {legacyMaterial.name}, which specifies non-convertible mode {legacyMaterial.bounceCombine} for {nameof(PhysicMaterial.bounceCombine)}.",
+                    collider
+                );
 
             return material;
         }
@@ -69,10 +80,9 @@ namespace Unity.Physics.Authoring
 
         protected override bool ShouldConvertShape(T shape) => shape.enabled;
         protected override GameObject GetPrimaryBody(T shape) => shape.GetPrimaryBody();
-        protected override byte GetCustomFlags(T shape) => 0;
     }
 
-    public class LegacyBoxColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacyBox>
+    public sealed class LegacyBoxColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacyBox>
     {
         protected override BlobAssetReference<Collider> ProduceColliderBlob(LegacyBox shape)
         {
@@ -89,14 +99,14 @@ namespace Unity.Physics.Authoring
                 center,
                 quaternion.identity,
                 size,
-                PhysicsShape.k_DefaultConvexRadius,
+                math.min(PhysicsShape.k_DefaultConvexRadius, math.cmin(size) * 0.5f),
                 ProduceCollisionFilter(shape),
                 ProduceMaterial(shape)
             );
         }
     }
 
-    public class LegacyCapsuleColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacyCapsule>
+    public sealed class LegacyCapsuleColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacyCapsule>
     {
         protected override BlobAssetReference<Collider> ProduceColliderBlob(LegacyCapsule shape)
         {
@@ -124,7 +134,7 @@ namespace Unity.Physics.Authoring
         }
     }
 
-    public class LegacySphereColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacySphere>
+    public sealed class LegacySphereColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacySphere>
     {
         protected override BlobAssetReference<Collider> ProduceColliderBlob(LegacySphere shape)
         {
@@ -146,7 +156,7 @@ namespace Unity.Physics.Authoring
         }
     }
 
-    public class LegacyMeshColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacyMesh>
+    public sealed class LegacyMeshColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacyMesh>
     {
         List<Vector3> m_Vertices = new List<Vector3>(65535 / 2);
 
@@ -156,6 +166,13 @@ namespace Unity.Physics.Authoring
             {
                 throw new InvalidOperationException(
                     $"No {nameof(LegacyMesh.sharedMesh)} assigned to {typeof(MeshCollider)} on {shape.name}."
+                );
+            }
+
+            if (!shape.sharedMesh.IsValidForConversion(shape.gameObject))
+            {
+                throw new InvalidOperationException(
+                    $"Mesh '{shape.sharedMesh}' assigned to {typeof(MeshCollider)} on {shape.name} is not readable. Ensure that you have enabled Read/Write on its import settings."
                 );
             }
 

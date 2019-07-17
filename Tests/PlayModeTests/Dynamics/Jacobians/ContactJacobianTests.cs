@@ -1,12 +1,11 @@
-﻿using NUnit.Framework;
+﻿using System;
+using NUnit.Framework;
 using Unity.Collections;
-using Unity.Mathematics;
-using static Unity.Physics.Math;
 using Assert = UnityEngine.Assertions.Assert;
 
 namespace Unity.Physics.Tests.Dynamics.Jacobians
 {
-    public class ContactJacobiansTests
+    class ContactJacobiansTests
     {
         [Test]
         public void SolveTest()
@@ -19,7 +18,7 @@ namespace Unity.Physics.Tests.Dynamics.Jacobians
             var stepInput = new Solver.StepInput();
             var collisionEventsWriter = new BlockStream.Writer();
 
-            jacobian.Solve(ref jacHeader, ref velocityA, ref velocityB, stepInput, ref collisionEventsWriter);
+            jacobian.SolveContact(ref jacHeader, ref velocityA, ref velocityB, stepInput, ref collisionEventsWriter);
 
             Assert.AreEqual(new JacobianHeader(), jacHeader);
             Assert.AreEqual(MotionVelocity.Zero, velocityA);

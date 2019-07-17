@@ -4,10 +4,13 @@ using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Jobs.LowLevel.Unsafe;
 using Unity.Mathematics;
+using EditorBrowsableAttribute = System.ComponentModel.EditorBrowsableAttribute;
+using EditorBrowsableState = System.ComponentModel.EditorBrowsableState;
 
 namespace Unity.Physics
 {
     // Interface for jobs that iterate through the list of contact manifolds produced by the narrow phase
+    [JobProducerType(typeof(IContactsJobExtensions.ContactsJobProcess<>))]
     public interface IContactsJob
     {
         // Note, multiple contacts can share the same header, but will have a different ModifiableContactPoint.Index.
@@ -21,7 +24,7 @@ namespace Unity.Physics
 
         public EntityPair Entities { get; internal set; }
         public BodyIndexPair BodyIndexPair => ContactHeader.BodyPair;
-        public CustomDataPair BodyCustomDatas => ContactHeader.BodyCustomDatas;
+        public CustomTagsPair BodyCustomTags => ContactHeader.BodyCustomTags;
         public ColliderKeyPair ColliderKeys => ContactHeader.ColliderKeys;
         public int NumContacts => ContactHeader.NumContacts;
 
@@ -64,6 +67,12 @@ namespace Unity.Physics
                 Modified = true;
             }
         }
+
+        #region Obsolete
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("BodyCustomDatas has been deprecated. Use BodyCustomTags instead. (RemovedAfter 2019-10-03)", true)]
+        public CustomDataPair BodyCustomDatas => throw new NotImplementedException();
+        #endregion
     }
 
     public struct ModifiableContactPoint
@@ -142,17 +151,17 @@ namespace Unity.Physics
             return inputDeps;
         }
 
-        private unsafe struct ContactsJobData<T> where T : struct
+        internal unsafe struct ContactsJobData<T> where T : struct
         {
             public T UserJobData;
 
             [NativeDisableContainerSafetyRestriction] public BlockStream.Reader ContactReader;
             [ReadOnly] public NativeArray<int> NumWorkItems;
-            //Need to disable aliasing restriction in case T has a NativeSlice of PhysicsWorld.Bodies:
-            [ReadOnly] [NativeDisableContainerSafetyRestriction] public NativeSlice<RigidBody> Bodies;
+            // Disable aliasing restriction in case T has a NativeSlice of PhysicsWorld.Bodies
+            [ReadOnly, NativeDisableContainerSafetyRestriction] public NativeSlice<RigidBody> Bodies;
         }
 
-        private struct ContactsJobProcess<T> where T : struct, IContactsJob
+        internal struct ContactsJobProcess<T> where T : struct, IContactsJob
         {
             static IntPtr jobReflectionData;
 
@@ -176,6 +185,8 @@ namespace Unity.Physics
 
                 while (iterator.HasItemsLeft())
                 {
+                    iterator.Next();
+
                     //<todo.eoin.modifier Could store the pointer, to avoid copies, like the jacobian job?
                     var header = new ModifiableContactHeader
                     {
@@ -203,8 +214,6 @@ namespace Unity.Physics
                     {
                         *iterator.m_LastContact = contact.ContactPoint;
                     }
-
-                    iterator.Next();
                 }
             }
         }
@@ -217,7 +226,7 @@ namespace Unity.Physics
             [NativeDisableUnsafePtrRestriction] public ContactPoint* m_LastContact;
             int m_NumPointsLeft;
             int m_CurrentWorkItem;
-            int m_MaxNumWorkItems;
+            readonly int m_MaxNumWorkItems;
 
             public unsafe ContactsJobIterator(BlockStream.Reader reader, int numWorkItems)
             {
@@ -229,7 +238,6 @@ namespace Unity.Physics
                 m_LastHeader = null;
                 m_LastContact = null;
                 AdvanceForEachIndex();
-                Next();
             }
 
             public bool HasItemsLeft()

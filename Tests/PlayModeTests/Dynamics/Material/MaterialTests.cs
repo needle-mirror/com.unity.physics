@@ -1,12 +1,10 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+﻿using System;
 using NUnit.Framework;
 using UnityEngine;
-using UnityEngine.TestTools;
 
 namespace Unity.Physics.Tests.Dynamics.Materials
 {
-    public class MaterialTests
+    class MaterialTests
     {
         [Test]
         public void FrictionCombinePolicyTest()

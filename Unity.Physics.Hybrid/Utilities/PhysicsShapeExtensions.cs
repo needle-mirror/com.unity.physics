@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Mathematics;
+using Unity.Scenes;
 using UnityEngine;
 using UnityCollider = UnityEngine.Collider;
 
@@ -19,6 +20,37 @@ namespace Unity.Physics.Authoring
         {
             var cmax = math.cmax(v);
             return cmax == v.z ? 2 : cmax == v.y ? 1 : 0;
+        }
+
+        static bool HasNonUniformScale(this float4x4 m)
+        {
+            var s = new float3(math.lengthsq(m.c0.xyz), math.lengthsq(m.c1.xyz), math.lengthsq(m.c2.xyz));
+            return math.cmin(s) != math.cmax(s);
+        }
+
+        internal static bool HasShear(this float4x4 m)
+        {
+            // scale each axis by abs of its max component in order to work with very large/small scales
+            var rs0 = m.c0.xyz / math.max(math.cmax(math.abs(m.c0.xyz)), float.Epsilon);
+            var rs1 = m.c1.xyz / math.max(math.cmax(math.abs(m.c1.xyz)), float.Epsilon);
+            var rs2 = m.c2.xyz / math.max(math.cmax(math.abs(m.c2.xyz)), float.Epsilon);
+            // verify all axes are orthogonal
+            const float k_Zero = 1e-6f;
+            return
+                math.abs(math.dot(rs0, rs1)) > k_Zero ||
+                math.abs(math.dot(rs0, rs2)) > k_Zero ||
+                math.abs(math.dot(rs1, rs2)) > k_Zero;
+        }
+
+        // TODO: revisit readable requirement when conversion is offline-only
+        internal static bool IsValidForConversion(this UnityEngine.Mesh mesh, GameObject host)
+        {
+            if (mesh.isReadable)
+                return true;
+            if (Application.isPlaying)
+                return false;
+            var subScene = host.GetComponentInParent<SubScene>();
+            return subScene != null;
         }
 
         internal static GameObject GetPrimaryBody(this UnityCollider collider) => GetPrimaryBody(collider.gameObject);
@@ -105,16 +137,27 @@ namespace Unity.Physics.Authoring
                 throw new ArgumentException(nameof(basisPriority));
 
             var localToBasis = float4x4.TRS(center, orientation, scale);
+            // correct for imprecision in cases of no scale to prevent e.g., convex radius from being altered
+            if (scale.Equals(new float3(1f)))
+            {
+                localToBasis.c0 = math.normalizesafe(localToBasis.c0);
+                localToBasis.c1 = math.normalizesafe(localToBasis.c1);
+                localToBasis.c2 = math.normalizesafe(localToBasis.c2);
+            }
             var localToBake = math.mul(shape.transform.localToWorldMatrix, localToBasis);
 
-            // deskew second longest axis with respect to longest axis
-            localToBake[basisPriority[1]] =
-                DeskewSecondaryAxis(localToBake[basisPriority[0]], localToBake[basisPriority[1]]);
-            // recompute third axes from first two
-            var n2 = math.normalizesafe(
-                new float4(math.cross(localToBake[basisPriority[0]].xyz, localToBake[basisPriority[1]].xyz), 0f)
-            );
-            localToBake[basisPriority[2]] = n2 * math.dot(localToBake[basisPriority[2]], n2);
+            if (localToBake.HasNonUniformScale() || localToBake.HasShear())
+            {
+                // deskew second longest axis with respect to longest axis
+                localToBake[basisPriority[1]] =
+                    DeskewSecondaryAxis(localToBake[basisPriority[0]], localToBake[basisPriority[1]]);
+
+                // recompute third axes from first two
+                var n2 = math.normalizesafe(
+                    new float4(math.cross(localToBake[basisPriority[0]].xyz, localToBake[basisPriority[1]].xyz), 0f)
+                );
+                localToBake[basisPriority[2]] = n2 * math.dot(localToBake[basisPriority[2]], n2);
+            }
 
             var bakeToShape = math.mul(math.inverse(shape.GetShapeToWorldMatrix()), localToBake);
             // transform baked center/orientation (i.e. primitive basis) into shape space
@@ -172,19 +215,44 @@ namespace Unity.Physics.Authoring
         {
             shape.GetBoxProperties(out center, out size, out orientation);
 
-            var basisToWorld = GetBasisToWorldMatrix(shape.transform.localToWorldMatrix, center, orientation, size);
-            var basisPriority = GetBasisAxisPriority(basisToWorld);
+            var localToWorld = (float4x4)shape.transform.localToWorldMatrix;
+            float4x4 bakeToShape;
+            var basisPriority = k_DefaultAxisPriority;
+            var sheared = localToWorld.HasShear();
+            if (localToWorld.HasNonUniformScale() || sheared)
+            {
+                if (sheared)
+                {
+                    var basisToWorld =
+                        GetBasisToWorldMatrix(shape.transform.localToWorldMatrix, center, orientation, size);
+                    basisPriority = GetBasisAxisPriority(basisToWorld);
+                }
 
-            var bakeToShape = GetPrimitiveBakeToShapeMatrix(shape, ref center, ref orientation, size, basisPriority);
+                bakeToShape =
+                    GetPrimitiveBakeToShapeMatrix(shape, ref center, ref orientation, size, basisPriority);
 
-            var s = new float3(
-                math.length(bakeToShape[basisPriority[2]]),
-                math.length(bakeToShape[basisPriority[1]]),
-                math.length(bakeToShape[basisPriority[0]])
-            );
-            convexRadius = shape.ConvexRadius * math.cmin(s / size);
+                var s = new float3(
+                    math.length(bakeToShape[basisPriority[2]]),
+                    math.length(bakeToShape[basisPriority[1]]),
+                    math.length(bakeToShape[basisPriority[0]])
+                );
 
-            size = s;
+                convexRadius = shape.ConvexRadius * math.cmin(s / size);
+                size = s;
+            }
+            else
+            {
+                bakeToShape =
+                    GetPrimitiveBakeToShapeMatrix(shape, ref center, ref orientation, 1f, basisPriority);
+
+                var s = new float3(
+                    math.length(bakeToShape.c0),
+                    math.length(bakeToShape.c1),
+                    math.length(bakeToShape.c2)
+                );
+
+                convexRadius = shape.ConvexRadius * math.cmin(s);
+            }
         }
 
         static void MakeZAxisPrimaryBasis(ref int3 basisPriority)
@@ -204,9 +272,16 @@ namespace Unity.Physics.Authoring
             shape.GetCapsuleProperties(out center, out height, out radius, out orientation);
 
             var s = new float3(radius * 2f, radius * 2f, height);
-            var basisToWorld = GetBasisToWorldMatrix(shape.transform.localToWorldMatrix, center, orientation, s);
-            var basisPriority = GetBasisAxisPriority(basisToWorld);
-            MakeZAxisPrimaryBasis(ref basisPriority);
+            var localToWorld = (float4x4)shape.transform.localToWorldMatrix;
+            var basisToWorld = GetBasisToWorldMatrix(localToWorld, center, orientation, s);
+            var basisPriority = k_DefaultAxisPriority;
+            var sheared = localToWorld.HasShear();
+            if (localToWorld.HasNonUniformScale() || sheared)
+            {
+                if (sheared)
+                    basisPriority = GetBasisAxisPriority(basisToWorld);
+                MakeZAxisPrimaryBasis(ref basisPriority);
+            }
             var bakeToShape = GetPrimitiveBakeToShapeMatrix(shape, ref center, ref orientation, 1f, basisPriority);
 
             height *= math.length(bakeToShape.c2);
@@ -226,9 +301,16 @@ namespace Unity.Physics.Authoring
             shape.GetCylinderProperties(out center, out height, out radius, out orientation);
 
             var size = new float3(radius * 2f, radius * 2f, height);
-            var basisToWorld = GetBasisToWorldMatrix(shape.transform.localToWorldMatrix, center, orientation, size);
-            var basisPriority = GetBasisAxisPriority(basisToWorld);
-            MakeZAxisPrimaryBasis(ref basisPriority);
+            var localToWorld = (float4x4)shape.transform.localToWorldMatrix;
+            var basisToWorld = GetBasisToWorldMatrix(localToWorld, center, orientation, size);
+            var basisPriority = k_DefaultAxisPriority;
+            var sheared = localToWorld.HasShear();
+            if (localToWorld.HasNonUniformScale() || sheared)
+            {
+                if (sheared)
+                    basisPriority = GetBasisAxisPriority(basisToWorld);
+                MakeZAxisPrimaryBasis(ref basisPriority);
+            }
             var bakeToShape = GetPrimitiveBakeToShapeMatrix(shape, ref center, ref orientation, 1f, basisPriority);
 
             height *= math.length(bakeToShape.c2);
@@ -249,7 +331,7 @@ namespace Unity.Physics.Authoring
             shape.GetSphereProperties(out center, out radius, out orientation);
 
             var basisToWorld = GetBasisToWorldMatrix(shape.transform.localToWorldMatrix, center, orientation, 1f);
-            var basisPriority = GetBasisAxisPriority(basisToWorld);
+            var basisPriority = basisToWorld.HasShear() ? GetBasisAxisPriority(basisToWorld) : k_DefaultAxisPriority;
             var bakeToShape = GetPrimitiveBakeToShapeMatrix(shape, ref center, ref orientation, 1f, basisPriority);
 
             radius *= math.cmax(

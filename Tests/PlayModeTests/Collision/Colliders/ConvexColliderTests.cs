@@ -1,9 +1,9 @@
+using System;
 using NUnit.Framework;
 using Unity.Mathematics;
 using UnityEngine;
 using Assert = UnityEngine.Assertions.Assert;
 using TestUtils = Unity.Physics.Tests.Utils.TestUtils;
-using Unity.Collections.LowLevel.Unsafe;
 using Unity.Collections;
 
 namespace Unity.Physics.Tests.Collision.Colliders
@@ -11,7 +11,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
     /// <summary>
     /// Contains all <see cref="ConvexCollider"/> unit tests
     /// </summary>
-    public class ConvexColliderTests
+    class ConvexColliderTests
     {
         #region Construction
 

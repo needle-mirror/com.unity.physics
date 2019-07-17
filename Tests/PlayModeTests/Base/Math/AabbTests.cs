@@ -1,15 +1,16 @@
-﻿using NUnit.Framework;
-using Unity.Mathematics;
+﻿using System;
+using NUnit.Framework;
 using static Unity.Mathematics.math;
 using Assert = UnityEngine.Assertions.Assert;
 using float3 = Unity.Mathematics.float3;
 using quaternion = Unity.Mathematics.quaternion;
+using Random = Unity.Mathematics.Random;
 using RigidTransform = Unity.Mathematics.RigidTransform;
 using TestUtils = Unity.Physics.Tests.Utils.TestUtils;
 
 namespace Unity.Physics.Tests.Base.Math
 {
-    public class AabbTests
+    class AabbTests
     {
         const float k_pi2 = 1.57079632679489f;
 

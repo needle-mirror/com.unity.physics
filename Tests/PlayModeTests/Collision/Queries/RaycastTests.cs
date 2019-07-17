@@ -1,9 +1,10 @@
-﻿using NUnit.Framework;
+﻿using System;
+using NUnit.Framework;
 using Unity.Mathematics;
 
 namespace Unity.Physics.Tests.Collision.Queries
 {
-    public class RayCastTests
+    class RayCastTests
     {
         [Test]
         public void RayVsTriangle()

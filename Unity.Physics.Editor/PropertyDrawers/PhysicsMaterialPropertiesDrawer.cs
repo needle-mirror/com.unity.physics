@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using Unity.Physics.Authoring;
 using UnityEditor;
 using UnityEngine;
@@ -8,20 +7,10 @@ using UnityEngine;
 namespace Unity.Physics.Editor
 {
     [CustomPropertyDrawer(typeof(PhysicsMaterialProperties))]
-    class PhysicsMaterialPropertiesDrawer : BaseDrawer,
-        ICustomOptionNamesProvider<PhysicsCategoryNames>,
-        ICustomOptionNamesProvider<CustomFlagNames>
+    class PhysicsMaterialPropertiesDrawer : BaseDrawer
     {
         static class Content
         {
-            static readonly string DefaultCategoryFormatString = L10n.Tr("(Undefined Category {0})");
-            static readonly string DefaultCustomFlagFormatString = L10n.Tr("Custom Flag {0}");
-
-            public static readonly string[] DefaultCategoriesOptions =
-                Enumerable.Range(0, 32).Select(i => string.Format(DefaultCategoryFormatString, i)).ToArray();
-            public static readonly string[] DefaultCustomFlags =
-                Enumerable.Range(0, 8).Select(i => string.Format(DefaultCustomFlagFormatString, i)).ToArray();
-
             public static readonly GUIContent AdvancedGroupFoldout = EditorGUIUtility.TrTextContent("Advanced");
             public static readonly GUIContent BelongsToLabel = EditorGUIUtility.TrTextContent(
                 "Belongs To",
@@ -35,7 +24,7 @@ namespace Unity.Physics.Editor
             public static readonly GUIContent CollisionFilterGroupFoldout =
                 EditorGUIUtility.TrTextContent("Collision Filter");
             public static readonly GUIContent CustomFlagsLabel =
-                EditorGUIUtility.TrTextContent("Custom Flags", "Specify custom flags to read at run-time.");
+                EditorGUIUtility.TrTextContent("Custom Tags", "Specify custom tags to read at run-time.");
             public static readonly GUIContent FrictionLabel = EditorGUIUtility.TrTextContent(
                 "Friction",
                 "Specifies how resistant the body is to motion when sliding along other surfaces, " +
@@ -55,30 +44,6 @@ namespace Unity.Physics.Editor
                 "Specifies that the shape is a volume that will raise events when intersecting other shapes, but will not cause a collision response."
             );
         }
-
-        string[] ICustomOptionNamesProvider<PhysicsCategoryNames>.GetOptions()
-        {
-            this.GetOptionsAndNameAssets(ref m_CategoriesOptionNames, ref m_CategoriesAssets, Content.DefaultCategoriesOptions);
-            return m_CategoriesOptionNames;
-        }
-        string[] m_CategoriesOptionNames;
-
-        IReadOnlyList<PhysicsCategoryNames> ICustomOptionNamesProvider<PhysicsCategoryNames>.NameAssets => m_CategoriesAssets;
-        PhysicsCategoryNames[] m_CategoriesAssets;
-
-        void ICustomOptionNamesProvider<PhysicsCategoryNames>.Update() => m_CategoriesOptionNames = null;
-
-        string[] ICustomOptionNamesProvider<CustomFlagNames>.GetOptions()
-        {
-            this.GetOptionsAndNameAssets(ref m_CustomFlagsOptionNames, ref m_CustomFlagsAssets, Content.DefaultCustomFlags);
-            return m_CustomFlagsOptionNames;
-        }
-        string[] m_CustomFlagsOptionNames;
-
-        IReadOnlyList<CustomFlagNames> ICustomOptionNamesProvider<CustomFlagNames>.NameAssets => m_CustomFlagsAssets;
-        CustomFlagNames[] m_CustomFlagsAssets;
-
-        void ICustomOptionNamesProvider<CustomFlagNames>.Update() => m_CustomFlagsOptionNames = null;
 
         const string k_CollisionFilterGroupKey = "m_BelongsTo";
         const string k_AdvancedGroupKey = "m_RaisesCollisionEvents";
@@ -181,19 +146,25 @@ namespace Unity.Physics.Editor
             DisplayOverridableProperty(position, label, toggle, value, templateAssigned, EditorGUI.PropertyField);
         }
 
-        bool CategoriesPopup(Rect position, SerializedProperty property, GUIContent label, bool includeChildren)
+        CustomMaterialTagsDrawer m_CustomMaterialTagsDrawer =
+            new CustomMaterialTagsDrawer { FirstChildPropertyPath = "Array.data[0]" };
+
+        bool DrawCustomMaterialTags(
+            Rect position, SerializedProperty property, GUIContent label, bool includeChildren
+        )
         {
-            EditorGUIControls.DoCustomNamesPopup(
-                position, property, label, this as ICustomOptionNamesProvider<PhysicsCategoryNames>
-            );
+            m_CustomMaterialTagsDrawer.OnGUI(position, property, label);
             return includeChildren && property.hasChildren && property.isExpanded;
         }
 
-        bool FlagsPopup(Rect position, SerializedProperty property, GUIContent label, bool includeChildren)
+        PhysicsCategoryTagsDrawer m_PhysicsCategoryTagsDrawer =
+            new PhysicsCategoryTagsDrawer { FirstChildPropertyPath = "Array.data[0]" };
+
+        bool DrawPhysicsCategoryTags(
+            Rect position, SerializedProperty property, GUIContent label, bool includeChildren
+        )
         {
-            EditorGUIControls.DoCustomNamesPopup(
-                position, property, label, this as ICustomOptionNamesProvider<CustomFlagNames>
-            );
+            m_PhysicsCategoryTagsDrawer.OnGUI(position, property, label);
             return includeChildren && property.hasChildren && property.isExpanded;
         }
 
@@ -242,16 +213,12 @@ namespace Unity.Physics.Editor
                 FindToggleAndValueProperties(property, templateValue, "m_BelongsTo", out toggle, out var belongsTo);
                 position.y = position.yMax + EditorGUIUtility.standardVerticalSpacing;
                 position.height = EditorGUIUtility.singleLineHeight;
-                DisplayOverridableProperty(
-                    position, Content.BelongsToLabel, toggle, belongsTo, templateAssigned, CategoriesPopup
-                );
+                DisplayOverridableProperty(position, Content.BelongsToLabel, toggle, belongsTo, templateAssigned, DrawPhysicsCategoryTags);
 
                 FindToggleAndValueProperties(property, templateValue, "m_CollidesWith", out toggle, out var collidesWith);
                 position.y = position.yMax + EditorGUIUtility.standardVerticalSpacing;
                 position.height = EditorGUIUtility.singleLineHeight;
-                DisplayOverridableProperty(
-                    position, Content.CollidesWithLabel, toggle, collidesWith, templateAssigned, CategoriesPopup
-                );
+                DisplayOverridableProperty(position, Content.CollidesWithLabel, toggle, collidesWith, templateAssigned, DrawPhysicsCategoryTags);
 
                 --EditorGUI.indentLevel;
             }
@@ -281,12 +248,10 @@ namespace Unity.Physics.Editor
                     );
                 }
 
-                FindToggleAndValueProperties(property, templateValue, "m_CustomFlags", out toggle, out var customFlags);
+                FindToggleAndValueProperties(property, templateValue, "m_CustomTags", out toggle, out var customFlags);
                 position.y = position.yMax + EditorGUIUtility.standardVerticalSpacing;
                 position.height = EditorGUIUtility.singleLineHeight;
-                DisplayOverridableProperty(
-                    position, Content.CustomFlagsLabel, toggle, customFlags, templateAssigned, FlagsPopup
-                );
+                DisplayOverridableProperty(position, Content.CustomFlagsLabel, toggle, customFlags, templateAssigned, DrawCustomMaterialTags);
 
                 --EditorGUI.indentLevel;
             }

@@ -4,7 +4,7 @@ using static Unity.Physics.Math;
 namespace Unity.Physics
 {
     // Solve data for a constraint that limits the linear distance between a pair of pivots in 1, 2, or 3 degrees of freedom
-    public struct LinearLimitJacobian
+    struct LinearLimitJacobian
     {
         // Pivot positions in motion space
         public float3 PivotAinA;

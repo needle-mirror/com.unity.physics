@@ -6,9 +6,11 @@ using UnityEngine;
 namespace Unity.Physics.Authoring
 {
     [CreateAssetMenu(menuName = "DOTS/Physics/Physics Category Names", fileName = "Physics Category Names")]
-    public sealed class PhysicsCategoryNames : ScriptableObject, IFlagNames
+    public sealed class PhysicsCategoryNames : ScriptableObject, ITagNames
     {
-        IReadOnlyList<string> IFlagNames.FlagNames => CategoryNames;
+        PhysicsCategoryNames() { }
+
+        IReadOnlyList<string> ITagNames.TagNames => CategoryNames;
         public IReadOnlyList<string> CategoryNames => m_CategoryNames;
         [SerializeField]
         string[] m_CategoryNames = Enumerable.Range(0, 32).Select(i => string.Empty).ToArray();
@@ -16,9 +18,7 @@ namespace Unity.Physics.Authoring
         void OnValidate()
         {
             if (m_CategoryNames.Length != 32)
-            {
                 Array.Resize(ref m_CategoryNames, 32);
-            }
         }
     }
 }

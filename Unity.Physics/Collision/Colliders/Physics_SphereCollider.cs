@@ -1,7 +1,7 @@
 ﻿using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
-using Unity.Mathematics;
 using Unity.Entities;
+using Unity.Mathematics;
 
 namespace Unity.Physics
 {
@@ -14,8 +14,8 @@ namespace Unity.Physics
 
         private float3 m_Vertex;
 
-        public float3 Center { get => m_Vertex; set => m_Vertex = value; }
-        public float Radius { get => ConvexHull.ConvexRadius; set => ConvexHull.ConvexRadius = value; }
+        public float3 Center { get => m_Vertex; set { m_Vertex = value; m_Header.Version++; } }
+        public float Radius { get => ConvexHull.ConvexRadius; set { ConvexHull.ConvexRadius = value; m_Header.Version++; } }
 
         #region Construction
 
@@ -29,11 +29,10 @@ namespace Unity.Physics
             {
                 throw new System.ArgumentException("Tried to create sphere collider with negative/inf/nan radius");
             }
-
             
             var collider = default(SphereCollider);
             collider.Init(center, radius, filter ?? CollisionFilter.Default, material ?? Material.Default);
-            
+
             var sphereCollider = BlobAssetReference<Collider>.Create(&collider, sizeof(SphereCollider));
             return sphereCollider;
         }

@@ -1,8 +1,9 @@
-﻿using NUnit.Framework;
+﻿using System;
+using NUnit.Framework;
 
 namespace Unity.Physics.Tests.Dynamics.PhysicsWorld
 {
-    public class PhysicsWorldTests
+    class PhysicsWorldTests
     {
         [Test]
         public void WorldTest()

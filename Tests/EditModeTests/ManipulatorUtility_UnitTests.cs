@@ -4,7 +4,7 @@ using Unity.Mathematics;
 using Unity.Physics.Editor;
 using UnityEngine;
 
-namespace Unity.Physics.EditModeTests
+namespace Unity.Physics.Tests.Editor
 {
     class ManipulatorUtility_UnitTests
     {

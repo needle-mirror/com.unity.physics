@@ -1,8 +1,10 @@
 ﻿using System;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using Unity.Collections;
 using Unity.Entities;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace Unity.Physics.Tests.Authoring
 {
@@ -66,6 +68,20 @@ namespace Unity.Physics.Tests.Authoring
                         checkValue(componentData);
                     }
                 }
+            }
+            finally
+            {
+                world.Dispose();
+            }
+        }
+
+        protected void VerifyLogsException<T>(Regex message = null) where T : Exception
+        {
+            var world = new World("Test world");
+            try
+            {
+                LogAssert.Expect(LogType.Exception, message ?? new Regex($"\b{typeof(T).Name}\b"));
+                GameObjectConversionUtility.ConvertGameObjectHierarchy(Root, world);
             }
             finally
             {

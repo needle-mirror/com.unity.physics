@@ -1,4 +1,5 @@
 ﻿using System;
+using System.ComponentModel;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -28,16 +29,20 @@ namespace Unity.Physics
         EnableMassFactors = 1 << 1,
         UserFlag0 = 1 << 2,
         UserFlag1 = 1 << 3,
+        UserFlag2 = 1 << 4,
 
         // These flags apply only to contact Jacobians
-        IsTrigger = 1 << 4,
-        EnableCollisionEvents = 1 << 5,
-        EnableSurfaceVelocity = 1 << 6,
-        EnableMaxImpulse = 1 << 7
+        IsTrigger = 1 << 5,
+        EnableCollisionEvents = 1 << 6,
+        EnableSurfaceVelocity = 1 << 7,
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("EnableMaxImpulse has been deprecated. (RemovedAfter 2019-10-15)", true)]
+        EnableEnableMaxImpulse = 0
     }
 
     // Jacobian header, first part of each Jacobian in the stream
-    public struct JacobianHeader
+    struct JacobianHeader
     {
         public BodyIndexPair BodyPair { get; internal set; }
         public JacobianType Type { get; internal set; }
@@ -89,20 +94,6 @@ namespace Unity.Physics
                     AccessSurfaceVelocity() = value;
                 else
                     throw new NotSupportedException("Jacobian does not have surface velocity enabled");
-            }
-        }
-
-        // The maximum impulse that can be applied by contact points
-        public bool HasMaxImpulse => (Flags & JacobianFlags.EnableMaxImpulse) != 0;
-        public float MaxImpulse
-        {
-            get => HasMaxImpulse ? AccessMaxImpulse() : float.MaxValue;
-            set
-            {
-                if (HasMaxImpulse)
-                    AccessMaxImpulse() = value;
-                else
-                    throw new NotSupportedException("Jacobian does not have max impulse enabled");
             }
         }
 
@@ -159,12 +150,6 @@ namespace Unity.Physics
                 UnsafeUtility.SizeOf<SurfaceVelocity>() : 0;
         }
 
-        private static int SizeOfMaxImpulse(JacobianType type, JacobianFlags flags)
-        {
-            return (type == JacobianType.Contact && (flags & JacobianFlags.EnableMaxImpulse) != 0) ?
-                UnsafeUtility.SizeOf<float>() : 0;
-        }
-
         private static int SizeOfMassFactors(JacobianType type, JacobianFlags flags)
         {
             return (type == JacobianType.Contact && (flags & JacobianFlags.EnableMassFactors) != 0) ?
@@ -174,7 +159,7 @@ namespace Unity.Physics
         private static int SizeOfModifierData(JacobianType type, JacobianFlags flags)
         {
             return SizeOfColliderKeys(type, flags) + SizeOfSurfaceVelocity(type, flags) +
-                SizeOfMaxImpulse(type, flags) + SizeOfMassFactors(type, flags);
+                SizeOfMassFactors(type, flags);
         }
 
         private static int SizeOfBaseJacobian(JacobianType type)
@@ -223,21 +208,12 @@ namespace Unity.Physics
             return ref UnsafeUtilityEx.AsRef<SurfaceVelocity>(ptr);
         }
 
-        public unsafe ref float AccessMaxImpulse()
-        {
-            Assert.IsTrue((Flags & JacobianFlags.EnableMaxImpulse) != 0);
-            byte* ptr = (byte*)UnsafeUtility.AddressOf(ref this);
-            ptr += UnsafeUtility.SizeOf<JacobianHeader>() + SizeOfBaseJacobian(Type) +
-                SizeOfColliderKeys(Type, Flags) + SizeOfSurfaceVelocity(Type, Flags);
-            return ref UnsafeUtilityEx.AsRef<float>(ptr);
-        }
-
         public unsafe ref MassFactors AccessMassFactors()
         {
             Assert.IsTrue((Flags & JacobianFlags.EnableMassFactors) != 0);
             byte* ptr = (byte*)UnsafeUtility.AddressOf(ref this);
             ptr += UnsafeUtility.SizeOf<JacobianHeader>() + SizeOfBaseJacobian(Type) +
-                SizeOfColliderKeys(Type, Flags) + SizeOfSurfaceVelocity(Type, Flags) + SizeOfMaxImpulse(Type, Flags);
+                SizeOfColliderKeys(Type, Flags) + SizeOfSurfaceVelocity(Type, Flags);
             return ref UnsafeUtilityEx.AsRef<MassFactors>(ptr);
         }
 
@@ -254,7 +230,7 @@ namespace Unity.Physics
     }
 
     // Helper functions for working with Jacobians
-    public static class JacobianUtilities
+    static class JacobianUtilities
     {
         public static void CalculateTauAndDamping(float springFrequency, float springDampingRatio, float timestep, int iterations, out float tau, out float damping)
         {
@@ -398,7 +374,7 @@ namespace Unity.Physics
     }
 
     // Iterator (and modifier) for jacobians
-    public unsafe struct JacobianIterator
+    unsafe struct JacobianIterator
     {
         BlockStream.Reader m_Reader;
         int m_CurrentWorkItem;
@@ -428,15 +404,15 @@ namespace Unity.Physics
             return m_Reader.RemainingItemCount > 0;
         }
 
-        public ref JacobianHeader ReadJacobianHeader(out short readSize)
+        public ref JacobianHeader ReadJacobianHeader(out int readSize)
         {
-            readSize = Read<short>();
+            readSize = Read<int>();
             return ref UnsafeUtilityEx.AsRef<JacobianHeader>(Read(readSize));
         }
 
         public ref JacobianHeader ReadJacobianHeader()
         {
-            short readSize = Read<short>();
+            int readSize = Read<int>();
             return ref UnsafeUtilityEx.AsRef<JacobianHeader>(Read(readSize));
         }
 

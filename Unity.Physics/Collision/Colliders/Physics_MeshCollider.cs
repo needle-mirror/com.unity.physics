@@ -15,7 +15,7 @@ namespace Unity.Physics
     {
         private ColliderHeader m_Header;
         private Aabb m_Aabb;
-        public Mesh Mesh;
+        internal Mesh Mesh;
 
         // followed by variable sized mesh data
 
@@ -53,7 +53,8 @@ namespace Unity.Physics
             }
 
             // Build bounding volume hierarchy
-            var nodes = new NativeArray<BoundingVolumeHierarchy.Node>(primitives.Count * 2 + 1, Allocator.Temp);
+            int nodeCount = math.max(primitives.Count * 2 + 1, 2); // We need at least two nodes - an "invalid" node and a root node.
+            var nodes = new NativeArray<BoundingVolumeHierarchy.Node>(nodeCount, Allocator.Temp);
             int numNodes = 0;
             {
                 // Prepare data for BVH
@@ -109,7 +110,7 @@ namespace Unity.Physics
                 mesh.Init(nodesPtr, numNodes, sections, filter ?? CollisionFilter.Default, material ?? Material.Default);
 
                 // Calculate combined filter
-                meshCollider->m_Header.Filter = mesh.Sections[0].Filters[0];
+                meshCollider->m_Header.Filter = mesh.Sections.Length > 0 ? mesh.Sections[0].Filters[0] : CollisionFilter.Default;
                 for (int i = 0; i < mesh.Sections.Length; ++i)
                 {
                     foreach (CollisionFilter f in mesh.Sections[i].Filters)

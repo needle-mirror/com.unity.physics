@@ -1,4 +1,6 @@
-﻿using Unity.Collections;
+﻿using System;
+using System.ComponentModel;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 
@@ -7,26 +9,29 @@ namespace Unity.Physics
     // An instance of a collider in a physics world.
     public unsafe struct RigidBody : ICollidable
     {
-        // The rigid body's transform in world space
-        public RigidTransform WorldFromBody;
-
         // The rigid body's collider (allowed to be null)
         public Collider* Collider;    // Todo: use BlobAssetReference<Collider>?
+
+        // The rigid body's transform in world space
+        public RigidTransform WorldFromBody;
 
         // The entity that rigid body represents
         public Entity Entity;
 
-        // Arbitrary custom data.
-        // Gets copied into contact manifolds and can be used to inform contact modifiers.
-        public byte CustomData;
+        // Arbitrary custom tags.
+        // These get copied into contact manifolds and can be used to inform contact modifiers.
+        public byte CustomTags;
 
         public static readonly RigidBody Zero = new RigidBody
         {
             WorldFromBody = RigidTransform.identity,
             Collider = null,
             Entity = Entity.Null,
-            CustomData = 0
+            CustomTags = 0
         };
+
+        /// Return true if the body has a collider set
+        public bool HasCollider => Collider != null;
 
         #region ICollidable implementation
 
@@ -90,7 +95,7 @@ namespace Unity.Physics
         public int BodyBIndex;
         public int BodyAIndex;
 
-        public static BodyIndexPair Invalid => new BodyIndexPair() { BodyBIndex = -1, BodyAIndex = -1 };
+        public static BodyIndexPair Invalid => new BodyIndexPair { BodyBIndex = -1, BodyAIndex = -1 };
     }
 
     // A pair of entities
@@ -101,11 +106,11 @@ namespace Unity.Physics
         public Entity EntityA;
     }
 
-    // A pair of custom rigid body datas
-    public struct CustomDataPair
+    // A pair of custom rigid body tags
+    public struct CustomTagsPair
     {
         // B before A for consistency with other pairs
-        public byte CustomDataB;
-        public byte CustomDataA;
+        public byte CustomTagsB;
+        public byte CustomTagsA;
     }
 }

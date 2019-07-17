@@ -4,7 +4,7 @@ using static Unity.Physics.Math;
 namespace Unity.Physics
 {
     // Solve data for a constraint that limits one degree of angular freedom
-    public struct AngularLimit1DJacobian
+    struct AngularLimit1DJacobian
     {
         // Limited axis in motion A space
         // TODO could calculate this from AxisIndex and MotionAFromJoint

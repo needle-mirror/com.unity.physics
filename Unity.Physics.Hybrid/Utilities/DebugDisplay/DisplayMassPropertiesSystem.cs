@@ -5,6 +5,7 @@ using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
+using Unity.Burst;
 
 namespace Unity.Physics.Authoring
 {
@@ -47,6 +48,7 @@ namespace Unity.Physics.Authoring
 
         // Job to write mass properties info to a DebugStream for any moving bodies
         // Attempts to build a box which has the same inertia tensor as the body.
+        [BurstCompile]
         struct DisplayMassPropertiesJob : IJob //<todo.eoin.udebug This can be a parallelfor job
         {
             public DebugStream.Context OutputStream;

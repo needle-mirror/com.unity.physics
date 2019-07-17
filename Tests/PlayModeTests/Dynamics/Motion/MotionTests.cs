@@ -1,10 +1,11 @@
-﻿using NUnit.Framework;
+﻿using System;
+using NUnit.Framework;
 using Unity.Mathematics;
 using Assert = UnityEngine.Assertions.Assert;
 
 namespace Unity.Physics.Tests.Dynamics.Motion
 {
-    public class MotionTests
+    class MotionTests
     {
         [Test]
         public void MassPropertiesUnitSphereTest()

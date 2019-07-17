@@ -37,12 +37,18 @@ namespace Unity.Physics.Tests
             return sb.ToString();
         }
 
-        static MatrixPrettyCloseConstraint PrettyClose(
-            this ConstraintExpression expression,
-            float4x4 expected, float tolerance = MatrixPrettyCloseConstraint.DefaultTolerance
+        static MatrixPrettyCloseConstraint PrettyCloseTo(this ConstraintExpression expression, float4x4 expected)
+        {
+            var constraint = new MatrixPrettyCloseConstraint(expected);
+            expression.Append(constraint);
+            return constraint;
+        }
+
+        static QuaternionOrientationEquivalentConstraint OrientedEquivalentTo(
+            this ConstraintExpression expression, quaternion expected
         )
         {
-            var constraint = new MatrixPrettyCloseConstraint(expected, tolerance);
+            var constraint = new QuaternionOrientationEquivalentConstraint(expected);
             expression.Append(constraint);
             return constraint;
         }
@@ -50,12 +56,11 @@ namespace Unity.Physics.Tests
 
     class Is : NUnit.Framework.Is
     {
-        public static MatrixPrettyCloseConstraint PrettyCloseTo(
-            float4x4 actual, float tolerance = MatrixPrettyCloseConstraint.DefaultTolerance
-        )
-        {
-            return new MatrixPrettyCloseConstraint(actual, tolerance);
-        }
+        public static MatrixPrettyCloseConstraint PrettyCloseTo(float4x4 actual) =>
+            new MatrixPrettyCloseConstraint(actual);
+
+        public static QuaternionOrientationEquivalentConstraint OrientedEquivalentTo(quaternion actual) =>
+            new QuaternionOrientationEquivalentConstraint(actual);
     }
 
     class MatrixPrettyCloseConstraint : NUnit.Framework.Constraints.Constraint
@@ -63,13 +68,11 @@ namespace Unity.Physics.Tests
         public const float DefaultTolerance = 0.0001f;
 
         readonly float4x4 m_Expected;
-        readonly float m_ToleranceSq;
+        float m_ToleranceSq = DefaultTolerance * DefaultTolerance;
 
-        public MatrixPrettyCloseConstraint(float4x4 expected, float tolerance = DefaultTolerance)
-            : base((object)expected, (object)tolerance)
+        public MatrixPrettyCloseConstraint(float4x4 expected) : base((object)expected)
         {
             m_Expected = expected;
-            m_ToleranceSq = tolerance * tolerance;
         }
 
         public override string Description => $"each column to be within {math.sqrt(m_ToleranceSq)} of {m_Expected}";
@@ -83,6 +86,45 @@ namespace Unity.Physics.Tests
                 && math.lengthsq(m.c2 - m_Expected.c2) < m_ToleranceSq
                 && math.lengthsq(m.c3 - m_Expected.c3) < m_ToleranceSq;
             return new ConstraintResult(this, actual, cmp);
+        }
+
+        public MatrixPrettyCloseConstraint EachAxisWithin(float tolerance)
+        {
+            m_ToleranceSq = tolerance * tolerance;
+            return this;
+        }
+    }
+
+    class QuaternionOrientationEquivalentConstraint : NUnit.Framework.Constraints.Constraint
+    {
+        public const float DefaultTolerance = 0.0005f;
+
+        readonly quaternion m_Expected;
+        float m_ToleranceSq = DefaultTolerance * DefaultTolerance;
+
+        public QuaternionOrientationEquivalentConstraint(quaternion expected)
+        {
+            m_Expected = expected;
+        }
+
+        public override string Description => $"each axis to be within {math.sqrt(m_ToleranceSq)} of {new float3x3(m_Expected)}";
+
+        public override ConstraintResult ApplyTo(object actual)
+        {
+            var q = (quaternion)actual;
+            var m = new float3x3(q);
+            var expected = new float3x3(m_Expected);
+            var cmp =
+                math.lengthsq(m.c0 - expected.c0) < m_ToleranceSq
+                && math.lengthsq(m.c1 - expected.c1) < m_ToleranceSq
+                && math.lengthsq(m.c2 - expected.c2) < m_ToleranceSq;
+            return new ConstraintResult(this, actual, cmp);
+        }
+
+        public QuaternionOrientationEquivalentConstraint EachAxisWithin(float tolerance)
+        {
+            m_ToleranceSq = tolerance * tolerance;
+            return this;
         }
     }
 }
@@ -934,6 +976,23 @@ namespace Unity.Physics.Tests.Utils
             return MeshCollider.Create(vertices, indices);
         }
 
+        public unsafe static BlobAssetReference<Collider> GenerateRandomTerrain(ref Random rnd)
+        {
+            int2 size = rnd.NextInt2(2, 50);
+            float3 scale = rnd.NextFloat3(0.1f, new float3(1, 10, 1));
+
+            int numSamples = size.x * size.y;
+            float* heights = stackalloc float[numSamples];
+            for (int i = 0; i < numSamples; i++)
+            {
+                heights[i] = rnd.NextFloat(0, 1);
+            }
+
+            // CollisionMethod.Vertices will fail the unit tests, because it is a low-quality mode
+            // that produces inaccurate manifolds. For now we just test CollisionMethod.Triangles
+            return TerrainCollider.Create(size, scale, heights, TerrainCollider.CollisionMethod.Triangles);
+        }
+
         public static unsafe BlobAssetReference<Collider> GenerateRandomCompound(ref Random rnd)
         {
             int numChildren = rnd.NextInt(1, 10);
@@ -1040,13 +1099,20 @@ namespace Unity.Physics.Tests.Utils
         {
             if (rnd.NextInt(10) > 0)
             {
-                return GenerateRandomConvex(ref rnd);
+                return GenerateRandomConvex(ref rnd); // 90% convex
             }
             else if (rnd.NextInt(4) > 0)
             {
-                return GenerateRandomMesh(ref rnd);
+                if (rnd.NextInt(2) > 0)
+                {
+                    return GenerateRandomMesh(ref rnd); // 3.25% mesh
+                }
+                else
+                {
+                    return GenerateRandomTerrain(ref rnd); // 3.25% terrain
+                }
             }
-            return GenerateRandomCompound(ref rnd);
+            return GenerateRandomCompound(ref rnd); // 2.5% compound
         }
 
         public static unsafe PhysicsWorld GenerateRandomWorld(ref Random rnd, int numBodies, float size)
@@ -1067,7 +1133,7 @@ namespace Unity.Physics.Tests.Utils
                     },
                     Collider = (Collider*)GenerateRandomCollider(ref rnd).GetUnsafePtr(),   // Not safe, could be garbage collected
                     Entity = Entity.Null,
-                    CustomData = 0
+                    CustomTags = 0
                 };
             }
 

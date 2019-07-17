@@ -462,25 +462,35 @@ namespace Unity.Physics
         {
             m_Nodes[0] = Node.Empty;
 
-            var builder = new Builder
+            if (aabbs.Length > 0)
             {
-                Bvh = this,
-                Points = points,
-                Aabbs = aabbs,
-                FreeNodeIndex = 2,
-                UseSah = useSah
-            };
+                var builder = new Builder
+                {
+                    Bvh = this,
+                    Points = points,
+                    Aabbs = aabbs,
+                    FreeNodeIndex = 2,
+                    UseSah = useSah
+                };
 
-            Aabb aabb = new Aabb();
-            SetAabbFromPoints(ref aabb, (float4*)points.GetUnsafePtr(), points.Length);
-            builder.Build(new Builder.Range(0, points.Length, 1, aabb));
-            nodeCount = builder.FreeNodeIndex;
+                Aabb aabb = new Aabb();
+                SetAabbFromPoints(ref aabb, (float4*)points.GetUnsafePtr(), points.Length);
+                builder.Build(new Builder.Range(0, points.Length, 1, aabb));
+                nodeCount = builder.FreeNodeIndex;
 
-            Refit(aabbs, 1, builder.FreeNodeIndex - 1);
+                Refit(aabbs, 1, builder.FreeNodeIndex - 1);
+            }
+            else
+            {
+                // No input AABBs - building a tree for no nodes.
+                // Make an empty node for the root, as most algorithms jump to the 1th node.
+                m_Nodes[1] = Node.Empty;
+                nodeCount = 2;
+            }
         }
 
-        // For each node between nodeStartIndex and nodeEnd index, set the collision filter info to the combination of the node's childen
-        public unsafe void BuildCombinedCollisionFilter(NativeArray<CollisionFilter> leafFilterInfo, int nodeStartIndex, int nodeEndIndex)
+        // For each node between nodeStartIndex and nodeEnd index, set the collision filter info to the combination of the node's children
+        internal unsafe void BuildCombinedCollisionFilter(NativeArray<CollisionFilter> leafFilterInfo, int nodeStartIndex, int nodeEndIndex)
         {
             Node* baseNode = m_Nodes;
             Node* currentNode = baseNode + nodeEndIndex;
@@ -619,7 +629,7 @@ namespace Unity.Physics
             }
         }
 
-        public unsafe void BuildFirstNLevels(
+        internal unsafe void BuildFirstNLevels(
             NativeArray<PointAndIndex> points,
             NativeArray<Builder.Range> branchRanges, NativeArray<int> branchNodeOffset,
             int threadCount, out int branchCount)
@@ -706,7 +716,7 @@ namespace Unity.Physics
         }
 
         // Build the branch for range. Returns the index of the last built node in the range
-        public int BuildBranch(NativeArray<PointAndIndex> points, NativeArray<Aabb> aabb, Builder.Range range, int firstNodeIndex)
+        internal int BuildBranch(NativeArray<PointAndIndex> points, NativeArray<Aabb> aabb, Builder.Range range, int firstNodeIndex)
         {
             var builder = new Builder
             {
@@ -736,7 +746,7 @@ namespace Unity.Physics
         }
 
         [BurstCompile]
-        public unsafe struct BuildFirstNLevelsJob : IJob
+        internal unsafe struct BuildFirstNLevelsJob : IJob
         {
             public NativeArray<PointAndIndex> Points;
             [NativeDisableUnsafePtrRestriction]
@@ -767,7 +777,7 @@ namespace Unity.Physics
         }
 
         [BurstCompile]
-        public unsafe struct BuildBranchesJob : IJobParallelForDefer
+        internal unsafe struct BuildBranchesJob : IJobParallelForDefer
         {
             [ReadOnly] public NativeArray<Aabb> Aabbs;
             [ReadOnly] public NativeArray<CollisionFilter> BodyFilters;
@@ -798,7 +808,7 @@ namespace Unity.Physics
         }
 
         [BurstCompile]
-        public unsafe struct FinalizeTreeJob : IJob
+        internal unsafe struct FinalizeTreeJob : IJob
         {
             [ReadOnly] [DeallocateOnJobCompletion] public NativeArray<Aabb> Aabbs;
             [ReadOnly] [DeallocateOnJobCompletion] public NativeArray<int> BranchNodeOffsets;
@@ -838,7 +848,7 @@ namespace Unity.Physics
             }
         }
 
-        public unsafe void CheckIntegrity(int nodeIndex = 1, int parentIndex = 0, int childIndex = 0)
+        internal unsafe void CheckIntegrity(int nodeIndex = 1, int parentIndex = 0, int childIndex = 0)
         {
             Node parent = m_Nodes[parentIndex];
             Node node = m_Nodes[nodeIndex];

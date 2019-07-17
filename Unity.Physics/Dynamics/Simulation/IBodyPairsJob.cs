@@ -7,6 +7,7 @@ using Unity.Jobs.LowLevel.Unsafe;
 namespace Unity.Physics
 {
     // Interface for jobs that iterate through the list of potentially overlapping body pairs produced by the broad phase
+    [JobProducerType(typeof(IBodyPairsJobExtensions.BodyPairsJobProcess<>))]
     public interface IBodyPairsJob
     {
         void Execute(ref ModifiableBodyPair pair);
@@ -69,7 +70,7 @@ namespace Unity.Physics
             return inputDeps;
         }
 
-        private struct BodyPairsJobData<T> where T : struct
+        internal struct BodyPairsJobData<T> where T : struct
         {
             public T UserJobData;
             public NativeArray<Scheduler.DispatchPair> PhasedDispatchPairs;
@@ -77,7 +78,7 @@ namespace Unity.Physics
             [ReadOnly] [NativeDisableContainerSafetyRestriction] public NativeSlice<RigidBody> Bodies;
         }
 
-        private struct BodyPairsJobProcess<T> where T : struct, IBodyPairsJob
+        internal struct BodyPairsJobProcess<T> where T : struct, IBodyPairsJob
         {
             static IntPtr jobReflectionData;
 
@@ -100,7 +101,7 @@ namespace Unity.Physics
                 int currentIdx = 0;
                 while (currentIdx < jobData.PhasedDispatchPairs.Length)
                 {
-                    var dispatchPair = jobData.PhasedDispatchPairs[currentIdx];
+                    Scheduler.DispatchPair dispatchPair = jobData.PhasedDispatchPairs[currentIdx];
                     var pair = new ModifiableBodyPair
                     {
                         BodyIndices = new BodyIndexPair { BodyAIndex = dispatchPair.BodyAIndex, BodyBIndex = dispatchPair.BodyBIndex },
