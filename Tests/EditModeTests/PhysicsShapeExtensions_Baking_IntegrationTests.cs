@@ -1,4 +1,4 @@
-﻿using NUnit.Framework;
+using NUnit.Framework;
 using Unity.Collections;
 using Unity.Mathematics;
 using Unity.Physics.Authoring;
@@ -8,12 +8,12 @@ namespace Unity.Physics.Tests.Authoring
 {
     class PhysicsShapeExtensions_Baking_IntegrationTests
     {
-        PhysicsShape m_Shape;
+        PhysicsShapeAuthoring m_Shape;
 
         [OneTimeSetUp]
         public void OneTimeSetUp()
         {
-            m_Shape = new GameObject(GetType().Name, typeof(PhysicsShape)).GetComponent<PhysicsShape>();
+            m_Shape = new GameObject(GetType().Name, typeof(PhysicsShapeAuthoring)).GetComponent<PhysicsShapeAuthoring>();
         }
 
         [OneTimeTearDown]
@@ -73,20 +73,20 @@ namespace Unity.Physics.Tests.Authoring
         }
 
         [Test]
-        public void GetBakedBoxProperties_WhenScaleIsIdentity_ReturnsInputConvexRadius(
+        public void GetBakedBoxProperties_WhenScaleIsIdentity_ReturnsInputBevelRadius(
             [Values(1f, 2f, 3f)] float sx, [Values(1f, 2f, 3f)] float sy, [Values(1f, 2f, 3f)] float sz,
             [Values(-90f, 0f, 90f)] float rx, [Values(-90f, 0f, 90f)] float ry, [Values(-90f, 0f, 90f)] float rz
         )
         {
             m_Shape.SetBox(new float3(0f), new float3(sx, sy, sz), GetOrientation(rx, ry, rz));
-            var expectedConvexRadius = PhysicsShape.k_DefaultConvexRadius * 0.5f;
-            m_Shape.ConvexRadius = expectedConvexRadius;
+            var expectedBevelRadius = ConvexHullGenerationParameters.Default.BevelRadius * 0.5f;
+            m_Shape.BevelRadius = expectedBevelRadius;
 
             m_Shape.GetBakedBoxProperties(
-                out var center, out var size, out var orientation, out var actualConvexRadius
+                out var center, out var size, out var orientation, out var actualBevelRadius
             );
 
-            Assert.That(actualConvexRadius, Is.EqualTo(expectedConvexRadius));
+            Assert.That(actualBevelRadius, Is.EqualTo(expectedBevelRadius));
         }
 
         [Test]
@@ -187,19 +187,19 @@ namespace Unity.Physics.Tests.Authoring
         }
 
         [Test]
-        public void GetBakedCylinderProperties_WhenScaleIsIdentity_ReturnsInputConvexRadius(
+        public void GetBakedCylinderProperties_WhenScaleIsIdentity_ReturnsInputBevelRadius(
             [Values(-90f, 0f, 90f)] float rx, [Values(-90f, 0f, 90f)] float ry, [Values(-90f, 0f, 90f)] float rz
         )
         {
             m_Shape.SetCylinder(0f, 2f, 0.5f, GetOrientation(rx, ry, rz));
-            var expectedConvexRadius = PhysicsShape.k_DefaultConvexRadius * 0.5f;
-            m_Shape.ConvexRadius = expectedConvexRadius;
+            var expectedBevelRadius = ConvexHullGenerationParameters.Default.BevelRadius * 0.5f;
+            m_Shape.BevelRadius = expectedBevelRadius;
 
             m_Shape.GetBakedCylinderProperties(
-                out var center, out var height, out var radius, out var orientation, out var actualConvexRadius
+                out var center, out var height, out var radius, out var orientation, out var actualBevelRadius
             );
 
-            Assert.That(actualConvexRadius, Is.EqualTo(expectedConvexRadius));
+            Assert.That(actualBevelRadius, Is.EqualTo(expectedBevelRadius));
         }
 
         [Test]
@@ -236,17 +236,17 @@ namespace Unity.Physics.Tests.Authoring
         }
 
         [Test]
-        public void GetBakedConvexProperties_WhenScaleIsIdentity_ReturnsInputConvexRadius()
+        public void GetBakedConvexProperties_WhenScaleIsIdentity_ReturnsInputBevelRadius()
         {
-            var expectedConvexRadius = PhysicsShape.k_DefaultConvexRadius * 0.5f;
+            var expectedBevelRadius = ConvexHullGenerationParameters.Default.BevelRadius * 0.5f;
             m_Shape.SetConvexHull(Resources.GetBuiltinResource<UnityEngine.Mesh>("New-Sphere.fbx"));
-            m_Shape.ConvexRadius = expectedConvexRadius;
+            m_Shape.BevelRadius = expectedBevelRadius;
 
-            float actualConvexRadius;
+            ConvexHullGenerationParameters actual;
             using (var pointCloud = new NativeList<float3>(Allocator.TempJob))
-                m_Shape.GetBakedConvexProperties(pointCloud, out actualConvexRadius);
+                m_Shape.GetBakedConvexProperties(pointCloud, out actual);
 
-            Assert.That(actualConvexRadius, Is.EqualTo(expectedConvexRadius));
+            Assert.That(actual.BevelRadius, Is.EqualTo(expectedBevelRadius));
         }
         */
     }

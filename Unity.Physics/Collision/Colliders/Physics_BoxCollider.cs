@@ -1,10 +1,53 @@
-﻿using Unity.Collections;
+﻿using System;
+using System.ComponentModel;
+using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Mathematics;
 
 namespace Unity.Physics
 {
+    public struct BoxGeometry
+    {
+        // The center of the box
+        public float3 Center { get => m_Center; set => m_Center = value; }
+        float3 m_Center;
+
+        // The orientation of the box
+        public quaternion Orientation { get => m_Orientation; set => m_Orientation = value; }
+        private quaternion m_Orientation;
+
+        // The length of each side of the box
+        public float3 Size { get => m_Size; set => m_Size = value; }
+        private float3 m_Size;
+
+        // The radius by which to round off the edges of the box.
+        // This helps to optimize collision detection performance, by reducing the likelihood
+        // of the inner hull being penetrated and incurring expensive collision algorithms.
+        public float BevelRadius { get => m_BevelRadius; set => m_BevelRadius = value; }
+        private float m_BevelRadius;
+
+        internal void Validate()
+        {
+            if (math.any(!math.isfinite(m_Center)))
+            {
+                throw new ArgumentException("Invalid box center");
+            }
+            if (math.any(m_Size <= 0) || math.any(!math.isfinite(m_Size)))
+            {
+                throw new ArgumentOutOfRangeException("Invalid box size");
+            }
+            if (m_BevelRadius < 0 || !math.isfinite(m_BevelRadius))
+            {
+                throw new ArgumentOutOfRangeException("Invalid box bevel radius");
+            }
+            if (math.any(m_BevelRadius + m_BevelRadius > m_Size))
+            {
+                throw new ArgumentException("Box bevel radius cannot be greater than half extent");
+            }
+        }
+    }
+
     // A collider in the shape of a box
     public struct BoxCollider : IConvexCollider
     {
@@ -26,39 +69,45 @@ namespace Unity.Physics
         private quaternion m_Orientation;
         private float3 m_Size;
 
-        public float3 Center { get => m_Center; set { m_Center = value; Update(); } }
-        public quaternion Orientation { get => m_Orientation; set { m_Orientation = value; Update(); } }
-        public float3 Size { get => m_Size; set { m_Size = value; Update(); } }
-        public float ConvexRadius { get => ConvexHull.ConvexRadius; set { ConvexHull.ConvexRadius = value; Update(); } }
+        public float3 Center => m_Center;
+        public quaternion Orientation => m_Orientation;
+        public float3 Size => m_Size;
+        public float BevelRadius => ConvexHull.ConvexRadius;
+
+        public BoxGeometry Geometry
+        {
+            get => new BoxGeometry
+            {
+                Center = m_Center,
+                Orientation = m_Orientation,
+                Size = m_Size,
+                BevelRadius = ConvexHull.ConvexRadius
+            };
+            set
+            {
+                if (!value.Equals(Geometry))
+                {
+                    SetGeometry(value);
+                }
+            }
+        }
 
         #region Construction
 
-        unsafe public static BlobAssetReference<Collider> Create(float3 center, quaternion orientation, float3 size, float convexRadius, CollisionFilter? filter = null, Material? material = null)
-        {
-            if (math.any(!math.isfinite(center)))
-            {
-                throw new System.ArgumentException("Tried to create BoxCollider with inf/nan center");
-            }
-            if (math.any(size <= 0) || math.any(!math.isfinite(size)))
-            {
-                throw new System.ArgumentException("Tried to create BoxCollider with a negative, zero, inf or nan size component");
-            }
-            if (convexRadius < 0 || !math.isfinite(convexRadius))
-            {
-                throw new System.ArgumentException("Tried to create BoxCollider with negative, zero, inf or nan convex radius");
-            }
-            if (math.any(convexRadius + convexRadius > size))
-            {
-                throw new System.ArgumentException("Tried to create BoxCollider with radius greater than half extent");
-            }
+        public static BlobAssetReference<Collider> Create(BoxGeometry geometry) =>
+            Create(geometry, CollisionFilter.Default, Material.Default);
 
+        public static BlobAssetReference<Collider> Create(BoxGeometry geometry, CollisionFilter filter) =>
+            Create(geometry, filter, Material.Default);
+
+        public static unsafe BlobAssetReference<Collider> Create(BoxGeometry geometry, CollisionFilter filter, Material material)
+        {
             var collider = default(BoxCollider);
-            collider.Init(center, orientation, size, convexRadius, filter ?? CollisionFilter.Default, material ?? Material.Default);
+            collider.Init(geometry, filter, material);
             return BlobAssetReference<Collider>.Create(&collider, sizeof(BoxCollider));
         }
 
-
-        internal unsafe void Init(float3 center, quaternion orientation, float3 size, float convexRadius, CollisionFilter filter, Material material)
+        private unsafe void Init(BoxGeometry geometry, CollisionFilter filter, Material material)
         {
             m_Header.Type = ColliderType.Box;
             m_Header.CollisionType = CollisionType.Convex;
@@ -97,14 +146,15 @@ namespace Unity.Physics
                 faces[5] = new ConvexHull.Face { FirstIndex = 20, NumVertices = 4, MinHalfAngleCompressed = 0x80 };
 
                 byte* index = &collider->m_FaceVertexIndices[0];
-                byte[] faceVertexIndices = new byte[24] { 2, 6, 4, 0, 1, 5, 7, 3, 1, 0, 4, 5, 7, 6, 2, 3, 3, 2, 0, 1, 7, 5, 4, 6 };
+                // stackalloc short* instead of byte* because packing size 1 not supported by Burst
+                short* faceVertexIndices = stackalloc short[24] { 2, 6, 4, 0, 1, 5, 7, 3, 1, 0, 4, 5, 7, 6, 2, 3, 3, 2, 0, 1, 7, 5, 4, 6 };
                 for (int i = 0; i < 24; i++)
                 {
-                    *index++ = faceVertexIndices[i];
+                    *index++ = (byte)faceVertexIndices[i];
                 }
 
                 ConvexHull.Edge* vertexEdge = (ConvexHull.Edge*)(&collider->m_VertexEdges[0]);
-                short[] vertexEdgeValuePairs = new short[16] { 4, 2, 2, 0, 4, 1, 4, 0, 5, 2, 5, 1, 0, 1, 5, 0 };
+                short* vertexEdgeValuePairs = stackalloc short[16] { 4, 2, 2, 0, 4, 1, 4, 0, 5, 2, 5, 1, 0, 1, 5, 0 };
                 for (int i = 0; i < 8; i++)
                 {
                     *vertexEdge++ = new ConvexHull.Edge
@@ -115,7 +165,7 @@ namespace Unity.Physics
                 }
 
                 ConvexHull.Edge* faceLink = (ConvexHull.Edge*)(&collider->m_FaceLinks[0]);
-                short[] faceLinkValuePairs = new short[48] {
+                short* faceLinkValuePairs = stackalloc short[48] {
                     3, 1, 5, 2, 2, 1, 4, 1, 2, 3, 5, 0, 3, 3, 4, 3, 4, 2, 0, 2, 5, 1, 1, 0,
                     5, 3, 0, 0, 4, 0, 1, 2, 3, 2, 0, 3, 2, 0, 1, 3, 1, 1, 2, 2, 0, 1, 3, 0
                 };
@@ -130,17 +180,18 @@ namespace Unity.Physics
             }
 
             // Build mutable convex data
-            m_Center = center;
-            m_Orientation = orientation;
-            m_Size = size;
-            ConvexHull.ConvexRadius = convexRadius;
-            Update();
+            SetGeometry(geometry);
         }
 
-        // Update the vertices and planes to match the current box properties
-        private unsafe void Update()
+        private unsafe void SetGeometry(BoxGeometry geometry)
         {
-            m_Header.Version++;
+            geometry.Validate();
+
+            m_Header.Version += 1;
+            ConvexHull.ConvexRadius = geometry.BevelRadius;
+            m_Center = geometry.Center;
+            m_Orientation = geometry.Orientation;
+            m_Size = geometry.Size;
 
             fixed (BoxCollider* collider = &this)
             {
@@ -177,8 +228,8 @@ namespace Unity.Physics
         public CollisionType CollisionType => m_Header.CollisionType;
         public int MemorySize => UnsafeUtility.SizeOf<BoxCollider>();
 
-        public CollisionFilter Filter { get => m_Header.Filter; set { m_Header.Filter = value; } }
-        public Material Material { get => m_Header.Material; set { m_Header.Material = value; } }
+        public CollisionFilter Filter { get => m_Header.Filter; set { if (!m_Header.Filter.Equals(value)) { m_Header.Version += 1; m_Header.Filter = value; } } }
+        public Material Material { get => m_Header.Material; set { if (!m_Header.Material.Equals(value)) { m_Header.Version += 1; m_Header.Material = value; } } }
 
         public MassProperties MassProperties => new MassProperties
         {
@@ -191,7 +242,7 @@ namespace Unity.Physics
                     (m_Size.x * m_Size.x + m_Size.y * m_Size.y) / 12.0f)
             },
             Volume = m_Size.x * m_Size.y * m_Size.z,
-            AngularExpansionFactor = math.length(m_Size * 0.5f - ConvexRadius)
+            AngularExpansionFactor = math.length(m_Size * 0.5f - ConvexHull.ConvexRadius)
         };
 
         public Aabb CalculateAabb()
@@ -263,6 +314,28 @@ namespace Unity.Physics
                 return DistanceQueries.ColliderCollider(input, (Collider*)target, ref collector);
             }
         }
+
+        #endregion
+
+        #region Obsolete
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("ConvexRadius has been renamed BevelRadius. (RemovedAfter 2019-11-28) (UnityUpgradable) -> BevelRadius", true)]
+        public float ConvexRadius
+        {
+            get => BevelRadius;
+            set
+            {
+                var geometry = Geometry;
+                geometry.BevelRadius = value;
+                Geometry = geometry;
+            }
+        }
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("This signature has been deprecated. Please use a signature that does not pass nullable arguments instead. (RemovedAfter 2019-11-15)")]
+        public static BlobAssetReference<Collider> Create(float3 center, quaternion orientation, float3 size, float convexRadius, CollisionFilter? filter = null, Material? material = null) =>
+            Create(new BoxGeometry { Center = center, Orientation = orientation, Size = size, BevelRadius = convexRadius }, filter ?? CollisionFilter.Default, material ?? Material.Default);
 
         #endregion
     }

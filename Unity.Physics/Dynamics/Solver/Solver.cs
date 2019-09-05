@@ -16,6 +16,7 @@ namespace Unity.Physics
             public bool IsLastIteration;
             public float InvNumSolverIterations;
             public float Timestep;
+            public float InvTimestep;
         }
 
         // Schedule some jobs to build Jacobians from the contacts stored in the simulation context
@@ -27,6 +28,7 @@ namespace Unity.Physics
                 JointJacobianReader = context.JointJacobians,
                 JacobianWriter = context.Jacobians,
                 TimeStep = timeStep,
+                InvTimeStep = timeStep > 0.0f ? 1.0f / timeStep : 0.0f,
                 GravityAcceleration = gravityAcceleration,
                 MotionDatas = world.MotionDatas,
                 MotionVelocities = world.MotionVelocities
@@ -76,7 +78,8 @@ namespace Unity.Physics
                             {
                                 InvNumSolverIterations = invNumIterations,
                                 IsLastIteration = lastIteration,
-                                Timestep = timestep
+                                Timestep = timestep,
+                                InvTimestep = timestep > 0.0f ? 1.0f / timestep : 0.0f
                             }
                         };
 
@@ -118,12 +121,13 @@ namespace Unity.Physics
             public BlockStream.Reader JointJacobianReader;
             public BlockStream.Writer JacobianWriter;
             public float TimeStep;
+            public float InvTimeStep;
             public float GravityAcceleration;
 
             public void Execute(int workItemIndex)
             {
                 BuildContactJacobians(ref MotionDatas, ref MotionVelocities, ref ContactReader, ref JointJacobianReader, ref JacobianWriter,
-                    TimeStep, GravityAcceleration, workItemIndex);
+                    TimeStep, InvTimeStep, GravityAcceleration, workItemIndex);
             }
         }
 
@@ -184,6 +188,7 @@ namespace Unity.Physics
             MotionVelocity velocityA,
             MotionVelocity velocityB,
             float sumInvMass,
+            float maxDepenetrationVelocity,
             ref JacobianHeader jacobianHeader,
             ref float3 centerA,
             ref float3 centerB,
@@ -203,8 +208,6 @@ namespace Unity.Physics
             float solveDistance = contact.Distance;
             float solveVelocity = solveDistance * invTimestep;
 
-            // If contact distance is negative, use an artificially reduced penetration depth to prevent the contact from depenetrating too quickly
-            const float maxDepenetrationVelocity = 3.0f; // meter/seconds time step independent
             solveVelocity = math.max(-maxDepenetrationVelocity, solveVelocity);
 
             jacAngular.VelToReachCp = -solveVelocity;
@@ -284,35 +287,9 @@ namespace Unity.Physics
             out MotionVelocity velocityA,
             out MotionVelocity velocityB)
         {
-            bool bodyAIsStatic = pair.BodyAIndex >= motionVelocities.Length;
-            bool bodyBIsStatic = pair.BodyBIndex >= motionVelocities.Length;
-
-            if (bodyAIsStatic)
-            {
-                if (bodyBIsStatic)
-                {
-                    // Static-Static pairs may be filtered during broadphase overlap test
-                    // However, some usecases may lead here e.g.:
-                    //   - a Joint between two Static bodies
-                    //   - using solver directly without the broadphase
-                    velocityA = MotionVelocity.Zero;
-                    velocityB = MotionVelocity.Zero;
-                    return;
-                }
-
-                velocityA = MotionVelocity.Zero;
-                velocityB = motionVelocities[pair.BodyBIndex];
-            }
-            else if (bodyBIsStatic)
-            {
-                velocityA = motionVelocities[pair.BodyAIndex];
-                velocityB = MotionVelocity.Zero;
-            }
-            else
-            {
-                velocityA = motionVelocities[pair.BodyAIndex];
-                velocityB = motionVelocities[pair.BodyBIndex];
-            }
+            Assert.IsTrue(pair.BodyAIndex < motionVelocities.Length); // static-static pairs should have been filtered during broadphase overlap test
+            velocityA = motionVelocities[pair.BodyAIndex];
+            velocityB = pair.BodyBIndex < motionVelocities.Length ? motionVelocities[pair.BodyBIndex] : MotionVelocity.Zero;
         }
 
         private static unsafe void AppendJointJacobiansToContactStream(
@@ -362,11 +339,10 @@ namespace Unity.Physics
             ref BlockStream.Reader jointJacobianReader,
             ref BlockStream.Writer jacobianWriter,
             float timestep,
+            float invTimestep,
             float gravityAcceleration,
             int workItemIndex)
         {
-            float invTimestep = 1.0f / timestep;
-
             // Contact resting velocity for restitution
             float negContactRestingVelocity = -gravityAcceleration * timestep;
 
@@ -418,6 +394,13 @@ namespace Unity.Physics
                     Normal = contactHeader.Normal
                 };
 
+                // Body A must be dynamic
+                Assert.IsTrue(contactHeader.BodyPair.BodyAIndex < motionVelocities.Length);
+                bool isDynamicStaticPair = contactHeader.BodyPair.BodyBIndex >= motionVelocities.Length;
+
+                // If contact distance is negative, use an artificially reduced penetration depth to prevent the dynamic-dynamic contacts from depenetrating too quickly
+                float maxDepenetrationVelocity = isDynamicStaticPair ? float.MaxValue : 3.0f; // meter/seconds time step independent
+
                 if (jacobianHeader.Type == JacobianType.Contact)
                 {
                     ref ContactJacobian contactJacobian = ref jacobianHeader.AccessBaseJacobian<ContactJacobian>();
@@ -438,7 +421,7 @@ namespace Unity.Physics
                     {
                         // Build the jacobian
                         BuildContactJacobian(
-                            j, contactJacobian.BaseJacobian.Normal, worldFromA, worldFromB, invTimestep, velocityA, velocityB, sumInvMass,
+                            j, contactJacobian.BaseJacobian.Normal, worldFromA, worldFromB, invTimestep, velocityA, velocityB, sumInvMass, maxDepenetrationVelocity,
                             ref jacobianHeader, ref centerA, ref centerB, ref contactReader);
 
                         // Restitution (optional)
@@ -573,7 +556,7 @@ namespace Unity.Physics
                     {
                         // Build the jacobian
                         BuildContactJacobian(
-                            j, triggerJacobian.BaseJacobian.Normal, worldFromA, worldFromB, invTimestep, velocityA, velocityB, sumInvMass,
+                            j, triggerJacobian.BaseJacobian.Normal, worldFromA, worldFromB, invTimestep, velocityA, velocityB, sumInvMass, maxDepenetrationVelocity,
                             ref jacobianHeader, ref centerA, ref centerB, ref contactReader);
                     }
                 }

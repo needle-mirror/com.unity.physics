@@ -95,6 +95,8 @@ namespace Unity.Physics
         public int BodyBIndex;
         public int BodyAIndex;
 
+        public bool IsValid => BodyBIndex != -1 && BodyAIndex != -1;
+
         public static BodyIndexPair Invalid => new BodyIndexPair { BodyBIndex = -1, BodyAIndex = -1 };
     }
 

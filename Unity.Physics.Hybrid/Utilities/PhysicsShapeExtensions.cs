@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
 using Unity.Scenes;
 using UnityEngine;
@@ -20,6 +21,41 @@ namespace Unity.Physics.Authoring
         {
             var cmax = math.cmax(v);
             return cmax == v.z ? 2 : cmax == v.y ? 1 : 0;
+        }
+
+        const float k_HashFloatTolerance = 0.01f;
+
+        // used to hash convex hull generation properties in a way that is robust to imprecision
+        internal static uint GetStableHash(
+            this ConvexHullGenerationParameters generationParameters,
+            ConvexHullGenerationParameters hashedParameters,
+            float tolerance = k_HashFloatTolerance
+        )
+        {
+            var differences = new float3(
+                generationParameters.BevelRadius - hashedParameters.BevelRadius,
+                generationParameters.MinimumAngle - hashedParameters.MinimumAngle,
+                generationParameters.SimplificationTolerance - hashedParameters.SimplificationTolerance
+            );
+            return math.cmax(math.abs(differences)) < tolerance
+                ? unchecked((uint)hashedParameters.GetHashCode())
+                : unchecked((uint)generationParameters.GetHashCode());
+        }
+
+        // used to hash an array of points in a way that is robust to imprecision
+        internal static unsafe uint GetStableHash(
+            this NativeList<float3> points, NativeArray<float3> hashedPoints, float tolerance = k_HashFloatTolerance
+        )
+        {
+            if (points.Length != hashedPoints.Length)
+                return math.hash(points.GetUnsafePtr(), UnsafeUtility.SizeOf<float3>() * points.Length);
+
+            for (int i = 0, count = points.Length; i < count; ++i)
+            {
+                if (math.cmax(math.abs(points[i] - hashedPoints[i])) > tolerance)
+                    return math.hash(points.GetUnsafePtr(), UnsafeUtility.SizeOf<float3>() * points.Length);
+            }
+            return math.hash(hashedPoints.GetUnsafePtr(), UnsafeUtility.SizeOf<float3>() * hashedPoints.Length);
         }
 
         static bool HasNonUniformScale(this float4x4 m)
@@ -54,12 +90,12 @@ namespace Unity.Physics.Authoring
         }
 
         internal static GameObject GetPrimaryBody(this UnityCollider collider) => GetPrimaryBody(collider.gameObject);
-        internal static GameObject GetPrimaryBody(this PhysicsShape shape) => GetPrimaryBody(shape.gameObject);
+        internal static GameObject GetPrimaryBody(this PhysicsShapeAuthoring shape) => GetPrimaryBody(shape.gameObject);
 
-        static readonly List<PhysicsBody> s_PhysicsBodiesBuffer = new List<PhysicsBody>(16);
+        static readonly List<PhysicsBodyAuthoring> s_PhysicsBodiesBuffer = new List<PhysicsBodyAuthoring>(16);
         static readonly List<Rigidbody> s_RigidbodiesBuffer = new List<Rigidbody>(16);
         static readonly List<UnityCollider> s_CollidersBuffer = new List<UnityCollider>(16);
-        static readonly List<PhysicsShape> s_ShapesBuffer = new List<PhysicsShape>(16);
+        static readonly List<PhysicsShapeAuthoring> s_ShapesBuffer = new List<PhysicsShapeAuthoring>(16);
 
         internal static GameObject GetPrimaryBody(GameObject shape)
         {
@@ -72,7 +108,7 @@ namespace Unity.Physics.Authoring
             }
             if (rb != null)
                 return rb.gameObject;
-            // for implicit static shape, find topmost enabled Collider or PhysicsShape
+            // for implicit static shape, find topmost enabled Collider or PhysicsShapeAuthoring
             var topCollider = FindTopmostEnabledAncestorShape(shape, s_CollidersBuffer);
             var topShape = FindTopmostEnabledAncestorShape(shape, s_ShapesBuffer);
             return topCollider == null
@@ -126,7 +162,7 @@ namespace Unity.Physics.Authoring
 
         // matrix to transform point on a primitive from bake space into space of the shape
         static float4x4 GetPrimitiveBakeToShapeMatrix(
-            PhysicsShape shape, ref float3 center, ref EulerAngles orientation, float3 scale, int3 basisPriority
+            PhysicsShapeAuthoring shape, ref float3 center, ref EulerAngles orientation, float3 scale, int3 basisPriority
         )
         {
             if (
@@ -208,12 +244,9 @@ namespace Unity.Physics.Authoring
             return new int3(imax, imid, imin);
         }
 
-        internal static void GetBakedBoxProperties(
-            this PhysicsShape shape,
-            out float3 center, out float3 size, out EulerAngles orientation, out float convexRadius
-        )
+        internal static BoxGeometry GetBakedBoxProperties(this PhysicsShapeAuthoring shape)
         {
-            shape.GetBoxProperties(out center, out size, out orientation);
+            shape.GetBoxProperties(out var center, out var size, out var orientation, out var bevelRadius);
 
             var localToWorld = (float4x4)shape.transform.localToWorldMatrix;
             float4x4 bakeToShape;
@@ -237,7 +270,7 @@ namespace Unity.Physics.Authoring
                     math.length(bakeToShape[basisPriority[0]])
                 );
 
-                convexRadius = shape.ConvexRadius * math.cmin(s / size);
+                bevelRadius *= math.cmin(s / size);
                 size = s;
             }
             else
@@ -251,8 +284,17 @@ namespace Unity.Physics.Authoring
                     math.length(bakeToShape.c2)
                 );
 
-                convexRadius = shape.ConvexRadius * math.cmin(s);
+                bevelRadius *= math.cmin(s);
+                size *= s;
             }
+
+            return new BoxGeometry
+            {
+                Center = center,
+                Orientation = orientation,
+                Size = size,
+                BevelRadius = bevelRadius
+            };
         }
 
         static void MakeZAxisPrimaryBasis(ref int3 basisPriority)
@@ -263,13 +305,12 @@ namespace Unity.Physics.Authoring
                 basisPriority = basisPriority.zxy;
         }
 
-        internal static void GetBakedCapsuleProperties(
-            this PhysicsShape shape,
-            out float3 center, out float height, out float radius, out EulerAngles orientation,
-            out float3 vertex0, out float3 vertex1
+        internal static CapsuleGeometry GetBakedCapsuleProperties(
+            this PhysicsShapeAuthoring shape,
+            out float3 center, out float height, out EulerAngles orientation
         )
         {
-            shape.GetCapsuleProperties(out center, out height, out radius, out orientation);
+            shape.GetCapsuleProperties(out center, out height, out var radius, out orientation);
 
             var s = new float3(radius * 2f, radius * 2f, height);
             var localToWorld = (float4x4)shape.transform.localToWorldMatrix;
@@ -289,16 +330,20 @@ namespace Unity.Physics.Authoring
 
             var axis = math.mul(orientation, new float3 { z = 1f });
             var endPoint = axis * math.max(0f, 0.5f * height - radius);
-            vertex0 = center + endPoint;
-            vertex1 = center - endPoint;
+
+            return new CapsuleGeometry
+            {
+                Vertex0 = center + endPoint,
+                Vertex1 = center - endPoint,
+                Radius = radius
+            };
         }
 
-        internal static void GetBakedCylinderProperties(
-            this PhysicsShape shape,
-            out float3 center, out float height, out float radius, out EulerAngles orientation, out float convexRadius
-        )
+        internal static CylinderGeometry GetBakedCylinderProperties(this PhysicsShapeAuthoring shape)
         {
-            shape.GetCylinderProperties(out center, out height, out radius, out orientation);
+            shape.GetCylinderProperties(
+                out var center, out var height, out var radius, out var orientation, out var bevelRadius, out var sideCount
+            );
 
             var size = new float3(radius * 2f, radius * 2f, height);
             var localToWorld = (float4x4)shape.transform.localToWorldMatrix;
@@ -321,14 +366,21 @@ namespace Unity.Physics.Authoring
                 math.length(bakeToShape[basisPriority[1]]),
                 math.length(bakeToShape[basisPriority[0]])
             );
-            convexRadius = math.min(shape.ConvexRadius * math.cmax(s / size), height * 0.5f);
+
+            return new CylinderGeometry
+            {
+                Center = center,
+                Orientation = orientation,
+                Height = height,
+                Radius = radius,
+                BevelRadius = math.min(bevelRadius * math.cmax(s / size), height * 0.5f),
+                SideCount = sideCount
+            };
         }
 
-        internal static void GetBakedSphereProperties(
-            this PhysicsShape shape, out float3 center, out float radius, out EulerAngles orientation
-        )
+        internal static SphereGeometry GetBakedSphereProperties(this PhysicsShapeAuthoring shape, out EulerAngles orientation)
         {
-            shape.GetSphereProperties(out center, out radius, out orientation);
+            shape.GetSphereProperties(out var center, out var radius, out orientation);
 
             var basisToWorld = GetBasisToWorldMatrix(shape.transform.localToWorldMatrix, center, orientation, 1f);
             var basisPriority = basisToWorld.HasShear() ? GetBasisAxisPriority(basisToWorld) : k_DefaultAxisPriority;
@@ -337,10 +389,16 @@ namespace Unity.Physics.Authoring
             radius *= math.cmax(
                 new float3(math.length(bakeToShape.c0), math.length(bakeToShape.c1), math.length(bakeToShape.c2))
             );
+
+            return new SphereGeometry
+            {
+                Center = center,
+                Radius = radius
+            };
         }
 
         internal static void GetPlanePoints(
-            this PhysicsShape shape, out float3 vertex0, out float3 vertex1, out float3 vertex2, out float3 vertex3
+            this PhysicsShapeAuthoring shape, out float3 vertex0, out float3 vertex1, out float3 vertex2, out float3 vertex3
         )
         {
             shape.GetPlaneProperties(out var center, out var size, out EulerAngles orientation);
@@ -354,7 +412,7 @@ namespace Unity.Physics.Authoring
         }
 
         internal static void GetBakedPlaneProperties(
-            this PhysicsShape shape, out float3 vertex0, out float3 vertex1, out float3 vertex2, out float3 vertex3
+            this PhysicsShapeAuthoring shape, out float3 vertex0, out float3 vertex1, out float3 vertex2, out float3 vertex3
         )
         {
             GetPlanePoints(shape, out vertex0, out vertex1, out vertex2, out vertex3);
@@ -366,7 +424,7 @@ namespace Unity.Physics.Authoring
         }
 
         internal static void GetBakedConvexProperties(
-            this PhysicsShape shape, NativeList<float3> pointCloud, out float radius
+            this PhysicsShapeAuthoring shape, NativeList<float3> pointCloud, out ConvexHullGenerationParameters generationParameters
         )
         {
             shape.GetConvexHullProperties(pointCloud);
@@ -379,27 +437,20 @@ namespace Unity.Physics.Authoring
             var bakeToShape =
                 GetPrimitiveBakeToShapeMatrix(shape, ref center, ref orientation, 1f, k_DefaultAxisPriority);
             var s = new float3(math.length(bakeToShape[0]), math.length(bakeToShape[1]), math.length(bakeToShape[2]));
-            radius = shape.ConvexRadius * math.cmin(s);
+            generationParameters = shape.ConvexHullGenerationParameters;
+            generationParameters.SimplificationTolerance = math.max(
+                ConvexHullGenerationParametersExtensions.k_MinRecommendedSimplificationTolerance,
+                math.cmax(s) * generationParameters.SimplificationTolerance
+            );
+            generationParameters.BevelRadius *= math.cmin(s);
         }
 
-        static readonly List<Vector3> s_Vertices = new List<Vector3>(65535);
-
         internal static void GetBakedMeshProperties(
-            this PhysicsShape shape, NativeList<float3> pointCloud, NativeList<int> triangles
+            this PhysicsShapeAuthoring shape, NativeList<float3> pointCloud, NativeList<int> triangles
         )
         {
-            // TODO: currently only handling a single mesh
-            var mesh = shape.GetMesh();
-            if (mesh == null)
-                return;
-            mesh.GetVertices(s_Vertices);
-            foreach (var v in s_Vertices)
-                pointCloud.Add(v);
+            shape.GetMeshProperties(pointCloud, triangles);
             shape.BakePoints(pointCloud);
-
-            // TODO: use non-allocating accessors
-            using (var cpy = new NativeArray<int>(mesh.triangles, Allocator.Temp))
-                triangles.AddRange(cpy);
         }
     }
 }

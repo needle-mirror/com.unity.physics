@@ -12,7 +12,9 @@ namespace Unity.Physics.Tests.Collision.Queries
     {
         // These tests mostly work by comparing the results of different methods of calculating the same thing.
         // The results will not be exactly the same due to floating point inaccuracy, approximations in methods like convex-convex collider cast, etc.
-        const float tolerance = 1e-3f;
+        // Collider cast conservative advancement is accurate to 1e-3, so this tolerance must be at least a bit higher than that to allow for other
+        // sources of error on top of it.
+        const float tolerance = 1.1e-3f;
 
         //
         // Query result validation
@@ -31,8 +33,19 @@ namespace Unity.Physics.Tests.Collision.Queries
 
         static void ValidateDistanceResult(DistanceQueries.Result result, ref ConvexHull a, ref ConvexHull b, MTransform aFromB, float referenceDistance, string failureMessage)
         {
+            // Calculate the support distance along the separating normal
+            float3 tempA = getSupport(ref a, -result.NormalInA);
+            float3 supportQuery = tempA - result.NormalInA * a.ConvexRadius;
+            float3 tempB = Math.Mul(aFromB, getSupport(ref b, math.mul(aFromB.InverseRotation, result.NormalInA)));
+            float3 supportTarget = tempB + result.NormalInA * b.ConvexRadius;
+            float supportQueryDot = math.dot(supportQuery, result.NormalInA);
+            float supportTargetDot = math.dot(supportTarget, result.NormalInA);
+            float supportDistance = supportQueryDot - supportTargetDot;
+
+            // Increase the tolerance in case of core penetration
             float adjustedTolerance = tolerance;
-            if (result.Distance < a.ConvexRadius + b.ConvexRadius)
+            float zeroCoreDistance = -a.ConvexRadius - b.ConvexRadius; // Distance of shapes including radius at which core shapes are penetrating
+            if (result.Distance < zeroCoreDistance || referenceDistance < zeroCoreDistance || supportDistance < zeroCoreDistance)
             {
                 // Core shape penetration distances are less accurate, and error scales with the number of vertices (as well as shape size). See stopThreshold in ConvexConvexDistanceQueries.
                 // This is not usually noticeable in rigid body simulation because accuracy improves as the penetration resolves.
@@ -40,20 +53,11 @@ namespace Unity.Physics.Tests.Collision.Queries
                 adjustedTolerance = 1e-2f + 1e-3f * (a.NumVertices + b.NumVertices);
             }
 
-            // Check that the distances is correct
+            // Check that the distance is consistent with the reference distance
             Assert.AreEqual(result.Distance, referenceDistance, adjustedTolerance, failureMessage + ": incorrect distance");
 
             // Check that the separating normal and closest point are consistent with the distance
-            float3 tempA = getSupport(ref a, -result.NormalInA);
-            float3 supportQuery = tempA - result.NormalInA * a.ConvexRadius;
-            float3 tempB = Math.Mul(aFromB, getSupport(ref b, math.mul(aFromB.InverseRotation, result.NormalInA)));
-            float3 supportTarget = tempB + result.NormalInA * b.ConvexRadius;
-
-            float supportQueryDot = math.dot(supportQuery, result.NormalInA);
-            float supportTargetDot = math.dot(supportTarget, result.NormalInA);
-            float supportDistance = supportQueryDot - supportTargetDot;
             Assert.AreEqual(result.Distance, supportDistance, adjustedTolerance, failureMessage + ": incorrect normal");
-
             float positionDot = math.dot(result.PositionOnAinA, result.NormalInA);
             Assert.AreEqual(supportQueryDot, positionDot, adjustedTolerance, failureMessage + ": incorrect position");
         }
@@ -65,11 +69,10 @@ namespace Unity.Physics.Tests.Collision.Queries
         static unsafe float RefConvexConvexDistance(ref ConvexHull a, ref ConvexHull b, MTransform aFromB)
         {
             bool success = false;
-            if (a.NumVertices + b.NumVertices < 64) // TODO - work around hull builder asserts
+            if (a.NumVertices + b.NumVertices < 64) // too slow without burst
             {
                 // Build the minkowski difference in a-space
                 int maxNumVertices = a.NumVertices * b.NumVertices;
-                ConvexHullBuilder diff = new ConvexHullBuilder(maxNumVertices, 2 * maxNumVertices, Allocator.Temp);
                 Aabb aabb = Aabb.Empty;
                 for (int iB = 0; iB < b.NumVertices; iB++)
                 {
@@ -80,7 +83,8 @@ namespace Unity.Physics.Tests.Collision.Queries
                         aabb.Include(vertexA - vertexB);
                     }
                 }
-                diff.IntegerSpaceAabb = aabb;
+                ConvexHullBuilderStorage diffStorage = new ConvexHullBuilderStorage(maxNumVertices, Allocator.Temp, aabb, 0.0f, ConvexHullBuilder.IntResolution.Low);
+                ref ConvexHullBuilder diff = ref diffStorage.Builder;
                 success = true;
                 for (int iB = 0; iB < b.NumVertices; iB++)
                 {
@@ -88,21 +92,17 @@ namespace Unity.Physics.Tests.Collision.Queries
                     for (int iA = 0; iA < a.NumVertices; iA++)
                     {
                         float3 vertexA = a.Vertices[iA];
-                        if (!diff.AddPoint(vertexA - vertexB, (uint)(iA | iB << 16)))
-                        {
-                            // TODO - coplanar vertices are tripping up ConvexHullBuilder, we should fix it but for now fall back to DistanceQueries.ConvexConvex()
-                            success = false;
-                        }
+                        diff.AddPoint(vertexA - vertexB, (uint)(iA | iB << 16));
                     }
                 }
 
                 float distance = 0.0f;
-                if (success && diff.Triangles.GetFirstIndex() != -1)
+                if (success && diff.Dimension == 3)
                 {
                     // Find the closest triangle to the origin
                     distance = float.MaxValue;
                     bool penetrating = true;
-                    for (int t = diff.Triangles.GetFirstIndex(); t != -1; t = diff.Triangles.GetNextIndex(t))
+                    foreach (int t in diff.Triangles.Indices)
                     {
                         ConvexHullBuilder.Triangle triangle = diff.Triangles[t];
                         float3 v0 = diff.Vertices[triangle.GetVertex(0)].Position;
@@ -129,7 +129,7 @@ namespace Unity.Physics.Tests.Collision.Queries
                     success = false;
                 }
 
-                diff.Dispose();
+                diffStorage.Dispose();
 
                 if (success)
                 {
@@ -543,11 +543,10 @@ namespace Unity.Physics.Tests.Collision.Queries
         // Tests that a contact point is on the surface of its shape
         static unsafe void CheckPointOnSurface(ref ChildCollider leaf, float3 position, string failureMessage)
         {
-            const float tempTolerance = 5e-3f; // TODO - convex hull generator is making significantly non-flat faces, raise the tolerance for now until it's fixed
             float3 positionLocal = math.transform(math.inverse(leaf.TransformFromChild), position);
             leaf.Collider->CalculateDistance(new PointDistanceInput { Position = positionLocal, MaxDistance = float.MaxValue, Filter = Physics.CollisionFilter.Default }, out DistanceHit hit);
-            Assert.Less(hit.Distance, tempTolerance, failureMessage + ": contact point outside of shape");
-            Assert.Greater(hit.Distance, -((ConvexCollider*)leaf.Collider)->ConvexHull.ConvexRadius - tempTolerance, failureMessage + ": contact point inside of shape");
+            Assert.Less(hit.Distance, tolerance, failureMessage + ": contact point outside of shape");
+            Assert.Greater(hit.Distance, -((ConvexCollider*)leaf.Collider)->ConvexHull.ConvexRadius - tolerance, failureMessage + ": contact point inside of shape");
         }
 
         // Tests that the points of a manifold are all coplanar

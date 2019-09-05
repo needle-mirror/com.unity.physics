@@ -117,18 +117,18 @@ namespace Unity.Physics.Systems
             m_EndFramePhysicsSystem = World.GetOrCreateSystem<EndFramePhysicsSystem>();
         }
 
-        protected override void OnDestroyManager()
+        protected override void OnDestroy()
         {
             m_StaticLayerChangeInfo.Deallocate();
 
             PhysicsWorld.Dispose();
-            base.OnDestroyManager();
+            base.OnDestroy();
         }
 
         protected override JobHandle OnUpdate(JobHandle inputDeps)
         {
             // Make sure last frame's physics jobs are complete
-            inputDeps = JobHandle.CombineDependencies(inputDeps, m_EndFramePhysicsSystem.FinalJobHandle);
+            m_EndFramePhysicsSystem.FinalJobHandle.Complete();
 
             // Extract types used by initialize jobs
             var entityType = GetArchetypeChunkEntityType();
@@ -142,9 +142,9 @@ namespace Unity.Physics.Systems
             var physicsCustomTagsType = GetArchetypeChunkComponentType<PhysicsCustomTags>(true);
             var physicsJointType = GetArchetypeChunkComponentType<PhysicsJoint>(true);
 
-            int numDynamicBodies = DynamicEntityGroup.CalculateLength();
-            int numStaticBodies = StaticEntityGroup.CalculateLength();
-            int numJoints = JointEntityGroup.CalculateLength();
+            int numDynamicBodies = DynamicEntityGroup.CalculateEntityCount();
+            int numStaticBodies = StaticEntityGroup.CalculateEntityCount();
+            int numJoints = JointEntityGroup.CalculateEntityCount();
 
             m_StaticLayerChangeInfo.NumStaticBodies = numStaticBodies + 1;
             m_StaticLayerChangeInfo.HaveStaticBodiesChanged = 0;
@@ -258,7 +258,8 @@ namespace Unity.Physics.Systems
                         EntityType = entityType,
                         RigidBodies = PhysicsWorld.Bodies,
                         Joints = PhysicsWorld.Joints,
-                        DefaultStaticBodyIndex = PhysicsWorld.Bodies.Length - 1
+                        DefaultStaticBodyIndex = PhysicsWorld.Bodies.Length - 1,
+                        NumDynamicBodies = numDynamicBodies
                     }.Schedule(JointEntityGroup, handle));
                 }
 
@@ -487,6 +488,7 @@ namespace Unity.Physics.Systems
                 [ReadOnly] public ArchetypeChunkComponentType<PhysicsJoint> JointComponentType;
                 [ReadOnly] public ArchetypeChunkEntityType EntityType;
                 [ReadOnly] public NativeSlice<RigidBody> RigidBodies;
+                [ReadOnly] public int NumDynamicBodies;
 
                 [NativeDisableParallelForRestriction]
                 public NativeSlice<Joint> Joints;
@@ -544,6 +546,13 @@ namespace Unity.Physics.Systems
                         }
 
                         Assert.IsTrue(pair.BodyAIndex != -1 && pair.BodyBIndex != -1);
+
+                        bool isStaticStaticPair = pair.BodyAIndex >= NumDynamicBodies && pair.BodyBIndex >= NumDynamicBodies;
+                        // Mark static-static constrains as invalid since they are not going to affect simulation in any way.
+                        if (isStaticStaticPair)
+                        {
+                            pair = BodyIndexPair.Invalid;
+                        }
 
                         Joints[firstEntityIndex + i] = new Joint
                         {

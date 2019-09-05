@@ -44,7 +44,10 @@ namespace Unity.Physics
         // Free internal memory
         public void Dispose()
         {
-            m_Bodies.Dispose();
+            if (m_Bodies.IsCreated)
+            {
+                m_Bodies.Dispose();
+            }
             Broadphase.Dispose();
         }
 

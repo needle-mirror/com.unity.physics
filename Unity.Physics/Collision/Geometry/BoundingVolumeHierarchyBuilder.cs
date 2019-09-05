@@ -98,17 +98,17 @@ namespace Unity.Physics
                 public int SortAxis;
             }
 
-            void ProcessAxis(Range range, int axis, NativeArray<float> scores, NativeArray<float4> points, ref int bestAxis, ref int pivot, ref float minScore)
+            void ProcessAxis(int rangeLength, int axis, NativeArray<float> scores, NativeArray<float4> points, ref int bestAxis, ref int pivot, ref float minScore)
             {
                 CompareVertices comparator;
                 comparator.SortAxis = axis;
-                points.Sort(comparator);
+                NativeSortExtension.Sort((float4*)points.GetUnsafePtr(), rangeLength, comparator);
 
-                PointAndIndex* p = (PointAndIndex*)PointsAsFloat4 + range.Start;
+                PointAndIndex* p = (PointAndIndex*)points.GetUnsafePtr();
 
                 Aabb runningAabb = Aabb.Empty;
 
-                for (int i = 0; i < points.Length; i++)
+                for (int i = 0; i < rangeLength; i++)
                 {
                     runningAabb.Include(Aabbs[p[i].Index]);
                     scores[i] = (i + 1) * runningAabb.SurfaceArea;
@@ -116,7 +116,7 @@ namespace Unity.Physics
 
                 runningAabb = Aabb.Empty;
 
-                for (int i = points.Length - 1, j = 1; i > 0; --i, ++j)
+                for (int i = rangeLength - 1, j = 1; i > 0; --i, ++j)
                 {
                     runningAabb.Include(Aabbs[p[i].Index]);
                     float sum = scores[i - 1] + j * runningAabb.SurfaceArea;
@@ -129,29 +129,35 @@ namespace Unity.Physics
                 }
             }
 
-            [BurstDiscard]
             void SegregateSah3(Range range, int minItems, ref Range lRange, ref Range rRange)
             {
-                NativeArray<float> scores = new NativeArray<float>(range.Length, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-                NativeArray<float4> pointsX = new NativeArray<float4>(range.Length, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-                NativeArray<float4> pointsY = new NativeArray<float4>(range.Length, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-                NativeArray<float4> pointsZ = new NativeArray<float4>(range.Length, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+                if (!ScratchScores.IsCreated)
+                {
+                    ScratchScores = new NativeArray<float>(Aabbs.Length, Allocator.Temp);
+                    ScratchPointsX = new NativeArray<float4>(Aabbs.Length, Allocator.Temp);
+                    ScratchPointsY = new NativeArray<float4>(Aabbs.Length, Allocator.Temp);
+                    ScratchPointsZ = new NativeArray<float4>(Aabbs.Length, Allocator.Temp);
+                }
+                
+                // This code relies on range.length always being less than or equal to the number of primitives, which 
+                // happens to be Aabbs.length.  If that ever becomes not true then scratch memory size should be increased.
+                Assert.IsTrue(range.Length <= ScratchScores.Length/*, "Aabbs.Length isn't a large enough scratch memory size for SegregateSah3"*/);
+                
                 float4* p = PointsAsFloat4 + range.Start;
 
                 for (int i = 0; i < range.Length; i++)
                 {
-                    pointsX[i] = p[i];
+                    ScratchPointsX[i] = p[i];
+                    ScratchPointsY[i] = p[i];
+                    ScratchPointsZ[i] = p[i];
                 }
-
-                pointsY.CopyFrom(pointsX);
-                pointsZ.CopyFrom(pointsX);
 
                 int bestAxis = -1, pivot = -1;
                 float minScore = float.MaxValue;
 
-                ProcessAxis(range, 0, scores, pointsX, ref bestAxis, ref pivot, ref minScore);
-                ProcessAxis(range, 1, scores, pointsY, ref bestAxis, ref pivot, ref minScore);
-                ProcessAxis(range, 2, scores, pointsZ, ref bestAxis, ref pivot, ref minScore);
+                ProcessAxis(range.Length, 0, ScratchScores, ScratchPointsX, ref bestAxis, ref pivot, ref minScore);
+                ProcessAxis(range.Length, 1, ScratchScores, ScratchPointsY, ref bestAxis, ref pivot, ref minScore);
+                ProcessAxis(range.Length, 2, ScratchScores, ScratchPointsZ, ref bestAxis, ref pivot, ref minScore);
 
                 // Build sub-ranges.
                 int lSize = pivot;
@@ -170,15 +176,15 @@ namespace Unity.Physics
 
                 if (bestAxis == 0)
                 {
-                    sortedPoints = (float4*)pointsX.GetUnsafePtr();
+                    sortedPoints = (float4*)ScratchPointsX.GetUnsafePtr();
                 }
                 else if (bestAxis == 1)
                 {
-                    sortedPoints = (float4*)pointsY.GetUnsafePtr();
+                    sortedPoints = (float4*)ScratchPointsY.GetUnsafePtr();
                 }
                 else // bestAxis == 2
                 {
-                    sortedPoints = (float4*)pointsZ.GetUnsafePtr();
+                    sortedPoints = (float4*)ScratchPointsZ.GetUnsafePtr();
                 }
 
                 // Write back sorted points.
@@ -186,11 +192,6 @@ namespace Unity.Physics
                 {
                     p[i] = sortedPoints[i];
                 }
-
-                scores.Dispose();
-                pointsX.Dispose();
-                pointsY.Dispose();
-                pointsZ.Dispose();
             }
 
 
@@ -373,6 +374,7 @@ namespace Unity.Physics
                 Range* ranges = stackalloc Range[Constants.UnaryStackSize];
                 int rangeStackSize = 1;
                 ranges[0] = baseRange;
+                Range* subRanges = stackalloc Range[4];
 
                 if (baseRange.Length > 4)
                 {
@@ -386,7 +388,6 @@ namespace Unity.Physics
                         }
                         else
                         {
-                            Range* subRanges = stackalloc Range[4];
                             ProcessLargeRange(range, subRanges);
                             CreateChildren(subRanges, 4, range.Root, ref FreeNodeIndex, ranges, ref rangeStackSize);
                         }
@@ -404,6 +405,12 @@ namespace Unity.Physics
             public NativeArray<Aabb> Aabbs;
             public int FreeNodeIndex;
             public bool UseSah;
+
+            // These arrays are only used if SAH is used for BVH building.
+            private NativeArray<float> ScratchScores;
+            private NativeArray<float4> ScratchPointsX;
+            private NativeArray<float4> ScratchPointsY;
+            private NativeArray<float4> ScratchPointsZ;
         }
 
         public unsafe JobHandle ScheduleBuildJobs(
@@ -651,6 +658,8 @@ namespace Unity.Physics
 
             var builder = new Builder { Bvh = this, Points = points, UseSah = false };
 
+            Builder.Range* subRanges = stackalloc Builder.Range[4];
+
             do
             {
                 largestRangeInLastLevel = 0;
@@ -660,7 +669,6 @@ namespace Unity.Physics
                     if (level0[i].Length > smallRangeThreshold && freeNodeIndex < maxNumBranchesMinusOneSplit)
                     {
                         // Split range in up to 4 sub-ranges.
-                        Builder.Range* subRanges = stackalloc Builder.Range[4];
 
                         builder.ProcessLargeRange(level0[i], subRanges);
 

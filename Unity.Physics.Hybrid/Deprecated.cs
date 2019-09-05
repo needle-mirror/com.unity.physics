@@ -4,7 +4,9 @@ using System.ComponentModel;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.Serialization;
 using LegacyCollider = UnityEngine.Collider;
+using UnityMesh = UnityEngine.Mesh;
 
 // all deprecated API points in this assembly should go in this file, if possible
 
@@ -30,24 +32,24 @@ namespace Unity.Physics.Authoring
         public IReadOnlyList<string> FlagNames => throw new NotImplementedException();
     }
 
-    [DisableAutoCreation]
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    [Obsolete("FirstPassLegacyRigidbodyConversionSystem is no longer used. (RemovedAfter 2019-08-24)", true)]
-    public class FirstPassLegacyRigidbodyConversionSystem : GameObjectConversionSystem
-    {
-        protected override void OnUpdate() => throw new NotImplementedException();
-    }
+    [Obsolete("PhysicsBody has been renamed PhysicsBodyAuthoring. (RemovedAfter 2019-11-27) (UnityUpgradable) -> PhysicsBodyAuthoring", true)]
+    public sealed class PhysicsBody : MonoBehaviour { }
 
-    [DisableAutoCreation]
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    [Obsolete("FirstPassPhysicsBodyConversionSystem is no longer used. (RemovedAfter 2019-08-24)", true)]
-    public class FirstPassPhysicsBodyConversionSystem : GameObjectConversionSystem
-    {
-        protected override void OnUpdate() => throw new NotImplementedException();
-    }
+    [Obsolete("PhysicsShape has been renamed PhysicsShapeAuthoring. (RemovedAfter 2019-11-27) (UnityUpgradable) -> PhysicsShapeAuthoring", true)]
+    public sealed class PhysicsShape : MonoBehaviour { }
 
-    public sealed partial class PhysicsShape
+    [Obsolete("PhysicsStep has been renamed PhysicsStepAuthoring. (RemovedAfter 2019-11-27) (UnityUpgradable) -> PhysicsStepAuthoring", true)]
+    public sealed class PhysicsStep : MonoBehaviour { }
+
+    [Obsolete("PhysicsDebugDisplay has been renamed PhysicsDebugDisplayAuthoring. (RemovedAfter 2019-11-27) (UnityUpgradable) -> PhysicsDebugDisplayAuthoring", true)]
+    public sealed class PhysicsDebugDisplay : MonoBehaviour { }
+
+    public sealed partial class PhysicsShapeAuthoring
     {
+        [FormerlySerializedAs("m_ConvexRadius")]
+        [SerializeField, HideInInspector]
+        float m_ConvexRadius_Deprecated = -1f;
+
         [EditorBrowsable(EditorBrowsableState.Never)]
         [Obsolete("GetBelongsTo() has been deprecated. Use BelongsTo instead. (RemovedAfter 2019-09-06)")]
         public bool GetBelongsTo(int categoryIndex) => m_Material.BelongsTo[categoryIndex];
@@ -96,18 +98,95 @@ namespace Unity.Physics.Authoring
         }
 
         [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("RemovedAfter 2019-08-10", true)]
-        public void GetCapsuleProperties(out float3 vertex0, out float3 vertex1, out float radius) =>
-            throw new NotImplementedException();
+        [Obsolete("This signature has been deprecated. Please use a signature passing ConvexHullGenerationParameters. (RemovedAfter 2019-11-15)")]
+        public void SetConvexHull(UnityMesh convexHull = null) =>
+            SetConvexHull(ConvexHullGenerationParameters.Default, convexHull);
 
         [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("RemovedAfter 2019-08-10", true)]
-        public void GetPlaneProperties(out float3 vertex0, out float3 vertex1, out float3 vertex2, out float3 vertex3) =>
-            throw new NotImplementedException();
+        [Obsolete("GetMesh() has been deprecated. Please use GetMeshProperties() instead. (RemovedAfter 2019-11-20)")]
+        public UnityMesh GetMesh()
+        {
+            if (m_CustomMesh != null)
+                return m_CustomMesh;
+            var meshFilter = gameObject.GetComponent<MeshFilter>();
+            return meshFilter == null ? null : meshFilter.sharedMesh;
+        }
 
         [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("FitToGeometry() has been deprecated. Use FitToEnabledRenderMeshes() instead. (RemovedAfter 2019-08-27) (UnityUpgradable) -> FitToEnabledRenderMeshes(*)", true)]
-        public void FitToGeometry() => throw new NotImplementedException();
+        [Obsolete("ConvexRadius has been deprecated. Please use BevelRadius instead. (RemovedAfter 2019-11-15) (UnityUpgradable) -> BevelRadius", true)]
+        public float ConvexRadius { get; set; }
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("This signature has been deprecated. Please use the signature returning BoxGeometry instead. (RemovedAfter 2019-11-22")]
+        public void GetBoxProperties(out float3 center, out float3 size, out quaternion orientation)
+        {
+            GetBoxProperties(out center, out size, out var euler, out _);
+            orientation = euler;
+        }
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("This signature has been deprecated. Please use the signature passing BoxGeometry instead. (RemovedAfter 2019-11-22)")]
+        public void SetBox(float3 center, float3 size, quaternion orientation)
+        {
+            var euler = m_PrimitiveOrientation;
+            euler.SetValue(orientation);
+            SetBox(center, size, euler);
+        }
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("This signature has been deprecated. Please use the signature returning CapsuleGeometry instead. (RemovedAfter 2019-11-22")]
+        public void GetCapsuleProperties(
+            out float3 center, out float height, out float radius, out quaternion orientation
+        )
+        {
+            GetCapsuleProperties(out center, out height, out radius, out EulerAngles euler);
+            orientation = euler;
+        }
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("This signature has been deprecated. Please use the signature passing CapsuleGeometryAuthoring instead. (RemovedAfter 2019-11-22)")]
+        public void SetCapsule(float3 center, float height, float radius, quaternion orientation)
+        {
+            var euler = m_PrimitiveOrientation;
+            euler.SetValue(orientation);
+            SetCapsule(center, height, radius, euler);
+        }
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("This signature has been deprecated. Please use the signature returning CylinderGeometry instead. (RemovedAfter 2019-11-22")]
+        public void GetCylinderProperties(
+            out float3 center, out float height, out float radius, out quaternion orientation
+        )
+        {
+            GetCylinderProperties(out center, out height, out radius, out var euler, out _, out _);
+            orientation = euler;
+        }
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("This signature has been deprecated. Please use the signature passing CylinderGeometry instead. (RemovedAfter 2019-11-22)")]
+        public void SetCylinder(float3 center, float height, float radius, quaternion orientation)
+        {
+            var euler = m_PrimitiveOrientation;
+            euler.SetValue(orientation);
+            SetCylinder(center, height, radius, euler);
+        }
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("This signature has been deprecated. Please use the signature returning SphereGeometry instead. (RemovedAfter 2019-11-22")]
+        public void GetSphereProperties(out float3 center, out float radius, out quaternion orientation)
+        {
+            GetSphereProperties(out center, out radius, out EulerAngles euler);
+            orientation = euler;
+        }
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("This signature has been deprecated. Please use the signature passing SphereGeometry instead. (RemovedAfter 2019-11-22)")]
+        public void SetSphere(float3 center, float radius, quaternion orientation)
+        {
+            var euler = m_PrimitiveOrientation;
+            euler.SetValue(orientation);
+            SetSphere(center, radius, euler);
+        }
     }
 
     public sealed partial class PhysicsMaterialTemplate
@@ -154,21 +233,5 @@ namespace Unity.Physics.Authoring
             tags[customFlagIndex] = value;
             CustomTags = tags;
         }
-    }
-
-    [DisableAutoCreation]
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    [Obsolete("SecondPassLegacyRigidbodyConversionSystem has been deprecated. Use LegacyRigidbodyConversionSystem instead. (RemovedAfter 2019-08-28) (UnityUpgradable) -> LegacyRigidbodyConversionSystem", true)]
-    public class SecondPassLegacyRigidbodyConversionSystem : GameObjectConversionSystem
-    {
-        protected override void OnUpdate() => throw new NotImplementedException();
-    }
-
-    [DisableAutoCreation]
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    [Obsolete("SecondPassPhysicsBodyConversionSystem has been deprecated. Use PhysicsBodyConversionSystem instead. (RemovedAfter 2019-08-28) (UnityUpgradable) -> PhysicsBodyConversionSystem", true)]
-    public class SecondPassPhysicsBodyConversionSystem : GameObjectConversionSystem
-    {
-        protected override void OnUpdate() => throw new NotImplementedException();
     }
 }

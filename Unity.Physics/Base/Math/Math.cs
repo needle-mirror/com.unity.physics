@@ -65,6 +65,9 @@ namespace Unity.Physics
         public static float Dotxyz1(float4 lhs, float3 rhs) => math.dot(lhs, new float4(rhs, 1));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static double Dotxyz1(double4 lhs, double3 rhs) => math.dot(lhs, new double4(rhs, 1));
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float Det(float3 a, float3 b, float3 c) => math.dot(math.cross(a, b), c); // TODO: use math.determinant()?
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

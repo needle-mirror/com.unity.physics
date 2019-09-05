@@ -59,10 +59,10 @@ namespace Unity.Physics.Systems
             });
         }
 
-        protected override void OnDestroyManager()
+        protected override void OnDestroy()
         {
             Simulation.Dispose();
-            base.OnDestroyManager();
+            base.OnDestroy();
         }
 
         // Register a simulation creator

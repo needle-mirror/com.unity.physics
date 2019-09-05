@@ -9,8 +9,8 @@ namespace Unity.Physics.Tests.Authoring
     {
         [Test]
         public void GetPrimaryBody_WhenHierarchyContainsMultipleBodies_ReturnsFirstParent(
-            [Values(typeof(Rigidbody), typeof(PhysicsBody))]Type rootBodyType,
-            [Values(typeof(Rigidbody), typeof(PhysicsBody))]Type parentBodyType
+            [Values(typeof(Rigidbody), typeof(PhysicsBodyAuthoring))]Type rootBodyType,
+            [Values(typeof(Rigidbody), typeof(PhysicsBodyAuthoring))]Type parentBodyType
         )
         {
             CreateHierarchy(new[] { rootBodyType }, new[] { parentBodyType }, Array.Empty<Type>());
@@ -22,14 +22,14 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public void GetPrimaryBody_WhenFirstParentPhysicsBodyIsDisabled_ReturnsFirstEnabledAncestor(
-            [Values(typeof(Rigidbody), typeof(PhysicsBody))]Type rootBodyType,
-            [Values(typeof(Rigidbody), typeof(PhysicsBody))]Type parentBodyType
+            [Values(typeof(Rigidbody), typeof(PhysicsBodyAuthoring))]Type rootBodyType,
+            [Values(typeof(Rigidbody), typeof(PhysicsBodyAuthoring))]Type parentBodyType
         )
         {
-            CreateHierarchy(new[] { rootBodyType }, new[] { parentBodyType }, new[] { typeof(PhysicsBody) });
-            // if root is PhysicsBody, test assumes it is enabled; Rigidbody is Component and cannot be disabled
-            Assume.That(Root.GetComponent<PhysicsBody>()?.enabled ?? true, Is.True);
-            Child.GetComponent<PhysicsBody>().enabled = false;
+            CreateHierarchy(new[] { rootBodyType }, new[] { parentBodyType }, new[] { typeof(PhysicsBodyAuthoring) });
+            // if root is PhysicsBodyAuthoring, test assumes it is enabled; Rigidbody is Component and cannot be disabled
+            Assume.That(Root.GetComponent<PhysicsBodyAuthoring>()?.enabled ?? true, Is.True);
+            Child.GetComponent<PhysicsBodyAuthoring>().enabled = false;
 
             var primaryBody = PhysicsShapeExtensions.GetPrimaryBody(Child);
 
@@ -38,9 +38,9 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public void GetPrimaryBody_WhenHierarchyContainsNoBodies_ReturnsTopMostShape(
-            [Values(typeof(UnityEngine.BoxCollider), typeof(PhysicsShape))]Type rootShapeType,
-            [Values(typeof(UnityEngine.BoxCollider), typeof(PhysicsShape))]Type parentShapeType,
-            [Values(typeof(UnityEngine.BoxCollider), typeof(PhysicsShape))]Type childShapeType
+            [Values(typeof(UnityEngine.BoxCollider), typeof(PhysicsShapeAuthoring))]Type rootShapeType,
+            [Values(typeof(UnityEngine.BoxCollider), typeof(PhysicsShapeAuthoring))]Type parentShapeType,
+            [Values(typeof(UnityEngine.BoxCollider), typeof(PhysicsShapeAuthoring))]Type childShapeType
         )
         {
             CreateHierarchy(new[] { rootShapeType }, new[] { parentShapeType }, new[] { childShapeType });

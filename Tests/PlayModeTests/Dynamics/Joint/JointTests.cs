@@ -121,6 +121,46 @@ namespace Unity.Physics.Tests.Joints
 
         delegate BlobAssetReference<JointData> GenerateJoint(ref Random rnd);
 
+        unsafe void SolveSingleJoint(JointData* jointData, int numIterations, float timestep,
+            ref MotionVelocity velocityA, ref MotionVelocity velocityB, ref MotionData motionA, ref MotionData motionB, out BlockStream jacobiansOut)
+        {
+            Solver.StepInput stepInput = new Solver.StepInput
+            {
+                IsLastIteration = false,
+                InvNumSolverIterations = 1.0f / numIterations,
+                Timestep = timestep,
+                InvTimestep = timestep > 0.0f ? 1.0f / timestep : 0.0f
+            };
+
+            // Build jacobians
+            jacobiansOut = new BlockStream(1, 0);
+            {
+                BlockStream.Writer jacobianWriter = jacobiansOut;
+                jacobianWriter.BeginForEachIndex(0);
+                Solver.BuildJointJacobian(jointData, new BodyIndexPair(), velocityA, velocityB, motionA, motionB, timestep, numIterations, ref jacobianWriter);
+                jacobianWriter.EndForEachIndex();
+            }
+
+            BlockStream.Writer eventWriter = new BlockStream.Writer(); // no events expected
+
+            // Solve the joint
+            for (int iIteration = 0; iIteration < numIterations; iIteration++)
+            {
+                stepInput.IsLastIteration = (iIteration == numIterations - 1);
+                BlockStream.Reader jacobianReader = jacobiansOut;
+                JacobianIterator jacIterator = new JacobianIterator(jacobianReader, 0);
+                while (jacIterator.HasJacobiansLeft())
+                {
+                    ref JacobianHeader header = ref jacIterator.ReadJacobianHeader();
+                    header.Solve(ref velocityA, ref velocityB, stepInput, ref eventWriter, ref eventWriter);
+                }
+            }
+
+            // After solving, integrate motions
+            integrate(ref velocityA, ref motionA, timestep);
+            integrate(ref velocityB, ref motionB, timestep);
+        }
+
         unsafe void RunJointTest(string testName, GenerateJoint generateJoint)
         {
             uint numTests = 1000;
@@ -155,46 +195,16 @@ namespace Unity.Physics.Tests.Joints
                     const int numIterations = 4;
                     const int numSteps = 15;
                     float3 gravity = new float3(0.0f, -9.81f, 0.0f);
-                    Solver.StepInput stepInput = new Solver.StepInput
-                    {
-                        IsLastIteration = false,
-                        InvNumSolverIterations = 1.0f / numIterations,
-                        Timestep = timestep
-                    };
-                    BlockStream.Writer eventWriter = new BlockStream.Writer(); // no events expected
 
                     // Simulate
                     for (int iStep = 0; iStep < numSteps; iStep++)
                     {
-                        // Build jacobians
-                        BlockStream jacobians = new BlockStream(1, 0);
-                        {
-                            BlockStream.Writer jacobianWriter = jacobians;
-                            jacobianWriter.BeginForEachIndex(0);
-                            Solver.BuildJointJacobian(jointData, new BodyIndexPair(), velocityA, velocityB, motionA, motionB, timestep, numIterations, ref jacobianWriter);
-                            jacobianWriter.EndForEachIndex();
-                        }
-
                         // Before solving, apply gravity
                         applyGravity(ref velocityA, ref motionA, gravity, timestep);
                         applyGravity(ref velocityB, ref motionB, gravity, timestep);
 
-                        // Solve the joint
-                        for (int iIteration = 0; iIteration < numIterations; iIteration++)
-                        {
-                            stepInput.IsLastIteration = (iIteration == numIterations - 1);
-                            BlockStream.Reader jacobianReader = jacobians;
-                            JacobianIterator jacIterator = new JacobianIterator(jacobianReader, 0);
-                            while (jacIterator.HasJacobiansLeft())
-                            {
-                                ref JacobianHeader header = ref jacIterator.ReadJacobianHeader();
-                                header.Solve(ref velocityA, ref velocityB, stepInput, ref eventWriter, ref eventWriter);
-                            }
-                        }
-
-                        // After solving, integrate motions
-                        integrate(ref velocityA, ref motionA, timestep);
-                        integrate(ref velocityB, ref motionB, timestep);
+                        // Solve and integrate
+                        SolveSingleJoint(jointData, numIterations, timestep, ref velocityA, ref velocityB, ref motionA, ref motionB, out BlockStream jacobians);
 
                         // Last step, check the joint error
                         if (iStep == numSteps - 1)
@@ -328,6 +338,58 @@ namespace Unity.Physics.Tests.Joints
                 quaternion orientationB = generateRandomTransform(ref rnd).rot;
                 return JointData.CreateFixed(pivotA, pivotB, orientationA, orientationB);
             });
+        }
+
+        [Test]
+        public unsafe void TwistTest()
+        {
+            // Check that the twist constraint works in each axis.
+            // Set up a constraint between a fixed and dynamic body, give the dynamic body
+            // angular velocity about the limited axis, and verify that it stops at the limit
+            for (int i = 0; i < 3; i++) // For each axis
+            {
+                for (int j = 0; j < 2; j++) // Negative / positive limit
+                {
+                    float3 axis = float3.zero;
+                    axis[i] = 1.0f;
+
+                    MotionVelocity velocityA = new MotionVelocity
+                    {
+                        LinearVelocity = float3.zero,
+                        AngularVelocity = (j + j - 1) * axis,
+                        InverseInertiaAndMass = new float4(1)
+                    };
+
+                    MotionVelocity velocityB = new MotionVelocity
+                    {
+                        LinearVelocity = float3.zero,
+                        AngularVelocity = float3.zero,
+                        InverseInertiaAndMass = float4.zero
+                    };
+
+                    MotionData motionA = new MotionData
+                    {
+                        WorldFromMotion = RigidTransform.identity,
+                        BodyFromMotion = RigidTransform.identity
+                    };
+
+                    MotionData motionB = motionA;
+
+                    const float angle = 0.5f;
+                    float minLimit = (j - 1) * angle;
+                    float maxLimit = j * angle;
+                    BlobAssetReference<JointData> jointData = JointData.Create(
+                        Math.MTransform.Identity, Math.MTransform.Identity, new Constraint[]
+                        {
+                            Constraint.Twist(i, minLimit, maxLimit)
+                        });
+                    SolveSingleJoint((JointData*)jointData.GetUnsafePtr(), 4, 1.0f, ref velocityA, ref velocityB, ref motionA, ref motionB, out BlockStream jacobians);
+
+                    quaternion expectedOrientation = quaternion.AxisAngle(axis, minLimit + maxLimit);
+                    Utils.TestUtils.AreEqual(expectedOrientation, motionA.WorldFromMotion.rot, 1e-3f);
+                    jacobians.Dispose();
+                }
+            }
         }
     }
 }

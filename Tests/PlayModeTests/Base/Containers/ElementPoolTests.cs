@@ -32,9 +32,11 @@ namespace Unity.Physics.Tests.Base.Containers
         }
 
         [Test]
-        public void CreateEmpty([Values(1, 100, 200)] int count)
+        public unsafe void CreateEmpty([Values(1, 100, 200)] int count)
         {
-            var pool = new ElementPool<PoolTestElement>(count, Allocator.Persistent);
+            PoolTestElement* elements = stackalloc PoolTestElement[count];
+            ElementPoolBase poolBase = new ElementPoolBase(elements, count);
+            var pool = new ElementPool<PoolTestElement> { ElementPoolBase = &poolBase };
 
             var numElems = 0;
             foreach (var elem in pool.Elements)
@@ -44,16 +46,15 @@ namespace Unity.Physics.Tests.Base.Containers
 
             Assert.IsTrue(numElems == 0);
             Assert.IsTrue(pool.Capacity == count);
-            Assert.IsTrue(pool.GetFirstIndex() == -1);
-
-            pool.Dispose();
+            Assert.IsTrue(pool.PeakCount == 0);
         }
 
         [Test]
-        public void InsertAndClear([Values(1, 100, 200)] int count)
+        public unsafe void InsertAndClear([Values(1, 100, 200)] int count)
         {
-            var pool = new ElementPool<PoolTestElement>(count, Allocator.Persistent);
-
+            PoolTestElement* elements = stackalloc PoolTestElement[count];
+            ElementPoolBase poolBase = new ElementPoolBase(elements, count);
+            var pool = new ElementPool<PoolTestElement> { ElementPoolBase = &poolBase };
 
             for (var i = 0; i < count; ++i)
             {
@@ -72,9 +73,6 @@ namespace Unity.Physics.Tests.Base.Containers
 
             Assert.IsTrue(numElems == count);
             Assert.IsTrue(pool.PeakCount == count);
-            Assert.IsTrue(pool.GetFirstIndex() == 0);
-            Assert.IsTrue(pool.GetNextIndex(0) == (count == 1 ? -1 : 1));
-            Assert.IsTrue(pool.GetNextIndex(count) == -1);
 
             pool.Clear();
 
@@ -86,16 +84,18 @@ namespace Unity.Physics.Tests.Base.Containers
 
             Assert.IsTrue(numElems == 0);
             Assert.IsTrue(pool.PeakCount == 0);
-            Assert.IsTrue(pool.GetFirstIndex() == -1);
-
-            pool.Dispose();
         }
 
         [Test]
-        public void Copy([Values(1, 100, 200)] int count)
+        public unsafe void Copy([Values(1, 100, 200)] int count)
         {
-            var pool = new ElementPool<PoolTestElement>(count, Allocator.Persistent);
-            var anotherPool = new ElementPool<PoolTestElement>(count, Allocator.Persistent);
+            PoolTestElement* elements = stackalloc PoolTestElement[count];
+            ElementPoolBase poolBase = new ElementPoolBase(elements, count);
+            var pool = new ElementPool<PoolTestElement> { ElementPoolBase = &poolBase };
+
+            PoolTestElement* anotherElements = stackalloc PoolTestElement[count];
+            ElementPoolBase anotherPoolBase = new ElementPoolBase(anotherElements, count);
+            var anotherPool = new ElementPool<PoolTestElement> { ElementPoolBase = &anotherPoolBase };
 
             Assert.IsTrue(pool.Capacity == anotherPool.Capacity);
 
@@ -108,7 +108,6 @@ namespace Unity.Physics.Tests.Base.Containers
             anotherPool.CopyFrom(pool);
 
             Assert.IsTrue(pool.PeakCount == anotherPool.PeakCount);
-            Assert.IsTrue(pool.GetFirstIndex() == anotherPool.GetFirstIndex());
 
             for (var i = 0; i < count; ++i)
             {
@@ -116,9 +115,6 @@ namespace Unity.Physics.Tests.Base.Containers
                 Assert.IsTrue(anotherPool[i].TestIndex==i);
                 Assert.IsTrue(anotherPool[i].IsAllocated);
             }
-
-            pool.Dispose();
-            anotherPool.Dispose();
         }
     }
 }

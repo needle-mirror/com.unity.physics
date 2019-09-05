@@ -6,9 +6,9 @@ using UnityEngine;
 
 namespace Unity.Physics.Editor
 {
-    [CustomEditor(typeof(PhysicsBody))]
+    [CustomEditor(typeof(PhysicsBodyAuthoring))]
     [CanEditMultipleObjects]
-    class PhysicsBodyEditor : BaseEditor
+    class PhysicsBodyAuthoringEditor : BaseEditor
     {
         static class Content
         {

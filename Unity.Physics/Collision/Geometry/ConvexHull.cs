@@ -15,7 +15,7 @@ namespace Unity.Physics
             public byte NumVertices;             // number of vertex indices in the FaceVertexIndices array
             public byte MinHalfAngleCompressed;  // 0-255 = 0-90 degrees
 
-            private static readonly float k_CompressionFactor = 255.0f / ((float)math.PI * 0.5f);
+            const float k_CompressionFactor = 255.0f / (math.PI * 0.5f);
             public float MinHalfAngle { set => MinHalfAngleCompressed = (byte)math.min(value * k_CompressionFactor, 255); }
             public bool Equals(Face other) => FirstIndex.Equals(other.FirstIndex) && NumVertices.Equals(other.NumVertices) && MinHalfAngleCompressed.Equals(other.MinHalfAngleCompressed);
         }
@@ -24,9 +24,11 @@ namespace Unity.Physics
         {
             public short FaceIndex;             // index into Faces array
             public byte EdgeIndex;              // edge index within the face
-            private readonly byte m_Padding;    // TODO: can we use/remove this?
+            readonly byte m_Padding;            // TODO: can we use/remove this?
 
             public bool Equals(Edge other) => FaceIndex.Equals(other.FaceIndex) && EdgeIndex.Equals(other.EdgeIndex);
+
+            public override int GetHashCode() => unchecked((ushort)FaceIndex | (EdgeIndex << 16));
         }
 
         // A distance by which to inflate the surface of the hull for collision detection.

@@ -1,10 +1,8 @@
 ﻿using System;
-using Unity.Entities;
 using UnityEngine;
 
 namespace Unity.Physics.Authoring
 {
-    [UpdateAfter(typeof(PhysicsBodyConversionSystem))]
     public sealed class LegacyRigidbodyConversionSystem : GameObjectConversionSystem
     {
         protected override void OnUpdate()

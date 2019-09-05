@@ -5,7 +5,7 @@ using Unity.Mathematics;
 namespace Unity.Physics
 {
     // Describes how an object should respond to collisions with other objects.
-    public struct Material
+    public struct Material : IEquatable<Material>
     {
         public MaterialFlags Flags;
         public CombinePolicy FrictionCombinePolicy;
@@ -95,6 +95,17 @@ namespace Unity.Physics
                 default:
                     return 0;
             }
+        }
+
+        public bool Equals(Material other)
+        {
+            return
+                Flags == other.Flags &&
+                FrictionCombinePolicy == other.FrictionCombinePolicy &&
+                RestitutionCombinePolicy == other.RestitutionCombinePolicy &&
+                CustomTags == other.CustomTags &&
+                Friction == other.Friction &&
+                Restitution == other.Restitution;
         }
 
         #region Obsolete

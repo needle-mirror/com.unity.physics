@@ -22,24 +22,10 @@ namespace Unity.Physics
                 ReciprocalDisplacement = math.select(math.rcp(m_Displacement), math.sqrt(float.MaxValue), m_Displacement == float3.zero);
             }
         }
+        float3 m_Displacement;
 
-        private float3 m_Displacement;
         // Performance optimization used in the BoundingVolumeHierarchy casting functions
         internal float3 ReciprocalDisplacement { get; private set; }
-
-        #region Obsolete
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("Direction has been deprecated. Use Displacement instead (RemovedAfter 2019-07-29) (UnityUpgradable) -> Displacement")]
-        public float3 Direction { get => Displacement; set => Displacement = value; }
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("ReciprocalDirection has been deprecated. (RemovedAfter 2019-07-29)")]
-        public float3 ReciprocalDirection => ReciprocalDisplacement;
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("Ray(float3, float3) has been deprecated. (RemovedAfter 2019-07-29)")]
-        public Ray(float3 origin, float3 direction) : this() => new Ray { Origin = origin, Displacement = direction };
-        #endregion
     }
 
     // The input to ray cast queries consists of 
@@ -66,24 +52,6 @@ namespace Unity.Physics
         public CollisionFilter Filter;
 
         internal Ray Ray;
-
-        #region Obsolete
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("Position has been deprecated. Use Start Instead (RemovedAfter 2019-07-29) (UnityUpgradable) -> Start")]
-        public float3 Position
-        {
-            get => Ray.Origin;
-            set => Ray.Origin = value;
-        }
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("Direction has been deprecated. Use End Instead (RemovedAfter 2019-07-29)")]
-        public float3 Direction
-        {
-            get => Ray.Direction;
-            set => Ray.Direction = value;
-        }
-        #endregion
     }
 
     // A hit from a ray cast query

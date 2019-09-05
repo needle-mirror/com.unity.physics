@@ -15,7 +15,7 @@ namespace Unity.Physics.Authoring
         protected override void OnUpdate()
         {
             Entities.ForEach(
-                (PhysicsBody body) =>
+                (PhysicsBodyAuthoring body) =>
                 {
                     var entity = GetPrimaryEntity(body.gameObject);
 

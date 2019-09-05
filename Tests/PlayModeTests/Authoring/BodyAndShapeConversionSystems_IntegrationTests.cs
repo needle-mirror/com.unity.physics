@@ -11,8 +11,8 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasPhysicsBodyAndRigidbody_EntityUsesPhysicsBodyMass()
         {
-            CreateHierarchy(new[] { typeof(Rigidbody), typeof(PhysicsBody) }, Array.Empty<Type>(), Array.Empty<Type>());
-            Root.GetComponent<PhysicsBody>().Mass = 100f;
+            CreateHierarchy(new[] { typeof(Rigidbody), typeof(PhysicsBodyAuthoring) }, Array.Empty<Type>(), Array.Empty<Type>());
+            Root.GetComponent<PhysicsBodyAuthoring>().Mass = 100f;
             Root.GetComponent<Rigidbody>().mass = 50f;
 
             TestConvertedData<PhysicsMass>(mass => Assert.That(mass.InverseMass, Is.EqualTo(0.01f)));
@@ -21,8 +21,8 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasPhysicsBodyAndRigidbody_EntityUsesPhysicsBodyDamping()
         {
-            CreateHierarchy(new[] { typeof(Rigidbody), typeof(PhysicsBody) }, Array.Empty<Type>(), Array.Empty<Type>());
-            Root.GetComponent<PhysicsBody>().LinearDamping = 1f;
+            CreateHierarchy(new[] { typeof(Rigidbody), typeof(PhysicsBodyAuthoring) }, Array.Empty<Type>(), Array.Empty<Type>());
+            Root.GetComponent<PhysicsBodyAuthoring>().LinearDamping = 1f;
             Root.GetComponent<Rigidbody>().drag = 0.5f;
 
             TestConvertedData<PhysicsDamping>(damping => Assert.That(damping.Linear, Is.EqualTo(1f)));
@@ -31,9 +31,9 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasDynamicPhysicsBodyWithCustomGravity_AndKinematicRigidbody_EntityUsesPhysicsBodyGravityFactor()
         {
-            CreateHierarchy(new[] { typeof(Rigidbody), typeof(PhysicsBody) }, Array.Empty<Type>(), Array.Empty<Type>());
-            Root.GetComponent<PhysicsBody>().MotionType = BodyMotionType.Dynamic;
-            Root.GetComponent<PhysicsBody>().GravityFactor = 2f;
+            CreateHierarchy(new[] { typeof(Rigidbody), typeof(PhysicsBodyAuthoring) }, Array.Empty<Type>(), Array.Empty<Type>());
+            Root.GetComponent<PhysicsBodyAuthoring>().MotionType = BodyMotionType.Dynamic;
+            Root.GetComponent<PhysicsBodyAuthoring>().GravityFactor = 2f;
             Root.GetComponent<Rigidbody>().isKinematic = true;
 
             TestConvertedData<PhysicsGravityFactor>(gravity => Assert.That(gravity.Value, Is.EqualTo(2f)));
@@ -42,8 +42,8 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasKinematicPhysicsBody_AndDynamicRigidbody_EntityUsesPhysicsBodyGravityFactor()
         {
-            CreateHierarchy(new[] { typeof(Rigidbody), typeof(PhysicsBody) }, Array.Empty<Type>(), Array.Empty<Type>());
-            Root.GetComponent<PhysicsBody>().MotionType = BodyMotionType.Kinematic;
+            CreateHierarchy(new[] { typeof(Rigidbody), typeof(PhysicsBodyAuthoring) }, Array.Empty<Type>(), Array.Empty<Type>());
+            Root.GetComponent<PhysicsBodyAuthoring>().MotionType = BodyMotionType.Kinematic;
             Root.GetComponent<Rigidbody>().isKinematic = false;
 
             TestConvertedData<PhysicsGravityFactor>(gravity => Assert.That(gravity.Value, Is.EqualTo(0f)));
@@ -52,8 +52,8 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasDynamicPhysicsBodyWithDefaultGravity_AndDynamicRigidbodyWithCustomGravity_EntityHasNoGravityFactor()
         {
-            CreateHierarchy(new[] { typeof(Rigidbody), typeof(PhysicsBody) }, Array.Empty<Type>(), Array.Empty<Type>());
-            Root.GetComponent<PhysicsBody>().MotionType = BodyMotionType.Dynamic;
+            CreateHierarchy(new[] { typeof(Rigidbody), typeof(PhysicsBodyAuthoring) }, Array.Empty<Type>(), Array.Empty<Type>());
+            Root.GetComponent<PhysicsBodyAuthoring>().MotionType = BodyMotionType.Dynamic;
             Root.GetComponent<Rigidbody>().isKinematic = true;
 
             VerifyNoDataProduced<PhysicsGravityFactor>();
@@ -62,9 +62,9 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasDynamicPhysicsBodyWithNoPhysicsShape_AndDynamicRigidbodyWithNoCollider_EntityHasNoPhysicsCollider()
         {
-            CreateHierarchy(new[] { typeof(Rigidbody), typeof(PhysicsBody) }, Array.Empty<Type>(), Array.Empty<Type>());
-            Root.GetComponent<PhysicsBody>().MotionType = BodyMotionType.Dynamic;
-            Root.GetComponent<PhysicsBody>().Mass = 100f;
+            CreateHierarchy(new[] { typeof(Rigidbody), typeof(PhysicsBodyAuthoring) }, Array.Empty<Type>(), Array.Empty<Type>());
+            Root.GetComponent<PhysicsBodyAuthoring>().MotionType = BodyMotionType.Dynamic;
+            Root.GetComponent<PhysicsBodyAuthoring>().Mass = 100f;
             Root.GetComponent<Rigidbody>().isKinematic = false;
             Root.GetComponent<Rigidbody>().mass = 50f;
 
@@ -74,9 +74,9 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasDynamicPhysicsBody_AndKinematicRigidbody_EntityUsesPhysicsBodyMass()
         {
-            CreateHierarchy(new[] { typeof(Rigidbody), typeof(PhysicsBody) }, Array.Empty<Type>(), Array.Empty<Type>());
-            Root.GetComponent<PhysicsBody>().MotionType = BodyMotionType.Dynamic;
-            Root.GetComponent<PhysicsBody>().Mass = 100f;
+            CreateHierarchy(new[] { typeof(Rigidbody), typeof(PhysicsBodyAuthoring) }, Array.Empty<Type>(), Array.Empty<Type>());
+            Root.GetComponent<PhysicsBodyAuthoring>().MotionType = BodyMotionType.Dynamic;
+            Root.GetComponent<PhysicsBodyAuthoring>().Mass = 100f;
             Root.GetComponent<Rigidbody>().isKinematic = true;
             Root.GetComponent<Rigidbody>().mass = 50f;
 
@@ -86,9 +86,9 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasKinematicPhysicsBody_AndDynamicRigidbody_EntityUsesPhysicsBodyMass()
         {
-            CreateHierarchy(new[] { typeof(Rigidbody), typeof(PhysicsBody) }, Array.Empty<Type>(), Array.Empty<Type>());
-            Root.GetComponent<PhysicsBody>().MotionType = BodyMotionType.Kinematic;
-            Root.GetComponent<PhysicsBody>().Mass = 100f;
+            CreateHierarchy(new[] { typeof(Rigidbody), typeof(PhysicsBodyAuthoring) }, Array.Empty<Type>(), Array.Empty<Type>());
+            Root.GetComponent<PhysicsBodyAuthoring>().MotionType = BodyMotionType.Kinematic;
+            Root.GetComponent<PhysicsBodyAuthoring>().Mass = 100f;
             Root.GetComponent<Rigidbody>().isKinematic = false;
             Root.GetComponent<Rigidbody>().mass = 50f;
 
@@ -98,8 +98,8 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasStaticPhysicsBody_AndDynamicRigidbody_EntityHasNoGravityFactor()
         {
-            CreateHierarchy(new[] { typeof(Rigidbody), typeof(PhysicsBody) }, Array.Empty<Type>(), Array.Empty<Type>());
-            Root.GetComponent<PhysicsBody>().MotionType = BodyMotionType.Static;
+            CreateHierarchy(new[] { typeof(Rigidbody), typeof(PhysicsBodyAuthoring) }, Array.Empty<Type>(), Array.Empty<Type>());
+            Root.GetComponent<PhysicsBodyAuthoring>().MotionType = BodyMotionType.Static;
             Root.GetComponent<Rigidbody>().isKinematic = false;
 
             VerifyNoDataProduced<PhysicsGravityFactor>();
@@ -107,7 +107,7 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public void ConversionSystems_WhenGOHasBody_GOIsActive_BodyIsConverted(
-            [Values(typeof(PhysicsBody), typeof(Rigidbody))]Type bodyType
+            [Values(typeof(PhysicsBodyAuthoring), typeof(Rigidbody))]Type bodyType
         )
         {
             CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { bodyType });
@@ -119,8 +119,8 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasBody_AuthoringComponentDisabled_AuthoringDataNotConverted()
         {
-            CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { typeof(PhysicsBody) });
-            Child.GetComponent<PhysicsBody>().enabled = false;
+            CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { typeof(PhysicsBodyAuthoring) });
+            Child.GetComponent<PhysicsBodyAuthoring>().enabled = false;
 
             // conversion presumed to create PhysicsVelocity under default conditions
             // covered by corresponding test ConversionSystems_WhenGOHasBody_GOIsActive_BodyIsConverted
@@ -130,7 +130,7 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasBody_GOIsInactive_BodyIsNotConverted(
             [Values]Node inactiveNode,
-            [Values(typeof(PhysicsBody), typeof(Rigidbody))]Type bodyType
+            [Values(typeof(PhysicsBodyAuthoring), typeof(Rigidbody))]Type bodyType
         )
         {
             CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { bodyType });

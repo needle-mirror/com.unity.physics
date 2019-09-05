@@ -40,7 +40,7 @@ namespace Unity.Physics.Systems
             m_ExportPhysicsWorld = World.GetOrCreateSystem<ExportPhysicsWorld>();
         }
 
-        protected override void OnDestroyManager()
+        protected override void OnDestroy()
         {
             CombineDependencies().Complete();
             HandlesToWaitFor.Dispose();

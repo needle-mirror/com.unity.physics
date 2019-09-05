@@ -8,8 +8,10 @@ namespace Unity.Physics.Authoring
     [AddComponentMenu("DOTS/Physics/Physics Step")]
     [DisallowMultipleComponent]
     [RequiresEntityConversion]
-    public class PhysicsStep : MonoBehaviour, IConvertGameObjectToEntity
+    public sealed class PhysicsStepAuthoring : MonoBehaviour, IConvertGameObjectToEntity
     {
+        PhysicsStepAuthoring() { }
+
         public SimulationType SimulationType = Default.SimulationType;
         public float3 Gravity = Default.Gravity;
         public int SolverIterationCount = Default.SolverIterationCount;

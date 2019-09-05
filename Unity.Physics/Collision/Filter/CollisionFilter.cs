@@ -6,7 +6,7 @@ namespace Unity.Physics
 {
     // Describes which other objects an object can collide with.
     [DebuggerDisplay("Group: {GroupIndex} BelongsTo: {BelongsTo} CollidesWith: {CollidesWith}")]
-    public struct CollisionFilter
+    public struct CollisionFilter : IEquatable<CollisionFilter>
     {
         // A bit mask describing which layers this object belongs to.
         public uint BelongsTo;
@@ -57,6 +57,7 @@ namespace Unity.Physics
         }
 
         // Return a union of two filters.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static CollisionFilter CreateUnion(CollisionFilter filterA, CollisionFilter filterB)
         {
             return new CollisionFilter
@@ -65,6 +66,12 @@ namespace Unity.Physics
                 CollidesWith = filterA.CollidesWith | filterB.CollidesWith,
                 GroupIndex = (filterA.GroupIndex == filterB.GroupIndex) ? filterA.GroupIndex : 0
             };
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool Equals(CollisionFilter other)
+        {
+            return BelongsTo == other.BelongsTo && CollidesWith == other.CollidesWith && GroupIndex == other.GroupIndex;
         }
     }
 }

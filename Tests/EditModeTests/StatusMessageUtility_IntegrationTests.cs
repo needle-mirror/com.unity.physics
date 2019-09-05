@@ -25,9 +25,9 @@ namespace Unity.Physics.Tests.Editor
 
         [Test]
         public void GetHierarchyStatusMessage_WhenChild_AndChildIsNotPrimaryBody_MessageNullOrEmpty(
-            [Values(typeof(PhysicsBody), typeof(PhysicsShape), typeof(PxBox), typeof(Rigidbody))]
+            [Values(typeof(PhysicsBodyAuthoring), typeof(PhysicsShapeAuthoring), typeof(PxBox), typeof(Rigidbody))]
             Type parentComponentType,
-            [Values(typeof(PhysicsShape), typeof(PxBox), typeof(PxCapsule), typeof(PxMesh), typeof(PxSphere))]
+            [Values(typeof(PhysicsShapeAuthoring), typeof(PxBox), typeof(PxCapsule), typeof(PxMesh), typeof(PxSphere))]
             Type childComponentType
         )
         {
@@ -41,7 +41,7 @@ namespace Unity.Physics.Tests.Editor
 
         [Test]
         public void GetHierarchyStatusMessage_WhenChild_AndChildIsPrimaryBody_MessageNotNullOrEmpty(
-            [Values(typeof(PhysicsBody), typeof(PhysicsShape), typeof(PxBox), typeof(PxCapsule), typeof(PxMesh), typeof(PxSphere), typeof(Rigidbody))]
+            [Values(typeof(PhysicsBodyAuthoring), typeof(PhysicsShapeAuthoring), typeof(PxBox), typeof(PxCapsule), typeof(PxMesh), typeof(PxSphere), typeof(Rigidbody))]
             Type childComponentType
         )
         {
@@ -55,9 +55,9 @@ namespace Unity.Physics.Tests.Editor
 
         [Test]
         public void GetHierarchyStatusMessage_WhenChild_AndChildHasBodyAndShape_QueryingBodyReturnsMessage(
-            [Values(typeof(PhysicsBody), typeof(Rigidbody))]
+            [Values(typeof(PhysicsBodyAuthoring), typeof(Rigidbody))]
             Type bodyType,
-            [Values(typeof(PhysicsShape), typeof(PxBox), typeof(PxCapsule), typeof(PxMesh), typeof(PxSphere))]
+            [Values(typeof(PhysicsShapeAuthoring), typeof(PxBox), typeof(PxCapsule), typeof(PxMesh), typeof(PxSphere))]
             Type shapeType
         )
         {
@@ -71,9 +71,9 @@ namespace Unity.Physics.Tests.Editor
 
         [Test]
         public void GetHierarchyStatusMessage_WhenChild_AndChildHasBodyAndShape_QueryingShapeReturnsNullOrEmpty(
-            [Values(typeof(PhysicsBody), typeof(Rigidbody))]
+            [Values(typeof(PhysicsBodyAuthoring), typeof(Rigidbody))]
             Type bodyType,
-            [Values(typeof(PhysicsShape), typeof(PxBox), typeof(PxCapsule), typeof(PxMesh), typeof(PxSphere))]
+            [Values(typeof(PhysicsShapeAuthoring), typeof(PxBox), typeof(PxCapsule), typeof(PxMesh), typeof(PxSphere))]
             Type shapeType
         )
         {

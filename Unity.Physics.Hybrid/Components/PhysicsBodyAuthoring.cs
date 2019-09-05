@@ -15,9 +15,9 @@ namespace Unity.Physics.Authoring
     [AddComponentMenu("DOTS/Physics/Physics Body")]
     [DisallowMultipleComponent]
     [RequiresEntityConversion]
-    public sealed class PhysicsBody : MonoBehaviour
+    public sealed class PhysicsBodyAuthoring : MonoBehaviour
     {
-        PhysicsBody() { }
+        PhysicsBodyAuthoring() { }
 
         public BodyMotionType MotionType { get => m_MotionType; set => m_MotionType = value; }
         [SerializeField]

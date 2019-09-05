@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -37,9 +38,19 @@ namespace Unity.Physics
         }
 
         // Create a terrain collider from a grid of heights
+        public static BlobAssetReference<Collider> Create(
+            NativeArray<float> heights, int2 size, float3 scale, CollisionMethod collisionMethod
+        ) =>
+            Create(heights, size, scale, collisionMethod, CollisionFilter.Default, Material.Default);
+
+        public static BlobAssetReference<Collider> Create(
+            NativeArray<float> heights, int2 size, float3 scale, CollisionMethod collisionMethod, CollisionFilter filter
+        ) =>
+            Create(heights, size, scale, collisionMethod, filter, Material.Default);
+
         public static unsafe BlobAssetReference<Collider> Create(
-            int2 size, float3 scale, float* heights, CollisionMethod collisionMethod,
-            CollisionFilter? filter = null, Material? material = null)
+            NativeArray<float> heights, int2 size, float3 scale, CollisionMethod collisionMethod, CollisionFilter filter, Material material
+        )
         {
             if (math.any(size < 2))
             {
@@ -49,15 +60,14 @@ namespace Unity.Physics
             {
                 throw new ArgumentOutOfRangeException("Tried to create TerrainCollider with scale <= 0");
             }
-            if (heights == null)
-            {
-                throw new ArgumentNullException("Tried to create TerrainCollider with heights == null");
-            }
             
-            // Allocate a blob for the collider and the variable size data that follows it
+            // Allocate memory for the collider
             int totalSize = sizeof(TerrainCollider) + Terrain.CalculateDataSize(size);
-            var blob = BlobAssetReference<Collider>.Create(new byte[totalSize]);
-            TerrainCollider* collider = (TerrainCollider*)blob.GetUnsafePtr();
+            var collider = (TerrainCollider*)UnsafeUtility.Malloc(totalSize, 16, Allocator.Temp);
+            // BlobAssetReference<T> does memcpy, so allocate memory first and then assign properly aligned values to result
+            var blob = BlobAssetReference<Collider>.Create(collider, totalSize);
+            UnsafeUtility.Free(collider, Allocator.Temp);
+            collider = (TerrainCollider*)blob.GetUnsafePtr();
             UnsafeUtility.MemClear(collider, totalSize);
 
             // Initialize the collider
@@ -65,10 +75,10 @@ namespace Unity.Physics
             collider->m_Header.CollisionType = (collisionMethod == CollisionMethod.Triangles) ? CollisionType.Composite : CollisionType.Terrain;
             collider->m_Header.Version = 1;
             collider->m_Header.Magic = 0xff;
-            collider->m_Header.Filter = filter ?? CollisionFilter.Default;
-            collider->Material = material ?? Material.Default;
+            collider->m_Header.Filter = filter;
+            collider->Material = material;
             collider->MemorySize = totalSize;
-            collider->Terrain.Init(size, scale, heights);
+            collider->Terrain.Init(size, scale, (float*)heights.GetUnsafePtr());
 
             return blob;
         }
@@ -198,6 +208,22 @@ namespace Unity.Physics
             {
                 return DistanceQueries.ColliderCollider(input, (Collider*)target, ref collector);
             }
+        }
+
+        #endregion
+
+        #region Obsolete
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("This signature has been deprecated. Please use a signature that passes native containers and does not pass nullable arguments instead. (RemovedAfter 2019-11-09)")]
+        public static unsafe BlobAssetReference<Collider> Create(
+            int2 size, float3 scale, float* heights, CollisionMethod collisionMethod,
+            CollisionFilter? filter = null, Material? material = null
+        )
+        {
+            var heightsArray = new NativeArray<float>(size.x * size.y, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+            UnsafeUtility.MemCpy(heightsArray.GetUnsafePtr(), heights, heightsArray.Length * UnsafeUtility.SizeOf<float>());
+            return Create(heightsArray, size, scale, collisionMethod, filter ?? CollisionFilter.Default, material ?? Material.Default);
         }
 
         #endregion

@@ -1,10 +1,43 @@
-﻿using Unity.Collections;
+using System;
+using System.ComponentModel;
+using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Mathematics;
 
 namespace Unity.Physics
 {
+    public struct CapsuleGeometry
+    {
+        // The start position of the capsule's inner line segment
+        public float3 Vertex0 { get => m_Vertex0; set => m_Vertex0 = value; }
+        float3 m_Vertex0;
+
+        // The end position of the capsule's inner line segment
+        public float3 Vertex1 { get => m_Vertex1; set => m_Vertex1 = value; }
+        float3 m_Vertex1;
+
+        // The radius of the capsule around the line segment
+        public float Radius { get => m_Radius; set => m_Radius = value; }
+        private float m_Radius;
+
+        internal void Validate()
+        {
+            if (math.any(!math.isfinite(m_Vertex0)))
+            {
+                throw new ArgumentException("Invalid capsule vertex 0");
+            }
+            if (math.any(!math.isfinite(m_Vertex1)))
+            {
+                throw new ArgumentException("Invalid capsule vertex 1");
+            }
+            if (!math.isfinite(m_Radius) || m_Radius < 0.0f)
+            {
+                throw new ArgumentException("Invalid capsule radius");
+            }
+        }
+    }
+
     // A collider in the shape of a capsule
     public struct CapsuleCollider : IConvexCollider
     {
@@ -15,57 +48,66 @@ namespace Unity.Physics
         private float3 m_Vertex0;
         private float3 m_Vertex1;
 
-        public float3 Vertex0 { get => m_Vertex0; set { m_Vertex0 = value; Update(); } }
-        public float3 Vertex1 { get => m_Vertex1; set { m_Vertex1 = value; Update(); } }
-        public float Radius { get => ConvexHull.ConvexRadius; set { ConvexHull.ConvexRadius = value; Update(); } }
+        public float3 Vertex0 => m_Vertex0;
+        public float3 Vertex1 => m_Vertex1;
+        public float Radius => ConvexHull.ConvexRadius;
+
+        public CapsuleGeometry Geometry
+        {
+            get => new CapsuleGeometry
+            {
+                Vertex0 = m_Vertex0,
+                Vertex1 = m_Vertex1,
+                Radius = ConvexHull.ConvexRadius
+            };
+            set
+            {
+                if (!value.Equals(Geometry))
+                {
+                    SetGeometry(value);
+                }
+            }
+        }
 
         #region Construction
 
-        unsafe public static BlobAssetReference<Collider> Create(float3 point0, float3 point1, float radius, CollisionFilter? filter = null, Material? material = null)
-        {
-            if (math.any(!math.isfinite(point0)))
-            {
-                throw new System.ArgumentException("Tried to create capsule collider with inf/nan point0");
-            }
-            if (math.any(!math.isfinite(point1)))
-            {
-                throw new System.ArgumentException("Tried to create capsule collider with inf/nan point1");
-            }
-            if (!math.isfinite(radius) || radius < 0.0f)
-            {
-                throw new System.ArgumentException("Tried to create capsule collider with zero/negative/inf/nan radius");
-            }
+        public static BlobAssetReference<Collider> Create(CapsuleGeometry geometry) =>
+            Create(geometry, CollisionFilter.Default, Material.Default);
 
+        public static BlobAssetReference<Collider> Create(CapsuleGeometry geometry, CollisionFilter filter) =>
+            Create(geometry, filter, Material.Default);
+
+        public static unsafe BlobAssetReference<Collider> Create(CapsuleGeometry geometry, CollisionFilter filter, Material material)
+        {
             var collider = default(CapsuleCollider);
-            collider.Init(point0, point1, radius, filter ?? CollisionFilter.Default, material ?? Material.Default);
+            collider.Init(geometry, filter, material);
             return BlobAssetReference<Collider>.Create(&collider, sizeof(CapsuleCollider));
         }
 
-        internal unsafe void Init(float3 vertex0, float3 vertex1, float radius, CollisionFilter filter, Material material)
+        private void Init(CapsuleGeometry geometry, CollisionFilter filter, Material material)
         {
             m_Header.Type = ColliderType.Capsule;
             m_Header.CollisionType = CollisionType.Convex;
-            m_Header.Version += 1;
+            m_Header.Version = 0;
             m_Header.Magic = 0xff;
             m_Header.Filter = filter;
             m_Header.Material = material;
 
-            ConvexHull.ConvexRadius = radius;
             ConvexHull.VerticesBlob.Offset = UnsafeEx.CalculateOffset(ref m_Vertex0, ref ConvexHull.VerticesBlob.Offset);
             ConvexHull.VerticesBlob.Length = 2;
             // note: no faces
 
-            m_Vertex0 = vertex0;
-            m_Vertex1 = vertex1;
-            Update();
+            SetGeometry(geometry);
         }
 
-        private void Update()
+        private void SetGeometry(CapsuleGeometry geometry)
         {
-            m_Header.Version++;
+            geometry.Validate();
 
-            // Treat as sphere if degenerate
-            ConvexHull.VerticesBlob.Length = m_Vertex0.Equals(m_Vertex1) ? 1 : 2;
+            m_Header.Version += 1;
+            m_Vertex0 = geometry.Vertex0;
+            m_Vertex1 = geometry.Vertex1;
+            ConvexHull.ConvexRadius = geometry.Radius;
         }
 
         #endregion
@@ -76,8 +118,8 @@ namespace Unity.Physics
         public CollisionType CollisionType => m_Header.CollisionType;
         public int MemorySize => UnsafeUtility.SizeOf<CapsuleCollider>();
 
-        public CollisionFilter Filter { get => m_Header.Filter; set { m_Header.Filter = value; } }
-        public Material Material { get => m_Header.Material; set { m_Header.Material = value; } }
+        public CollisionFilter Filter { get => m_Header.Filter; set { if (!m_Header.Filter.Equals(value)) { m_Header.Version += 1; m_Header.Filter = value; } } }
+        public Material Material { get => m_Header.Material; set { if (!m_Header.Material.Equals(value)) { m_Header.Version += 1; m_Header.Material = value; } } }
 
         public MassProperties MassProperties
         {
@@ -179,6 +221,15 @@ namespace Unity.Physics
                 return DistanceQueries.ColliderCollider(input, (Collider*)target, ref collector);
             }
         }
+
+        #endregion
+
+        #region Obsolete
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("This signature has been deprecated. Please use a signature that does not pass nullable arguments instead. (RemovedAfter 2019-11-15)")]
+        public static BlobAssetReference<Collider> Create(float3 point0, float3 point1, float radius, CollisionFilter? filter = null, Material? material = null) =>
+            Create(new CapsuleGeometry { Vertex0 = point0, Vertex1 = point1, Radius = radius }, filter ?? CollisionFilter.Default, material ?? Material.Default);
 
         #endregion
     }

@@ -1,10 +1,12 @@
 using System;
 using NUnit.Framework;
+using Unity.Burst;
 using Unity.Mathematics;
 using UnityEngine;
 using Assert = UnityEngine.Assertions.Assert;
 using TestUtils = Unity.Physics.Tests.Utils.TestUtils;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Jobs;
 
 namespace Unity.Physics.Tests.Collision.Colliders
 {
@@ -15,19 +17,34 @@ namespace Unity.Physics.Tests.Collision.Colliders
     {
         #region Construction
 
+        [BurstCompile(CompileSynchronously = true)]
+        struct CreateFromBurstJob : IJob
+        {
+            public void Execute() => SphereCollider.Create(new SphereGeometry { Radius = 1f }).Release();
+        }
+
+        [Test]
+        public void SphereCollider_Create_WhenCalledFromBurstJob_DoesNotThrow() => new CreateFromBurstJob().Run();
+
         /// <summary>
         /// Tests if a created <see cref="SphereCollider"/> has its attributes set correctly
         /// </summary>
         [Test]
         unsafe public void TestSphereColliderCreate()
         {
-            float3 center = new float3(-8.45f, 9.65f, -0.10f);
-            float radius = 0.98f;
-            var collider = SphereCollider.Create(center, radius);
+            var sphere = new SphereGeometry
+            {
+                Center = new float3(-8.45f, 9.65f, -0.10f),
+                Radius = 0.98f
+            };
+
+            var collider = SphereCollider.Create(sphere);
             var sphereCollider = UnsafeUtilityEx.AsRef<SphereCollider>(collider.GetUnsafePtr());
 
-            TestUtils.AreEqual(center, sphereCollider.Center, 1e-3f);
-            TestUtils.AreEqual(radius, sphereCollider.Radius, 1e-3f);
+            TestUtils.AreEqual(sphere.Center, sphereCollider.Center, 1e-3f);
+            TestUtils.AreEqual(sphere.Center, sphereCollider.Geometry.Center, 1e-3f);
+            TestUtils.AreEqual(sphere.Radius, sphereCollider.Radius, 1e-3f);
+            TestUtils.AreEqual(sphere.Radius, sphereCollider.Geometry.Radius, 1e-3f);
             Assert.AreEqual(ColliderType.Sphere, sphereCollider.Type);
             Assert.AreEqual(CollisionType.Convex, sphereCollider.CollisionType);
         }
@@ -38,63 +55,59 @@ namespace Unity.Physics.Tests.Collision.Colliders
         [Test]
         public void TestSphereColliderCreateInvalid()
         {
-            float3 center = new float3(-10.34f, 0.0f, -1.54f);
-            float radius = 1.25f;
+            var sphere = new SphereGeometry
+            {
+                Center = new float3(-10.34f, 0.0f, -1.54f),
+                Radius = 1.25f
+            };
 
             // positive inf center
             {
-                float3 invalidCenter = new float3(float.PositiveInfinity, 0.0f, 0.0f);
-                TestUtils.ThrowsException<System.ArgumentException>(
-                        () => SphereCollider.Create(invalidCenter, radius)
-                );
+                var invalidSphere = sphere;
+                invalidSphere.Center = new float3(float.PositiveInfinity, 0.0f, 0.0f);
+                TestUtils.ThrowsException<System.ArgumentException>(() => SphereCollider.Create(invalidSphere));
             }
 
             // negative inf center
             {
-                float3 invalidCenter = new float3(float.NegativeInfinity, 0.0f, 0.0f);
-                TestUtils.ThrowsException<System.ArgumentException>(
-                        () => SphereCollider.Create(invalidCenter, radius)
-                );
+                var invalidSphere = sphere;
+                invalidSphere.Center = new float3(float.NegativeInfinity, 0.0f, 0.0f);
+                TestUtils.ThrowsException<System.ArgumentException>(() => SphereCollider.Create(invalidSphere));
             }
 
             // nan center
             {
-                float3 invalidCenter = new float3(float.NaN, 0.0f, 0.0f);
-                TestUtils.ThrowsException<System.ArgumentException>(
-                        () => SphereCollider.Create(invalidCenter, radius)
-                );
+                var invalidSphere = sphere;
+                invalidSphere.Center = new float3(float.NaN, 0.0f, 0.0f);
+                TestUtils.ThrowsException<System.ArgumentException>(() => SphereCollider.Create(invalidSphere));
             }
 
             // negative radius
             {
-                float invalidRadius = -0.5f;
-                TestUtils.ThrowsException<System.ArgumentException>(
-                        () => SphereCollider.Create(center, invalidRadius)
-                );
+                var invalidSphere = sphere;
+                invalidSphere.Radius = -0.5f;
+                TestUtils.ThrowsException<System.ArgumentException>(() => SphereCollider.Create(invalidSphere));
             }
 
             // positive inf radius
             {
-                float invalidRadius = float.PositiveInfinity;
-                TestUtils.ThrowsException<System.ArgumentException>(
-                        () => SphereCollider.Create(center, invalidRadius)
-                );
+                var invalidSphere = sphere;
+                invalidSphere.Radius = float.PositiveInfinity;
+                TestUtils.ThrowsException<System.ArgumentException>(() => SphereCollider.Create(invalidSphere));
             }
 
             // negative inf radius
             {
-                float invalidRadius = float.NegativeInfinity;
-                TestUtils.ThrowsException<System.ArgumentException>(
-                        () => SphereCollider.Create(center, invalidRadius)
-                );
+                var invalidSphere = sphere;
+                invalidSphere.Radius = float.NegativeInfinity;
+                TestUtils.ThrowsException<System.ArgumentException>(() => SphereCollider.Create(invalidSphere));
             }
 
             // nan radius
             {
-                float invalidRadius = float.NaN;
-                TestUtils.ThrowsException<System.ArgumentException>(
-                        () => SphereCollider.Create(center, invalidRadius)
-                );
+                var invalidSphere = sphere;
+                invalidSphere.Radius = float.NaN;
+                TestUtils.ThrowsException<System.ArgumentException>(() => SphereCollider.Create(invalidSphere));
             }
         }
 
@@ -110,7 +123,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         {
             float3 center = new float3(-8.4f, 5.63f, -7.2f);
             float radius = 2.3f;
-            var sphereCollider = SphereCollider.Create(center, radius);
+            var sphereCollider = SphereCollider.Create(new SphereGeometry { Center = center, Radius = radius });
 
             Aabb expected = new Aabb();
             expected.Min = center - new float3(radius, radius, radius);
@@ -129,7 +142,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         {
             float3 center = new float3(-3.4f, 0.63f, -17.2f);
             float radius = 5.3f;
-            var sphereCollider = SphereCollider.Create(center, radius);
+            var sphereCollider = SphereCollider.Create(new SphereGeometry { Center = center, Radius = radius });
 
             float3 translation = new float3(8.3f, -0.5f, 170.0f);
             quaternion rotation = quaternion.AxisAngle(math.normalize(new float3(1.1f, 4.5f, 0.0f)), 146.0f);
@@ -155,7 +168,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         {
             float3 center = new float3(-8.4f, 5.63f, 77.2f);
             float radius = 2.3f;
-            var sphereCollider = SphereCollider.Create(center, radius);
+            var sphereCollider = SphereCollider.Create(new SphereGeometry { Center = center, Radius = radius });
 
             float inertia = 2.0f / 5.0f * radius * radius;
             float3 expectedInertiaTensor = new float3(inertia, inertia, inertia);

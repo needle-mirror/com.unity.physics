@@ -177,8 +177,24 @@ namespace Unity.Physics
 
                 contactWriter.Write(header);
 
-                for (int contactIndex = 0; contactIndex < header.NumContacts; contactIndex++)
+                // Group the contact points in 2s (when 4-6 contact points) and 3s (6 or more contact points)
+                // to avoid the order forcing the magnitude of the impulse on one side of the face.
+                // When less than 4 contact points access them in order.
+                int startIndex = 0;
+                int increment = header.NumContacts < 6 ?
+                    math.max(header.NumContacts / 2, 1) : (header.NumContacts / 3 + ((header.NumContacts % 3 > 0) ? 1 : 0));
+                for (int contactIndex = 0; ; contactIndex += increment)
                 {
+                    if (contactIndex >= header.NumContacts)
+                    {
+                        startIndex++;
+                        if (startIndex == increment)
+                        {
+                            break;
+                        }
+                        contactIndex = startIndex;
+                    }
+
                     contactWriter.Write(manifold[contactIndex]);
                 }
             }

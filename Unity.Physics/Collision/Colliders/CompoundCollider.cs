@@ -246,7 +246,8 @@ namespace Unity.Physics
         public CollisionType CollisionType => m_Header.CollisionType;
         public int MemorySize { get; private set; }
 
-        public CollisionFilter Filter { get => m_Header.Filter; set => m_Header.Filter = value; }
+        // TODO: Should not be able to set this directly, it should always be the union of the child filters
+        public CollisionFilter Filter { get => m_Header.Filter; set { if (!m_Header.Filter.Equals(value)) { m_Header.Version += 1; m_Header.Filter = value; } } }
         public MassProperties MassProperties { get; private set; }
 
         public Aabb CalculateAabb()

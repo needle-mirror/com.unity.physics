@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
+using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
 
 namespace Unity.Physics
@@ -8,17 +11,35 @@ namespace Unity.Physics
     // Utilities for building physics meshes
     internal static class MeshBuilder
     {
-        internal class TempSection
+        internal struct TempSectionRanges
         {
-            public List<Mesh.PrimitiveFlags> PrimitivesFlags;
-            public List<Mesh.PrimitiveVertexIndices> Primitives;
-            public List<float3> Vertices;
+            public int PrimitivesFlagsMin;
+            public int PrimitivesFlagsLength;
+            public int PrimitivesMin;
+            public int PrimitivesLength;
+            public int VerticesMin;
+            public int VerticesLength;
+        }
+        
+        internal struct TempSection
+        {
+            public NativeList<Mesh.PrimitiveFlags>  PrimitivesFlags;
+            public NativeList<Mesh.PrimitiveVertexIndices> Primitives;
+            public NativeList<float3> Vertices;
+            public NativeList<TempSectionRanges> Ranges;
         }
 
-        internal static unsafe List<TempSection> BuildSections(BoundingVolumeHierarchy.Node* nodes, int nodeCount, List<MeshConnectivityBuilder.Primitive> primitives)
+        internal static unsafe TempSection BuildSections(BoundingVolumeHierarchy.Node* nodes, int nodeCount, NativeList<MeshConnectivityBuilder.Primitive> primitives)
         {
-            var tempSections = new List<TempSection>();
-            if (primitives.Count == 0)
+            var tempSections = new TempSection()
+            {
+                PrimitivesFlags = new NativeList<Mesh.PrimitiveFlags>(Allocator.Temp),
+                Primitives = new NativeList<Mesh.PrimitiveVertexIndices>(Allocator.Temp),
+                Vertices = new NativeList<float3>(Allocator.Temp),
+                Ranges = new NativeList<TempSectionRanges>(Allocator.Temp)
+            };
+            
+            if (primitives.Length == 0)
             {
                 // Early-out in the case of no input primitives
                 return tempSections;
@@ -31,14 +52,17 @@ namespace Unity.Physics
 
             const float uniqueVerticesPerPrimitiveFactor = 1.5f;
 
-            int[] primitivesCountInSubTree = ProducedPrimitivesCountPerSubTree(nodes, nodeCount);
-
+            var primitivesCountInSubTree = ProducedPrimitivesCountPerSubTree(nodes, nodeCount);
+            
+            var subTreeIndices = new NativeList<int>(Allocator.Temp);
+            var nodeIndices = new NativeList<int>(Allocator.Temp);
+            var tmpVertices = new NativeList<float3>(Allocator.Temp);
             do
             {
                 int nodeIndex = nodesIndexStack[--stackSize];
                 int subTreeVertexCountEstimate = (int)(uniqueVerticesPerPrimitiveFactor * primitivesCountInSubTree[nodeIndex]);
 
-                var subTreeIndices = new List<int>();
+                subTreeIndices.Clear();
 
                 if (subTreeVertexCountEstimate < Mesh.Section.MaxNumVertices)
                 {
@@ -71,14 +95,15 @@ namespace Unity.Physics
                 float tempUniqueVertexPrimitiveFactor = 1.0f;
                 const float factorStepIncrement = 0.25f;
 
-                while (subTreeIndices.Any())
+                while (subTreeIndices.Length > 0)
                 {
                     // Try to combine sub trees if multiple sub trees can fit into one section.
-                    var nodeIndices = new List<int>();
+                    nodeIndices.Clear();
                     int vertexCountEstimate = 0;
 
-                    foreach (int subTreeNodeIndex in subTreeIndices)
+                    for(var i = 0; i < subTreeIndices.Length; ++i)
                     {
+                        var subTreeNodeIndex = subTreeIndices[i];
                         int nodeIndexCount = (int)(tempUniqueVertexPrimitiveFactor * primitivesCountInSubTree[subTreeNodeIndex]);
                         if (vertexCountEstimate + nodeIndexCount < Mesh.Section.MaxNumVertices)
                         {
@@ -87,12 +112,13 @@ namespace Unity.Physics
                         }
                     }
 
-                    if (!nodeIndices.Any())
+                    if (nodeIndices.Length == 0)
                     {
                         // We failed to fit any sub tree into sections.
                         // Split up nodes and push them to stack.
-                        foreach (int subTreeNodeIndex in subTreeIndices)
+                        for(var index = 0; index < subTreeIndices.Length; ++index)
                         {
+                            var subTreeNodeIndex = subTreeIndices[index];
                             BoundingVolumeHierarchy.Node nodeToSplit = nodes[subTreeNodeIndex];
 
                             for (int i = 0; i < 4; i++)
@@ -109,30 +135,30 @@ namespace Unity.Physics
                     }
 
                     // Collect vertices from all sub trees.
-                    var tmpVertices = new List<float3>();
-                    foreach (int subTreeNodeIndex in nodeIndices)
+                    tmpVertices.Clear();
+                    for(var i = 0; i < nodeIndices.Length; ++i)
                     {
-                        tmpVertices.AddRange(CollectAllVerticesFromSubTree(nodes, subTreeNodeIndex, primitives));
+                        var subTreeNodeIndex = nodeIndices[i];
+                        CollectAllVerticesFromSubTree(nodes, subTreeNodeIndex, primitives, tmpVertices);
                     }
 
-                    float3[] allVertices = tmpVertices.ToArray();
-
-                    int[] vertexIndices = new int[allVertices.Length];
+                    var vertexIndices = new NativeArray<int>(tmpVertices.Length, Allocator.Temp);
                     for (int i = 0; i < vertexIndices.Length; i++)
                     {
                         vertexIndices[i] = i;
                     }
 
-                    MeshConnectivityBuilder.WeldVertices(vertexIndices, ref allVertices);
+                    NativeList<float3> uniqueVertices = MeshConnectivityBuilder.WeldVertices(vertexIndices, new NativeArray<float3>(tmpVertices, Allocator.Temp));
 
-                    if (allVertices.Length < Mesh.Section.MaxNumVertices)
+                    if (uniqueVertices.Length < Mesh.Section.MaxNumVertices)
                     {
-                        tempSections.Add(BuildSectionGeometry(tempSections.Count, primitives, nodeIndices, nodes, allVertices));
+                        BuildSectionGeometry(tempSections, primitives, nodeIndices, nodes, new NativeArray<float3>(uniqueVertices, Allocator.Temp));
 
                         // Remove used indices
-                        foreach (int nodeTreeIndex in nodeIndices)
+                        for(var i = 0; i < nodeIndices.Length; ++i)
                         {
-                            subTreeIndices.Remove(nodeTreeIndex);
+                            var nodeTreeIndex = nodeIndices[i];
+                            subTreeIndices.RemoveAtSwapBack(subTreeIndices.IndexOf(nodeTreeIndex));
                         }
                     }
                     else
@@ -148,9 +174,9 @@ namespace Unity.Physics
             return tempSections;
         }
 
-        private static unsafe int[] ProducedPrimitivesCountPerSubTree(BoundingVolumeHierarchy.Node* nodes, int nodeCount)
+        private static unsafe NativeArray<int> ProducedPrimitivesCountPerSubTree(BoundingVolumeHierarchy.Node* nodes, int nodeCount)
         {
-            int[] primitivesPerNode = Enumerable.Repeat(0, nodeCount).ToArray();
+            var primitivesPerNode = new NativeArray<int>(nodeCount, Allocator.Temp);
 
             for (int nodeIndex = nodeCount - 1; nodeIndex >= 0; nodeIndex--)
             {
@@ -171,9 +197,9 @@ namespace Unity.Physics
             return primitivesPerNode;
         }
 
-        private static unsafe List<float3> CollectAllVerticesFromSubTree(BoundingVolumeHierarchy.Node* nodes, int subTreeNodeIndex, List<MeshConnectivityBuilder.Primitive> primitives)
+        private static unsafe void CollectAllVerticesFromSubTree(BoundingVolumeHierarchy.Node* nodes, int subTreeNodeIndex,
+            NativeList<MeshConnectivityBuilder.Primitive> primitives, NativeList<float3> vertices)
         {
-            var vertices = new List<float3>();
 
             int* nodesIndexStack = stackalloc int[BoundingVolumeHierarchy.Constants.UnaryStackSize];
             int stackSize = 1;
@@ -194,7 +220,7 @@ namespace Unity.Physics
                             vertices.Add(p.Vertices[1]);
                             vertices.Add(p.Vertices[2]);
 
-                            if (p.Flags.HasFlag(MeshConnectivityBuilder.PrimitiveFlags.DefaultTrianglePairFlags))
+                            if ((p.Flags & MeshConnectivityBuilder.PrimitiveFlags.DefaultTrianglePairFlags) != 0)
                             {
                                 vertices.Add(p.Vertices[3]);
                             }
@@ -213,15 +239,14 @@ namespace Unity.Physics
                 }
             } while (stackSize > 0);
 
-            return vertices;
         }
 
         private static Mesh.PrimitiveFlags ConvertPrimitiveFlags(MeshConnectivityBuilder.PrimitiveFlags flags)
         {
             Mesh.PrimitiveFlags newFlags = 0;
-            newFlags |= flags.HasFlag(MeshConnectivityBuilder.PrimitiveFlags.IsTrianglePair) ? Mesh.PrimitiveFlags.IsTrianglePair : Mesh.PrimitiveFlags.IsTriangle;
+            newFlags |= (flags & MeshConnectivityBuilder.PrimitiveFlags.IsTrianglePair) != 0 ? Mesh.PrimitiveFlags.IsTrianglePair : Mesh.PrimitiveFlags.IsTriangle;
 
-            if (flags.HasFlag(MeshConnectivityBuilder.PrimitiveFlags.IsFlatConvexQuad))
+            if ((flags & MeshConnectivityBuilder.PrimitiveFlags.IsFlatConvexQuad) == MeshConnectivityBuilder.PrimitiveFlags.IsFlatConvexQuad)
             {
                 newFlags |= Mesh.PrimitiveFlags.IsQuad;
             }
@@ -229,17 +254,24 @@ namespace Unity.Physics
             return newFlags;
         }
 
-        private static unsafe TempSection BuildSectionGeometry(
-            int sectionIndex, List<MeshConnectivityBuilder.Primitive> primitives, List<int> subTreeNodeIndices, BoundingVolumeHierarchy.Node* nodes, float3[] vertices)
+        private static unsafe void BuildSectionGeometry(TempSection sections, NativeList<MeshConnectivityBuilder.Primitive> primitives, NativeList<int> subTreeNodeIndices, BoundingVolumeHierarchy.Node* nodes, NativeArray<float3> vertices)
         {
-            var section = new TempSection();
-            section.Vertices = vertices.ToList();
-            section.Primitives = new List<Mesh.PrimitiveVertexIndices>();
-            section.PrimitivesFlags = new List<Mesh.PrimitiveFlags>();
+            var sectionIndex = sections.Ranges.Length;
 
-            foreach (int root in subTreeNodeIndices)
+            var newSectionRange = new TempSectionRanges
             {
-                int* nodesIndexStack = stackalloc int[BoundingVolumeHierarchy.Constants.UnaryStackSize];
+                VerticesMin = sections.Vertices.Length,
+                PrimitivesFlagsMin = sections.PrimitivesFlags.Length,
+                PrimitivesMin = sections.Primitives.Length
+            };
+            
+            sections.Vertices.AddRange(vertices);
+
+            int* nodesIndexStack = stackalloc int[BoundingVolumeHierarchy.Constants.UnaryStackSize];
+
+            for(var rootIndex = 0; rootIndex < subTreeNodeIndices.Length; ++rootIndex)
+            {
+                var root = subTreeNodeIndices[rootIndex];
                 int stackSize = 1;
                 nodesIndexStack[0] = root;
 
@@ -255,16 +287,16 @@ namespace Unity.Physics
                             if (node.IsChildValid(i))
                             {
                                 MeshConnectivityBuilder.Primitive p = primitives[node.Data[i]];
-                                section.PrimitivesFlags.Add(ConvertPrimitiveFlags(p.Flags));
+                                sections.PrimitivesFlags.Add(ConvertPrimitiveFlags(p.Flags));
 
-                                int vertexCount = p.Flags.HasFlag(MeshConnectivityBuilder.PrimitiveFlags.IsTrianglePair) ? 4 : 3;
+                                int vertexCount = (p.Flags &MeshConnectivityBuilder.PrimitiveFlags.IsTrianglePair) != 0 ? 4 : 3;
 
                                 Mesh.PrimitiveVertexIndices sectionPrimitive = new Mesh.PrimitiveVertexIndices();
                                 byte* vertexIndices = &sectionPrimitive.A;
 
                                 for (int v = 0; v < vertexCount; v++)
                                 {
-                                    vertexIndices[v] = (byte)Array.IndexOf(vertices, p.Vertices[v]);
+                                    vertexIndices[v] = (byte)vertices.IndexOf(p.Vertices[v]);
                                 }
 
                                 if (vertexCount == 3)
@@ -272,9 +304,9 @@ namespace Unity.Physics
                                     sectionPrimitive.D = sectionPrimitive.C;
                                 }
 
-                                section.Primitives.Add(sectionPrimitive);
+                                sections.Primitives.Add(sectionPrimitive);
 
-                                int primitiveSectionIndex = section.Primitives.Count - 1;
+                                int primitiveSectionIndex = sections.Primitives.Length - newSectionRange.PrimitivesMin - 1;
 
                                 // Update primitive index in the BVH.
                                 node.Data[i] = (sectionIndex << 8) | primitiveSectionIndex;
@@ -294,17 +326,21 @@ namespace Unity.Physics
                 } while (stackSize > 0);
             }
 
-            return section;
+            newSectionRange.VerticesLength = sections.Vertices.Length - newSectionRange.VerticesMin;
+            newSectionRange.PrimitivesLength = sections.Primitives.Length - newSectionRange.PrimitivesMin;
+            newSectionRange.PrimitivesFlagsLength = sections.PrimitivesFlags.Length - newSectionRange.PrimitivesFlagsMin;
+            
+            sections.Ranges.Add(newSectionRange);
         }
     }
 
-    internal class MeshConnectivityBuilder
+    internal struct MeshConnectivityBuilder
     {
         const float k_MergeCoplanarTrianglesTolerance = 1e-4f;
 
-        internal Vertex[] Vertices;
-        internal Triangle[] Triangles;
-        internal Edge[] Edges;
+        internal NativeArray<Vertex> Vertices;
+        internal NativeArray<Triangle> Triangles;
+        internal NativeArray<Edge> Edges;
 
         /// Vertex.
         internal struct Vertex
@@ -344,17 +380,55 @@ namespace Unity.Physics
             internal bool IsValid;
         }
 
-        internal class Triangle
+        internal struct Triangle
         {
             public void Clear()
             {
                 IsValid = false;
-                Links[0].IsValid = false;
-                Links[1].IsValid = false;
-                Links[2].IsValid = false;
+                Edge0.IsValid = false;
+                Edge1.IsValid = false;
+                Edge2.IsValid = false;
             }
 
-            internal Edge[] Links = new Edge[3];
+            // Broken up rather than an array because we need native containers of triangles elsewhere in the code, and
+            // nested native containers aren't supported.
+            internal Edge Edge0;
+            internal Edge Edge1;
+            internal Edge Edge2;
+
+            internal Edge Links(int edge)
+            {
+                switch (edge)
+                {
+                    case 0:
+                        return Edge0;
+                    case 1:
+                        return Edge1;
+                    case 2:
+                        return Edge2;
+                    default:
+                        throw new IndexOutOfRangeException();
+                }
+            }
+
+            internal void SetLinks(int edge, Edge newEdge)
+            {
+                switch (edge)
+                {
+                    case 0:
+                        Edge0 = newEdge;
+                        break;
+                    case 1:
+                        Edge1 = newEdge;
+                        break;
+                    case 2:
+                        Edge2 = newEdge;
+                        break;
+                    default:
+                        throw new IndexOutOfRangeException();
+                }
+            }
+            
             internal bool IsValid;
         }
 
@@ -381,17 +455,17 @@ namespace Unity.Physics
         }
 
         /// Get the opposite edge.
-        internal Edge GetLink(Edge e) => e.IsValid ? Triangles[e.Triangle].Links[e.Start] : e;
+        internal Edge GetLink(Edge e) => e.IsValid ? Triangles[e.Triangle].Links(e.Start) : e;
         internal bool IsBound(Edge e) => GetLink(e).IsValid;
         internal bool IsNaked(Edge e) => !IsBound(e);
         internal Edge GetNext(Edge e) => e.IsValid ? new Edge { Triangle = e.Triangle, Start = (e.Start + 1) % 3, IsValid = true } : e;
         internal Edge GetPrev(Edge e) => e.IsValid ? new Edge { Triangle = e.Triangle, Start = (e.Start + 2) % 3, IsValid = true } : e;
 
-        internal int GetStartVertexIndex(Edge e) => Triangles[e.Triangle].Links[e.Start].Start;
+        internal int GetStartVertexIndex(Edge e) => Triangles[e.Triangle].Links(e.Start).Start;
 
-        internal int GetEndVertexIndex(Edge e) => Triangles[e.Triangle].Links[(e.Start + 1) % 3].Start;
+        internal int GetEndVertexIndex(Edge e) => Triangles[e.Triangle].Links((e.Start + 1) % 3).Start;
 
-        internal bool IsEdgeConcaveOrFlat(Edge edge, int[] indices, float3[] vertices, float4[] planes)
+        internal bool IsEdgeConcaveOrFlat(Edge edge, NativeArray<int> indices, NativeArray<float3> vertices, NativeArray<float4> planes)
         {
             if (IsNaked(edge))
             {
@@ -407,7 +481,7 @@ namespace Unity.Physics
             return true;
         }
 
-        internal bool IsTriangleConcaveOrFlat(Edge edge, int[] indices, float3[] vertices, float4[] planes)
+        internal bool IsTriangleConcaveOrFlat(Edge edge, NativeArray<int> indices, NativeArray<float3> vertices, NativeArray<float4> planes)
         {
             for (int i = 0; i < 3; i++)
             {
@@ -421,7 +495,7 @@ namespace Unity.Physics
             return true;
         }
 
-        internal bool IsFlat(Edge edge, int[] indices, float3[] vertices, float4[] planes)
+        internal bool IsFlat(Edge edge, NativeArray<int> indices, NativeArray<float3> vertices, NativeArray<float4> planes)
         {
             Edge link = GetLink(edge);
             if (!link.IsValid)
@@ -438,7 +512,7 @@ namespace Unity.Physics
             return flat;
         }
 
-        internal bool IsConvexQuad(Primitive quad, Edge edge, float4[] planes)
+        internal bool IsConvexQuad(Primitive quad, Edge edge, NativeArray<float4> planes)
         {
             float4x2 quadPlanes;
             quadPlanes.c0 = planes[edge.Triangle];
@@ -469,9 +543,9 @@ namespace Unity.Physics
             return false;
         }
 
-        internal bool CanEdgeBeDisabled(Edge e, PrimitiveFlags[] flags, int[] indices, float3[] vertices, float4[] planes)
+        internal bool CanEdgeBeDisabled(Edge e, NativeArray<PrimitiveFlags> flags, NativeArray<int> indices, NativeArray<float3> vertices, NativeArray<float4> planes)
         {
-            if (!e.IsValid || IsEdgeConcaveOrFlat(e, indices, vertices, planes) || flags[e.Triangle].HasFlag(PrimitiveFlags.DisableAllEdges))
+            if (!e.IsValid || IsEdgeConcaveOrFlat(e, indices, vertices, planes) || (flags[e.Triangle] & PrimitiveFlags.DisableAllEdges) != 0)
             {
                 return false;
             }
@@ -479,12 +553,12 @@ namespace Unity.Physics
             return true;
         }
 
-        internal bool CanAllEdgesBeDisabled(Edge[] edges, PrimitiveFlags[] flags, int[] indices, float3[] vertices, float4[] planes)
+        internal bool CanAllEdgesBeDisabled(NativeArray<Edge> edges, NativeArray<PrimitiveFlags> flags, NativeArray<int> indices, NativeArray<float3> vertices, NativeArray<float4> planes)
         {
             bool allDisabled = true;
-            foreach (Edge e in edges)
+            for(var i = 0; i < edges.Length; ++i)
             {
-                allDisabled &= CanEdgeBeDisabled(e, flags, indices, vertices, planes);
+                allDisabled &= CanEdgeBeDisabled(edges[i], flags, indices, vertices, planes);
             }
 
             return allDisabled;
@@ -505,19 +579,27 @@ namespace Unity.Physics
             internal int Index;
         }
 
+        private struct SortVertexWithHashByHash : IComparer<VertexWithHash>
+        {
+            public int Compare(VertexWithHash x, VertexWithHash y)
+            {
+                return x.Hash.CompareTo(y.Hash);
+            }
+        }
+
         private static ulong SpatialHash(float3 vertex)
         {
-            ulong x, y, z;
+            uint x, y, z;
             unsafe
             {
                 float* tmp = &vertex.x;
-                x = *((ulong*)tmp);
+                x = *((uint*)tmp);
 
                 tmp = &vertex.y;
-                y = *((ulong*)tmp);
+                y = *((uint*)tmp);
 
                 tmp = &vertex.z;
-                z = *((ulong*)tmp);
+                z = *((uint*)tmp);
             }
 
             const ulong p1 = 73856093;
@@ -527,20 +609,23 @@ namespace Unity.Physics
             return (x * p1) ^ (y * p2) ^ (z * p3);
         }
 
-        public static void WeldVertices(int[] indices, ref float3[] vertices)
+        public static NativeList<float3> WeldVertices(NativeArray<int> indices, NativeArray<float3> vertices)
         {
             int numVertices = vertices.Length;
-            var verticesAndHashes = new VertexWithHash[numVertices];
+            var verticesAndHashes = new NativeArray<VertexWithHash>(numVertices, Allocator.Temp);
             for (int i = 0; i < numVertices; i++)
             {
-                verticesAndHashes[i].Index = i;
-                verticesAndHashes[i].Vertex = vertices[i];
-                verticesAndHashes[i].Hash = SpatialHash(verticesAndHashes[i].Vertex);
+                verticesAndHashes[i] = new VertexWithHash()
+                {
+                    Index = i, 
+                    Vertex = vertices[i], 
+                    Hash = SpatialHash(vertices[i])
+                };
             }
 
-            var uniqueVertices = new List<float3>();
-            var remap = new int[numVertices];
-            verticesAndHashes = verticesAndHashes.OrderBy(v => v.Hash).ToArray();
+            var uniqueVertices = new NativeList<float3>(Allocator.Temp);
+            var remap = new NativeArray<int>(numVertices, Allocator.Temp);
+            verticesAndHashes.Sort(new SortVertexWithHashByHash());
 
             for (int i = 0; i < numVertices; i++)
             {
@@ -550,7 +635,7 @@ namespace Unity.Physics
                 }
 
                 uniqueVertices.Add(vertices[verticesAndHashes[i].Index]);
-                remap[verticesAndHashes[i].Index] = uniqueVertices.Count - 1;
+                remap[verticesAndHashes[i].Index] = uniqueVertices.Length - 1;
 
                 for (int j = i + 1; j < numVertices; j++)
                 {
@@ -566,18 +651,24 @@ namespace Unity.Physics
                             verticesAndHashes[i].Vertex.z == verticesAndHashes[j].Vertex.z)
                         {
                             remap[verticesAndHashes[j].Index] = remap[verticesAndHashes[i].Index];
-                            verticesAndHashes[j].Index = int.MaxValue;
+
+                            verticesAndHashes[j] = new VertexWithHash()
+                            {
+                                Index = int.MaxValue, 
+                                Vertex = verticesAndHashes[j].Vertex, 
+                                Hash = verticesAndHashes[j].Hash
+                            };
                         }
                     }
                 }
             }
-
-            vertices = uniqueVertices.ToArray();
-
+            
             for (int i = 0; i < indices.Length; i++)
             {
                 indices[i] = remap[indices[i]];
             }
+
+            return uniqueVertices;
         }
 
         public static bool IsTriangleDegenerate(float3 a, float3 b, float3 c)
@@ -619,18 +710,20 @@ namespace Unity.Physics
             }
         }
 
-        internal MeshConnectivityBuilder(int[] indices, float3[] vertices)
+        internal unsafe MeshConnectivityBuilder(NativeArray<int> indices, NativeArray<float3> vertices)
         {
             int numIndices = indices.Length;
             int numTriangles = numIndices / 3;
             int numVertices = vertices.Length;
 
-            Vertices = new Vertex[numVertices];
-            Triangles = new Triangle[numTriangles];
+            Vertices = new NativeArray<Vertex>(numVertices, Allocator.Temp);
+            Triangles = new NativeArray<Triangle>(numTriangles, Allocator.Temp);
+            
             for (int i = 0; i < numTriangles; i++)
             {
-                Triangles[i] = new Triangle();
-                Triangles[i].Clear();
+                var triangle = new Triangle();
+                triangle.Clear();
+                Triangles[i] = triangle;
             }
 
             int numEdges = 0;
@@ -638,17 +731,16 @@ namespace Unity.Physics
             // Compute cardinality and triangle flags.
             for (int triangleIndex = 0; triangleIndex < numTriangles; triangleIndex++)
             {
-                var triangleIndices = new ArraySegment<int>(indices, triangleIndex * 3, 3);
-                Triangles[triangleIndex].IsValid =
-                    triangleIndices.Array[triangleIndices.Offset + 0] != triangleIndices.Array[triangleIndices.Offset + 1] &&
-                    triangleIndices.Array[triangleIndices.Offset + 1] != triangleIndices.Array[triangleIndices.Offset + 2] &&
-                    triangleIndices.Array[triangleIndices.Offset + 0] != triangleIndices.Array[triangleIndices.Offset + 2];
+                ((Triangle*)Triangles.GetUnsafePtr())[triangleIndex].IsValid =
+                    indices[triangleIndex * 3 + 0] != indices[triangleIndex * 3 + 1] &&
+                    indices[triangleIndex * 3 + 1] != indices[triangleIndex * 3 + 2] &&
+                    indices[triangleIndex * 3 + 0] != indices[triangleIndex * 3 + 2];
 
                 if (Triangles[triangleIndex].IsValid)
                 {
-                    Vertices[triangleIndices.Array[triangleIndices.Offset + 0]].Cardinality++;
-                    Vertices[triangleIndices.Array[triangleIndices.Offset + 1]].Cardinality++;
-                    Vertices[triangleIndices.Array[triangleIndices.Offset + 2]].Cardinality++;
+                    ((Vertex*)Vertices.GetUnsafePtr())[indices[triangleIndex * 3 + 0]].Cardinality++;
+                    ((Vertex*)Vertices.GetUnsafePtr())[indices[triangleIndex * 3 + 1]].Cardinality++;
+                    ((Vertex*)Vertices.GetUnsafePtr())[indices[triangleIndex * 3 + 2]].Cardinality++;
                 }
             }
 
@@ -656,13 +748,13 @@ namespace Unity.Physics
             for (int vertexIndex = 0; vertexIndex < numVertices; ++vertexIndex)
             {
                 int cardinality = Vertices[vertexIndex].Cardinality;
-                Vertices[vertexIndex].FirstEdge = cardinality > 0 ? numEdges : 0;
+                ((Vertex*)Vertices.GetUnsafePtr())[vertexIndex].FirstEdge = cardinality > 0 ? numEdges : 0;
                 numEdges += cardinality;
             }
 
             // Compute edges and triangles links.
-            int[] counters = Enumerable.Repeat(0, numVertices).ToArray();
-            Edges = new Edge[numEdges];
+            var counters = new NativeArray<int>(numVertices, Allocator.Temp);
+            Edges = new NativeArray<Edge>(numEdges, Allocator.Temp);
 
             for (int triangleIndex = 0; triangleIndex < numTriangles; triangleIndex++)
             {
@@ -690,14 +782,14 @@ namespace Unity.Physics
                         int endVertex = indices[edge.Triangle * 3 + endVertexOffset];
                         if (endVertex == vertexI)
                         {
-                            Triangles[triangleIndex].Links[i] = edge;
-                            Triangles[edge.Triangle].Links[edge.Start] = Edges[thisEdgeIndex];
+                            ((Triangle*)Triangles.GetUnsafePtr())[triangleIndex].SetLinks(i, edge);
+                            ((Triangle*)Triangles.GetUnsafePtr())[edge.Triangle].SetLinks(edge.Start, Edges[thisEdgeIndex]);
                             break;
                         }
                     }
                 }
             }
-
+            
             // Compute vertices attributes.
             for (int vertexIndex = 0; vertexIndex < numVertices; vertexIndex++)
             {
@@ -717,7 +809,7 @@ namespace Unity.Physics
                     }
                 }
 
-                ref Vertex vertex = ref Vertices[vertexIndex];
+                ref Vertex vertex = ref ((Vertex*)Vertices.GetUnsafePtr())[vertexIndex];
                 vertex.Manifold = numNakedEdge < 2 && vertex.Cardinality > 0;
                 vertex.Boundary = numNakedEdge > 0;
                 vertex.Border = numNakedEdge == 1 && vertex.Manifold;
@@ -725,7 +817,7 @@ namespace Unity.Physics
                 // Make sure that naked edge appears first.
                 if (nakedEdgeIndex > 0)
                 {
-                    Swap(ref Edges[vertex.FirstEdge], ref Edges[vertex.FirstEdge + nakedEdgeIndex]);
+                    Swap(ref ((Edge*)Edges.GetUnsafePtr())[vertex.FirstEdge], ref ((Edge*)Edges.GetUnsafePtr())[vertex.FirstEdge + nakedEdgeIndex]);
                 }
 
                 // Order ring as fan.
@@ -746,7 +838,7 @@ namespace Unity.Physics
                                 {
                                     if (Edges[firstEdge + j].Triangle == triangle)
                                     {
-                                        Swap(ref Edges[firstEdge + i + 1], ref Edges[firstEdge + j]);
+                                        Swap(ref ((Edge*)Edges.GetUnsafePtr())[firstEdge + i + 1], ref ((Edge*)Edges.GetUnsafePtr())[firstEdge + j]);
                                         found = true;
                                         break;
                                     }
@@ -785,13 +877,18 @@ namespace Unity.Physics
             }
         }
 
-        private struct EdgeData
+        private struct EdgeData : IComparable<EdgeData>
         {
             internal Edge Edge;
             internal float Value;
+
+            public int CompareTo(EdgeData other)
+            {
+                return Value.CompareTo(other.Value);
+            }
         }
 
-        private static int4 GetVertexIndices(int[] indices, Edge edge)
+        private static int4 GetVertexIndices(NativeArray<int> indices, Edge edge)
         {
             int4 vertexIndices;
             int triangleIndicesIndex = edge.Triangle * 3;
@@ -802,7 +899,7 @@ namespace Unity.Physics
             return vertexIndices;
         }
 
-        private static int GetApexVertexIndex(int[] indices, Edge edge)
+        private static int GetApexVertexIndex(NativeArray<int> indices, Edge edge)
         {
             int triangleIndicesIndex = edge.Triangle * 3;
             return indices[triangleIndicesIndex + ((edge.Start + 2) % 3)];
@@ -815,15 +912,16 @@ namespace Unity.Physics
             return math.length(math.cross(d0, d1));
         }
 
-        internal List<Primitive> EnumerateQuadDominantGeometry(int[] indices, float3[] vertices)
+        internal unsafe NativeList<Primitive> EnumerateQuadDominantGeometry(NativeArray<int> indices, NativeList<float3> vertices)
         {
             int numTriangles = indices.Length / 3;
-            PrimitiveFlags[] flags = new PrimitiveFlags[numTriangles];
-            var quadRoots = new List<Edge>();
-            var triangleRoots = new List<Edge>();
+            var flags = new NativeArray<PrimitiveFlags>(numTriangles, Allocator.Temp);
+            var quadRoots = new NativeList<Edge>(Allocator.Temp);
+            var triangleRoots = new NativeList<Edge>(Allocator.Temp);
 
             // Generate triangle planes
-            var planes = new float4[indices.Length / 3];
+            var planes = new NativeArray<float4>(indices.Length / 3, Allocator.Temp);
+            
             for (int i = 0; i < numTriangles; i++)
             {
                 int triangleIndex = i * 3;
@@ -835,13 +933,13 @@ namespace Unity.Physics
                 planes[i] = new float4(normal, -math.dot(normal, v0));
             }
 
-            var edges = new EdgeData[Edges.Length];
+            var edges = new NativeArray<EdgeData>(Edges.Length, Allocator.Temp);
 
             for (int i = 0; i < edges.Length; i++)
             {
                 Edge e = Edges[i];
 
-                ref EdgeData edgeData = ref edges[i];
+                ref EdgeData edgeData = ref ((EdgeData*)edges.GetUnsafePtr())[i];
                 edgeData.Edge = Edge.Invalid();
                 edgeData.Value = float.MaxValue;
 
@@ -865,15 +963,21 @@ namespace Unity.Physics
                 }
             }
 
-            edges = edges.OrderBy(e => e.Value).ToArray();
+            edges.Sort();
 
-            bool[] freeTriangles = Enumerable.Repeat(true, numTriangles).ToArray();
+            var freeTriangles = new NativeArray<bool>(numTriangles, Allocator.Temp);
+            for (var i = 0; i < freeTriangles.Length; ++i)
+            {
+                freeTriangles[i] = true;
+            }
 
-            var primitives = new List<Primitive>();
+            var primitives = new NativeList<Primitive>(Allocator.Temp);
 
             // Generate quads
-            foreach (EdgeData edgeData in edges)
+            for(var edgeIndex = 0; edgeIndex < edges.Length; ++edgeIndex)
             {
+                var edgeData = edges[edgeIndex];
+                
                 if (!edgeData.Edge.IsValid)
                 {
                     break;
@@ -963,26 +1067,28 @@ namespace Unity.Physics
 
                 primitives.Add(primitive);
                 triangleRoots.Add(edge);
-                flags[edge.Triangle] = primitives.Last().Flags;
+                flags[edge.Triangle] = primitive.Flags;
             }
 
             DisableEdgesOfAdjacentPrimitives(primitives, indices, vertices, planes, flags, quadRoots, triangleRoots);
-
+            
             return primitives;
         }
 
         private void DisableEdgesOfAdjacentPrimitives(
-            List<Primitive> primitives, int[] indices, float3[] vertices, float4[] planes, PrimitiveFlags[] flags,
-            List<Edge> quadRoots, List<Edge> triangleRoots)
+            NativeList<Primitive> primitives, NativeArray<int> indices, NativeArray<float3> vertices, NativeArray<float4> planes, NativeArray<PrimitiveFlags> flags,
+            NativeList<Edge> quadRoots, NativeList<Edge> triangleRoots)
         {
-            for (int quadIndex = 0; quadIndex < quadRoots.Count; quadIndex++)
+            var outerBoundary = new NativeArray<Edge>(4, Allocator.Temp);
+                
+            for (int quadIndex = 0; quadIndex < quadRoots.Length; quadIndex++)
             {
                 Edge root = quadRoots[quadIndex];
                 Edge link = GetLink(root);
                 PrimitiveFlags quadFlags = flags[root.Triangle];
-                if (quadFlags.HasFlag(PrimitiveFlags.IsFlatConvexQuad) && !quadFlags.HasFlag(PrimitiveFlags.DisableAllEdges))
+                if ((quadFlags & PrimitiveFlags.IsFlatConvexQuad) == PrimitiveFlags.IsFlatConvexQuad &&
+                    (quadFlags & PrimitiveFlags.DisableAllEdges) != PrimitiveFlags.DisableAllEdges)
                 {
-                    Edge[] outerBoundary = new Edge[4];
                     outerBoundary[0] = GetLink(GetNext(root));
                     outerBoundary[1] = GetLink(GetPrev(root));
                     outerBoundary[2] = GetLink(GetNext(link));
@@ -1005,14 +1111,15 @@ namespace Unity.Physics
                     Flags = quadFlags
                 };
             }
+            
+            outerBoundary = new NativeArray<Edge>(3, Allocator.Temp);
 
-            for (int triangleIndex = 0; triangleIndex < triangleRoots.Count; triangleIndex++)
+            for (int triangleIndex = 0; triangleIndex < triangleRoots.Length; triangleIndex++)
             {
                 Edge root = triangleRoots[triangleIndex];
                 PrimitiveFlags triangleFlags = flags[root.Triangle];
-                if (!triangleFlags.HasFlag(PrimitiveFlags.DisableAllEdges))
+                if ((triangleFlags & PrimitiveFlags.DisableAllEdges) == 0)
                 {
-                    Edge[] outerBoundary = new Edge[3];
                     outerBoundary[0] = GetLink(root);
                     outerBoundary[1] = GetLink(GetNext(root));
                     outerBoundary[2] = GetLink(GetPrev(root));
@@ -1027,7 +1134,7 @@ namespace Unity.Physics
                 flags[root.Triangle] = triangleFlags;
 
                 // Write primitive flags.
-                int primitiveIndex = quadRoots.Count + triangleIndex;
+                int primitiveIndex = quadRoots.Length + triangleIndex;
                 primitives[primitiveIndex] = new Primitive
                 {
                     Vertices = primitives[primitiveIndex].Vertices,

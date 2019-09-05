@@ -5,9 +5,9 @@ Since the simulation is *state-less*, that is to say does not cache anything fra
 
 ## Setting up a simulation in Editor
 
-First you will need a static body so that your dynamic bodies can hit something and not just fall out of the world. Make a normal 'GameObject->3D Object->Cube'. Set the scale to 20,1,20 say.  Remove the 'Box Collider' component, that is the older Physics representation, we don't need it. Instead add a **'Physics Shape'** component and set its Shape Type drop down to 'Box'. Then select 'Fit to Render Mesh'. The wireframe outline of the collider shape should match up with the graphics version.  If we don't add a 'Physics Body' here it will assume it wants to be a static body, which is fine for this object. We do need to add a **'Convert to Entity'** component though, to tell Unity that the Game Object we see in the editor should become an Entity.
+First you will need a static body so that your dynamic bodies can hit something and not just fall out of the world. Make a normal 'GameObject->3D Object->Cube'. Set the scale to 20,1,20 say.  Remove the 'Box Collider' component, that is the older Physics representation, we don't need it. Instead add a **'Physics Shape Authoring'** component and set its Shape Type drop down to 'Box'. Then select 'Fit to Render Mesh'. The wireframe outline of the collider shape should match up with the graphics version.  If we don't add a 'Physics Body' here it will assume it wants to be a static body, which is fine for this object. We do need to add a **'Convert to Entity'** component though, to tell Unity that the Game Object we see in the editor should become an Entity.
 
-Now add something to collide with the ground. Create 'GameObject->3D Object->Sphere', again remove the Collider that was added. Add a **'Physics Shape'** component as before, this time set Shape Type to 'sphere' and do a 'Fit to Render Mesh'. Since we want to set the body to be dynamic, we need to add a **'Physics Body'** to the object. You will want Motion Type to be 'Dynamic' with a mass of say 1. We again will need a  **'Convert to Entity'**. It should look like the following picture:
+Now add something to collide with the ground. Create 'GameObject->3D Object->Sphere', again remove the Collider that was added. Add a **'Physics Shape Authoring'** component as before, this time set Shape Type to 'sphere' and do a 'Fit to Render Mesh'. Since we want to set the body to be dynamic, we need to add a **'Physics Body Authoring'** to the object. You will want Motion Type to be 'Dynamic' with a mass of say 1. We again will need a  **'Convert to Entity'**. It should look like the following picture:
 
 ![collider_cast](images/DynamicBody.png)
 
@@ -15,7 +15,7 @@ To simulate, just press Play in the Editor and it should fall and collide off th
 
 ## Exploring materials 
 
-With the scene you just made, select the Sphere and change its Physics Shape->Material->Restitution to say 1 and play again. It should now bounce back from collision to nearly where it began. If you change the Linear Damping in the Physics Body to 0, then should get even closer. Play around with the friction (change the rotation of the floor to allow the sphere to roll) and restitution to get a feel of what they can do. The higher the friction the more the sphere will catch and roll rather than just slide, and the higher the restitution the more it will bounce on contact.
+With the scene you just made, select the Sphere and change its Physics Shap Authoring->Material->Restitution to say 1 and play again. It should now bounce back from collision to nearly where it began. If you change the Linear Damping in the Physics Body to 0, then should get even closer. Play around with the friction (change the rotation of the floor to allow the sphere to roll) and restitution to get a feel of what they can do. The higher the friction the more the sphere will catch and roll rather than just slide, and the higher the restitution the more it will bounce on contact.
 
 ## Exploring shapes
 
@@ -31,9 +31,9 @@ So far we have used Box and Sphere for the collision types. Currently six distin
 
 * **Mesh** : a arbitrary triangle soup. The most expensive and is assumed to be concave. Mesh versus mesh collision in particular can be very expensive, so best practice is to use mesh shapes only for static objects and convex shapes for dynamic objects. But if you know your dynamic mesh shape will not need to collide with another mesh then it can be dynamic, but make sure to setup your collision filtering appropriately.
 
-### What is 'convex radius'
+### What is 'bevel radius'
 
-In a lot of the shapes you will see a 'convex radius' field. That is an optimization for collision detection so that it can inflate the hull of the shape a little, like an outer shell of that size around the object. That has the side effect of rounding out corners, so you typically don't want it too big, and is normally quite small with respect to the size of the object.
+In a lot of the shapes you will see a 'bevel radius' field (analogous to 'convex radius' in the run-time API). This value is an optimization for collision detection that inflates a shape's hull, creating a shell outside its vertices. As implemented in Unity Physics, it simultaneously moves the collision geometry's vertices inward a bit, attempting to best preserve the surfaces of the geometry. Because it has the side effect of rounding out a shape's corners, you typically don't want it too big. It is normally quite small with respect to the size of the object.
 
 ## Compound Shapes
 
@@ -48,7 +48,7 @@ Here is a simple example, where Body is a Physics Body (and a Physics Shape sphe
 
 ## More control over the Physics Step
 
-You can add a **Physics Step** to an object in the scene (just one object in the scene, say an empty object called Physics off the root you can set these values on). Don't forget to add the **Convert to Entity** on the object too.
+You can add a **Physics Step Authoring** to an object in the scene (just one object in the scene, say an empty object called Physics off the root you can set these values on). Don't forget to add the **Convert to Entity** on the object too.
 
 ![collider_cast](images/StepPhysics.png)
 
@@ -132,7 +132,7 @@ Add that to a new empty GameObject positioned near the sphere (maybe just above 
 
 ### How it should be done
 
-The correct DOTS way to do this would be something along the lines of using  IConvertGameObjectToEntity on the AttractComponent MonoBehavior we made, and in the IConvertGameObjectToEntity.Convert create an AttractData ComponentData with the center and strength etc that you attach to the Entity representing the point to attract to. Then in the AttractSystem do ForEach over all AttractData instead. The most efficient way to get all bodies close to that point is then to use the Unity.Physics.CollisionWorld OverlapAabb or if you want something more exact CalculateDistance (with MaxDistance in it set to our maxDistance above). We will cover such queries later on, so dont worry about it too much here.
+The correct DOTS way to do this would be something along the lines of using  `IConvertGameObjectToEntity` on the AttractComponent MonoBehavior we made, and in the IConvertGameObjectToEntity.Convert create an AttractData ComponentData with the center and strength etc that you attach to the Entity representing the point to attract to. Then in the AttractSystem do ForEach over all AttractData instead. The most efficient way to get all bodies close to that point is then to use the Unity.Physics.CollisionWorld OverlapAabb or if you want something more exact CalculateDistance (with MaxDistance in it set to our maxDistance above). We will cover such queries later on, so dont worry about it too much here.
 
 ## Impulses 
 

@@ -10,6 +10,8 @@ using LegacyCapsule = UnityEngine.CapsuleCollider;
 using LegacyMesh = UnityEngine.MeshCollider;
 using LegacySphere = UnityEngine.SphereCollider;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
+using Unity.Jobs;
 
 namespace Unity.Physics.Authoring
 {
@@ -90,16 +92,20 @@ namespace Unity.Physics.Authoring
             var shapeFromWorld = math.inverse(
                 new float4x4(new RigidTransform(shape.transform.rotation, shape.transform.position))
             );
-            var center = math.mul(shapeFromWorld, worldCenter).xyz;
+
+            var geometry = new BoxGeometry
+            {
+                Center = math.mul(shapeFromWorld, worldCenter).xyz,
+                Orientation = quaternion.identity
+            };
 
             var linearScale = (float3)shape.transform.lossyScale;
-            var size = math.abs(shape.size * linearScale);
+            geometry.Size = math.abs(shape.size * linearScale);
+
+            geometry.BevelRadius = math.min(ConvexHullGenerationParameters.Default.BevelRadius, math.cmin(geometry.Size) * 0.5f);
 
             return BoxCollider.Create(
-                center,
-                quaternion.identity,
-                size,
-                math.min(PhysicsShape.k_DefaultConvexRadius, math.cmin(size) * 0.5f),
+                geometry,
                 ProduceCollisionFilter(shape),
                 ProduceMaterial(shape)
             );
@@ -125,9 +131,7 @@ namespace Unity.Physics.Authoring
             var v1 = offset + ((float3)shape.center - vertex) * math.abs(linearScale) + ax * radius;
 
             return CapsuleCollider.Create(
-                v0,
-                v1,
-                radius,
+                new CapsuleGeometry { Vertex0 = v0, Vertex1 = v1, Radius = radius },
                 ProduceCollisionFilter(shape),
                 ProduceMaterial(shape)
             );
@@ -148,8 +152,7 @@ namespace Unity.Physics.Authoring
             var radius = shape.radius * math.cmax(math.abs(linearScale));
 
             return SphereCollider.Create(
-                center,
-                radius,
+                new SphereGeometry { Center = center, Radius = radius },
                 ProduceCollisionFilter(shape),
                 ProduceMaterial(shape)
             );
@@ -179,23 +182,30 @@ namespace Unity.Physics.Authoring
             var filter = ProduceCollisionFilter(shape);
             var material = ProduceMaterial(shape);
 
-            using (var pointCloud = new NativeList<float3>(shape.sharedMesh.vertexCount, Allocator.Temp))
+            // transform points into world space and back into shape space
+            shape.sharedMesh.GetVertices(m_Vertices);
+            var shapeFromWorld = math.inverse(
+                new float4x4(new RigidTransform(shape.transform.rotation, shape.transform.position))
+            );
+            var pointCloud = new NativeList<float3>(shape.sharedMesh.vertexCount, Allocator.Temp);
+            for (int i = 0, count = m_Vertices.Count; i < count; ++i)
             {
-                // transform points into world space and back into shape space
-                shape.sharedMesh.GetVertices(m_Vertices);
-                var shapeFromWorld = math.inverse(
-                    new float4x4(new RigidTransform(shape.transform.rotation, shape.transform.position))
-                );
-                for (int i = 0, count = m_Vertices.Count; i < count; ++i)
-                {
-                    var worldPt = math.mul(shape.transform.localToWorldMatrix, new float4(m_Vertices[i], 1f));
-                    pointCloud.Add(math.mul(shapeFromWorld, worldPt).xyz);
-                }
-
-                return shape.convex
-                    ? ConvexCollider.Create(pointCloud, PhysicsShape.k_DefaultConvexRadius, new float3(1f), filter, material)
-                    : MeshCollider.Create(pointCloud.ToArray(), shape.sharedMesh.triangles, filter, material);
+                var worldPt = math.mul(shape.transform.localToWorldMatrix, new float4(m_Vertices[i], 1f));
+                pointCloud.Add(math.mul(shapeFromWorld, worldPt).xyz);
             }
+
+            if (shape.convex)
+                RegisterConvexColliderDeferred(shape, pointCloud, ConvexHullGenerationParameters.Default, filter, material);
+            else
+            {
+                var triangles = new NativeArray<int>(shape.sharedMesh.triangles, Allocator.Temp);
+                RegisterMeshColliderDeferred(shape, pointCloud, triangles, filter, material);
+                triangles.Dispose();
+            }
+
+            pointCloud.Dispose();
+
+            return default;
         }
     }
 }

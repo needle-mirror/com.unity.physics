@@ -6,13 +6,13 @@ using UnityEngine;
 
 namespace Unity.Physics.Editor
 {
-    class ConvexBoxBoundsHandle : BoxBoundsHandle
+    class BeveledBoxBoundsHandle : BoxBoundsHandle
     {
-        public float ConvexRadius { get; set; }
+        public float BevelRadius { get; set; }
 
         protected override void DrawWireframe()
         {
-            if (ConvexRadius <= 0f)
+            if (BevelRadius <= 0f)
             {
                 base.DrawWireframe();
                 return;
@@ -27,7 +27,7 @@ namespace Unity.Physics.Editor
             DrawFace(center, size * new float3( 1f,  1f,  1f), 2, 0, 1);
             DrawFace(center, size * new float3( 1f,  1f, -1f), 2, 0, 1);
 
-            var corner = 0.5f * size - new float3(1f) * ConvexRadius;
+            var corner = 0.5f * size - new float3(1f) * BevelRadius;
             var rgt = new float3(1f, 0f, 0f);
             var up = new float3(0f, 1f, 0f);
             var fwd = new float3(0f, 0f, 1f);
@@ -48,7 +48,7 @@ namespace Unity.Physics.Editor
             size *= 0.5f;
             var ctr = center + new float3 { [a] = size[a] };
             var i = 0;
-            size -= new float3(ConvexRadius);
+            size -= new float3(BevelRadius);
             s_FacePoints[i++] = ctr + new float3 { [b] =  size[b], [c] =  size[c] };
             s_FacePoints[i++] = ctr + new float3 { [b] = -size[b], [c] =  size[c] };
             s_FacePoints[i++] = ctr + new float3 { [b] = -size[b], [c] =  size[c] };
@@ -65,9 +65,9 @@ namespace Unity.Physics.Editor
             var rgt = math.mul(orientation, new float3(1f, 0f, 0f));
             var up = math.mul(orientation, new float3(0f, 1f, 0f));
             var fwd = math.mul(orientation, new float3(0f, 0f, 1f));
-            Handles.DrawWireArc(point, fwd, rgt, 90f, ConvexRadius);
-            Handles.DrawWireArc(point, rgt, up, 90f, ConvexRadius);
-            Handles.DrawWireArc(point, up, fwd, 90f, ConvexRadius);
+            Handles.DrawWireArc(point, fwd, rgt, 90f, BevelRadius);
+            Handles.DrawWireArc(point, rgt, up, 90f, BevelRadius);
+            Handles.DrawWireArc(point, up, fwd, 90f, BevelRadius);
         }
     }
 }

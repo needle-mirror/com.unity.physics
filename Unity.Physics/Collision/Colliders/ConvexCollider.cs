@@ -1,5 +1,5 @@
 using System;
-using System.Collections.Generic;
+using System.ComponentModel;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -8,6 +8,42 @@ using UnityEngine.Assertions;
 
 namespace Unity.Physics
 {
+    [Serializable]
+    public struct ConvexHullGenerationParameters
+    {
+        internal const string k_BevelRadiusTooltip =
+            "Determines how rounded the edges of the convex shape will be. A value greater than 0 results in more optimized collision, at the expense of some shape detail.";
+
+        const float k_DefaultSimplificationTolerance = 0.015f;
+        const float k_DefaultBevelRadius = 0.05f;
+        const float k_DefaultMinAngle = 2.5f * math.PI / 180f; // 2.5 degrees
+
+        public static readonly ConvexHullGenerationParameters Default = new ConvexHullGenerationParameters
+        {
+            SimplificationTolerance = k_DefaultSimplificationTolerance,
+            BevelRadius = k_DefaultBevelRadius,
+            MinimumAngle = k_DefaultMinAngle
+        };
+
+        public float SimplificationTolerance { get => m_SimplificationTolerance; set => m_SimplificationTolerance = value; }
+        [UnityEngine.Tooltip("Specifies maximum distance that any input point may be moved when simplifying convex hull.")]
+        [UnityEngine.SerializeField]
+        float m_SimplificationTolerance;
+
+        public float BevelRadius { get => m_BevelRadius; set => m_BevelRadius = value; }
+        [UnityEngine.Tooltip(k_BevelRadiusTooltip)]
+        [UnityEngine.SerializeField]
+        float m_BevelRadius;
+
+        public float MinimumAngle { get => m_MinimumAngle; set => m_MinimumAngle = value; }
+        [UnityEngine.Tooltip("Specifies the angle between adjacent faces below which they should be made coplanar.")]
+        [UnityEngine.SerializeField]
+        float m_MinimumAngle;
+
+        public override int GetHashCode() =>
+            unchecked((int)math.hash(new float3(m_SimplificationTolerance, m_BevelRadius, m_MinimumAngle)));
+    }
+
     // A collider in the shape of an arbitrary convex hull.
     // Warning: This is just the header, it is followed by variable sized data in memory.
     // Therefore this struct must always be passed by reference, never by value.
@@ -17,84 +53,75 @@ namespace Unity.Physics
         private ConvexColliderHeader m_Header;
         internal ConvexHull ConvexHull;
 
+        internal const int k_MaxVertices = 252;
+        internal const int k_MaxFaces = 252;
+        internal const int k_MaxFaceVertices = ConvexConvexManifoldQueries.Manifold.k_MaxNumContacts;
+
         // followed by variable sized convex hull data
 
         #region Construction
 
         // Create a convex collider from the given point cloud.
-        public static unsafe BlobAssetReference<Collider> Create(
-            NativeArray<float3> points, float convexRadius,
-            float3? scale = null, CollisionFilter? filter = null, Material? material = null)
+        public static BlobAssetReference<Collider> Create(
+            NativeArray<float3> points, ConvexHullGenerationParameters generationParameters
+        ) =>
+            Create(points, generationParameters, CollisionFilter.Default, Material.Default);
+
+        public static BlobAssetReference<Collider> Create(
+            NativeArray<float3> points, ConvexHullGenerationParameters generationParameters, CollisionFilter filter
+        ) =>
+            Create(points, generationParameters, filter, Material.Default);
+
+        public static BlobAssetReference<Collider> Create(
+            NativeArray<float3> points, ConvexHullGenerationParameters generationParameters, CollisionFilter filter, Material material
+        ) =>
+            Create(points, generationParameters, filter, material, k_MaxVertices, k_MaxFaces, k_MaxFaceVertices);
+
+        internal static BlobAssetReference<Collider> Create(
+            NativeArray<float3> points, ConvexHullGenerationParameters generationParameters, CollisionFilter filter, Material material,
+            int maxVertices, int maxFaces, int maxFaceVertices
+        )
         {
-            if (convexRadius < 0.0f || !math.isfinite(convexRadius))
+            if (generationParameters.BevelRadius < 0.0f || !math.isfinite(generationParameters.BevelRadius))
             {
-                throw new ArgumentException("Tried to create ConvexCollider with invalid convex radius");
+                throw new ArgumentException("Tried to create ConvexCollider with invalid bevel radius");
             }
 
-            // Build convex hull
-            int verticesCapacity = points.Length;
-            int triangleCapacity = 2 * verticesCapacity;
-            var vertices = (ConvexHullBuilder.Vertex*)UnsafeUtility.Malloc(verticesCapacity * sizeof(ConvexHullBuilder.Vertex), 16, Allocator.Temp);
-            var triangles = (ConvexHullBuilder.Triangle*)UnsafeUtility.Malloc(triangleCapacity * sizeof(ConvexHullBuilder.Triangle), 16, Allocator.Temp);
-            var builder = new ConvexHullBuilder(vertices, verticesCapacity, triangles, triangleCapacity);
-            float3 s = scale ?? new float3(1);
-
-            // Build the points' AABB and validate them
-            var domain = new Aabb();
-            foreach (var point in points)
+            for (int i = 0, count = points.Length; i < count; ++i)
             {
-                if (math.any(!math.isfinite(point)))
+                if (math.any(!math.isfinite(points[i])))
                 {
                     throw new ArgumentException("Tried to create ConvexCollider with invalid points");
                 }
-                domain.Include(point * s);
             }
 
-            // Add points to the hull
-            builder.IntegerSpaceAabb = domain;
-            foreach (float3 point in points)
-            {
-                builder.AddPoint(point * s);
-            }
+            // Build convex hull
+            var builder = new ConvexHullBuilder(
+                points,
+                generationParameters,
+                maxVertices,
+                maxFaces,
+                maxFaceVertices,
+                out var builderConvexRadius
+            );
 
-            // TODO: shrink by convex radius
+            return Create(builder, builderConvexRadius, filter, material);
+        }
 
-            // Build face information
-            float maxAngle = 0.1f * (float)math.PI / 180.0f;
-            builder.BuildFaceIndices(maxAngle);
-
-            // Simplify the hull until it's under the max vertices requirement
-            // TODO.ma this is just a failsafe. We need to think about user-controlled simplification settings & how to warn the user if their shape is too complex.
-            {
-                const int maxVertices = 252;    // as per Havok
-
-                float maxSimplificationError = 1e-3f;
-                int iterations = 0;
-                while (builder.Vertices.PeakCount > maxVertices)
-                {
-                    if (iterations++ > 10) // don't loop forever
-                    {
-                        Assert.IsTrue(false);
-                        return new BlobAssetReference<Collider>();
-                    }
-                    builder.SimplifyVertices(maxSimplificationError);
-                    builder.BuildFaceIndices();
-                    maxSimplificationError *= 2.0f;
-                }
-            }
-
+        internal static unsafe BlobAssetReference<Collider> Create(ConvexHullBuilder builder, float convexRadius, CollisionFilter filter, Material material)
+        {
             // Convert hull to compact format
             var tempHull = new TempHull(ref builder);
 
             // Allocate collider
             int totalSize = UnsafeUtility.SizeOf<ConvexCollider>();
-            totalSize += tempHull.Vertices.Count * sizeof(float3);
+            totalSize += tempHull.Vertices.Length * sizeof(float3);
             totalSize = Math.NextMultipleOf16(totalSize);  // planes currently must be aligned for Havok
-            totalSize += tempHull.Planes.Count * sizeof(Plane);
-            totalSize += tempHull.Faces.Count * sizeof(ConvexHull.Face);
-            totalSize += tempHull.FaceVertexIndices.Count * sizeof(short);
-            totalSize += tempHull.VertexEdges.Count * sizeof(ConvexHull.Edge);
-            totalSize += tempHull.FaceLinks.Count * sizeof(ConvexHull.Edge);
+            totalSize += tempHull.Planes.Length * sizeof(Plane);
+            totalSize += tempHull.Faces.Length * sizeof(ConvexHull.Face);
+            totalSize += tempHull.FaceVertexIndices.Length * sizeof(short);
+            totalSize += tempHull.VertexEdges.Length * sizeof(ConvexHull.Edge);
+            totalSize += tempHull.FaceLinks.Length * sizeof(ConvexHull.Edge);
             ConvexCollider* collider = (ConvexCollider*)UnsafeUtility.Malloc(totalSize, 16, Allocator.Temp);
 
             // Initialize it
@@ -106,8 +133,8 @@ namespace Unity.Physics
                 collider->m_Header.CollisionType = CollisionType.Convex;
                 collider->m_Header.Version = 0;
                 collider->m_Header.Magic = 0xff;
-                collider->m_Header.Filter = filter ?? CollisionFilter.Default;
-                collider->m_Header.Material = material ?? Material.Default;
+                collider->m_Header.Filter = filter;
+                collider->m_Header.Material = material;
 
                 ref var hull = ref collider->ConvexHull;
 
@@ -118,47 +145,47 @@ namespace Unity.Physics
                     byte* end = (byte*)collider + UnsafeUtility.SizeOf<ConvexCollider>();
 
                     hull.VerticesBlob.Offset = UnsafeEx.CalculateOffset(end, ref hull.VerticesBlob);
-                    hull.VerticesBlob.Length = tempHull.Vertices.Count;
-                    end += sizeof(float3) * tempHull.Vertices.Count;
+                    hull.VerticesBlob.Length = tempHull.Vertices.Length;
+                    end += sizeof(float3) * tempHull.Vertices.Length;
 
                     end = (byte*)Math.NextMultipleOf16((ulong)end); // planes currently must be aligned for Havok
 
                     hull.FacePlanesBlob.Offset = UnsafeEx.CalculateOffset(end, ref hull.FacePlanesBlob);
-                    hull.FacePlanesBlob.Length = tempHull.Planes.Count;
-                    end += sizeof(Plane) * tempHull.Planes.Count;
+                    hull.FacePlanesBlob.Length = tempHull.Planes.Length;
+                    end += sizeof(Plane) * tempHull.Planes.Length;
 
                     hull.FacesBlob.Offset = UnsafeEx.CalculateOffset(end, ref hull.FacesBlob);
-                    hull.FacesBlob.Length = tempHull.Faces.Count;
-                    end += sizeof(ConvexHull.Face) * tempHull.Faces.Count;
+                    hull.FacesBlob.Length = tempHull.Faces.Length;
+                    end += sizeof(ConvexHull.Face) * tempHull.Faces.Length;
 
                     hull.FaceVertexIndicesBlob.Offset = UnsafeEx.CalculateOffset(end, ref hull.FaceVertexIndicesBlob);
-                    hull.FaceVertexIndicesBlob.Length = tempHull.FaceVertexIndices.Count;
-                    end += sizeof(byte) * tempHull.FaceVertexIndices.Count;
+                    hull.FaceVertexIndicesBlob.Length = tempHull.FaceVertexIndices.Length;
+                    end += sizeof(byte) * tempHull.FaceVertexIndices.Length;
 
                     hull.VertexEdgesBlob.Offset = UnsafeEx.CalculateOffset(end, ref hull.VertexEdgesBlob);
-                    hull.VertexEdgesBlob.Length = tempHull.VertexEdges.Count;
-                    end += sizeof(ConvexHull.Edge) * tempHull.VertexEdges.Count;
+                    hull.VertexEdgesBlob.Length = tempHull.VertexEdges.Length;
+                    end += sizeof(ConvexHull.Edge) * tempHull.VertexEdges.Length;
 
                     hull.FaceLinksBlob.Offset = UnsafeEx.CalculateOffset(end, ref hull.FaceLinksBlob);
-                    hull.FaceLinksBlob.Length = tempHull.FaceLinks.Count;
-                    end += sizeof(ConvexHull.Edge) * tempHull.FaceLinks.Count;
+                    hull.FaceLinksBlob.Length = tempHull.FaceLinks.Length;
+                    end += sizeof(ConvexHull.Edge) * tempHull.FaceLinks.Length;
                 }
 
                 // Fill blob arrays
                 {
-                    for (int i = 0; i < tempHull.Vertices.Count; i++)
+                    for (int i = 0; i < tempHull.Vertices.Length; i++)
                     {
                         hull.Vertices[i] = tempHull.Vertices[i];
                         hull.VertexEdges[i] = tempHull.VertexEdges[i];
                     }
 
-                    for (int i = 0; i < tempHull.Faces.Count; i++)
+                    for (int i = 0; i < tempHull.Faces.Length; i++)
                     {
                         hull.Planes[i] = tempHull.Planes[i];
                         hull.Faces[i] = tempHull.Faces[i];
                     }
 
-                    for (int i = 0; i < tempHull.FaceVertexIndices.Count; i++)
+                    for (int i = 0; i < tempHull.FaceVertexIndices.Length; i++)
                     {
                         hull.FaceVertexIndices[i] = tempHull.FaceVertexIndices[i];
                         hull.FaceLinks[i] = tempHull.FaceLinks[i];
@@ -167,13 +194,19 @@ namespace Unity.Physics
 
                 // Fill mass properties
                 {
-                    var massProperties = builder.ComputeMassProperties();
+                    // Build the mass properties if they haven't been computed already.
+                    if (builder.HullMassProperties.Volume == 0.0f)
+                    {
+                        builder.UpdateHullMassProperties();
+                    }
+
+                    var massProperties = builder.HullMassProperties;
                     Math.DiagonalizeSymmetricApproximation(massProperties.InertiaTensor, out float3x3 orientation, out float3 inertia);
 
                     float maxLengthSquared = 0.0f;
-                    foreach (float3 vertex in hull.Vertices)
+                    for (int v = 0, count = hull.Vertices.Length; v < count; ++v)
                     {
-                        maxLengthSquared = math.max(maxLengthSquared, math.lengthsq(vertex - massProperties.CenterOfMass));
+                        maxLengthSquared = math.max(maxLengthSquared, math.lengthsq(hull.Vertices[v] - massProperties.CenterOfMass));
                     }
 
                     collider->MassProperties = new MassProperties
@@ -193,97 +226,162 @@ namespace Unity.Physics
             var asset = BlobAssetReference<Collider>.Create(collider, totalSize);
 
             UnsafeUtility.Free(collider, Allocator.Temp);
-            UnsafeUtility.Free(vertices, Allocator.Temp);
-            UnsafeUtility.Free(triangles, Allocator.Temp);
-
             return asset;
         }
-        
-        // Temporary hull of managed arrays, used during construction
-        private struct TempHull
-        {
-            public readonly List<float3> Vertices;
-            public readonly List<Plane> Planes;
-            public readonly List<ConvexHull.Face> Faces;
-            public readonly List<byte> FaceVertexIndices;
-            public readonly List<ConvexHull.Edge> VertexEdges;
-            public readonly List<ConvexHull.Edge> FaceLinks;
 
-            public unsafe TempHull(ref ConvexHullBuilder builder)
+        // Temporary hull of managed arrays, used during construction
+        unsafe struct TempHull
+        {
+            public readonly NativeList<float3> Vertices;
+            public readonly NativeList<Plane> Planes;
+            public readonly NativeList<ConvexHull.Face> Faces;
+            public readonly NativeList<byte> FaceVertexIndices;
+            public readonly NativeList<ConvexHull.Edge> VertexEdges;
+            public readonly NativeList<ConvexHull.Edge> FaceLinks;
+
+            public TempHull(ref ConvexHullBuilder builder)
             {
-                Vertices = new List<float3>(builder.Vertices.PeakCount);
-                Faces = new List<ConvexHull.Face>(builder.NumFaces);
-                Planes = new List<Plane>(builder.NumFaces);
-                FaceVertexIndices = new List<byte>(builder.NumFaceVertices);
-                VertexEdges = new List<ConvexHull.Edge>(builder.Vertices.PeakCount);
-                FaceLinks = new List<ConvexHull.Edge>(builder.NumFaceVertices);
+                Vertices = new NativeList<float3>(builder.Vertices.PeakCount, Allocator.Temp);
+                Faces = new NativeList<ConvexHull.Face>(builder.NumFaces, Allocator.Temp);
+                Planes = new NativeList<Plane>(builder.NumFaces, Allocator.Temp);
+                FaceVertexIndices = new NativeList<byte>(builder.NumFaceVertices, Allocator.Temp);
+                VertexEdges = new NativeList<ConvexHull.Edge>(builder.Vertices.PeakCount, Allocator.Temp);
+                FaceLinks = new NativeList<ConvexHull.Edge>(builder.NumFaceVertices, Allocator.Temp);
 
                 // Copy the vertices
-                byte* vertexIndexMap = stackalloc byte[builder.Vertices.PeakCount];
+                var vertexIndexMap = new NativeArray<byte>(builder.Vertices.PeakCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
                 foreach (int i in builder.Vertices.Indices)
                 {
-                    vertexIndexMap[i] = (byte)Vertices.Count;
+                    vertexIndexMap[i] = (byte)Vertices.Length;
                     Vertices.Add(builder.Vertices[i].Position);
                     VertexEdges.Add(new ConvexHull.Edge());  // filled below
                 }
 
                 // Copy the faces
-                var edgeMap = new NativeHashMap<ConvexHull.Edge, ConvexHull.Edge>(builder.NumFaceVertices, Allocator.Temp);
-                for (ConvexHullBuilder.FaceEdge hullFace = builder.GetFirstFace(); hullFace.IsValid; hullFace = builder.GetNextFace(hullFace))
+                switch (builder.Dimension)
                 {
-                    // Store the plane
-                    ConvexHullBuilder.Edge firstEdge = hullFace;
-                    Plane facePlane = builder.ComputePlane(firstEdge.TriangleIndex);
-                    Planes.Add(facePlane);
-
-                    // Walk the face's outer vertices & edges
-                    short firstVertexIndex = (short)FaceVertexIndices.Count;
-                    byte numEdges = 0;
-                    float maxCosAngle = -1.0f;
-                    for (ConvexHullBuilder.FaceEdge edge = hullFace; edge.IsValid; edge = builder.GetNextFaceEdge(edge))
+                    case 3:
                     {
-                        byte vertexIndex = vertexIndexMap[builder.StartVertex(edge)];
-                        FaceVertexIndices.Add(vertexIndex);
+                        var edgeMap = new NativeHashMap<ConvexHull.Edge, ConvexHull.Edge>(builder.NumFaceVertices, Allocator.Temp);
+                        for (ConvexHullBuilder.FaceEdge hullFace = builder.GetFirstFace(); hullFace.IsValid; hullFace = builder.GetNextFace(hullFace))
+                        {
+                            // Store the plane
+                            ConvexHullBuilder.Edge firstEdge = hullFace;
+                            Plane facePlane = builder.Planes[builder.Triangles[firstEdge.TriangleIndex].FaceIndex];
+                            Planes.Add(facePlane);
 
-                        var hullEdge = new ConvexHull.Edge { FaceIndex = (short)edge.Current.TriangleIndex, EdgeIndex = (byte)edge.Current.EdgeIndex }; // will be mapped to the output hull below
-                        edgeMap.TryAdd(hullEdge, new ConvexHull.Edge { FaceIndex = (short)Faces.Count, EdgeIndex = numEdges });
+                            // Walk the face's outer vertices & edges
+                            short firstVertexIndex = (short)FaceVertexIndices.Length;
+                            byte numEdges = 0;
+                            float maxCosAngle = -1.0f;
+                            for (ConvexHullBuilder.FaceEdge edge = hullFace; edge.IsValid; edge = builder.GetNextFaceEdge(edge))
+                            {
+                                byte vertexIndex = vertexIndexMap[builder.StartVertex(edge)];
+                                FaceVertexIndices.Add(vertexIndex);
 
-                        VertexEdges[vertexIndex] = hullEdge;
+                                var hullEdge = new ConvexHull.Edge { FaceIndex = (short)edge.Current.TriangleIndex, EdgeIndex = (byte)edge.Current.EdgeIndex }; // will be mapped to the output hull below
+                                edgeMap.TryAdd(hullEdge, new ConvexHull.Edge { FaceIndex = (short)Faces.Length, EdgeIndex = numEdges });
 
-                        ConvexHullBuilder.Edge linkedEdge = builder.GetLinkedEdge(edge);
-                        FaceLinks.Add(new ConvexHull.Edge { FaceIndex = (short)linkedEdge.TriangleIndex, EdgeIndex = (byte)linkedEdge.EdgeIndex }); // will be mapped to the output hull below
+                                VertexEdges[vertexIndex] = hullEdge;
 
-                        Plane linkedPlane = builder.ComputePlane(linkedEdge.TriangleIndex);
-                        maxCosAngle = math.max(maxCosAngle, math.dot(facePlane.Normal, linkedPlane.Normal));
+                                ConvexHullBuilder.Edge linkedEdge = builder.GetLinkedEdge(edge);
+                                FaceLinks.Add(new ConvexHull.Edge { FaceIndex = (short)linkedEdge.TriangleIndex, EdgeIndex = (byte)linkedEdge.EdgeIndex }); // will be mapped to the output hull below
 
-                        numEdges++;
+                                ConvexHullBuilder.Triangle linkedTriangle = builder.Triangles[linkedEdge.TriangleIndex];
+                                Plane linkedPlane = builder.Planes[linkedTriangle.FaceIndex];
+                                maxCosAngle = math.max(maxCosAngle, math.dot(facePlane.Normal, linkedPlane.Normal));
+
+                                numEdges++;
+                            }
+                            Assert.IsTrue(numEdges >= 3);
+
+                            // Store the face
+                            Faces.Add(new ConvexHull.Face
+                            {
+                                FirstIndex = firstVertexIndex,
+                                NumVertices = numEdges,
+                                MinHalfAngle = math.acos(maxCosAngle) * 0.5f
+                            });
+                        }
+
+                        // Remap the edges
+                        {
+                            for (int i = 0; i < VertexEdges.Length; i++)
+                            {
+                                edgeMap.TryGetValue(VertexEdges[i], out ConvexHull.Edge vertexEdge);
+                                VertexEdges[i] = vertexEdge;
+                            }
+
+                            for (int i = 0; i < FaceLinks.Length; i++)
+                            {
+                                edgeMap.TryGetValue(FaceLinks[i], out ConvexHull.Edge faceLink);
+                                FaceLinks[i] = faceLink;
+                            }
+                        }
+
+                        break;
                     }
-                    Assert.IsTrue(numEdges >= 3);
 
-                    // Store the face
-                    Faces.Add(new ConvexHull.Face
+                    case 2:
                     {
-                        FirstIndex = firstVertexIndex,
-                        NumVertices = numEdges,
-                        MinHalfAngle = math.acos(maxCosAngle) * 0.5f
-                    });
+                        // Make face vertices and edges
+                        for (byte i = 0; i < Vertices.Length; i++)
+                        {
+                            FaceVertexIndices.Add(i);
+                            VertexEdges.Add(new ConvexHull.Edge
+                            {
+                                FaceIndex = 0,
+                                EdgeIndex = i
+                            });
+                            FaceLinks.Add(new ConvexHull.Edge
+                            {
+                                FaceIndex = 1,
+                                EdgeIndex = (byte)(Vertices.Length - 1 - i)
+                            });
+                        }
+
+                        for (byte i = 0; i < Vertices.Length; i++)
+                        {
+                            FaceVertexIndices.Add((byte)(Vertices.Length - 1 - i));
+                            FaceLinks.Add(VertexEdges[i]);
+                        }
+
+                        // Make planes and faces
+                        float3 normal;
+                        {
+                            float3 edge0 = Vertices[1] - Vertices[0];
+                            float3 cross = float3.zero;
+                            for (int i = 2; i < Vertices.Length; i++)
+                            {
+                                cross = math.cross(edge0, Vertices[i] - Vertices[0]);
+                                if (math.lengthsq(cross) > 1e-8f) // take the first cross product good enough to calculate a normal
+                                {
+                                    break;
+                                }
+                            }
+                            normal = math.normalizesafe(cross, new float3(1, 0, 0));
+                        }
+                        float distance = math.dot(normal, Vertices[0]);
+                        Planes.Add(new Plane(normal, -distance));
+                        Planes.Add(Planes[0].Flipped);
+                        Faces.Add(new ConvexHull.Face
+                        {
+                            FirstIndex = 0,
+                            NumVertices = (byte)Vertices.Length,
+                            MinHalfAngleCompressed = 255
+                        });
+                        Faces.Add(new ConvexHull.Face
+                        {
+                            FirstIndex = (byte)Vertices.Length,
+                            NumVertices = (byte)Vertices.Length,
+                            MinHalfAngleCompressed = 255
+                        });
+
+                        break;
+                    }
+
+                    default: break; // nothing to do for lower-dimensional hulls
                 }
-
-                // Remap the edges
-                {
-                    for (int i = 0; i < VertexEdges.Count; i++)
-                    {
-                        edgeMap.TryGetValue(VertexEdges[i], out ConvexHull.Edge vertexEdge);
-                        VertexEdges[i] = vertexEdge;
-                    }
-
-                    for (int i = 0; i < FaceLinks.Count; i++)
-                    {
-                        edgeMap.TryGetValue(FaceLinks[i], out ConvexHull.Edge faceLink);
-                        FaceLinks[i] = faceLink;
-                    }
-                }
-                edgeMap.Dispose();
             }
         }
 
@@ -295,8 +393,8 @@ namespace Unity.Physics
         public CollisionType CollisionType => m_Header.CollisionType;
         public int MemorySize { get; private set; }
 
-        public CollisionFilter Filter { get => m_Header.Filter; set => m_Header.Filter = value; }
-        public Material Material { get => m_Header.Material; set => m_Header.Material = value; }
+        public CollisionFilter Filter { get => m_Header.Filter; set { if (!m_Header.Filter.Equals(value)) { m_Header.Version += 1; m_Header.Filter = value; } } }
+        public Material Material { get => m_Header.Material; set { if (!m_Header.Material.Equals(value)) { m_Header.Version += 1; m_Header.Material = value; } } }
         public MassProperties MassProperties { get; private set; }
 
         public Aabb CalculateAabb()
@@ -369,6 +467,17 @@ namespace Unity.Physics
                 return DistanceQueries.ColliderCollider(input, (Collider*)target, ref collector);
             }
         }
+
+        #endregion
+
+        #region Obsolete
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("This signature has been deprecated. Please use a signature that does not pass nullable arguments instead. (RemovedAfter 2019-10-30)")]
+        public static unsafe BlobAssetReference<Collider> Create(
+            NativeArray<float3> points, float convexRadius, float3? scale = null, CollisionFilter? filter = null, Material? material = null
+        ) =>
+            Create(points, convexRadius, scale ?? 1f, filter ?? CollisionFilter.Default, material ?? Material.Default);
 
         #endregion
     }

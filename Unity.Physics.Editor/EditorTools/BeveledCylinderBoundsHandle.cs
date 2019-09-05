@@ -1,15 +1,14 @@
 using System;
 using Unity.Mathematics;
-using Unity.Physics.Authoring;
 using UnityEditor;
 using UnityEditor.IMGUI.Controls;
 using UnityEngine;
 
 namespace Unity.Physics.Editor
 {
-    class ConvexCylinderBoundsHandle : PrimitiveBoundsHandle
+    class BeveledCylinderBoundsHandle : PrimitiveBoundsHandle
     {
-        public ConvexCylinderBoundsHandle() => midpointHandleDrawFunction = DoMidpointHandle;
+        public BeveledCylinderBoundsHandle() => midpointHandleDrawFunction = DoMidpointHandle;
 
         void DoMidpointHandle(int controlID, Vector3 position, Quaternion rotation, float size, EventType eventType)
         {
@@ -37,18 +36,18 @@ namespace Unity.Physics.Editor
             Handles.DotHandleCap(controlID, position, rotation, size, eventType);
         }
 
-        public float ConvexRadius
+        public float BevelRadius
         {
-            get => m_ConvexRadius;
+            get => m_BevelRadius;
             set
             {
-                m_ConvexRadius = math.max(0f, value);
-                Height = math.max(Height, ConvexRadius * 2f);
-                Radius = math.max(Radius, ConvexRadius);
+                m_BevelRadius = math.max(0f, value);
+                Height = math.max(Height, BevelRadius * 2f);
+                Radius = math.max(Radius, BevelRadius);
             }
         }
 
-        float m_ConvexRadius = PhysicsShape.k_DefaultConvexRadius;
+        float m_BevelRadius = ConvexHullGenerationParameters.Default.BevelRadius;
 
         public float Height
         {
@@ -56,7 +55,7 @@ namespace Unity.Physics.Editor
             set
             {
                 var size = GetSize();
-                size.z = math.max(math.max(0f, 2f * ConvexRadius), value);
+                size.z = math.max(math.max(0f, 2f * BevelRadius), value);
                 SetSize(size);
             }
         }
@@ -67,14 +66,29 @@ namespace Unity.Physics.Editor
             set
             {
                 var size = GetSize();
-                size.x = size.y = math.max(0f, math.max(value, ConvexRadius) * 2f);
+                size.x = size.y = math.max(0f, math.max(value, BevelRadius) * 2f);
                 SetSize(size);
             }
         }
 
-        const int k_NumSpans = ConvexConvexManifoldQueries.Manifold.k_MaxNumContacts;
-        static readonly Vector3[] s_Points = new Vector3[k_NumSpans * 6];
-        static readonly Vector3[] s_PointsWithRadius = new Vector3[k_NumSpans * 10];
+        public int SideCount
+        {
+            get => m_SideCount;
+            set
+            {
+                if (value == m_SideCount)
+                    return;
+
+                m_SideCount = value;
+
+                Array.Resize(ref m_Points, m_SideCount * 6);
+                Array.Resize(ref m_PointsWithRadius, m_SideCount * 10);
+            }
+        }
+        int m_SideCount;
+
+        Vector3[] m_Points = Array.Empty<Vector3>();
+        Vector3[] m_PointsWithRadius = Array.Empty<Vector3>();
         int m_FirstControlID;
 
         protected override void DrawWireframe()
@@ -82,31 +96,31 @@ namespace Unity.Physics.Editor
             m_FirstControlID = GUIUtility.GetControlID(GetHashCode(), FocusType.Passive) - 6;
 
             var halfHeight = new float3(0f, 0f, Height * 0.5f);
-            var t = 2f * 31 / k_NumSpans;
+            var t = 2f * (m_SideCount - 1) / m_SideCount;
             var prevXY = new float3(math.cos(math.PI * t), math.sin(math.PI * t), 0f) * Radius;
-            var prevXYCvx = math.normalizesafe(prevXY) * ConvexRadius;
+            var prevXYCvx = math.normalizesafe(prevXY) * BevelRadius;
             int step;
             Vector3[] points;
-            if (ConvexRadius > 0f)
+            if (BevelRadius > 0f)
             {
-                points = s_PointsWithRadius;
+                points = m_PointsWithRadius;
                 step = 10;
             }
             else
             {
-                points = s_Points;
+                points = m_Points;
                 step = 6;
             }
-            for (var i = 0; i < k_NumSpans; ++i)
+            for (var i = 0; i < m_SideCount; ++i)
             {
-                t = 2f * i / k_NumSpans;
+                t = 2f * i / m_SideCount;
                 var xy = new float3(math.cos(math.PI * t), math.sin(math.PI * t), 0f) * Radius;
-                var xyCvx = math.normalizesafe(xy) * ConvexRadius;
+                var xyCvx = math.normalizesafe(xy) * BevelRadius;
                 var idx = i * step;
                 var ctr = (float3)center;
                 // height
-                points[idx++] = ctr + xy + halfHeight - new float3 { z = ConvexRadius };
-                points[idx++] = ctr + xy - halfHeight + new float3 { z = ConvexRadius };
+                points[idx++] = ctr + xy + halfHeight - new float3 { z = BevelRadius };
+                points[idx++] = ctr + xy - halfHeight + new float3 { z = BevelRadius };
                 // top
                 points[idx++] = prevXY + halfHeight - prevXYCvx;
                 points[idx++] = xy + halfHeight - xyCvx;
@@ -114,20 +128,20 @@ namespace Unity.Physics.Editor
                 points[idx++] = prevXY - halfHeight - prevXYCvx;
                 points[idx++] = xy - halfHeight - xyCvx;
                 // convex
-                if (ConvexRadius > 0f)
+                if (BevelRadius > 0f)
                 {
                     // top
-                    points[idx++] = ctr + prevXY + halfHeight - new float3 { z = ConvexRadius };
-                    points[idx++] = ctr + xy + halfHeight - new float3 { z = ConvexRadius };
+                    points[idx++] = ctr + prevXY + halfHeight - new float3 { z = BevelRadius };
+                    points[idx++] = ctr + xy + halfHeight - new float3 { z = BevelRadius };
                     // bottom
-                    points[idx++] = ctr + prevXY - halfHeight + new float3 { z = ConvexRadius };
-                    points[idx++] = ctr + xy - halfHeight + new float3 { z = ConvexRadius };
+                    points[idx++] = ctr + prevXY - halfHeight + new float3 { z = BevelRadius };
+                    points[idx++] = ctr + xy - halfHeight + new float3 { z = BevelRadius };
                     // corners
                     var normal = math.cross(new float3(0f, 0f, 1f), xy);
-                    var p = new float3(xy.x, xy.y, halfHeight.z) - new float3(xyCvx.x, xyCvx.y, ConvexRadius);
-                    Handles.DrawWireArc(ctr + p, normal, xy, -90f, ConvexRadius);
+                    var p = new float3(xy.x, xy.y, halfHeight.z) - new float3(xyCvx.x, xyCvx.y, BevelRadius);
+                    Handles.DrawWireArc(ctr + p, normal, xy, -90f, BevelRadius);
                     p *= new float3(1f, 1f, -1f);
-                    Handles.DrawWireArc(ctr + p, normal, xy, 90f, ConvexRadius);
+                    Handles.DrawWireArc(ctr + p, normal, xy, 90f, BevelRadius);
                 }
                 prevXY = xy;
                 prevXYCvx = xyCvx;
@@ -159,7 +173,7 @@ namespace Unity.Physics.Editor
             var upperBound = newBounds.max;
             var lowerBound = newBounds.min;
 
-            var convexDiameter = 2f * ConvexRadius;
+            var convexDiameter = 2f * BevelRadius;
 
             // ensure changed dimension cannot be made less than convex diameter
             if (upperBound[changedAxis] - lowerBound[changedAxis] < convexDiameter)

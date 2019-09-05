@@ -1,6 +1,7 @@
 ﻿using System;
-﻿using Unity.Burst;
+using Unity.Burst;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -34,28 +35,32 @@ namespace Unity.Physics.Authoring
 
             DebugStream.Context debugOutput = m_DebugStreamSystem.GetContext(1);
             debugOutput.Begin(0);
-            // Allocate a NativeArray to store our debug output, so it can be shared across the display/finish jobs
-            var sharedOutput = new NativeArray<DebugStream.Context>(1, Allocator.TempJob);
-            sharedOutput[0] = debugOutput;
 
-            var job = new DisplayCollisionEventsJob
+            unsafe
             {
-                World = m_BuildPhysicsWorldSystem.PhysicsWorld,
-                OutputStream = sharedOutput
-            };
+                // Allocate a block of memory to store our debug output, so it can be shared across the display/finish jobs
+                var sharedOutput = (DebugStream.Context*)UnsafeUtility.Malloc(sizeof(DebugStream.Context), 16, Allocator.TempJob);
+                sharedOutput[0] = debugOutput;
 
-            JobHandle handle = ScheduleCollisionEventsJob(job, m_StepPhysicsWorldSystem.Simulation, ref m_BuildPhysicsWorldSystem.PhysicsWorld, inputDeps);
+                var job = new DisplayCollisionEventsJob
+                {
+                    World = m_BuildPhysicsWorldSystem.PhysicsWorld,
+                    OutputStreamContext = sharedOutput
+                };
+
+                JobHandle handle = ScheduleCollisionEventsJob(job, m_StepPhysicsWorldSystem.Simulation, ref m_BuildPhysicsWorldSystem.PhysicsWorld, inputDeps);
 
 #pragma warning disable 618
-            JobHandle finishHandle = new FinishDisplayCollisionEventsJob
-            {
-                OutputStream = sharedOutput
-            }.Schedule(handle);
+                JobHandle finishHandle = new FinishDisplayCollisionEventsJob
+                {
+                    OutputStreamContext = sharedOutput
+                }.Schedule(handle);
 #pragma warning restore 618
 
-            m_EndFramePhysicsSystem.HandlesToWaitFor.Add(finishHandle);
+                m_EndFramePhysicsSystem.HandlesToWaitFor.Add(finishHandle);
 
-            return handle;
+                return handle;
+            }
         }
 
         protected virtual JobHandle ScheduleCollisionEventsJob(DisplayCollisionEventsJob job, ISimulation simulation, ref PhysicsWorld world, JobHandle inDeps)
@@ -66,15 +71,14 @@ namespace Unity.Physics.Authoring
 
         // Job which iterates over collision events and writes display info to a DebugStream.
         //[BurstCompile]
-        protected struct DisplayCollisionEventsJob : ICollisionEventsJob
+        protected unsafe struct DisplayCollisionEventsJob : ICollisionEventsJob
         {
             [ReadOnly] public PhysicsWorld World;
-            public NativeArray<DebugStream.Context> OutputStream;
+            [NativeDisableUnsafePtrRestriction]
+            internal DebugStream.Context* OutputStreamContext;
 
             public unsafe void Execute(CollisionEvent collisionEvent)
             {
-                DebugStream.Context outputContext = OutputStream[0];
-
                 RigidBody bodyA = World.Bodies[collisionEvent.BodyIndices.BodyAIndex];
                 RigidBody bodyB = World.Bodies[collisionEvent.BodyIndices.BodyBIndex];
                 float totalImpulse = math.csum(collisionEvent.AccumulatedImpulses);
@@ -98,24 +102,23 @@ namespace Unity.Physics.Authoring
                 bool areBodyBCollisionEventsEnabled = AreCollisionEventsEnabled(bodyB.Collider, collisionEvent.ColliderKeys.ColliderKeyB);
                 if (areBodyACollisionEventsEnabled || areBodyBCollisionEventsEnabled)
                 {
-                    outputContext.Text(totalImpulse.ToString().ToCharArray(),
+                    OutputStreamContext->Text(totalImpulse.ToString().ToCharArray(),
                         math.lerp(bodyA.WorldFromBody.pos, bodyB.WorldFromBody.pos, 0.5f), UnityEngine.Color.blue);
                 }
-
-                OutputStream[0] = outputContext;
             }
         }
 
         [BurstCompile]
         [Obsolete("This type will be made protected in a future release. (RemovedAfter 2019-10-15)")]
-        public struct FinishDisplayCollisionEventsJob : IJob
+        public unsafe struct FinishDisplayCollisionEventsJob : IJob
         {
-            [DeallocateOnJobCompletion]
-            public NativeArray<DebugStream.Context> OutputStream;
+            [NativeDisableUnsafePtrRestriction]
+            internal DebugStream.Context* OutputStreamContext;
 
             public void Execute()
             {
-                OutputStream[0].End();
+                OutputStreamContext->End();
+                UnsafeUtility.Free(OutputStreamContext, Allocator.TempJob);
             }
         }
     }

@@ -1,14 +1,15 @@
 using System;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 
 namespace Unity.Physics.Authoring
 {
-    public sealed class PhysicsShapeConversionSystem : BaseShapeConversionSystem<PhysicsShape>
+    public sealed class PhysicsShapeConversionSystem : BaseShapeConversionSystem<PhysicsShapeAuthoring>
     {
-        static Material ProduceMaterial(PhysicsShape shape)
+        static Material ProduceMaterial(PhysicsShapeAuthoring shape)
         {
             // TODO: TBD how we will author editor content for other shape flags
             var flags = new Material.MaterialFlags();
@@ -32,7 +33,7 @@ namespace Unity.Physics.Authoring
             };
         }
 
-        static CollisionFilter ProduceCollisionFilter(PhysicsShape shape)
+        static CollisionFilter ProduceCollisionFilter(PhysicsShapeAuthoring shape)
         {
             // TODO: determine optimal workflow for specifying group index
             return new CollisionFilter
@@ -42,58 +43,44 @@ namespace Unity.Physics.Authoring
             };
         }
 
-        protected override bool ShouldConvertShape(PhysicsShape shape) => shape.enabled;
+        protected override bool ShouldConvertShape(PhysicsShapeAuthoring shape) => shape.enabled;
 
-        protected override GameObject GetPrimaryBody(PhysicsShape shape) => shape.GetPrimaryBody();
+        protected override GameObject GetPrimaryBody(PhysicsShapeAuthoring shape) => shape.GetPrimaryBody();
 
-        protected override BlobAssetReference<Collider> ProduceColliderBlob(PhysicsShape shape)
+        protected override BlobAssetReference<Collider> ProduceColliderBlob(PhysicsShapeAuthoring shape)
         {
             var material = ProduceMaterial(shape);
             var collisionFilter = ProduceCollisionFilter(shape);
 
-            var blob = new BlobAssetReference<Collider>();
+            BlobAssetReference<Collider> blob = default;
             switch (shape.ShapeType)
             {
                 case ShapeType.Box:
-                    shape.GetBakedBoxProperties(out var center, out var size, out var orientation, out var convexRadius);
                     blob = BoxCollider.Create(
-                        center,
-                        orientation,
-                        size,
-                        convexRadius,
+                        shape.GetBakedBoxProperties(),
                         collisionFilter,
                         material);
                     break;
                 case ShapeType.Capsule:
-                    shape.GetBakedCapsuleProperties(out center, out var height, out var radius, out orientation, out var v0, out var v1);
                     blob = CapsuleCollider.Create(
-                        v0,
-                        v1,
-                        radius,
+                        shape.GetBakedCapsuleProperties(out var center, out var height, out var orientation),
                         collisionFilter,
                         material);
                     break;
                 case ShapeType.Sphere:
-                    shape.GetBakedSphereProperties(out center, out radius, out orientation);
                     blob = SphereCollider.Create(
-                        center,
-                        radius,
+                        shape.GetBakedSphereProperties(out orientation),
                         collisionFilter,
                         material);
                     break;
                 case ShapeType.Cylinder:
-                    shape.GetBakedCylinderProperties(out center, out height, out radius, out orientation, out convexRadius);
                     blob = CylinderCollider.Create(
-                        center,
-                        height,
-                        radius,
-                        orientation,
-                        convexRadius,
+                        shape.GetBakedCylinderProperties(),
                         collisionFilter,
                         material);
                     break;
                 case ShapeType.Plane:
-                    shape.GetBakedPlaneProperties(out v0, out v1, out var v2, out var v3);
+                    shape.GetBakedPlaneProperties(out var v0, out var v1, out var v2, out var v3);
                     blob = PolygonCollider.CreateQuad(
                         v0,
                         v1,
@@ -107,53 +94,36 @@ namespace Unity.Physics.Authoring
                     shape.GetConvexHullProperties(pointCloud);
                     if (pointCloud.Length == 0)
                     {
-                        pointCloud.Dispose();
                         throw new InvalidOperationException(
-                            $"No vertices associated with {shape.name}. Add a {typeof(MeshFilter)} component or assign a readable {nameof(PhysicsShape.CustomMesh)}."
+                            $"No vertices associated with {shape.name}. Add a {typeof(MeshFilter)} component or assign a readable {nameof(PhysicsShapeAuthoring.CustomMesh)}."
                         );
                     }
-                    shape.GetBakedConvexProperties(pointCloud, out radius);
-                    blob = ConvexCollider.Create(
-                        pointCloud,
-                        radius,
-                        1f,
-                        collisionFilter,
-                        material);
+                    shape.GetBakedConvexProperties(pointCloud, out var hullGenerationParameters);
+                    RegisterConvexColliderDeferred(
+                        shape, pointCloud, hullGenerationParameters.ToRunTime(), collisionFilter, material
+                    );
                     pointCloud.Dispose();
                     break;
                 case ShapeType.Mesh:
-                    // TODO: no convex radius?
-                    var mesh = shape.GetMesh();
-                    if (mesh == null)
-                    {
-                        throw new InvalidOperationException(
-                            $"No mesh associated with {shape.name}. Add a {typeof(MeshFilter)} component or assign a readable {nameof(PhysicsShape.CustomMesh)}."
-                        );
-                    }
-                    else if (!mesh.IsValidForConversion(shape.gameObject))
-                    {
-                        throw new InvalidOperationException(
-                            $"Mesh '{mesh}' associated with {typeof(PhysicsShape)} on {shape.name} is not readable. Ensure that you have enabled Read/Write on its import settings."
-                        );
-                    }
-                    else
-                    {
-                        pointCloud = new NativeList<float3>(mesh.vertexCount, Allocator.Temp);
-                        var triangles = new NativeList<int>(mesh.vertexCount, Allocator.Temp);
-                        shape.GetBakedMeshProperties(pointCloud, triangles);
-                        if (triangles.Length == 0)
-                        {
-                            pointCloud.Dispose();
-                            triangles.Dispose();
+                    const int defaultVertexCount = 2048;
+                    pointCloud = new NativeList<float3>(defaultVertexCount, Allocator.Temp);
+                    var triangles = new NativeList<int>((defaultVertexCount - 2) * 3, Allocator.Temp);
+                    shape.GetBakedMeshProperties(pointCloud, triangles);
 
-                            throw new InvalidOperationException(
-                                $"No triangles associated with {shape.name}. Ensure mesh import settings enables Read/Write");
-                        }
-
-                        blob = MeshCollider.Create(pointCloud.ToArray(), triangles.ToArray(), collisionFilter, material);
-                        pointCloud.Dispose();
+                    if (pointCloud.Length == 0 || triangles.Length == 0)
+                    {
                         triangles.Dispose();
+                        pointCloud.Dispose();
+                        throw new InvalidOperationException(
+                            $"Invalid mesh data associated with {shape.name}. " +
+                            $"Add a {typeof(MeshFilter)} component or assign a {nameof(PhysicsShapeAuthoring.CustomMesh)}. " +
+                            "Ensure that you have enabled Read/Write on the mesh's import settings."
+                        );
                     }
+
+                    RegisterMeshColliderDeferred(shape, pointCloud, triangles, collisionFilter, material);
+                    triangles.Dispose();
+                    pointCloud.Dispose();
                     break;
                 default:
                     throw new UnimplementedShapeException(shape.ShapeType);

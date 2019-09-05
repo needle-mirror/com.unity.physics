@@ -401,7 +401,7 @@ public class DebugStream : ComponentSystem
         }
     }
 
-    protected override void OnDestroyManager()
+    protected override void OnDestroy()
     {
         for (int i = 0; i < m_DebugStreams.Count; i++)
             m_DebugStreams[i].Dispose();

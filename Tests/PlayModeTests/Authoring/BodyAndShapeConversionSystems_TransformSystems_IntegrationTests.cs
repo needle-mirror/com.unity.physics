@@ -99,9 +99,9 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public void ConversionSystems_WhenChildGOHasPhysicsComponents_EntityIsNewRoot(
-            [Values(typeof(PhysicsBody), typeof(Rigidbody), null)]
+            [Values(typeof(PhysicsBodyAuthoring), typeof(Rigidbody), null)]
             Type bodyType,
-            [Values(typeof(PhysicsShape), typeof(BoxCollider))]
+            [Values(typeof(PhysicsShapeAuthoring), typeof(BoxCollider))]
             Type colliderType,
             [Values(typeof(StaticOptimizeEntity), null)]
             Type otherType
@@ -136,8 +136,8 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public void ConversionSystems_WhenGOHasPhysicsComponents_EntityHasSameLocalToWorldAsGO(
-            [Values(typeof(PhysicsBody), typeof(Rigidbody), null)] Type bodyType,
-            [Values(typeof(PhysicsShape), typeof(BoxCollider))] Type colliderType,
+            [Values(typeof(PhysicsBodyAuthoring), typeof(Rigidbody), null)] Type bodyType,
+            [Values(typeof(PhysicsShapeAuthoring), typeof(BoxCollider))] Type colliderType,
             [Values(typeof(StaticOptimizeEntity), null)] Type otherType
         )
         {
@@ -155,9 +155,9 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public void ConversionSystems_WhenGOHasPhysicsComponents_EntityHasRotationInWorldSpace(
-            [Values(typeof(PhysicsBody), typeof(Rigidbody), null)]
+            [Values(typeof(PhysicsBodyAuthoring), typeof(Rigidbody), null)]
             Type bodyType,
-            [Values(typeof(PhysicsShape), typeof(BoxCollider))]
+            [Values(typeof(PhysicsShapeAuthoring), typeof(BoxCollider))]
             Type colliderType,
             [Values(typeof(StaticOptimizeEntity), null)]
             Type otherType
@@ -177,8 +177,8 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public void ConversionSystems_WhenGOHasPhysicsComponents_EntityHasTranslationInWorldSpace(
-            [Values(typeof(PhysicsBody), typeof(Rigidbody), null)] Type bodyType,
-            [Values(typeof(PhysicsShape), typeof(BoxCollider))] Type colliderType,
+            [Values(typeof(PhysicsBodyAuthoring), typeof(Rigidbody), null)] Type bodyType,
+            [Values(typeof(PhysicsShapeAuthoring), typeof(BoxCollider))] Type colliderType,
             [Values(typeof(StaticOptimizeEntity), null)] Type otherType
         )
         {

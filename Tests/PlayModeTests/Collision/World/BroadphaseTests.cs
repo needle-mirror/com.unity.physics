@@ -23,7 +23,13 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             Assert.IsTrue(index < world.NumStaticBodies, "Static body index is out of range in addStaticBoxToWorld");
             Unity.Collections.NativeSlice<Physics.RigidBody> staticBodies = world.StaticBodies;
             Physics.RigidBody rb = staticBodies[index];
-            BlobAssetReference<Physics.Collider> collider = Unity.Physics.BoxCollider.Create(pos, orientation, size, .01f);
+            BlobAssetReference<Physics.Collider> collider = Unity.Physics.BoxCollider.Create(new BoxGeometry
+            {
+                Center = pos,
+                Orientation = orientation,
+                Size = size,
+                BevelRadius = 0.01f
+            });
             rb.Collider = (Collider*)collider.GetUnsafePtr();
             staticBodies[index] = rb;
         }
@@ -34,7 +40,13 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             Assert.IsTrue(index < world.NumDynamicBodies, "Dynamic body index is out of range in addDynamicBoxToWorld");
             Unity.Collections.NativeSlice<Physics.RigidBody> dynamicBodies = world.DynamicBodies;
             Physics.RigidBody rb = dynamicBodies[index];
-            BlobAssetReference<Physics.Collider> collider = Unity.Physics.BoxCollider.Create(pos, orientation, size, .01f);
+            BlobAssetReference<Physics.Collider> collider = Unity.Physics.BoxCollider.Create(new BoxGeometry
+            {
+                Center = pos,
+                Orientation = orientation,
+                Size = size,
+                BevelRadius = 0.01f
+            });
             rb.Collider = (Collider*)collider.GetUnsafePtr();
             dynamicBodies[index] = rb;
         }

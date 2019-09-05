@@ -852,8 +852,8 @@ namespace Unity.Physics.Tests.Utils
         public static BlobAssetReference<Collider> GenerateRandomMesh(ref Random rnd)
         {
             int numTriangles = rnd.NextInt(1, 250);
-            float3[] vertices = new float3[numTriangles * 3];
-            int[] indices = new int[numTriangles * 3];
+            var vertices = new NativeArray<float3>(numTriangles * 3, Allocator.Temp);
+            var indices = new NativeArray<int>(numTriangles * 3, Allocator.Temp);
             int nextIndex = 0;
 
             while (numTriangles > 0)
@@ -972,17 +972,21 @@ namespace Unity.Physics.Tests.Utils
             {
                 indices[i] = i;
             }
-
-            return MeshCollider.Create(vertices, indices);
+            var ret = MeshCollider.Create(vertices, indices);
+            
+            vertices.Dispose();
+            indices.Dispose();
+            
+            return ret;
         }
 
-        public unsafe static BlobAssetReference<Collider> GenerateRandomTerrain(ref Random rnd)
+        public static BlobAssetReference<Collider> GenerateRandomTerrain(ref Random rnd)
         {
             int2 size = rnd.NextInt2(2, 50);
             float3 scale = rnd.NextFloat3(0.1f, new float3(1, 10, 1));
 
             int numSamples = size.x * size.y;
-            float* heights = stackalloc float[numSamples];
+            var heights = new NativeArray<float>(numSamples, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
             for (int i = 0; i < numSamples; i++)
             {
                 heights[i] = rnd.NextFloat(0, 1);
@@ -990,7 +994,7 @@ namespace Unity.Physics.Tests.Utils
 
             // CollisionMethod.Vertices will fail the unit tests, because it is a low-quality mode
             // that produces inaccurate manifolds. For now we just test CollisionMethod.Triangles
-            return TerrainCollider.Create(size, scale, heights, TerrainCollider.CollisionMethod.Triangles);
+            return TerrainCollider.Create(heights, size, scale, TerrainCollider.CollisionMethod.Triangles);
         }
 
         public static unsafe BlobAssetReference<Collider> GenerateRandomCompound(ref Random rnd)
@@ -1026,27 +1030,37 @@ namespace Unity.Physics.Tests.Utils
                     {
                         numPoints++;
                     }
-                    var points = new NativeArray<float3>(numPoints, Allocator.Temp);
+                    var points = new NativeArray<float3>(numPoints, Allocator.TempJob);
                     for (int i = 0; i < numPoints; i++)
                     {
                         points[i] = rnd.NextFloat3(-1.0f, 1.0f);
                     }
-                    var collider = ConvexCollider.Create(points, convexRadius);
+                    var generationParameters = ConvexHullGenerationParameters.Default;
+                    generationParameters.BevelRadius = convexRadius;
+                    var collider = ConvexCollider.Create(points, generationParameters, CollisionFilter.Default);
                     points.Dispose();
                     return collider;
                 }
 
                 case ColliderType.Sphere:
                 {
-                    float3 center = (rnd.NextInt(4) > 0) ? float3.zero : rnd.NextFloat3(-0.5f, 0.5f);
-                    return SphereCollider.Create(center, rnd.NextFloat(0.01f, 0.5f));
+                    return SphereCollider.Create(new SphereGeometry
+                    {
+                        Center = (rnd.NextInt(4) > 0) ? float3.zero : rnd.NextFloat3(-0.5f, 0.5f),
+                        Radius = rnd.NextFloat(0.01f, 0.5f)
+                    });
                 }
 
                 case ColliderType.Capsule:
                 {
                     float3 point0 = rnd.NextFloat3(0.0f, 1.0f);
                     float3 point1 = (rnd.NextInt(4) > 0) ? -point0 : rnd.NextFloat3(-1.0f, 1.0f);
-                    return CapsuleCollider.Create(point0, point1, rnd.NextFloat(0.01f, 0.5f));
+                    return CapsuleCollider.Create(new CapsuleGeometry
+                    {
+                        Vertex0 = point0,
+                        Vertex1 = point1,
+                        Radius = rnd.NextFloat(0.01f, 0.5f)
+                    });
                 }
 
                 case ColliderType.Triangle:
@@ -1072,26 +1086,40 @@ namespace Unity.Physics.Tests.Utils
 
                 case ColliderType.Box:
                 {
-                    float3 center = (rnd.NextInt(4) > 0) ? Unity.Mathematics.float3.zero : rnd.NextFloat3(-0.5f, 0.5f);
-                    quaternion orientation = (rnd.NextInt(4) > 0) ? Unity.Mathematics.quaternion.identity : rnd.NextQuaternionRotation();
                     float minSize = 0.05f; // TODO - work around hull builder problems with small faces, sometimes doesn't extend 1D->2D based on face area
-                    float3 size = rnd.NextFloat3(minSize, 1.0f);
-                    float maxConvexRadius = math.max(math.cmin((size - minSize) / (2.0f * (1.0f + float.Epsilon))), 0.0f);
-                    return BoxCollider.Create(center, orientation, size, math.min(maxConvexRadius, convexRadius));
+                    var boxGeometry = new BoxGeometry
+                    {
+                        Center = (rnd.NextInt(4) > 0) ? float3.zero : rnd.NextFloat3(-0.5f, 0.5f),
+                        Orientation = (rnd.NextInt(4) > 0) ? quaternion.identity : rnd.NextQuaternionRotation(),
+                        Size = rnd.NextFloat3(minSize, 1.0f)
+                    };
+
+                    float maxBevelRadius = math.max(math.cmin((boxGeometry.Size - minSize) / (2.0f * (1.0f + float.Epsilon))), 0.0f);
+                    boxGeometry.BevelRadius = math.min(maxBevelRadius, convexRadius);
+
+                    return BoxCollider.Create(boxGeometry);
                 }
 
                 case ColliderType.Cylinder:
                 {
-                    float3 center = (rnd.NextInt(4) > 0) ? Unity.Mathematics.float3.zero : rnd.NextFloat3(-0.5f, 0.5f);
-                    quaternion orientation = (rnd.NextInt(4) > 0) ? Unity.Mathematics.quaternion.identity : rnd.NextQuaternionRotation();
                     float minSize = 0.01f; // TODO - cylinder gets degenerate faces if radius-convexRadius=0 or height/2-convexRadius=0, decide how to handle this in CylinderCollider
-                    float height = rnd.NextFloat(2.0f * minSize, 1f);
-                    float cylinderRadius = rnd.NextFloat(minSize, 1.0f);
-                    float maxConvexRadius = math.max(math.min(height / 2, cylinderRadius) - minSize, 0.0f);
-                    return CylinderCollider.Create(center, height, cylinderRadius, orientation, math.min(maxConvexRadius, convexRadius));
+                    var cylinderGeometry = new CylinderGeometry
+                    {
+                        Center = (rnd.NextInt(4) > 0) ? float3.zero : rnd.NextFloat3(-0.5f, 0.5f),
+                        Orientation = (rnd.NextInt(4) > 0) ? quaternion.identity : rnd.NextQuaternionRotation(),
+                        Height = rnd.NextFloat(2.0f * minSize, 1f),
+                        Radius = rnd.NextFloat(minSize, 1.0f),
+                        SideCount = 20
+                    };
+
+                    var maxBevelRadius = math.max(math.min(cylinderGeometry.Height / 2, cylinderGeometry.Radius) - minSize, 0.0f);
+                    cylinderGeometry.BevelRadius = math.min(maxBevelRadius, convexRadius);
+
+                    return CylinderCollider.Create(cylinderGeometry);
                 }
 
-                default: throw new System.NotImplementedException();
+                default:
+                    throw new NotImplementedException();
             }
         }
 

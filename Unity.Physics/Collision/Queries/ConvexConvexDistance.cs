@@ -177,22 +177,59 @@ namespace Unity.Physics
                         coordinates.x = 1;
                         break;
                     case 2:
-                        coordinates.x = math.distance(B.Xyz, closestPoint) / math.distance(A.Xyz, B.Xyz);
+                        float distance = math.distance(A.Xyz, B.Xyz);
+                        UnityEngine.Assertions.Assert.AreNotEqual(distance, 0.0f); // TODO just checking if this happens in my tests
+                        if (distance == 0.0f) // Very rare case, simplex is really 1D.
+                        {
+                            goto case 1;
+                        }
+                        coordinates.x = math.distance(B.Xyz, closestPoint) / distance;
                         coordinates.y = 1 - coordinates.x;
                         break;
                     case 3:
+                    {
                         coordinates.x = math.length(math.cross(B.Xyz - closestPoint, C.Xyz - closestPoint));
                         coordinates.y = math.length(math.cross(C.Xyz - closestPoint, A.Xyz - closestPoint));
                         coordinates.z = math.length(math.cross(A.Xyz - closestPoint, B.Xyz - closestPoint));
-                        coordinates /= math.csum(coordinates.xyz);
+                        float sum = math.csum(coordinates.xyz);
+                        if (sum == 0.0f) // Very rare case, simplex is really 2D.  Happens because of int->float conversion from the hull builder.
+                        {
+                            // Choose the two farthest apart vertices to keep
+                            float3 lengthsSq = new float3(math.lengthsq(A.Xyz - B.Xyz), math.lengthsq(B.Xyz - C.Xyz), math.lengthsq(C.Xyz - A.Xyz));
+                            bool3 longest = math.cmin(lengthsSq) == lengthsSq;
+                            if (longest.y)
+                            {
+                                A.Xyz = C.Xyz;
+                            }
+                            else if (longest.z)
+                            {
+                                A.Xyz = B.Xyz;
+                                B.Xyz = C.Xyz;
+                            }
+                            coordinates.z = 0.0f;
+                            NumVertices = 2;
+                            goto case 2;
+                        }
+                        coordinates /= sum;
                         break;
+                    }
                     case 4:
+                    {
                         coordinates.x = Det(D.Xyz, C.Xyz, B.Xyz);
                         coordinates.y = Det(D.Xyz, A.Xyz, C.Xyz);
                         coordinates.z = Det(D.Xyz, B.Xyz, A.Xyz);
                         coordinates.w = Det(A.Xyz, B.Xyz, C.Xyz);
-                        coordinates /= math.csum(coordinates.xyzw);
+                        float sum = math.csum(coordinates.xyzw);
+                        UnityEngine.Assertions.Assert.AreNotEqual(sum, 0.0f); // TODO just checking that this doesn't happen in my tests
+                        if (sum == 0.0f) // Unexpected case, may introduce significant error by dropping a vertex but it's better than nan
+                        {
+                            coordinates.zw = 0.0f;
+                            NumVertices = 3;
+                            goto case 3;
+                        }
+                        coordinates /= sum;
                         break;
+                    }
                 }
 
                 return coordinates;
@@ -268,12 +305,10 @@ namespace Unity.Physics
                 int triangleCapacity = 2 * verticesCapacity;
                 ConvexHullBuilder.Vertex* vertices = stackalloc ConvexHullBuilder.Vertex[verticesCapacity];
                 ConvexHullBuilder.Triangle* triangles = stackalloc ConvexHullBuilder.Triangle[triangleCapacity];
-                var hull = new ConvexHullBuilder(vertices, verticesCapacity, triangles, triangleCapacity);
-
-                // Initialize int space
-                // TODO - either the hull should be robust when int space changes after points are already added, or the ability to do so should be removed, probably the latter
-                // Currently for example a valid triangle can collapse to a line segment when the bounds grow
-                hull.IntegerSpaceAabb = GetSupportingAabb(verticesA, numVerticesA, verticesB, numVerticesB, aFromB);
+                Aabb domain = GetSupportingAabb(verticesA, numVerticesA, verticesB, numVerticesB, aFromB);
+                const float simplificationTolerance = 0.0f;
+                var hull = new ConvexHullBuilder(verticesCapacity, vertices, triangles, null,
+                    domain, simplificationTolerance, ConvexHullBuilder.IntResolution.Low);
 
                 // Add simplex vertices to the hull, remove any vertices from the simplex that do not increase the hull dimension
                 hull.AddPoint(simplex.A.Xyz, simplex.A.Id);
@@ -494,7 +529,7 @@ namespace Unity.Physics
                 // Compute distance and normal.
                 float lengthSq = math.lengthsq(simplex.Direction);
                 float invLength = math.rsqrt(lengthSq);
-                bool smallLength = lengthSq < 1e-10f;
+                bool smallLength = lengthSq == 0;
                 ret.ClosestPoints.Distance = math.select(simplex.ScaledDistance * invLength, 0.0f, smallLength);
                 ret.ClosestPoints.NormalInA = math.select(simplex.Direction * invLength, new float3(1, 0, 0), smallLength);
 

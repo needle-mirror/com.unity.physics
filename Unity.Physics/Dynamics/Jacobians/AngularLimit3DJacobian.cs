@@ -32,8 +32,6 @@ namespace Unity.Physics
             MotionData motionA, MotionData motionB,
             Constraint constraint, float tau, float damping)
         {
-            this = default(AngularLimit3DJacobian);
-
             BFromA = math.mul(math.inverse(motionB.WorldFromMotion.rot), motionA.WorldFromMotion.rot);
             RefBFromA = new quaternion(math.mul(bFromConstraint.Rotation, aFromConstraint.InverseRotation));
             MinAngle = constraint.Min;
@@ -46,7 +44,7 @@ namespace Unity.Physics
             InitialError = JacobianUtilities.CalculateError(initialAngle, MinAngle, MaxAngle);
         }
 
-        public void Solve(ref MotionVelocity velocityA, ref MotionVelocity velocityB, float timestep)
+        public void Solve(ref MotionVelocity velocityA, ref MotionVelocity velocityB, float timestep, float invTimestep)
         {
             // Predict the relative orientation at the end of the step
             quaternion futureBFromA = JacobianUtilities.IntegrateOrientationBFromA(BFromA, velocityA.AngularVelocity, velocityB.AngularVelocity, timestep);
@@ -90,7 +88,7 @@ namespace Unity.Physics
             // Calculate the error, adjust by tau and damping, and apply an impulse to correct it
             float futureError = JacobianUtilities.CalculateError(futureAngle, MinAngle, MaxAngle);
             float solveError = JacobianUtilities.CalculateCorrection(futureError, InitialError, Tau, Damping);
-            float solveVelocity = -solveError * (1.0f / timestep);
+            float solveVelocity = -solveError * invTimestep;
             float3 impulseA = solveVelocity * (jacA0 * effectiveMass.x + jacA1 * effectiveMass.y + jacA2 * effectiveMass.z);
             float3 impulseB = solveVelocity * (jacB0 * effectiveMass.x + jacB1 * effectiveMass.y + jacB2 * effectiveMass.z);
             velocityA.ApplyAngularImpulse(impulseA);

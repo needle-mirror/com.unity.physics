@@ -1,4 +1,5 @@
-﻿using Unity.Collections;
+﻿using System;
+using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine.Assertions;
 
@@ -22,20 +23,17 @@ namespace Unity.Physics
 
     public static class SimplexSolver
     {
+        [Obsolete("SimplexSolver.c_SimplexSolverEpsilon has been deprecated. (RemovedAfter 2019-10-25)")]
         public const float c_SimplexSolverEpsilon = 0.0001f;
 
+        const float k_Epsilon = 0.0001f;
+
+        [Obsolete("SimplexSolver.Solve() taking the respectMinDeltaTime has been deprecated. Use the new SimplexSolver.Solve() method that takes minDeltaTime instead. (RemovedAfter 2019-10-25)")]
         public static unsafe void Solve(PhysicsWorld world, float deltaTime, float3 up, int numConstraints,
             ref NativeArray<SurfaceConstraintInfo> constraints, ref float3 position, ref float3 velocity, out float integratedTime, bool respectMinDeltaTime = true)
         {
-            // List of planes to solve against (up to 4)
-            SurfaceConstraintInfo* supportPlanes = stackalloc SurfaceConstraintInfo[4];
-            int numSupportPlanes = 0;
-
-            float remainingTime = deltaTime;
-            float currentTime = 0.0f;
-
             float minDeltaTime = 0.0f;
-            if (math.lengthsq(velocity) > c_SimplexSolverEpsilon)
+            if (math.lengthsq(velocity) > k_Epsilon)
             {
                 if (respectMinDeltaTime)
                 {
@@ -47,6 +45,21 @@ namespace Unity.Physics
                     minDeltaTime = deltaTime;
                 }
             }
+
+            // If velocity is exactly -up, it means we are checking for support.
+            bool useConstraintVelocities = !(velocity.Equals(-up));
+            Solve(world, deltaTime, minDeltaTime, up, numConstraints, ref constraints, ref position, ref velocity, out integratedTime, useConstraintVelocities);
+        }
+
+        public static unsafe void Solve(PhysicsWorld world, float deltaTime, float minDeltaTime, float3 up, int numConstraints,
+            ref NativeArray<SurfaceConstraintInfo> constraints, ref float3 position, ref float3 velocity, out float integratedTime, bool useConstraintVelocities = true)
+        {
+            // List of planes to solve against (up to 4)
+            SurfaceConstraintInfo* supportPlanes = stackalloc SurfaceConstraintInfo[4];
+            int numSupportPlanes = 0;
+
+            float remainingTime = deltaTime;
+            float currentTime = 0.0f;
 
             while (remainingTime > 0.0f)
             {
@@ -60,9 +73,9 @@ namespace Unity.Physics
 
                     SurfaceConstraintInfo constraint = constraints[i];
 
-                    float3 relVel = velocity - constraint.Velocity;
+                    float3 relVel = velocity - (useConstraintVelocities ? constraint.Velocity : float3.zero);
                     float relProjVel = -math.dot(relVel, constraint.Plane.Normal);
-                    if (relProjVel < c_SimplexSolverEpsilon)
+                    if (relProjVel < k_Epsilon)
                     {
                         continue;
                     }
@@ -97,7 +110,12 @@ namespace Unity.Physics
                 }
 
                 // Add the hit to the current list of active planes
-                supportPlanes[numSupportPlanes++] = constraints[hitIndex];
+                supportPlanes[numSupportPlanes] = constraints[hitIndex];
+                if (!useConstraintVelocities)
+                {
+                    supportPlanes[numSupportPlanes].Velocity = float3.zero;
+                }
+                numSupportPlanes++;
 
                 // Solve support planes
                 ExamineActivePlanes(up, supportPlanes, ref numSupportPlanes, ref velocity);
@@ -239,7 +257,7 @@ namespace Unity.Physics
         {
             float3 relVel = velocity - constraint.Velocity;
             float planeVel = math.dot(relVel, constraint.Plane.Normal);
-            return planeVel < -c_SimplexSolverEpsilon;
+            return planeVel < -k_Epsilon;
         }
 
         public static void Solve2d(float3 up, SurfaceConstraintInfo constraint0, SurfaceConstraintInfo constraint1, ref float3 velocity)
@@ -252,7 +270,7 @@ namespace Unity.Physics
             float axisLen2 = math.lengthsq(axis);
 
             // Check for parallel planes
-            if (axisLen2 < c_SimplexSolverEpsilon)
+            if (axisLen2 < k_Epsilon)
             {
                 // Do the planes sequentially
                 Sort2d(ref constraint0, ref constraint1);
@@ -314,7 +332,7 @@ namespace Unity.Physics
 
             float det = m.c0.x * m.c1.y * m.c2.z;
             float tst = math.abs(det);
-            if (tst < c_SimplexSolverEpsilon)
+            if (tst < k_Epsilon)
             {
                 Sort3d(ref constraint0, ref constraint1, ref constraint2);
                 Solve2d(up, constraint1, constraint2, ref velocity);

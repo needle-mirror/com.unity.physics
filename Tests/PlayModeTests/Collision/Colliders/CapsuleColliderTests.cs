@@ -1,10 +1,10 @@
-using System;
 using NUnit.Framework;
+using Unity.Burst;
+using Unity.Collections.LowLevel.Unsafe;
+using Unity.Jobs;
 using Unity.Mathematics;
-using UnityEngine;
 using Assert = UnityEngine.Assertions.Assert;
 using TestUtils = Unity.Physics.Tests.Utils.TestUtils;
-using Unity.Collections.LowLevel.Unsafe;
 
 namespace Unity.Physics.Tests.Collision.Colliders
 {
@@ -15,22 +15,38 @@ namespace Unity.Physics.Tests.Collision.Colliders
     {
         #region Construction
 
+        [BurstCompile(CompileSynchronously = true)]
+        struct CreateFromBurstJob : IJob
+        {
+            public void Execute() =>
+                CapsuleCollider.Create(new CapsuleGeometry { Vertex0 = math.up(), Vertex1 = -math.up(), Radius = 0.5f }).Release();
+        }
+
+        [Test]
+        public void Capsule_Create_WhenCalledFromBurstJob_DoesNotThrow() => new CreateFromBurstJob().Run();
+
         /// <summary>
         /// Test if all attributes are set as expected when creating a new <see cref="CapsuleCollider"/>.
         /// </summary>
         [Test]
         unsafe public void TestCapsuleColliderCreate()
         {
-            float3 v0 = new float3(1.45f, 0.34f, -8.65f);
-            float3 v1 = new float3(100.45f, -80.34f, -8.65f);
-            float radius = 1.45f;
-            var collider = CapsuleCollider.Create(v0, v1, radius);
+            var geometry = new CapsuleGeometry
+            {
+                Vertex0 = new float3(1.45f, 0.34f, -8.65f),
+                Vertex1 = new float3(100.45f, -80.34f, -8.65f),
+                Radius = 1.45f
+            };
+            var collider = CapsuleCollider.Create(geometry);
             var capsuleCollider = UnsafeUtilityEx.AsRef<CapsuleCollider>(collider.GetUnsafePtr());
             Assert.AreEqual(ColliderType.Capsule, capsuleCollider.Type);
             Assert.AreEqual(CollisionType.Convex, capsuleCollider.CollisionType);
-            TestUtils.AreEqual(v0, capsuleCollider.Vertex0);
-            TestUtils.AreEqual(v1, capsuleCollider.Vertex1);
-            TestUtils.AreEqual(radius, capsuleCollider.Radius);
+            TestUtils.AreEqual(geometry.Vertex0, capsuleCollider.Vertex0);
+            TestUtils.AreEqual(geometry.Vertex0, capsuleCollider.Geometry.Vertex0);
+            TestUtils.AreEqual(geometry.Vertex1, capsuleCollider.Vertex1);
+            TestUtils.AreEqual(geometry.Vertex1, capsuleCollider.Geometry.Vertex1);
+            TestUtils.AreEqual(geometry.Radius, capsuleCollider.Radius);
+            TestUtils.AreEqual(geometry.Radius, capsuleCollider.Geometry.Radius);
         }
 
         /// <summary>
@@ -39,68 +55,81 @@ namespace Unity.Physics.Tests.Collision.Colliders
         [Test]
         public void TestCapsuleColliderCreateInvalid()
         {
-            float3 v0 = new float3(5.66f, -6.72f, 0.12f);
-            float3 v1 = new float3(0.98f, 8.88f, 9.54f);
-            float radius = 0.65f;
+            var geometry = new CapsuleGeometry
+            {
+                Vertex0 = new float3(5.66f, -6.72f, 0.12f),
+                Vertex1 = new float3(0.98f, 8.88f, 9.54f),
+                Radius = 0.65f
+            };
 
             // v0, +inf
             {
-                float3 invalidV0 = new float3(float.PositiveInfinity, 0.0f, 0.0f);
-                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(invalidV0, v1, radius));
+                var invalidGeometry = geometry;
+                invalidGeometry.Vertex0 = new float3(float.PositiveInfinity, 0.0f, 0.0f);
+                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(invalidGeometry));
             }
 
             // v0, -inf
             {
-                float3 invalidV0 = new float3(float.NegativeInfinity, 0.0f, 0.0f);
-                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(invalidV0, v1, radius));
+                var invalidGeometry = geometry;
+                invalidGeometry.Vertex0 = new float3(float.NegativeInfinity, 0.0f, 0.0f);
+                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(invalidGeometry));
             }
 
             // v0, nan
             {
-                float3 invalidV0 = new float3(float.NaN, 0.0f, 0.0f);
-                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(invalidV0, v1, radius));
+                var invalidGeometry = geometry;
+                invalidGeometry.Vertex0 = new float3(float.NaN, 0.0f, 0.0f);
+                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(invalidGeometry));
             }
 
             // v1, +inf
             {
-                float3 invalidV1 = new float3(float.PositiveInfinity, 0.0f, 0.0f);
-                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(v0, invalidV1, radius));
+                var invalidGeometry = geometry;
+                invalidGeometry.Vertex1 = new float3(float.PositiveInfinity, 0.0f, 0.0f);
+                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(invalidGeometry));
             }
 
             // v1, -inf
             {
-                float3 invalidV1 = new float3(float.NegativeInfinity, 0.0f, 0.0f);
-                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(v0, invalidV1, radius));
+                var invalidGeometry = geometry;
+                invalidGeometry.Vertex1 = new float3(float.NegativeInfinity, 0.0f, 0.0f);
+                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(invalidGeometry));
             }
 
             // v1, nan
             {
-                float3 invalidV1 = new float3(float.NaN, 0.0f, 0.0f);
-                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(v0, invalidV1, radius));
+                var invalidGeometry = geometry;
+                invalidGeometry.Vertex1 = new float3(float.NaN, 0.0f, 0.0f);
+                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(invalidGeometry));
             }
 
             // negative radius
             {
-                float invalidRadius = -0.54f;
-                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(v0, v1, invalidRadius));
+                var invalidGeometry = geometry;
+                invalidGeometry.Radius = -0.54f;
+                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(invalidGeometry));
             }
 
             // radius, +inf
             {
-                float invalidRadius = float.PositiveInfinity;
-                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(v0, v1, invalidRadius));
+                var invalidGeometry = geometry;
+                invalidGeometry.Radius = float.PositiveInfinity;
+                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(invalidGeometry));
             }
 
             // radius, -inf
             {
-                float invalidRadius = float.NegativeInfinity;
-                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(v0, v1, invalidRadius));
+                var invalidGeometry = geometry;
+                invalidGeometry.Radius = float.NegativeInfinity;
+                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(invalidGeometry));
             }
 
             // radius, nan
             {
-                float invalidRadius = float.NaN;
-                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(v0, v1, invalidRadius));
+                var invalidGeometry = geometry;
+                invalidGeometry.Radius = float.NaN;
+                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(invalidGeometry));
             }
         }
 
@@ -118,7 +147,12 @@ namespace Unity.Physics.Tests.Collision.Colliders
             float length = 5.5f;
             float3 p0 = new float3(1.1f, 2.2f, 3.4f);
             float3 p1 = p0 + length * math.normalize(new float3(1, 1, 1));
-            var capsuleCollider = CapsuleCollider.Create(p0, p1, radius);
+            var capsuleCollider = CapsuleCollider.Create(new CapsuleGeometry
+            {
+                Vertex0 = p0,
+                Vertex1 = p1,
+                Radius = radius
+            });
 
             Aabb expectedAabb = new Aabb();
             expectedAabb.Min = math.min(p0, p1) - new float3(radius);
@@ -139,7 +173,12 @@ namespace Unity.Physics.Tests.Collision.Colliders
             float length = 5.5f;
             float3 p0 = new float3(1.1f, 2.2f, 3.4f);
             float3 p1 = p0 + length * math.normalize(new float3(1, 1, 1));
-            var capsuleCollider = CapsuleCollider.Create(p0, p1, radius);
+            var capsuleCollider = CapsuleCollider.Create(new CapsuleGeometry
+            {
+                Vertex0 = p0,
+                Vertex1 = p1,
+                Radius = radius
+            });
 
             float3 translation = new float3(-3.4f, 0.5f, 0.0f);
             quaternion rotation = quaternion.AxisAngle(math.normalize(new float3(0.4f, 0.0f, 150.0f)), 123.0f);
@@ -181,7 +220,12 @@ namespace Unity.Physics.Tests.Collision.Colliders
             float itZ = itX;
             float3 expectedInertiaTensor = new float3(itX, itY, itZ);
 
-            var capsuleCollider = CapsuleCollider.Create(p0, p1, radius);
+            var capsuleCollider = CapsuleCollider.Create(new CapsuleGeometry
+            {
+                Vertex0 = p0,
+                Vertex1 = p1,
+                Radius = radius
+            });
             float3 inertiaTensor = capsuleCollider.Value.MassProperties.MassDistribution.InertiaTensor;
             TestUtils.AreEqual(expectedInertiaTensor, inertiaTensor, 1e-3f);
         }

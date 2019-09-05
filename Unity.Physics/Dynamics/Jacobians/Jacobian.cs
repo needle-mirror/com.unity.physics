@@ -112,16 +112,16 @@ namespace Unity.Physics
                         AccessBaseJacobian<TriggerJacobian>().Solve(ref this, ref velocityA, ref velocityB, stepInput, ref triggerEventsWriter);
                         break;
                     case JacobianType.LinearLimit:
-                        AccessBaseJacobian<LinearLimitJacobian>().Solve(ref velocityA, ref velocityB, stepInput.Timestep);
+                        AccessBaseJacobian<LinearLimitJacobian>().Solve(ref velocityA, ref velocityB, stepInput.Timestep, stepInput.InvTimestep);
                         break;
                     case JacobianType.AngularLimit1D:
-                        AccessBaseJacobian<AngularLimit1DJacobian>().Solve(ref velocityA, ref velocityB, stepInput.Timestep);
+                        AccessBaseJacobian<AngularLimit1DJacobian>().Solve(ref velocityA, ref velocityB, stepInput.Timestep, stepInput.InvTimestep);
                         break;
                     case JacobianType.AngularLimit2D:
-                        AccessBaseJacobian<AngularLimit2DJacobian>().Solve(ref velocityA, ref velocityB, stepInput.Timestep);
+                        AccessBaseJacobian<AngularLimit2DJacobian>().Solve(ref velocityA, ref velocityB, stepInput.Timestep, stepInput.InvTimestep);
                         break;
                     case JacobianType.AngularLimit3D:
-                        AccessBaseJacobian<AngularLimit3DJacobian>().Solve(ref velocityA, ref velocityB, stepInput.Timestep);
+                        AccessBaseJacobian<AngularLimit3DJacobian>().Solve(ref velocityA, ref velocityB, stepInput.Timestep, stepInput.InvTimestep);
                         break;
                     default:
                         throw new NotImplementedException();

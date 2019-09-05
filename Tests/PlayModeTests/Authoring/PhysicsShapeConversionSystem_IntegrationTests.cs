@@ -6,7 +6,9 @@ using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Physics.Authoring;
 using UnityEngine;
+#if !UNITY_EDITOR
 using UnityEngine.TestTools;
+#endif
 using PxBox = UnityEngine.BoxCollider;
 using PxCapsule = UnityEngine.CapsuleCollider;
 using PxSphere = UnityEngine.SphereCollider;
@@ -30,11 +32,11 @@ namespace Unity.Physics.Tests.Authoring
         public void PhysicsShapeConversionSystem_WhenBodyHasOneSiblingShape_CreatesPrimitive()
         {
             CreateHierarchy(
-                new[] { typeof(ConvertToEntity), typeof(PhysicsBody), typeof(PhysicsShape) },
+                new[] { typeof(ConvertToEntity), typeof(PhysicsBodyAuthoring), typeof(PhysicsShapeAuthoring) },
                 new[] { typeof(ConvertToEntity) },
                 new[] { typeof(ConvertToEntity) }
             );
-            Root.GetComponent<PhysicsShape>().SetBox(float3.zero, new float3(1, 1, 1), quaternion.identity);
+            Root.GetComponent<PhysicsShapeAuthoring>().SetBox(new BoxGeometry { Size = 1f, Orientation = quaternion.identity });
 
             TestConvertedData<PhysicsCollider>(c => Assert.That(c.Value.Value.Type, Is.EqualTo(ColliderType.Box)));
         }
@@ -43,11 +45,11 @@ namespace Unity.Physics.Tests.Authoring
         public void PhysicsShapeConversionSystem_WhenBodyHasOneDescendentShape_CreatesCompound()
         {
             CreateHierarchy(
-                new[] { typeof(ConvertToEntity), typeof(PhysicsBody) },
-                new[] { typeof(ConvertToEntity), typeof(PhysicsShape) },
+                new[] { typeof(ConvertToEntity), typeof(PhysicsBodyAuthoring) },
+                new[] { typeof(ConvertToEntity), typeof(PhysicsShapeAuthoring) },
                 new[] { typeof(ConvertToEntity) }
             );
-            Parent.GetComponent<PhysicsShape>().SetBox(float3.zero, new float3(1, 1, 1), quaternion.identity);
+            Parent.GetComponent<PhysicsShapeAuthoring>().SetBox(new BoxGeometry { Size = 1f, Orientation = quaternion.identity });
 
             TestConvertedData<PhysicsCollider>(
                 c =>
@@ -67,12 +69,12 @@ namespace Unity.Physics.Tests.Authoring
         public void PhysicsShapeConversionSystem_WhenBodyHasMultipleDescendentShapes_CreatesCompound()
         {
             CreateHierarchy(
-                new[] { typeof(ConvertToEntity), typeof(PhysicsBody) },
-                new[] { typeof(ConvertToEntity), typeof(PhysicsShape) },
-                new[] { typeof(ConvertToEntity), typeof(PhysicsShape) }
+                new[] { typeof(ConvertToEntity), typeof(PhysicsBodyAuthoring) },
+                new[] { typeof(ConvertToEntity), typeof(PhysicsShapeAuthoring) },
+                new[] { typeof(ConvertToEntity), typeof(PhysicsShapeAuthoring) }
             );
-            Parent.GetComponent<PhysicsShape>().SetBox(float3.zero, new float3(1, 1, 1), quaternion.identity);
-            Child.GetComponent<PhysicsShape>().SetSphere(float3.zero, 1.0f, quaternion.identity);
+            Parent.GetComponent<PhysicsShapeAuthoring>().SetBox(new BoxGeometry { Size = 1f, Orientation = quaternion.identity });
+            Child.GetComponent<PhysicsShapeAuthoring>().SetSphere(new SphereGeometry { Radius = 1f }, quaternion.identity);
 
             TestConvertedData<PhysicsCollider>(
                 c =>
@@ -91,21 +93,14 @@ namespace Unity.Physics.Tests.Authoring
             );
         }
 
-        [Ignore("GameObjectConversionUtility does not yet support multiples of the same component type.")]
-        [TestCase(2)]
-        [TestCase(5)]
-        [TestCase(10)]
-        public void PhysicsShapeConversionSystem_WhenBodyHasMultipleSiblingShapes_CreatesCompound(int shapeCount)
+        [Test]
+        public void PhysicsShapeConversionSystem_WhenBodyHasMultipleDifferentSiblingShapes_CreatesCompound_WithFlatHierarchy()
         {
             CreateHierarchy(
-                new[] { typeof(ConvertToEntity), typeof(PhysicsBody) },
+                new[] { typeof(ConvertToEntity), typeof(PhysicsBodyAuthoring), typeof(PxBox), typeof(PxCapsule), typeof(PxSphere) },
                 new[] { typeof(ConvertToEntity) },
                 new[] { typeof(ConvertToEntity) }
             );
-            for (int i = 0; i < shapeCount; ++i)
-            {
-                Root.AddComponent<PhysicsShape>().SetBox(float3.zero, new float3(1, 1, 1), quaternion.identity);
-            }
 
             TestConvertedData<PhysicsCollider>(
                 c =>
@@ -114,9 +109,11 @@ namespace Unity.Physics.Tests.Authoring
                     unsafe
                     {
                         var compoundCollider = (CompoundCollider*)c.Value.GetUnsafePtr();
-                        Assert.That(compoundCollider->Children, Has.Length.EqualTo(shapeCount));
-                        for (int i = 0; i < compoundCollider->Children.Length; i++)
-                            Assert.That(compoundCollider->Children[i].Collider->Type, Is.EqualTo(ColliderType.Box));
+
+                        var childTypes = Enumerable.Range(0, compoundCollider->NumChildren)
+                            .Select(i => compoundCollider->Children[i].Collider->Type)
+                            .ToArray();
+                        Assert.That(childTypes, Is.EquivalentTo(new[] { ColliderType.Box, ColliderType.Capsule, ColliderType.Sphere }));
                     }
                 }
             );
@@ -127,8 +124,8 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void PhysicsShapeConversionSystem_WhenShapeHasNonReadableConvex_ThrowsException()
         {
-            CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { typeof(PhysicsShape) });
-            Child.GetComponent<PhysicsShape>().SetConvexHull(NonReadableMesh);
+            CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { typeof(PhysicsShapeAuthoring) });
+            Child.GetComponent<PhysicsShapeAuthoring>().SetConvexHull(default, NonReadableMesh);
 
             VerifyLogsException<InvalidOperationException>(k_NonReadableMeshPattern);
         }
@@ -136,21 +133,21 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void PhysicsShapeConversionSystem_WhenShapeHasNonReadableMesh_ThrowsException()
         {
-            CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { typeof(PhysicsShape) });
-            Child.GetComponent<PhysicsShape>().SetMesh(NonReadableMesh);
+            CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { typeof(PhysicsShapeAuthoring) });
+            Child.GetComponent<PhysicsShapeAuthoring>().SetMesh(NonReadableMesh);
 
             VerifyLogsException<InvalidOperationException>(k_NonReadableMeshPattern);
         }
 
         [Test]
+        [Ignore("Behavior is inconsistent on some platforms.")]
         public void LegacyMeshColliderConversionSystem_WhenMeshColliderHasNonReadableMesh_ThrowsException(
             [Values]bool convex
         )
         {
             CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { typeof(PxMesh) });
 #if !UNITY_EDITOR
-            // legacy components log error messages in the player for non-readable meshes
-            // once for each property access
+            // legacy components log error messages in the player for non-readable meshes once for each property access
             LogAssert.Expect(LogType.Error, k_NonReadableMeshPattern);
             LogAssert.Expect(LogType.Error, k_NonReadableMeshPattern);
 #endif
@@ -162,7 +159,7 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public void ConversionSystems_WhenGOHasShape_GOIsActive_AuthoringComponentEnabled_AuthoringDataConverted(
-            [Values(typeof(PhysicsShape), typeof(PxBox), typeof(PxCapsule), typeof(PxSphere), typeof(PxMesh))]
+            [Values(typeof(PhysicsShapeAuthoring), typeof(PxBox), typeof(PxCapsule), typeof(PxSphere), typeof(PxMesh))]
             Type shapeType
         )
         {
@@ -176,7 +173,7 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public void ConversionSystems_WhenGOHasShape_AuthoringComponentDisabled_AuthoringDataNotConverted(
-            [Values(typeof(PhysicsShape), typeof(PxBox), typeof(PxCapsule), typeof(PxSphere), typeof(PxMesh))]
+            [Values(typeof(PhysicsShapeAuthoring), typeof(PxBox), typeof(PxCapsule), typeof(PxSphere), typeof(PxMesh))]
             Type shapeType
         )
         {
@@ -186,7 +183,7 @@ namespace Unity.Physics.Tests.Authoring
             var c = Child.GetComponent(shapeType);
             if (c is UnityEngine.Collider collider)
                 collider.enabled = false;
-            else (c as PhysicsShape).enabled = false;
+            else (c as PhysicsShapeAuthoring).enabled = false;
 
             // conversion presumed to create valid PhysicsCollider under default conditions
             // covered by corresponding test ConversionSystems_WhenGOHasShape_GOIsActive_AuthoringComponentEnabled_AuthoringDataConverted
@@ -196,7 +193,7 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasShape_GOIsInactive_BodyIsNotConverted(
             [Values]Node inactiveNode,
-            [Values(typeof(PhysicsShape), typeof(PxBox), typeof(PxCapsule), typeof(PxSphere), typeof(PxMesh))]
+            [Values(typeof(PhysicsShapeAuthoring), typeof(PxBox), typeof(PxCapsule), typeof(PxSphere), typeof(PxMesh))]
             Type shapeType
         )
         {

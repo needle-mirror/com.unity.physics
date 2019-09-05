@@ -19,8 +19,10 @@ namespace Unity.Physics.Authoring
     [AddComponentMenu("DOTS/Physics/Physics Debug Display")]
     [DisallowMultipleComponent]
     [RequiresEntityConversion]
-    public class PhysicsDebugDisplay : MonoBehaviour, IConvertGameObjectToEntity
+    public sealed class PhysicsDebugDisplayAuthoring : MonoBehaviour, IConvertGameObjectToEntity
     {
+        PhysicsDebugDisplayAuthoring() { }
+
         public bool DrawColliders = false;
         public bool DrawColliderEdges = false;
         public bool DrawColliderAabbs = false;

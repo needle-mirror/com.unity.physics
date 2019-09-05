@@ -1,4 +1,6 @@
-﻿using Unity.Collections;
+﻿using System;
+using System.ComponentModel;
+using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
 using Unity.Entities;
@@ -27,36 +29,48 @@ namespace Unity.Physics
 
         #region Construction
 
-        unsafe public static BlobAssetReference<Collider> CreateTriangle(float3 vertex0, float3 vertex1, float3 vertex2, CollisionFilter? filter = null, Material? material = null)
+        public static BlobAssetReference<Collider> CreateTriangle(float3 vertex0, float3 vertex1, float3 vertex2) =>
+            CreateTriangle(vertex0, vertex1, vertex2, CollisionFilter.Default, Material.Default);
+
+        public static BlobAssetReference<Collider> CreateTriangle(float3 vertex0, float3 vertex1, float3 vertex2,
+            CollisionFilter filter) => CreateTriangle(vertex0, vertex1, vertex2, filter, Material.Default);
+
+        public static unsafe BlobAssetReference<Collider> CreateTriangle(float3 vertex0, float3 vertex1, float3 vertex2, CollisionFilter filter, Material material)
         {
             if (math.any(!math.isfinite(vertex0)) || math.any(!math.isfinite(vertex1)) || math.any(!math.isfinite(vertex2)))
             {
-                throw new System.ArgumentException("Tried to create triangle collider with nan/inf vertex");
+                throw new ArgumentException("Tried to create triangle collider with nan/inf vertex");
             }
 
             var collider = new PolygonCollider();
-            collider.InitAsTriangle(vertex0, vertex1, vertex2, filter ?? CollisionFilter.Default, material ?? Material.Default);
+            collider.InitAsTriangle(vertex0, vertex1, vertex2, filter, material);
             
             return BlobAssetReference<Collider>.Create(&collider, UnsafeUtility.SizeOf<PolygonCollider>());
         }
 
-        // Ray casting assumes vertices are presented in clockwise order
-        unsafe public static BlobAssetReference<Collider> CreateQuad(float3 vertex0, float3 vertex1, float3 vertex2, float3 vertex3, CollisionFilter? filter = null, Material? material = null)
+        // quad vertices must be coplanar and wound consistently
+        public static BlobAssetReference<Collider> CreateQuad(float3 vertex0, float3 vertex1, float3 vertex2, float3 vertex3) =>
+            CreateQuad(vertex0, vertex1, vertex2, vertex3, CollisionFilter.Default, Material.Default);
+
+        public static BlobAssetReference<Collider> CreateQuad(float3 vertex0, float3 vertex1, float3 vertex2, float3 vertex3, CollisionFilter filter) =>
+            CreateQuad(vertex0, vertex1, vertex2, vertex3, filter, Material.Default);
+
+        public static unsafe BlobAssetReference<Collider> CreateQuad(float3 vertex0, float3 vertex1, float3 vertex2, float3 vertex3, CollisionFilter filter, Material material)
         {
             if (math.any(!math.isfinite(vertex0)) || math.any(!math.isfinite(vertex1)) || math.any(!math.isfinite(vertex2)) || math.any(!math.isfinite(vertex3)))
             {
-                throw new System.ArgumentException("Tried to create triangle collider with nan/inf vertex");
+                throw new ArgumentException("Tried to create triangle collider with nan/inf vertex");
             }
 
             // check if vertices are co-planar
             float3 normal = math.normalize(math.cross(vertex1 - vertex0, vertex2 - vertex0));
             if (math.abs(math.dot(normal, vertex3 - vertex0)) > 1e-3f)
             {
-                throw new System.ArgumentException("Vertices for quad creation are not co-planar");
+                throw new ArgumentException("Vertices for quad creation are not co-planar");
             }
 
-            PolygonCollider collider = default(PolygonCollider);
-            collider.InitAsQuad(vertex0, vertex1, vertex2, vertex3, filter ?? CollisionFilter.Default, material ?? Material.Default);
+            PolygonCollider collider = default;
+            collider.InitAsQuad(vertex0, vertex1, vertex2, vertex3, filter, material);
             return BlobAssetReference<Collider>.Create(&collider, UnsafeUtility.SizeOf<PolygonCollider>());
         }
 
@@ -133,7 +147,7 @@ namespace Unity.Physics
             SetPlanes();
         }
 
-        private unsafe void Init(CollisionFilter filter, Material material)
+        unsafe void Init(CollisionFilter filter, Material material)
         {
             m_Header.CollisionType = CollisionType.Convex;
             m_Header.Version = 0;
@@ -187,8 +201,8 @@ namespace Unity.Physics
         public CollisionType CollisionType => m_Header.CollisionType;
         public int MemorySize => UnsafeUtility.SizeOf<PolygonCollider>();
 
-        public CollisionFilter Filter { get => m_Header.Filter; set { m_Header.Filter = value; } }
-        public Material Material { get => m_Header.Material; set { m_Header.Material = value; } }
+        public CollisionFilter Filter { get => m_Header.Filter; set { if (!m_Header.Filter.Equals(value)) { m_Header.Version += 1; m_Header.Filter = value; } } }
+        public Material Material { get => m_Header.Material; set { if (!m_Header.Material.Equals(value)) { m_Header.Version += 1; m_Header.Material = value; } } }
 
         public MassProperties MassProperties
         {
@@ -288,6 +302,24 @@ namespace Unity.Physics
                 return DistanceQueries.ColliderCollider(input, (Collider*)target, ref collector);
             }
         }
+
+        #endregion
+
+        #region Obsolete
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("This signature has been deprecated. Please use a signature that does not pass nullable arguments instead. (RemovedAfter 2019-11-27)")]
+        public static unsafe BlobAssetReference<Collider> CreateTriangle(
+            float3 vertex0, float3 vertex1, float3 vertex2, CollisionFilter? filter = null, Material? material = null
+        ) =>
+            CreateTriangle(vertex0, vertex1, vertex2, filter ?? CollisionFilter.Default, material ?? Material.Default);
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("This signature has been deprecated. Please use a signature that does not pass nullable arguments instead. (RemovedAfter 2019-11-27)")]
+        public static unsafe BlobAssetReference<Collider> CreateQuad(
+            float3 vertex0, float3 vertex1, float3 vertex2, float3 vertex3, CollisionFilter? filter = null, Material? material = null
+        ) =>
+            CreateQuad(vertex0, vertex1, vertex2, vertex3, filter ?? CollisionFilter.Default, material ?? Material.Default);
 
         #endregion
     }

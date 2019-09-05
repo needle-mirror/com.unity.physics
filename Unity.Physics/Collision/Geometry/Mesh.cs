@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
 
@@ -292,23 +293,24 @@ namespace Unity.Physics
         #region Construction helpers
 
         // Calculate the number of bytes needed to store the given mesh data, excluding the header (sizeof(Mesh))
-        internal static int CalculateMeshDataSize(int nodeCount, List<MeshBuilder.TempSection> tempSections)
+        internal static int CalculateMeshDataSize(int nodeCount, NativeList<MeshBuilder.TempSectionRanges> tempSections)
         {
             int totalSize = 0;
 
-            foreach (MeshBuilder.TempSection section in tempSections)
+            for(var i = 0; i < tempSections.Length; ++i)
             {
-                int numPrimitives = section.Primitives.Count;
+                var section = tempSections[i];
+                int numPrimitives = section.PrimitivesLength;
                 totalSize += Math.NextMultipleOf(numPrimitives * UnsafeUtility.SizeOf<PrimitiveFlags>(), 4);
                 totalSize += Math.NextMultipleOf(numPrimitives * UnsafeUtility.SizeOf<PrimitiveVertexIndices>(), 4);
-                totalSize += Math.NextMultipleOf(section.Vertices.Count * UnsafeUtility.SizeOf<float3>(), 4);
+                totalSize += Math.NextMultipleOf(section.VerticesLength * UnsafeUtility.SizeOf<float3>(), 4);
                 totalSize += Math.NextMultipleOf(numPrimitives * sizeof(short), 4);
                 totalSize += Math.NextMultipleOf(1 * UnsafeUtility.SizeOf<CollisionFilter>(), 4);
                 totalSize += Math.NextMultipleOf(numPrimitives * sizeof(short), 4);
                 totalSize += Math.NextMultipleOf(1 * UnsafeUtility.SizeOf<Material>(), 4);
             }
 
-            int sectionBlobArraySize = Math.NextMultipleOf(tempSections.Count * UnsafeUtility.SizeOf<Section>(), 16);
+            int sectionBlobArraySize = Math.NextMultipleOf(tempSections.Length * UnsafeUtility.SizeOf<Section>(), 16);
 
             int treeSize = nodeCount * UnsafeUtility.SizeOf<BoundingVolumeHierarchy.Node>();
 
@@ -316,7 +318,7 @@ namespace Unity.Physics
         }
 
         // Initialize the data. Assumes the appropriate memory has already been allocated.
-        internal unsafe void Init(BoundingVolumeHierarchy.Node* nodes, int nodeCount, List<MeshBuilder.TempSection> tempSections, CollisionFilter filter, Material material)
+        internal unsafe void Init(BoundingVolumeHierarchy.Node* nodes, int nodeCount, MeshBuilder.TempSection tempSections, CollisionFilter filter, Material material)
         {
             byte* end = (byte*)UnsafeUtility.AddressOf(ref this) + sizeof(Mesh);
             end = (byte*)Math.NextMultipleOf16((ulong)end);   
@@ -330,41 +332,41 @@ namespace Unity.Physics
             Section* section = (Section*)end;
 
             m_SectionsBlob.Offset = UnsafeEx.CalculateOffset(end, ref m_SectionsBlob);
-            m_SectionsBlob.Length = tempSections.Count;
+            m_SectionsBlob.Length = tempSections.Ranges.Length;
 
-            end += Math.NextMultipleOf(sizeof(Section) * tempSections.Count, 16);
+            end += Math.NextMultipleOf(sizeof(Section) * tempSections.Ranges.Length, 16);
 
-            for (int sectionIndex = 0; sectionIndex < tempSections.Count; sectionIndex++)
+            for (int sectionIndex = 0; sectionIndex < tempSections.Ranges.Length; sectionIndex++)
             {
-                MeshBuilder.TempSection tempSection = tempSections[sectionIndex];
+                var range = tempSections.Ranges[sectionIndex];
 
                 section->PrimitiveFlagsBlob.Offset = UnsafeEx.CalculateOffset(end, ref section->PrimitiveFlagsBlob);
-                section->PrimitiveFlagsBlob.Length = tempSection.PrimitivesFlags.Count;
+                section->PrimitiveFlagsBlob.Length = range.PrimitivesFlagsLength;
                 end += Math.NextMultipleOf(section->PrimitiveFlagsBlob.Length * sizeof(PrimitiveFlags), 4);
 
                 section->PrimitiveVertexIndicesBlob.Offset = UnsafeEx.CalculateOffset(end, ref section->PrimitiveVertexIndicesBlob);
-                section->PrimitiveVertexIndicesBlob.Length = tempSection.Primitives.Count;
+                section->PrimitiveVertexIndicesBlob.Length = range.PrimitivesLength;
                 end += Math.NextMultipleOf(section->PrimitiveVertexIndicesBlob.Length * sizeof(PrimitiveVertexIndices), 4);
 
                 section->VerticesBlob.Offset = UnsafeEx.CalculateOffset(end, ref section->VerticesBlob);
-                section->VerticesBlob.Length = tempSection.Vertices.Count;
+                section->VerticesBlob.Length = range.VerticesLength;
                 end += Math.NextMultipleOf(section->VerticesBlob.Length * sizeof(float3), 4);
 
-                for (int i = 0; i < tempSection.PrimitivesFlags.Count; i++)
+                for (int i = 0; i < range.PrimitivesFlagsLength; i++)
                 {
-                    Sections[sectionIndex].PrimitiveFlags[i] = tempSection.PrimitivesFlags[i];
-                    Sections[sectionIndex].PrimitiveVertexIndices[i] = tempSection.Primitives[i];
+                    Sections[sectionIndex].PrimitiveFlags[i] = tempSections.PrimitivesFlags[range.PrimitivesFlagsMin + i];
+                    Sections[sectionIndex].PrimitiveVertexIndices[i] = tempSections.Primitives[range.PrimitivesMin + i];
                 }
 
-                for (int i = 0; i < tempSection.Vertices.Count; i++)
+                for (int i = 0; i < range.VerticesLength; i++)
                 {
-                    Sections[sectionIndex].Vertices[i] = tempSection.Vertices[i];
+                    Sections[sectionIndex].Vertices[i] = tempSections.Vertices[range.VerticesMin + i];
                 }
 
                 // Filters
 
                 section->PrimitiveFilterIndicesBlob.Offset = UnsafeEx.CalculateOffset(end, ref section->PrimitiveFilterIndicesBlob);
-                section->PrimitiveFilterIndicesBlob.Length = tempSection.Primitives.Count;
+                section->PrimitiveFilterIndicesBlob.Length = range.PrimitivesLength;
                 end += Math.NextMultipleOf(section->PrimitiveFilterIndicesBlob.Length * sizeof(short), 4);
 
                 section->FiltersBlob.Offset = UnsafeEx.CalculateOffset(end, ref section->FiltersBlob);
@@ -372,7 +374,7 @@ namespace Unity.Physics
                 end += Math.NextMultipleOf(section->FiltersBlob.Length * sizeof(CollisionFilter), 4);
 
                 Sections[sectionIndex].Filters[0] = filter;
-                for (int i = 0; i < tempSection.Primitives.Count; i++)
+                for (int i = 0; i < range.PrimitivesLength; i++)
                 {
                     Sections[sectionIndex].PrimitiveFilterIndices[i] = 0;
                 }
@@ -380,7 +382,7 @@ namespace Unity.Physics
                 // Materials
 
                 section->PrimitiveMaterialIndicesBlob.Offset = UnsafeEx.CalculateOffset(end, ref section->PrimitiveMaterialIndicesBlob);
-                section->PrimitiveMaterialIndicesBlob.Length = tempSection.Primitives.Count;
+                section->PrimitiveMaterialIndicesBlob.Length = range.PrimitivesLength;
                 end += Math.NextMultipleOf(section->PrimitiveMaterialIndicesBlob.Length * sizeof(short), 4);
 
                 section->MaterialsBlob.Offset = UnsafeEx.CalculateOffset(end, ref section->MaterialsBlob);
@@ -388,7 +390,7 @@ namespace Unity.Physics
                 end += Math.NextMultipleOf(section->FiltersBlob.Length * sizeof(Material), 4);
 
                 Sections[sectionIndex].Materials[0] = material;
-                for (int i = 0; i < tempSection.Primitives.Count; i++)
+                for (int i = 0; i < range.PrimitivesLength; i++)
                 {
                     Sections[sectionIndex].PrimitiveMaterialIndices[i] = 0;
                 }

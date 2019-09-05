@@ -1,3 +1,5 @@
+using System;
+using System.ComponentModel;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -5,6 +7,66 @@ using Unity.Mathematics;
 
 namespace Unity.Physics
 {
+    public struct CylinderGeometry
+    {
+        public const int MinSideCount = 3;
+        public const int MaxSideCount = 32;
+
+        // The center of the cylinder
+        public float3 Center { get => m_Center; set => m_Center = value; }
+        float3 m_Center;
+
+        // The orientation of the cylinder
+        public quaternion Orientation { get => m_Orientation; set => m_Orientation = value; }
+        private quaternion m_Orientation;
+
+        // The height of the cylinder, centered along the local Y axis
+        public float Height { get => m_Height; set => m_Height = value; }
+        private float m_Height;
+
+        // The radius of the cylinder
+        public float Radius { get => m_Radius; set => m_Radius = value; }
+        private float m_Radius;
+
+        // The radius by which to round off the edges of the cylinder.
+        // This helps to optimize collision detection performance, by reducing the likelihood
+        // of the inner hull being penetrated and incurring expensive collision algorithms.
+        public float BevelRadius { get => m_BevelRadius; set => m_BevelRadius = value; }
+        private float m_BevelRadius;
+
+        // The number of faces used to represent the rounded part of the cylinder
+        public int SideCount { get => m_SideCount; set => m_SideCount = value; }
+        private int m_SideCount;
+
+        internal void Validate()
+        {
+            if (m_Height < 0 || !math.isfinite(m_Height))
+            {
+                throw new ArgumentOutOfRangeException("Invalid cylinder height");
+            }
+            if (m_Radius < 0 || !math.isfinite(m_Radius))
+            {
+                throw new ArgumentOutOfRangeException("Invalid cylinder radius");
+            }
+            if (m_BevelRadius < 0 || !math.isfinite(m_BevelRadius))
+            {
+                throw new ArgumentOutOfRangeException("Invalid cylinder bevel radius");
+            }
+            if (m_BevelRadius > m_Radius || m_BevelRadius * 2 > m_Height)
+            {
+                throw new ArgumentOutOfRangeException("Cylinder bevel radius cannot be larger than the cylinder");
+            }
+            if (m_SideCount < MinSideCount)
+            {
+                throw new ArgumentOutOfRangeException("Cylinder must have at least " + MinSideCount + " sides");
+            }
+            if (m_SideCount > MaxSideCount)
+            {
+                throw new ArgumentOutOfRangeException("Cylinder cannot have more than " + MaxSideCount + " sides");
+            }
+        }
+    }
+
     // A collider in the shape of a cylinder
     public struct CylinderCollider : IConvexCollider
     {
@@ -14,11 +76,10 @@ namespace Unity.Physics
 
         // Convex hull data, sized for the maximum allowed number of cylinder faces
         // Todo: would be nice to use the actual types here but C# only likes fixed arrays of builtin types..
-        private const int k_MaxSideCount = 32;
-        private unsafe fixed byte m_Vertices[sizeof(float) * 3 * 2 * k_MaxSideCount];
-        private unsafe fixed byte m_FacePlanes[sizeof(float) * 4 * (2 + k_MaxSideCount)];
-        private unsafe fixed byte m_Faces[4 * (2 + k_MaxSideCount)];
-        private unsafe fixed byte m_FaceVertexIndices[sizeof(byte) * 6 * k_MaxSideCount];
+        private unsafe fixed byte m_Vertices[sizeof(float) * 3 * 2 * CylinderGeometry.MaxSideCount];
+        private unsafe fixed byte m_FacePlanes[sizeof(float) * 4 * (2 + CylinderGeometry.MaxSideCount)];
+        private unsafe fixed byte m_Faces[4 * (2 + CylinderGeometry.MaxSideCount)];
+        private unsafe fixed byte m_FaceVertexIndices[sizeof(byte) * 6 * CylinderGeometry.MaxSideCount];
 
         // Cylinder parameters
         private float3 m_Center;
@@ -27,42 +88,49 @@ namespace Unity.Physics
         private float m_Radius;
         private int m_SideCount;
 
-        public float3 Center { get => m_Center; set { m_Center = value; Update(); } }
-        public quaternion Orientation { get => m_Orientation; set { m_Orientation = value; Update(); } }
-        public float Height { get => m_Height; set { m_Height = value; Update(); } }
-        public float Radius { get => m_Radius; set { m_Radius = value; Update(); } }
-        public int SideCount { get => m_SideCount; set { m_SideCount = math.clamp(value, 2, k_MaxSideCount); Update(); } }
-        public float ConvexRadius { get => ConvexHull.ConvexRadius; set { ConvexHull.ConvexRadius = value; Update(); } }
+        public float3 Center => m_Center;
+        public quaternion Orientation => m_Orientation;
+        public float Height => m_Height;
+        public float Radius => m_Radius;
+        public float BevelRadius => ConvexHull.ConvexRadius;
+        public int SideCount => m_SideCount;
+
+        public CylinderGeometry Geometry
+        {
+            get => new CylinderGeometry
+            {
+                Center = m_Center,
+                Orientation = m_Orientation,
+                Height = m_Height,
+                Radius = m_Radius,
+                BevelRadius = ConvexHull.ConvexRadius,
+                SideCount = m_SideCount
+            };
+            set
+            {
+                if (!value.Equals(Geometry))
+                {
+                    SetGeometry(value);
+                }
+            }
+        }
 
         #region Construction
 
-        unsafe public static BlobAssetReference<Collider> Create(
-            float3 center, float height, float radius, quaternion orientation, float convexRadius,
-            CollisionFilter? filter = null, Material? material = null)
-        {
-            if (height < 0 || !math.isfinite(height))
-            {
-                throw new System.ArgumentOutOfRangeException("Tried to create CylinderCollider with a negative, zero, inf or nan height");
-            }
-            if (radius < 0 || !math.isfinite(radius))
-            {
-                throw new System.ArgumentOutOfRangeException("Tried to create CylinderCollider with a negative, zero, inf or nan radius");
-            }
-            if (convexRadius < 0 || !math.isfinite(convexRadius))
-            {
-                throw new System.ArgumentOutOfRangeException("Tried to create CylinderCollider with negative, zero, inf or nan convex radius");
-            }
-            if (convexRadius > radius || convexRadius + convexRadius > height)
-            {
-                throw new System.ArgumentOutOfRangeException("Tried to create CylinderCollider with convex radius larger than shape dimensions");
-            }
+        public static BlobAssetReference<Collider> Create(CylinderGeometry geometry) =>
+            Create(geometry, CollisionFilter.Default, Material.Default);
 
+        public static BlobAssetReference<Collider> Create(CylinderGeometry geometry, CollisionFilter filter) =>
+            Create(geometry, filter, Material.Default);
+
+        public static unsafe BlobAssetReference<Collider> Create(CylinderGeometry geometry, CollisionFilter filter, Material material)
+        {
             var collider = default(CylinderCollider);
-            collider.Init(center, height, radius, orientation, convexRadius, filter ?? CollisionFilter.Default, material ?? Material.Default);
+            collider.Init(geometry, filter, material);
             return BlobAssetReference<Collider>.Create(&collider, sizeof(CylinderCollider));
         }
 
-        private unsafe void Init(float3 center, float height, float radius, quaternion orientation, float convexRadius, CollisionFilter filter, Material material)
+        private unsafe void Init(CylinderGeometry geometry, CollisionFilter filter, Material material)
         {
             m_Header.Type = ColliderType.Cylinder;
             m_Header.CollisionType = CollisionType.Convex;
@@ -72,7 +140,7 @@ namespace Unity.Physics
             m_Header.Material = material;
             MemorySize = UnsafeUtility.SizeOf<CylinderCollider>();
 
-            // Build immutable convex data
+            // Initialize immutable convex data
             fixed (CylinderCollider* collider = &this)
             {
                 ConvexHull.VerticesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_Vertices[0], ref ConvexHull.VerticesBlob);
@@ -94,32 +162,33 @@ namespace Unity.Physics
                 ConvexHull.FaceLinksBlob.Length = 0;
             }
 
-            // Build mutable convex data
-            m_Center = center;
-            m_Orientation = orientation;
-            m_Height = height;
-            m_Radius = radius;
-            m_SideCount = 20;
-            ConvexHull.ConvexRadius = convexRadius;
-            Update();
+            // Set mutable data
+            SetGeometry(geometry);
         }
 
-        // Update the vertices and faces to match the current cylinder properties
-        private unsafe void Update()
+        private unsafe void SetGeometry(CylinderGeometry geometry)
         {
-            m_Header.Version++;
+            geometry.Validate();
 
+            m_Header.Version += 1;
+            m_Center = geometry.Center;
+            m_Orientation = geometry.Orientation;
+            m_Height = geometry.Height;
+            m_Radius = geometry.Radius;
+            m_SideCount = geometry.SideCount;
+
+            ConvexHull.ConvexRadius = geometry.BevelRadius;
             ConvexHull.VerticesBlob.Length = m_SideCount * 2;
             ConvexHull.FacePlanesBlob.Length = m_SideCount + 2;
             ConvexHull.FacesBlob.Length = m_SideCount + 2;
             ConvexHull.FaceVertexIndicesBlob.Length = m_SideCount * 6;
 
             var transform = new RigidTransform(m_Orientation, m_Center);
-            var radius = math.max(m_Radius - ConvexRadius, 0);
-            var halfHeight = math.max(m_Height * 0.5f - ConvexRadius, 0);
-            if (m_SideCount > k_MaxSideCount)
-                throw new System.ArgumentOutOfRangeException();
-            
+            var radius = math.max(m_Radius - ConvexHull.ConvexRadius, 0);
+            var halfHeight = math.max(m_Height * 0.5f - ConvexHull.ConvexRadius, 0);
+            if (m_SideCount > CylinderGeometry.MaxSideCount)
+                throw new ArgumentOutOfRangeException();
+
             fixed (CylinderCollider* collider = &this)
             {
                 // vertices
@@ -204,8 +273,8 @@ namespace Unity.Physics
         public CollisionType CollisionType => m_Header.CollisionType;
         public int MemorySize { get; private set; }
 
-        public CollisionFilter Filter { get => m_Header.Filter; set => m_Header.Filter = value; }
-        public Material Material { get => m_Header.Material; set => m_Header.Material = value; }
+        public CollisionFilter Filter { get => m_Header.Filter; set { if (!m_Header.Filter.Equals(value)) { m_Header.Version += 1; m_Header.Filter = value; } } }
+        public Material Material { get => m_Header.Material; set { if (!m_Header.Material.Equals(value)) { m_Header.Version += 1; m_Header.Material = value; } } }
         public MassProperties MassProperties { get; private set; }
 
         public Aabb CalculateAabb()
@@ -274,6 +343,50 @@ namespace Unity.Physics
                 return DistanceQueries.ColliderCollider(input, (Collider*)target, ref collector);
             }
         }
+
+        #endregion
+
+        #region Obsolete
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("ConvexRadius has been renamed BevelRadius. (RemovedAfter 2019-11-28) (UnityUpgradable) -> BevelRadius", true)]
+        public float ConvexRadius
+        {
+            get => BevelRadius;
+            set
+            {
+                var geometry = Geometry;
+                geometry.BevelRadius = value;
+                Geometry = geometry;
+            }
+        }
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("This signature has been deprecated. Please use a signature that does not pass nullable arguments instead. (RemovedAfter 2019-11-15)")]
+        public static BlobAssetReference<Collider> Create(float3 center, float height, float radius, quaternion orientation, float convexRadius) =>
+            Create(new CylinderGeometry
+            {
+                Center = center,
+                Height = height,
+                Radius = radius,
+                Orientation = orientation,
+                BevelRadius = convexRadius,
+                SideCount = 20
+            },
+            CollisionFilter.Default, Material.Default);
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("This signature has been deprecated. Please use a signature that does not pass nullable arguments instead. (RemovedAfter 2019-11-15)")]
+        public static BlobAssetReference<Collider> Create(float3 center, float height, float radius, quaternion orientation, float convexRadius, CollisionFilter? filter = null, Material? material = null) =>
+            Create(new CylinderGeometry
+            {
+                Center = center,
+                Height = height,
+                Radius = radius,
+                Orientation = orientation,
+                BevelRadius = convexRadius,
+                SideCount = 20
+            },
+            filter ?? CollisionFilter.Default, material ?? Material.Default);
 
         #endregion
     }

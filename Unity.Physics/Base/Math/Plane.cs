@@ -1,9 +1,11 @@
 ﻿using System.Runtime.CompilerServices;
+using System.Diagnostics;
 using Unity.Mathematics;
 
 namespace Unity.Physics
 {
     // A plane described by a normal and a distance from the origin
+    [DebuggerDisplay("{Normal}, {Distance}")]
     public struct Plane
     {
         private float4 m_NormalAndDistance;
@@ -18,6 +20,19 @@ namespace Unity.Physics
         {
             get => m_NormalAndDistance.w;
             set => m_NormalAndDistance.w = value;
+        }
+
+        // Returns the distance from the point to the plane, positive if the point is on the side of
+        // the plane on which the plane normal points, zero if the point is on the plane, negative otherwise.
+        public float SignedDistanceToPoint(float3 point)
+        {
+            return Math.Dotxyz1(m_NormalAndDistance, point);
+        }
+
+        // Returns the closest point on the plane to the input point.
+        public float3 Projection(float3 point)
+        {
+            return point - Normal * SignedDistanceToPoint(point);
         }
 
         public Plane Flipped => new Plane { m_NormalAndDistance = -m_NormalAndDistance };

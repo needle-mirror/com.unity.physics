@@ -29,9 +29,9 @@ namespace Unity.Physics.Editor
                 var targetType = c.GetType();
                 // only bodies (both explicit and implicit static bodies) will emit a message
                 if (
-                    targetType == typeof(PhysicsBody)
+                    targetType == typeof(PhysicsBodyAuthoring)
                     || targetType == typeof(Rigidbody)
-                    || c.GetComponent<PhysicsBody>() == null && c.GetComponent<Rigidbody>() == null
+                    || c.GetComponent<PhysicsBodyAuthoring>() == null && c.GetComponent<Rigidbody>() == null
                 )
                     ++numChildTargets;
             }

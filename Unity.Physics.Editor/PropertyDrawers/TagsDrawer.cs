@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System.Collections.Generic;
+using System.Linq;
 using Unity.Physics.Authoring;
 using UnityEditor;
 using UnityEngine;
@@ -9,14 +10,13 @@ namespace Unity.Physics.Editor
     {
         static class Styles
         {
-            public const float CreateAssetButtonWidth = 24;
+            public static readonly string EverythingName = L10n.Tr("Everything");
+            public static readonly string MixedName = L10n.Tr("Mixed...");
+            public static readonly string NothingName = L10n.Tr("Nothing");
 
-            public static readonly string CreateAssetButtonTooltip =
-                L10n.Tr("Click to create a {0} asset and define category names.");
             public static readonly string MultipleAssetsTooltip =
                 L10n.Tr("Multiple {0} assets found. UI will display labels defined in {1}.");
 
-            public static readonly GUIContent CreateAssetLabel = new GUIContent { text = "+" };
             public static readonly GUIContent MultipleAssetsWarning =
                 new GUIContent { image = EditorGUIUtility.Load("console.warnicon") as Texture };
         }
@@ -25,7 +25,7 @@ namespace Unity.Physics.Editor
         protected abstract string DefaultCategoryName { get; }
         internal string FirstChildPropertyPath { get; set; } // TODO: remove when all usages of bool[] are migrated
 
-        string DefaultFormatString => L10n.Tr($"(Undefined {DefaultCategoryName} {{0}})");
+        string DefaultFormatString => L10n.Tr($"(Undefined {DefaultCategoryName})");
 
         string[] DefaultOptions =>
             m_DefaultOptions ?? (
@@ -53,11 +53,34 @@ namespace Unity.Physics.Editor
             {
                 if (string.IsNullOrEmpty(m_Options[i]))
                     m_Options[i] = DefaultOptions[i];
+
+                m_Options[i] = $"{i}: {m_Options[i]}";
             }
 
             return m_Options;
         }
         string[] m_Options;
+
+        static string GetButtonLabel(int value, IReadOnlyList<string> optionNames)
+        {
+            switch (value)
+            {
+                case 0:
+                    return Styles.NothingName;
+                case ~0:
+                    return Styles.EverythingName;
+                default:
+                {
+                    for (var i = 0; i < 32; i++)
+                    {
+                        if (value == 1 << i)
+                            return optionNames[i];
+                    }
+                    break;
+                }
+            }
+            return Styles.MixedName;
+        }
 
         T[] m_NamesAssets;
 
@@ -73,9 +96,7 @@ namespace Unity.Physics.Editor
 
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
-            if (m_NamesAssets?.Length == 0)
-                position.xMax -= Styles.CreateAssetButtonWidth + EditorGUIUtility.standardVerticalSpacing;
-            else if (m_NamesAssets?.Length > 1)
+            if (m_NamesAssets?.Length > 1)
                 position.xMax -= EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing;
 
             EditorGUI.BeginProperty(position, label, property);
@@ -100,16 +121,87 @@ namespace Unity.Physics.Editor
             if (value == everything)
                 value = ~0;
 
-            EditorGUI.BeginChangeCheck();
-            value = EditorGUI.MaskField(controlPosition, GUIContent.none, value, GetOptions());
-            if (EditorGUI.EndChangeCheck())
+            var options = GetOptions();
+            if (
+                EditorGUI.DropdownButton(
+                    controlPosition,
+                    EditorGUIUtility.TrTempContent(GetButtonLabel(value, options)),
+                    FocusType.Passive,
+                    EditorStyles.popup
+                )
+            )
             {
-                sp = GetFirstChildProperty(property);
-                for (int i = 0, count = MaxNumCategories; i < count; ++i)
+                var menu = new GenericMenu();
+
+                menu.AddItem(
+                    new GUIContent(Styles.NothingName),
+                    value == 0,
+                    () =>
+                    {
+                        sp = GetFirstChildProperty(property);
+                        for (int i = 0, count = MaxNumCategories; i < count; ++i)
+                        {
+                            sp.boolValue = false;
+                            sp.NextVisible(false);
+                        }
+                        sp.serializedObject.ApplyModifiedProperties();
+                    }
+                );
+
+                menu.AddItem(
+                    new GUIContent(Styles.EverythingName),
+                    value == ~0,
+                    () =>
+                    {
+                        sp = GetFirstChildProperty(property);
+                        for (int i = 0, count = MaxNumCategories; i < count; ++i)
+                        {
+                            sp.boolValue = true;
+                            sp.NextVisible(false);
+                        }
+                        sp.serializedObject.ApplyModifiedProperties();
+                    }
+                );
+
+                for (var option = 0; option < options.Length; ++option)
                 {
-                    sp.boolValue = (value & (1 << i)) != 0;
-                    sp.NextVisible(false);
+                    var callbackValue = option;
+                    menu.AddItem(
+                        EditorGUIUtility.TrTextContent(options[option]),
+                        ((1 << option) & value) != 0,
+                        args =>
+                        {
+                            var changedBitAndValue = (KeyValuePair<int, bool>)args;
+                            sp = GetFirstChildProperty(property);
+                            for (int i = 0, count = changedBitAndValue.Key; i < count; ++i)
+                                sp.NextVisible(false);
+                            sp.boolValue = changedBitAndValue.Value;
+                            sp.serializedObject.ApplyModifiedProperties();
+                        },
+                        new KeyValuePair<int, bool>(callbackValue, ((1 << option) & value) == 0)
+                    );
                 }
+
+                menu.AddSeparator(string.Empty);
+
+                menu.AddItem(
+                    EditorGUIUtility.TrTempContent($"Edit {ObjectNames.NicifyVariableName(typeof(T).Name)}"),
+                    false,
+                    () =>
+                    {
+                        if (m_NamesAssets.Length > 0)
+                            Selection.activeObject = m_NamesAssets[0];
+                        else
+                        {
+                            var assetPath = AssetDatabase.GenerateUniqueAssetPath($"Assets/{typeof(T).Name}.asset");
+                            AssetDatabase.CreateAsset(ScriptableObject.CreateInstance<T>(), assetPath);
+                            Selection.activeObject = AssetDatabase.LoadAssetAtPath<T>(assetPath);
+                            m_Options = null;
+                        }
+
+                    }
+                );
+                menu.DropDown(controlPosition);
             }
 
             EditorGUI.showMixedValue = showMixed;
@@ -117,21 +209,7 @@ namespace Unity.Physics.Editor
 
             EditorGUI.EndProperty();
 
-            if (m_NamesAssets?.Length == 0)
-            {
-                position.width = Styles.CreateAssetButtonWidth;
-                position.x = controlPosition.xMax + EditorGUIUtility.standardVerticalSpacing;
-                Styles.CreateAssetLabel.tooltip =
-                    string.Format(Styles.CreateAssetButtonTooltip, ObjectNames.NicifyVariableName(typeof(T).Name));
-                if (GUI.Button(position, Styles.CreateAssetLabel, EditorStyles.miniButton))
-                {
-                    var assetPath = AssetDatabase.GenerateUniqueAssetPath($"Assets/{typeof(T).Name}.asset");
-                    AssetDatabase.CreateAsset(ScriptableObject.CreateInstance<T>(), assetPath);
-                    Selection.activeObject = AssetDatabase.LoadAssetAtPath<T>(assetPath);
-                    m_Options = null;
-                }
-            }
-            else if (m_NamesAssets.Length > 1)
+            if (m_NamesAssets?.Length > 1)
             {
                 var id = GUIUtility.GetControlID(FocusType.Passive);
                 if (Event.current.type == EventType.Repaint)

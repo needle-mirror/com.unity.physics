@@ -11,6 +11,7 @@ namespace Unity.Physics.Editor
     [AttributeUsage(AttributeTargets.Field)]
     sealed class AutoPopulateAttribute : Attribute
     {
+        public string PropertyPath { get; set; }
         public string ElementFormatString { get; set; }
         public bool Reorderable { get; set; } = true;
         public bool Resizable { get; set; } = true;
@@ -35,7 +36,10 @@ namespace Unity.Physics.Editor
 
             foreach (var field in autoFields)
             {
-                var sp = serializedObject.FindProperty(field.Name);
+                var attr =
+                    field.GetCustomAttributes(typeof(AutoPopulateAttribute)).Single() as AutoPopulateAttribute;
+
+                var sp = serializedObject.FindProperty(attr.PropertyPath ?? field.Name);
 
                 if (sp == null)
                 {
@@ -63,8 +67,6 @@ namespace Unity.Physics.Editor
                         return EditorGUI.GetPropertyHeight(element) + EditorGUIUtility.standardVerticalSpacing;
                     };
 
-                    var attr =
-                        field.GetCustomAttributes(typeof(AutoPopulateAttribute)).Single() as AutoPopulateAttribute;
                     var formatString = attr.ElementFormatString;
                     if (formatString == null)
                     {

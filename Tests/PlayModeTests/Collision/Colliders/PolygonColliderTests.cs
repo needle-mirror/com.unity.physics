@@ -1,9 +1,11 @@
 using System;
 using NUnit.Framework;
+using Unity.Burst;
 using Unity.Mathematics;
 using Assert = UnityEngine.Assertions.Assert;
 using TestUtils = Unity.Physics.Tests.Utils.TestUtils;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Jobs;
 
 namespace Unity.Physics.Tests.Collision.Colliders
 {
@@ -13,6 +15,26 @@ namespace Unity.Physics.Tests.Collision.Colliders
     class PolygonColliderTests
     {
         #region Construction
+
+        [BurstCompile(CompileSynchronously = true)]
+        struct CreateQuadFromBurstJob : IJob
+        {
+            public void Execute() =>
+                PolygonCollider.CreateQuad(new float3(-1f, 1f, 0f), new float3(1f, 1f, 0f), new float3(1f, -1f, 0f), new float3(-1f, -1f, 0f)).Release();
+        }
+
+        [Test]
+        public void PolygonCollider_CreateQuad_WhenCalledFromBurstJob_DoesNotThrow() => new CreateQuadFromBurstJob().Run();
+
+        [BurstCompile(CompileSynchronously = true)]
+        struct CreateTriangleFromBurstJob : IJob
+        {
+            public void Execute() =>
+                PolygonCollider.CreateTriangle(new float3(-1f, 1f, 0f), new float3(1f, 1f, 0f), new float3(1f, -1f, 0f)).Release();
+        }
+
+        [Test]
+        public void PolygonCollider_CreateTriangle_WhenCalledFromBurstJob_DoesNotThrow() => new CreateTriangleFromBurstJob().Run();
 
         /// <summary>
         /// Test whether a triangle collider's attributes are set to the expected values after creation.

@@ -1,6 +1,5 @@
 using System;
-using System.Collections.Generic;
-using System.Runtime.InteropServices;
+using System.ComponentModel;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -13,8 +12,8 @@ namespace Unity.Physics
     // Therefore this struct must always be passed by reference, never by value.
     public struct MeshCollider : ICompositeCollider
     {
-        private ColliderHeader m_Header;
-        private Aabb m_Aabb;
+        ColliderHeader m_Header;
+        Aabb m_Aabb;
         internal Mesh Mesh;
 
         // followed by variable sized mesh data
@@ -22,46 +21,59 @@ namespace Unity.Physics
         #region Construction
 
         // Create a mesh collider asset from a set of triangles
-        public static unsafe BlobAssetReference<Collider> Create(float3[] vertices, int[] indices, CollisionFilter? filter = null, Material? material = null)
+        public static BlobAssetReference<Collider> Create(NativeArray<float3> vertices, NativeArray<int> indices) =>
+            Create(vertices, indices, CollisionFilter.Default, Material.Default);
+
+        public static BlobAssetReference<Collider> Create(NativeArray<float3> vertices, NativeArray<int> indices, CollisionFilter filter) =>
+            Create(vertices, indices, filter, Material.Default);
+
+        public static unsafe BlobAssetReference<Collider> Create(NativeArray<float3> vertices, NativeArray<int> indices, CollisionFilter filter, Material material)
         {
-            int numVertices = vertices.Length;
             int numIndices = indices.Length;
             int numTriangles = numIndices / 3;
 
             // Copy vertices
-            float3[] tempVertices = new float3[numVertices];
-            Array.Copy(vertices, tempVertices, numVertices);
+            var tempVertices = new NativeArray<float3>(vertices, Allocator.Temp);
 
             // Copy indices
-            int[] tempIndices = new int[numIndices];
+            var tempIndices = new NativeArray<int>(numIndices, Allocator.Temp);
             for (int iTriangle = 0; iTriangle < numTriangles; iTriangle++)
             {
                 int iIndex0 = iTriangle * 3;
                 int iIndex1 = iIndex0 + 1;
                 int iIndex2 = iIndex0 + 2;
-                tempIndices[iIndex0] = indices[iIndex0];
-                tempIndices[iIndex1] = indices[iIndex1];
-                tempIndices[iIndex2] = indices[iIndex2];
-            }
 
+                if (indices[iIndex0] >= 0 && indices[iIndex0] < vertices.Length
+                    && indices[iIndex1] >= 0 && indices[iIndex1] < vertices.Length
+                    && indices[iIndex2] >= 0 && indices[iIndex2] < vertices.Length)
+                {
+                    tempIndices[iIndex0] = indices[iIndex0];
+                    tempIndices[iIndex1] = indices[iIndex1];
+                    tempIndices[iIndex2] = indices[iIndex2];
+                }
+                else
+                {
+                    throw new ArgumentException("Tried to create a MeshCollider with indices referencing outside vertex array");
+                }
+            }
+            
             // Build connectivity and primitives
-            List<MeshConnectivityBuilder.Primitive> primitives = null;
-            {
-                MeshConnectivityBuilder.WeldVertices(tempIndices, ref tempVertices);
-                var connectivity = new MeshConnectivityBuilder(tempIndices, tempVertices);
-                primitives = connectivity.EnumerateQuadDominantGeometry(tempIndices, tempVertices);
-            }
-
+            
+            NativeList<float3> uniqueVertices = MeshConnectivityBuilder.WeldVertices(tempIndices, tempVertices);
+            var connectivity = new MeshConnectivityBuilder(tempIndices, uniqueVertices);
+            NativeList<MeshConnectivityBuilder.Primitive> primitives = connectivity.EnumerateQuadDominantGeometry(tempIndices, uniqueVertices);
+            
             // Build bounding volume hierarchy
-            int nodeCount = math.max(primitives.Count * 2 + 1, 2); // We need at least two nodes - an "invalid" node and a root node.
+            int nodeCount = math.max(primitives.Length * 2 + 1, 2); // We need at least two nodes - an "invalid" node and a root node.
             var nodes = new NativeArray<BoundingVolumeHierarchy.Node>(nodeCount, Allocator.Temp);
             int numNodes = 0;
+
             {
                 // Prepare data for BVH
-                var points = new NativeArray<BoundingVolumeHierarchy.PointAndIndex>(primitives.Count, Allocator.Temp);
-                var aabbs = new NativeArray<Aabb>(primitives.Count, Allocator.Temp);
+                var points = new NativeList<BoundingVolumeHierarchy.PointAndIndex>(primitives.Length, Allocator.Temp);
+                var aabbs = new NativeArray<Aabb>(primitives.Length, Allocator.Temp);
 
-                for (int i = 0; i < primitives.Count; i++)
+                for (int i = 0; i < primitives.Length; i++)
                 {
                     MeshConnectivityBuilder.Primitive p = primitives[i];
 
@@ -72,27 +84,26 @@ namespace Unity.Physics
                     }
 
                     aabbs[i] = Aabb.CreateFromPoints(p.Vertices);
-                    points[i] = new BoundingVolumeHierarchy.PointAndIndex
+                    points.Add(new BoundingVolumeHierarchy.PointAndIndex
                     {
                         Position = aabbs[i].Center,
                         Index = i
-                    };
+                    });
                 }
 
                 var bvh = new BoundingVolumeHierarchy(nodes);
-                bvh.Build(points, aabbs, out numNodes, useSah: true);
 
-                points.Dispose();
-                aabbs.Dispose();
+                bvh.Build(points.AsArray(), aabbs, out numNodes, useSah: true);
             }
 
             // Build mesh sections
             BoundingVolumeHierarchy.Node* nodesPtr = (BoundingVolumeHierarchy.Node*)nodes.GetUnsafePtr();
-            List<MeshBuilder.TempSection> sections = MeshBuilder.BuildSections(nodesPtr, numNodes, primitives);
+            MeshBuilder.TempSection sections = MeshBuilder.BuildSections(nodesPtr, numNodes, primitives);
 
             // Allocate collider
-            int meshDataSize = Mesh.CalculateMeshDataSize(numNodes, sections);
+            int meshDataSize = Mesh.CalculateMeshDataSize(numNodes, sections.Ranges);
             int totalColliderSize = Math.NextMultipleOf(sizeof(MeshCollider), 16) + meshDataSize;
+            
             MeshCollider* meshCollider = (MeshCollider*)UnsafeUtility.Malloc(totalColliderSize, 16, Allocator.Temp);
 
             // Initialize it
@@ -107,14 +118,15 @@ namespace Unity.Physics
 
                 ref var mesh = ref meshCollider->Mesh;
 
-                mesh.Init(nodesPtr, numNodes, sections, filter ?? CollisionFilter.Default, material ?? Material.Default);
+                mesh.Init(nodesPtr, numNodes, sections, filter, material);
 
                 // Calculate combined filter
                 meshCollider->m_Header.Filter = mesh.Sections.Length > 0 ? mesh.Sections[0].Filters[0] : CollisionFilter.Default;
                 for (int i = 0; i < mesh.Sections.Length; ++i)
                 {
-                    foreach (CollisionFilter f in mesh.Sections[i].Filters)
+                    for (var j = 0; j < mesh.Sections[i].Filters.Length; ++j)
                     {
+                        var f = mesh.Sections[i].Filters[j];
                         meshCollider->m_Header.Filter = CollisionFilter.CreateUnion(meshCollider->m_Header.Filter, f);
                     }
                 }
@@ -122,8 +134,6 @@ namespace Unity.Physics
                 meshCollider->m_Aabb = meshCollider->Mesh.BoundingVolumeHierarchy.Domain;
                 meshCollider->NumColliderKeyBits = meshCollider->Mesh.NumColliderKeyBits;
             }
-
-            nodes.Dispose();
 
             // Copy collider into blob
             var blob = BlobAssetReference<Collider>.Create(meshCollider, totalColliderSize);
@@ -269,6 +279,17 @@ namespace Unity.Physics
             }
         }
 
+        #endregion
+
+        #region Obsolete
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("This signature has been deprecated. Use a signature passing native containers instead. (RemovedAfter 2019-10-25)")]
+        public static unsafe BlobAssetReference<Collider> Create(float3[] vertices, int[] indices, CollisionFilter? filter = null, Material? material = null)
+        {
+            var v = new NativeArray<float3>(vertices.Length, Allocator.Temp);
+            var i = new NativeArray<int>(indices.Length, Allocator.Temp);
+            return Create(v, i, filter ?? CollisionFilter.Default, material ?? Material.Default);
+        }
         #endregion
     }
 }

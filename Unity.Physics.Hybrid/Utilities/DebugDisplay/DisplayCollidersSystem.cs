@@ -323,6 +323,14 @@ namespace Unity.Physics.Authoring
                 return results;
             }
 
+            static void GetEdge(ref ConvexHull hullIn, ConvexHull.Face faceIn, int edgeIndex, out float3 from, out float3 to)
+            {
+                byte fromIndex = hullIn.FaceVertexIndices[faceIn.FirstIndex + edgeIndex];
+                byte toIndex = hullIn.FaceVertexIndices[faceIn.FirstIndex + (edgeIndex + 1) % faceIn.NumVertices];
+                from = hullIn.Vertices[fromIndex];
+                to = hullIn.Vertices[toIndex];
+            }
+
             void DrawColliderEdges(ConvexCollider* collider, RigidTransform worldFromConvex, bool drawVertices = false)
             {
                 Matrix4x4 originalMatrix = Gizmos.matrix;
@@ -331,14 +339,6 @@ namespace Unity.Physics.Authoring
 
                 ref ConvexHull hull = ref collider->ConvexHull;
 
-                void GetEdge(ref ConvexHull hullIn, ConvexHull.Face faceIn, int edgeIndex, out float3 from, out float3 to)
-                {
-                    byte fromIndex = hullIn.FaceVertexIndices[faceIn.FirstIndex + edgeIndex];
-                    byte toIndex = hullIn.FaceVertexIndices[faceIn.FirstIndex + (edgeIndex + 1) % faceIn.NumVertices];
-                    from = hullIn.Vertices[fromIndex];
-                    to = hullIn.Vertices[toIndex];
-                }
-
                 if (hull.FaceLinks.Length > 0)
                 {
                     Gizmos.color = new Color(0.0f, 1.0f, 0.0f);
@@ -346,9 +346,6 @@ namespace Unity.Physics.Authoring
                     {
                         for (int edgeIndex = 0; edgeIndex < face.NumVertices; edgeIndex++)
                         {
-                            ConvexHull.Edge linkedEdge = hull.FaceLinks[face.FirstIndex + edgeIndex];
-                            ConvexHull.Face linkedFace = hull.Faces[linkedEdge.FaceIndex];
-
                             GetEdge(ref hull, face, edgeIndex, out float3 from, out float3 to);
                             Gizmos.DrawLine(from, to);
                         }

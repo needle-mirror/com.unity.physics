@@ -119,7 +119,7 @@ namespace Unity.Physics
             MTransform aFromBoxA = new MTransform(boxA->Orientation, boxA->Center);
             float3 posBinA = Mul(aFromB, sphereB->Center);
             float3 posBinBoxA = Mul(Inverse(aFromBoxA), posBinA);
-            float3 innerHalfExtents = boxA->Size * 0.5f - boxA->ConvexRadius;
+            float3 innerHalfExtents = boxA->Size * 0.5f - boxA->BevelRadius;
             float3 normalInBoxA;
             float distance;
             {
@@ -160,8 +160,8 @@ namespace Unity.Physics
             return new Result
             {
                 NormalInA = normalInA,
-                PositionOnAinA = posBinA + normalInA * (distance - boxA->ConvexRadius),
-                Distance = distance - (sphereB->Radius + boxA->ConvexRadius)
+                PositionOnAinA = posBinA + normalInA * (distance - boxA->BevelRadius),
+                Distance = distance - (sphereB->Radius + boxA->BevelRadius)
             };
         }
 

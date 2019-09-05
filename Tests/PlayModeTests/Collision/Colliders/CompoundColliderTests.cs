@@ -17,10 +17,22 @@ namespace Unity.Physics.Tests.Collision.Colliders
             void TestCompoundBox(RigidTransform transform)
             {
                 // Create a unit box
-                var box = BoxCollider.Create(transform.pos, transform.rot, new float3(1, 1, 1), 0.0f);
+                var box = BoxCollider.Create(new BoxGeometry
+                {
+                    Center = transform.pos,
+                    Orientation = transform.rot,
+                    Size = new float3(1),
+                    BevelRadius = 0.0f
+                });
 
                 // Create a compound of mini boxes, matching the volume of the single box
-                var miniBox = BoxCollider.Create(float3.zero, quaternion.identity, new float3(0.5f, 0.5f, 0.5f), 0.0f);
+                var miniBox = BoxCollider.Create(new BoxGeometry
+                {
+                    Center = float3.zero,
+                    Orientation = quaternion.identity,
+                    Size = new float3(0.5f, 0.5f, 0.5f),
+                    BevelRadius = 0.0f
+                });
                 var children = new NativeArray<CompoundCollider.ColliderBlobInstance>(8, Allocator.Temp)
                 {
                     [0] = new CompoundCollider.ColliderBlobInstance { Collider = miniBox, CompoundFromChild = math.mul(transform, new RigidTransform(quaternion.identity, new float3(+0.25f,+0.25f,+0.25f))) },

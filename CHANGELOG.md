@@ -1,3 +1,134 @@
+## [0.2.2-preview] - 2019-09-06
+
+### Fixes
+
+* Added internal API extensions to work around an API updater issue with Unity 2019.1 to provide a better upgrading experience.
+
+
+## [0.2.1-preview] - 2019-09-06
+
+### Upgrade guide
+
+* A few changes have been made to convex hulls that require double checking convex `PhysicsShapeAuthoring` components:
+    * Default parameters for generating convex hulls have been tweaked, which could result in minor differences.
+    * Bevel radius now applies a shrink to the shape rather than an expansion (as with primitive shape types).
+* Mesh `PhysicsShapeAuthoring` objects with no custom mesh assigned now include points from enabled mesh renderers on their children (like convex shapes). Double check any mesh shapes in your projects.
+* Due to a bug in version 0.2.0, any box colliders added to uniformly scaled objects had their scale baked into the box size parameter when initially added and/or when fit to render geometry. Double check box colliders on any uniformly scaled objects and update them as needed (usually by just re-fitting them to the render geometry).
+* The serialization layout of `PhysicsShapeAuthoring` has changed. Values previously saved in the `m_ConvexRadius` field will be migrated to `m_ConvexHullGenerationParameters.m_BevelRadius`, and a `m_ConvexRadius_Deprecated` field will then store a negative value to indicate the old data have been migrated. Because this happens automatically when objects are deserialized, prefab instances may mark this field dirty even if the prefab has already been migrated. Double check prefab overrides for Bevel Radius on your prefab instances. 
+
+### Changes
+
+* Run-Time API
+    * Added the following new members:
+        * `BodyIndexPair.IsValid`
+        * `Math.Dotxyz1()` using double
+        * `Plane.Projection()`
+        * `Plane.SignedDistanceToPoint()`
+    * Added the following structs:
+        * `BoxGeometry`
+        * `CapsuleGeometry`
+        * `CylinderGeometry`
+        * `SphereGeometry`
+        * `ConvexHullGenerationParameters`
+    * All previous `SphereCollider`, `CapsuleCollider`, `BoxCollider` and `CylinderCollider` properties are now read only. A new `Geometry` property allows reading or writing all the properties at once.
+    * `BoxCollider.Create()` now uses `BoxGeometry`. The signature passing nullable types has been deprecated.
+    * `CapsuleCollider.Create()` now uses `CapsuleGeometry`. The signature passing nullable types has been deprecated.
+    * `ConvexCollider.Create()` now uses `ConvexHullGenerationParameters`. The signature passing nullable types has been deprecated.
+    * `CylinderCollider.Create()` now uses `CylinderGeometry`. The signature passing nullable types has been deprecated.
+    * `MeshCollider.Create()` now uses native containers. The signature using managed containers has been deprecated.
+    * `PolygonCollider.CreateQuad()` signature passing nullable types has been deprecated.
+    * `PolygonCollider.CreateTriangle()` signature passing nullable types has been deprecated.
+    * `SphereCollider.Create()` now uses `SphereGeometry`. The signature passing nullable types has been deprecated.
+    * `TerrainCollider.Create()` signature passing pointer and nullable types has been deprecated.
+    * `SimplexSolver.Solve()` taking the `respectMinDeltaTime` has been deprecated. Use the new `SimplexSolver.Solve()` method that takes `minDeltaTime` instead.
+    * Renamed `BoxCollider.ConvexRadius` to `BevelRadius`.
+    * Renamed `CylinderCollider.ConvexRadius` to `BevelRadius`.
+    * Deprecated `SimplexSolver.c_SimplexSolverEpsilon`.
+    * Deprecated the following methods in `ComponentExtensions` taking an `Entity` as the first argument.
+        * `GetCollisionFilter()`
+        * `GetMass()`
+        * `GetEffectiveMass()`
+        * `GetCenterOfMass()`
+        * `GetPosition()`
+        * `GetRotation()`
+        * `GetVelocities()`
+        * `SetVelocities()`
+        * `GetLinearVelocity()`
+        * `SetLinearVelocity()`
+        * `GetAngularVelocity()`
+        * `SetAngularVelocity()`
+        * `ApplyImpulse()`
+        * `ApplyLinearImpulse()`
+        * `ApplyAngularImpulse()`
+    * Removed the following expired members:
+        * `ColliderCastInput.Direction`
+        * `ColliderCastInput.Position`
+        * `Ray(float3, float3)`
+        * `Ray.Direction`
+        * `Ray.ReciprocalDirection`
+        * `RaycastInput.Direction`
+        * `RaycastInput.Position`
+* Authoring/Conversion API
+    * Renamed `PhysicsBody` to `PhysicsBodyAuthoring`.
+    * Renamed `PhysicsShape` to `PhysicsShapeAuthoring`.
+    * `PhysicsShapeAuthoring.BevelRadius` now returns the serialized bevel radius data in all cases, instead of returning the shape radius when the type was either sphere or capsule, or a value of 0 for meshes. Its setter now only clamps the value if the shape type is box or cylinder.
+    * `PhysicsShapeAuthoring.GetBoxProperties()` now returns `BoxGeometry`. The signature containing out parameters has been deprecated.
+    * `PhysicsShapeAuthoring.SetBox()` now uses `BoxGeometry`. The signature passing individual parameters has been deprecated.
+    * `PhysicsShapeAuthoring.GetCapsuleProperties()` now returns `CapsuleGeometry`. The signature containing out parameters has been deprecated.
+    * `PhysicsShapeAuthoring.SetCapsule()` now uses `CapsuleGeometry`. The signature passing individual parameters has been deprecated.
+    * `PhysicsShapeAuthoring.GetCylinderGeometry()` now returns `CylinderGeometry`. The signature containing out parameters has been deprecated.
+    * `PhysicsShapeAuthoring.SetCylinder()` now uses `CylinderGeometry`. The signature passing individual parameters has been deprecated.
+    * `PhysicsShapeAuthoring.GetSphereProperties()` now returns `SphereGeometry`. The signature containing out parameters has been deprecated.
+    * `PhysicsShapeAuthoring.SetSphere()` now uses `SphereGeometry`. The signature passing individual parameters has been deprecated.
+    * `PhysicsShapeAuthoring.SetConvexHull()` now uses `ConvexHullGenerationParameters`. The old signature has been deprecated.
+    * `PhysicsShapeAuthoring.ConvexRadius` has been deprecated. Instead use `BevelRadius` values returned by geometry structs.
+    * `PhysicsShapeAuthoring.GetConvexHullProperties()` now returns points from `SkinnedMeshRenderer` components that are bound to the shape's transform, or to the transforms of its children that are not children of some other shape, when no custom mesh has been assigned.
+    * Added `PhysicsShapeAuthoring.SetConvexHull()` signature specifying minimum skinned vertex weight for inclusion.
+    * Added `PhysicsShapeAuthoring.ConvexHullGenerationParameters` property.
+    * `PhysicsShapeAuthoring.GetMesh()` has been deprecated.
+    * Added `PhysicsShapeAuthoring.GetMeshProperties()`. When no custom mesh has been assigned, this will return mesh data from all render geometry in the shape's hierarchy, that are not children of some other shape.
+    * `PhysicsShapeAuthoring.FitToEnabledRenderMeshes()` now takes an optional parameter for specifying minimum skinned vertex weight for inclusion.
+    * Removed the `OutputStream` field from various deprecated debug drawing jobs. These will be redesigned in a future release, and you are advised to not try to extend them yet.
+    * Removed the following expired members:
+        * `PhysicsShapeAuthoring.FitToGeometry()`.
+        * `PhysicsShapeAuthoring.GetCapsuleProperties()` returning raw points.
+        * `PhysicsShapeAuthoring.GetPlaneProperties()` returning raw points.
+        * `FirstPassLegacyRigidbodyConversionSystem`.
+        * `FirstPassPhysicsBodyConversionSystem`.
+        * `SecondPassLegacyRigidbodyConversionSystem`.
+        * `SecondPassPhysicsBodyConversionSystem`.
+* Run-Time Behavior
+    * `BoxCollider.Create()` is now compatible with Burst.
+    * `CapsuleCollider.Create()` is now compatible with Burst.
+    * `ConvexCollider.Create()` is now compatible with Burst.
+    * `CylinderCollider.Create()` is now compatible with Burst.
+    * `MeshCollider.Create()` is now compatible with Burst.
+    * `SphereCollider.Create()` is now compatible with Burst.
+    * `TerrainCollider.Create()` is now compatible with Burst.
+* Authoring/Conversion Behavior
+    * Converting mesh and convex shapes is now several orders of magnitude faster.
+    * Convex meshes are more accurate and less prone to jitter.
+    * `PhysicsShapeAuthoring` components set to convex now display a wire frame preview at edit time.
+    * `PhysicsShapeAuthoring` components set to cylinder can now specify how many sides the generated hull should have.
+    * Inspector controls for physics categories, custom material tags, and custom body tags now have a final option to select and edit the corresponding naming asset. 
+
+### Fixes
+
+* Body hierarchies with multiple shape types (e.g., classic collider types and `PhysicsShapeAuthoring`) now produce a single flat `CompoundCollider` tree, instead of a tree with several `CompoundCollider` leaves.
+* Fixed issues causing dynamic objects to tunnel through thin static objects (most likely meshes)
+* Fixed incorrect behavior of Constraint.Twist() with limitedAxis != 0
+* Fixed regression introduced in 0.2.0 causing box shapes on uniformly scaled objects to always convert into a box with size 1 on all sides.
+* Fixed exception when calling `Dispose()` on an uninitialized `CollisionWorld`.
+
+### Known Issues
+
+* Wire frame previews for convex `PhysicsShapeAuthoring` components can take a while to generate.
+* Wire frame previews for convex `PhysicsShapeAuthoring` components do not currently illustrate effects of bevel radius in the same way as primitives.
+* The first time you convert convex or mesh shapes in the Editor after a domain reload, you will notice a delay while the conversion jobs are Burst compiled. all subsequent conversions should be significantly faster until the next domain reload.
+* Updated dependency on `com.unity.burst` to version `1.1.2`.
+
+
+
 ## [0.2.0-preview] - 2019-07-18
 
 ### Upgrade guide

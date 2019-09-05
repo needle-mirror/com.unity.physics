@@ -42,8 +42,6 @@ namespace Unity.Physics
             MotionData motionA, MotionData motionB,
             Constraint constraint, float tau, float damping)
         {
-            this = default(LinearLimitJacobian);
-
             WorldFromA = motionA.WorldFromMotion;
             WorldFromB = motionB.WorldFromMotion;
 
@@ -104,7 +102,7 @@ namespace Unity.Physics
         }
 
         // Solve the Jacobian
-        public void Solve(ref MotionVelocity velocityA, ref MotionVelocity velocityB, float timestep)
+        public void Solve(ref MotionVelocity velocityA, ref MotionVelocity velocityB, float timestep, float invTimestep)
         {
             // Predict the motions' transforms at the end of the step
             MTransform futureWorldFromA;
@@ -150,7 +148,7 @@ namespace Unity.Physics
                 // Calculate the impulse to correct the error
                 float3 solveError = solveDistanceError * futureDirection;
                 float3x3 effectiveMass = JacobianUtilities.BuildSymmetricMatrix(EffectiveMassDiag, EffectiveMassOffDiag);
-                impulse = math.mul(effectiveMass, solveError) * (1.0f / timestep);
+                impulse = math.mul(effectiveMass, solveError) * invTimestep;
             }
 
             // Apply the impulse

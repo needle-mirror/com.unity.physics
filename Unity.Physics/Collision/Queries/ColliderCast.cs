@@ -30,16 +30,6 @@ namespace Unity.Physics
         }
 
         internal Ray Ray;
-
-        #region Obsolete
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("Position has been deprecated. Use Start Instead (RemovedAfter 2019-07-29) (UnityUpgradable) -> Start")]
-        public float3 Position { get => Ray.Origin; set => Ray.Origin = value; }
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("Direction has been deprecated. Use End Instead (RemovedAfter 2019-07-29)")]
-        public float3 Direction { get => Ray.Direction; set => Ray.Direction = value; }
-        #endregion
     }
 
     // A hit from a collider cast query

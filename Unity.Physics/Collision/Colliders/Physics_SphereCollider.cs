@@ -1,10 +1,35 @@
-﻿using Unity.Collections;
+using System;
+using System.ComponentModel;
+using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Mathematics;
 
 namespace Unity.Physics
 {
+    public struct SphereGeometry
+    {
+        // The center of the sphere
+        public float3 Center { get => m_Center; set => m_Center = value; }
+        float3 m_Center;
+
+        // The radius of the sphere
+        public float Radius { get => m_Radius; set => m_Radius = value; }
+        private float m_Radius;
+
+        internal void Validate()
+        {
+            if (math.any(!math.isfinite(m_Center)))
+            {
+                throw new ArgumentException("Invalid sphere center");
+            }
+            if (!math.isfinite(m_Radius) || m_Radius <= 0.0f)
+            {
+                throw new ArgumentException("Invalid sphere radius");
+            }
+        }
+    }
+
     // A collider in the shape of a sphere
     public struct SphereCollider : IConvexCollider
     {
@@ -14,44 +39,63 @@ namespace Unity.Physics
 
         private float3 m_Vertex;
 
-        public float3 Center { get => m_Vertex; set { m_Vertex = value; m_Header.Version++; } }
-        public float Radius { get => ConvexHull.ConvexRadius; set { ConvexHull.ConvexRadius = value; m_Header.Version++; } }
+        public float3 Center => m_Vertex;
+        public float Radius => ConvexHull.ConvexRadius;
+
+        public SphereGeometry Geometry
+        {
+            get => new SphereGeometry
+            {
+                Center = m_Vertex,
+                Radius = ConvexHull.ConvexRadius
+            };
+            set
+            {
+                if (!value.Equals(Geometry))
+                {
+                    SetGeometry(value);
+                }
+            }
+        }
 
         #region Construction
 
-        unsafe public static BlobAssetReference<Collider> Create(float3 center, float radius, CollisionFilter? filter = null, Material? material = null)
-        {
-            if (math.any(!math.isfinite(center)))
-            {
-                throw new System.ArgumentException("Tried to create sphere collider with inf/nan center");
-            }
-            if (!math.isfinite(radius) || radius <= 0.0f)
-            {
-                throw new System.ArgumentException("Tried to create sphere collider with negative/inf/nan radius");
-            }
-            
-            var collider = default(SphereCollider);
-            collider.Init(center, radius, filter ?? CollisionFilter.Default, material ?? Material.Default);
+        public static BlobAssetReference<Collider> Create(SphereGeometry geometry) =>
+            Create(geometry, CollisionFilter.Default, Material.Default);
 
-            var sphereCollider = BlobAssetReference<Collider>.Create(&collider, sizeof(SphereCollider));
-            return sphereCollider;
+        public static BlobAssetReference<Collider> Create(SphereGeometry geometry, CollisionFilter filter) =>
+            Create(geometry, filter, Material.Default);
+
+        public static unsafe BlobAssetReference<Collider> Create(SphereGeometry geometry, CollisionFilter filter, Material material)
+        {
+            var collider = default(SphereCollider);
+            collider.Init(geometry, filter, material);
+            return BlobAssetReference<Collider>.Create(&collider, sizeof(SphereCollider));
         }
 
-        internal unsafe void Init(float3 center, float radius, CollisionFilter filter, Material material)
+        private void Init(SphereGeometry geometry, CollisionFilter filter, Material material)
         {
             m_Header.Type = ColliderType.Sphere;
             m_Header.CollisionType = CollisionType.Convex;
-            m_Header.Version += 1;
+            m_Header.Version = 0;
             m_Header.Magic = 0xff;
             m_Header.Filter = filter;
             m_Header.Material = material;
 
-            ConvexHull.ConvexRadius = radius;
             ConvexHull.VerticesBlob.Offset = UnsafeEx.CalculateOffset(ref m_Vertex, ref ConvexHull.VerticesBlob);
             ConvexHull.VerticesBlob.Length = 1;
             // note: no faces
 
-            m_Vertex = center;
+            SetGeometry(geometry);
+        }
+
+        private void SetGeometry(SphereGeometry geometry)
+        {
+            geometry.Validate();
+
+            m_Header.Version += 1;
+            ConvexHull.ConvexRadius = geometry.Radius;
+            m_Vertex = geometry.Center;
         }
 
         #endregion
@@ -62,8 +106,8 @@ namespace Unity.Physics
         public CollisionType CollisionType => m_Header.CollisionType;
         public int MemorySize => UnsafeUtility.SizeOf<SphereCollider>();
 
-        public CollisionFilter Filter { get => m_Header.Filter; set => m_Header.Filter = value; }
-        public Material Material { get => m_Header.Material; set => m_Header.Material = value; }
+        public CollisionFilter Filter { get => m_Header.Filter; set { if (!m_Header.Filter.Equals(value)) { m_Header.Version += 1; m_Header.Filter = value; } } }
+        public Material Material { get => m_Header.Material; set { if (!m_Header.Material.Equals(value)) { m_Header.Version += 1; m_Header.Material = value; } } }
 
         public MassProperties MassProperties => new MassProperties
         {
@@ -142,6 +186,15 @@ namespace Unity.Physics
                 return DistanceQueries.ColliderCollider(input, (Collider*)target, ref collector);
             }
         }
+
+        #endregion
+
+        #region Obsolete
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("This signature has been deprecated. Please use a signature that does not pass nullable arguments instead. (RemovedAfter 2019-11-15)")]
+        public static BlobAssetReference<Collider> Create(float3 center, float radius, CollisionFilter? filter = null, Material? material = null) =>
+            Create(new SphereGeometry { Center = center, Radius = radius }, filter ?? CollisionFilter.Default, material ?? Material.Default);
 
         #endregion
     }
