@@ -17,13 +17,6 @@ namespace Unity.Physics
     [EditorBrowsable(EditorBrowsableState.Never)]
     [Obsolete("PhysicsCustomData has been deprecated. Use PhysicsCustomTags instead. (RemovedAfter 2019-10-03) (UnityUpgradable) -> PhysicsCustomTags", true)]
     public struct PhysicsCustomData : IComponentData { }
-
-#if !UNITY_ENTITIES_0_1_0_OR_NEWER
-    internal static class EntitiesBackwardCompatibility
-    {
-        public static int CalculateEntityCount(this EntityQuery entityQuery) => entityQuery.CalculateLength();
-    }
-#endif
 }
 
 

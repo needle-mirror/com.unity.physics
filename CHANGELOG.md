@@ -1,3 +1,11 @@
+## [0.2.4-preview] - 2019-09-19
+
+### Changes
+
+* Updated dependency on `com.unity.entities` to version `0.1.1-preview`. If you need to stay on entities version `0.0.12-preview.33` then you can use the previous version of this package, `0.2.3-preview`, which is feature equivalent:
+
+
+
 ## [0.2.3-preview] - 2019-09-19
 
 ### Upgrade guide
