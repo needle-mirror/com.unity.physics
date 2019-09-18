@@ -330,7 +330,7 @@ namespace Unity.Physics
             m.c2 = new float4(r2, 0.0f);
             m.c3 = new float4(0.0f, 0.0f, 0.0f, 1.0f);
 
-            float det = m.c0.x * m.c1.y * m.c2.z;
+            float det = math.dot(r0, plane0);
             float tst = math.abs(det);
             if (tst < k_Epsilon)
             {
@@ -342,7 +342,6 @@ namespace Unity.Physics
                 return;
             }
 
-            float3 sVel = constraint0.Velocity + constraint1.Velocity;
             float3 t = new float3(
                 math.dot(plane0, constraint0.Velocity),
                 math.dot(plane1, constraint1.Velocity),

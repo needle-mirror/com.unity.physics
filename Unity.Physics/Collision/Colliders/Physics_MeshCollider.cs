@@ -286,8 +286,8 @@ namespace Unity.Physics
         [Obsolete("This signature has been deprecated. Use a signature passing native containers instead. (RemovedAfter 2019-10-25)")]
         public static unsafe BlobAssetReference<Collider> Create(float3[] vertices, int[] indices, CollisionFilter? filter = null, Material? material = null)
         {
-            var v = new NativeArray<float3>(vertices.Length, Allocator.Temp);
-            var i = new NativeArray<int>(indices.Length, Allocator.Temp);
+            var v = new NativeArray<float3>(vertices, Allocator.Temp);
+            var i = new NativeArray<int>(indices, Allocator.Temp);
             return Create(v, i, filter ?? CollisionFilter.Default, material ?? Material.Default);
         }
         #endregion

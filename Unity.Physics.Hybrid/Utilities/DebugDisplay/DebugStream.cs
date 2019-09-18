@@ -16,7 +16,7 @@ public class DebugStream : ComponentSystem
 
     protected override void OnCreate()
     {
-        m_EndFramePhysicsSystem = World.Active.GetOrCreateSystem<EndFramePhysicsSystem>();
+        m_EndFramePhysicsSystem = World.GetOrCreateSystem<EndFramePhysicsSystem>();
     }
 
     public struct Context

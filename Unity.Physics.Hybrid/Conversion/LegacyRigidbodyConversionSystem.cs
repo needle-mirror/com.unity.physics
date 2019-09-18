@@ -12,11 +12,11 @@ namespace Unity.Physics.Authoring
                 {
                     var entity = GetPrimaryEntity(body.gameObject);
 
-                    DstEntityManager.RemoveParentAndSetWorldTranslationAndRotation(entity, body.transform);
-
                     // prefer conversions from non-legacy data if they have already been performed
                     if (DstEntityManager.HasComponent<PhysicsVelocity>(entity))
                         return;
+
+                    DstEntityManager.RemoveParentAndSetWorldTranslationAndRotation(entity, body.transform);
 
                     if (body.gameObject.isStatic)
                         return;

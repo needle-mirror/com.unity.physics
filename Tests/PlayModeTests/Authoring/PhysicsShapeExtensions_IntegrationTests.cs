@@ -1,5 +1,6 @@
 using System;
 using NUnit.Framework;
+using Unity.Entities;
 using Unity.Physics.Authoring;
 using UnityEngine;
 
@@ -37,6 +38,19 @@ namespace Unity.Physics.Tests.Authoring
         }
 
         [Test]
+        public void GetPrimaryBody_WhenHierarchyContainsBody_AndIsStaticOptimized_ReturnsBody(
+            [Values(typeof(Rigidbody), typeof(PhysicsBodyAuthoring))]Type parentBodyType,
+            [Values(typeof(UnityEngine.BoxCollider), typeof(PhysicsShapeAuthoring))]Type childShapeType
+        )
+        {
+            CreateHierarchy(new[] { typeof(StaticOptimizeEntity) }, new[] { parentBodyType }, new[] { childShapeType });
+
+            var primaryBody = PhysicsShapeExtensions.GetPrimaryBody(Child);
+
+            Assert.That(primaryBody, Is.EqualTo(Parent));
+        }
+
+        [Test]
         public void GetPrimaryBody_WhenHierarchyContainsNoBodies_ReturnsTopMostShape(
             [Values(typeof(UnityEngine.BoxCollider), typeof(PhysicsShapeAuthoring))]Type rootShapeType,
             [Values(typeof(UnityEngine.BoxCollider), typeof(PhysicsShapeAuthoring))]Type parentShapeType,
@@ -44,6 +58,18 @@ namespace Unity.Physics.Tests.Authoring
         )
         {
             CreateHierarchy(new[] { rootShapeType }, new[] { parentShapeType }, new[] { childShapeType });
+
+            var primaryBody = PhysicsShapeExtensions.GetPrimaryBody(Child);
+
+            Assert.That(primaryBody, Is.EqualTo(Root));
+        }
+
+        [Test]
+        public void GetPrimaryBody_WhenHierarchyContainsNoBodies_IsStaticOptimized_ReturnsStaticOptimizeEntity(
+            [Values(typeof(UnityEngine.BoxCollider), typeof(PhysicsShapeAuthoring))]Type childShapeType
+        )
+        {
+            CreateHierarchy(new[] { typeof(StaticOptimizeEntity) }, Array.Empty<Type>(), new[] { childShapeType });
 
             var primaryBody = PhysicsShapeExtensions.GetPrimaryBody(Child);
 

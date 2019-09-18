@@ -45,7 +45,7 @@ namespace Unity.Physics
                 m_Header->Flags = value;
             }
         }
-        public bool HasColliderKeys => m_Header->HasColliderKeys;
+        public bool HasColliderKeys => m_Header->HasContactManifold;
         public ColliderKeyPair ColliderKeys => m_Header->ColliderKeys;
 
         public bool HasMassFactors => m_Header->HasMassFactors;

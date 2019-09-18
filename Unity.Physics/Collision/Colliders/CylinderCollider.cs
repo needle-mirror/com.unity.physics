@@ -7,7 +7,7 @@ using Unity.Mathematics;
 
 namespace Unity.Physics
 {
-    public struct CylinderGeometry
+    public struct CylinderGeometry : IEquatable<CylinderGeometry>
     {
         public const int MinSideCount = 3;
         public const int MaxSideCount = 32;
@@ -37,6 +37,26 @@ namespace Unity.Physics
         // The number of faces used to represent the rounded part of the cylinder
         public int SideCount { get => m_SideCount; set => m_SideCount = value; }
         private int m_SideCount;
+
+        public bool Equals(CylinderGeometry other)
+        {
+            return m_Center.Equals(other.m_Center)
+                && m_Orientation.Equals(other.m_Orientation)
+                && m_Height.Equals(other.m_Height)
+                && m_Radius.Equals(other.m_Radius)
+                && m_BevelRadius.Equals(other.m_BevelRadius)
+                && m_SideCount.Equals(other.m_SideCount);
+        }
+
+        public override int GetHashCode()
+        {
+            return unchecked((int)math.hash(new uint4(
+                math.hash(m_Center),
+                math.hash(m_Orientation),
+                math.hash(new float3(m_Height, m_Radius, m_BevelRadius)),
+                unchecked((uint)m_SideCount)
+            )));
+        }
 
         internal void Validate()
         {

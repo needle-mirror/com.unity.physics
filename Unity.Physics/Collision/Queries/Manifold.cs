@@ -39,11 +39,9 @@ namespace Unity.Physics
         }
 
         // Write a set of contact manifolds for a pair of bodies to the given stream.
-        public static unsafe void BodyBody(ref PhysicsWorld world, BodyIndexPair pair, float timeStep, ref BlockStream.Writer contactWriter)
+        public static unsafe void BodyBody(RigidBody rigidBodyA, RigidBody rigidBodyB, MotionVelocity motionVelocityA, MotionVelocity motionVelocityB,
+            float collisionTolerance, float timeStep, BodyIndexPair pair, ref BlockStream.Writer contactWriter)
         {
-            RigidBody rigidBodyA = world.Bodies[pair.BodyAIndex];
-            RigidBody rigidBodyB = world.Bodies[pair.BodyBIndex];
-
             Collider* colliderA = rigidBodyA.Collider;
             Collider* colliderB = rigidBodyB.Collider;
 
@@ -55,16 +53,12 @@ namespace Unity.Physics
             // Build combined motion expansion
             MotionExpansion expansion;
             {
-                MotionExpansion GetBodyExpansion(int bodyIndex, NativeSlice<MotionVelocity> mvs)
-                {
-                    return bodyIndex < mvs.Length ? mvs[bodyIndex].CalculateExpansion(timeStep) : MotionExpansion.Zero;
-                }
-                MotionExpansion expansionA = GetBodyExpansion(pair.BodyAIndex, world.MotionVelocities);
-                MotionExpansion expansionB = GetBodyExpansion(pair.BodyBIndex, world.MotionVelocities);
+                MotionExpansion expansionA = motionVelocityA.CalculateExpansion(timeStep);
+                MotionExpansion expansionB = motionVelocityB.CalculateExpansion(timeStep);
                 expansion = new MotionExpansion
                 {
                     Linear = expansionA.Linear - expansionB.Linear,
-                    Uniform = expansionA.Uniform + expansionB.Uniform + world.CollisionTolerance
+                    Uniform = expansionA.Uniform + expansionB.Uniform + collisionTolerance
                 };
             }
 
@@ -73,8 +67,8 @@ namespace Unity.Physics
                 BodyIndices = pair,
                 BodyCustomTags = new CustomTagsPair { CustomTagsA = rigidBodyA.CustomTags, CustomTagsB = rigidBodyB.CustomTags },
                 BodiesHaveInfiniteMass =
-                    (pair.BodyAIndex < world.MotionVelocities.Length ? !math.any(world.MotionVelocities[pair.BodyAIndex].InverseInertiaAndMass) : true) &&
-                    (pair.BodyBIndex < world.MotionVelocities.Length ? !math.any(world.MotionVelocities[pair.BodyBIndex].InverseInertiaAndMass) : true)
+                    !math.any(motionVelocityA.InverseInertiaAndMass) &&
+                    !math.any(motionVelocityB.InverseInertiaAndMass)
             };
 
             var worldFromA = new MTransform(rigidBodyA.WorldFromBody);
@@ -371,9 +365,10 @@ namespace Unity.Physics
             Collider* convexColliderA, Collider* compositeColliderB, MTransform worldFromA, MTransform worldFromB,
             MotionExpansion expansion, bool flipped, ref BlockStream.Writer contactWriter)
         {
-            // Calculate AABB of A in B
+            // Calculate swept AABB of A in B
             MTransform bFromWorld = Inverse(worldFromB);
             MTransform bFromA = Mul(bFromWorld, worldFromA);
+            expansion.Linear = math.mul(bFromWorld.Rotation, expansion.Linear);
             var transform = new RigidTransform(new quaternion(bFromA.Rotation), bFromA.Translation); // TODO: avoid this conversion to and back from float3x3
             Aabb aabbAinB = expansion.ExpandAabb(convexColliderA->CalculateAabb(transform));
 
@@ -801,5 +796,19 @@ namespace Unity.Physics
                 m_KeyPath.PopChildKey(numCompositeKeyBits);
             }
         }
+
+        #region Obsolete
+        [Obsolete("BodyBody(ref PhysicsWorld, BodyIndexPair, float, ref BlockStream.Writer) has been deprecated. Use BodyBody() that takes a pair of bodies and motion velocities instead. (RemovedAfter 2019-12-10)")]
+        public static unsafe void BodyBody(ref PhysicsWorld world, BodyIndexPair pair, float timeStep, ref BlockStream.Writer contactWriter)
+        {
+            RigidBody rigidBodyA = world.Bodies[pair.BodyAIndex];
+            RigidBody rigidBodyB = world.Bodies[pair.BodyBIndex];
+
+            MotionVelocity motionVelocityA = pair.BodyAIndex < world.MotionVelocities.Length ? world.MotionVelocities[pair.BodyAIndex] : MotionVelocity.Zero;
+            MotionVelocity motionVelocityB = pair.BodyBIndex < world.MotionVelocities.Length ? world.MotionVelocities[pair.BodyBIndex] : MotionVelocity.Zero;
+
+            BodyBody(rigidBodyA, rigidBodyB, motionVelocityA, motionVelocityB, world.CollisionWorld.CollisionTolerance, timeStep, pair, ref contactWriter);
+        }
+        #endregion
     }
 }

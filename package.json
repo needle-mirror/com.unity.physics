@@ -14,10 +14,10 @@
   "name": "com.unity.physics",
   "unity": "2019.1",
   "unityRelease": "10f1",
-  "version": "0.2.2-preview",
+  "version": "0.2.3-preview",
   "repository": {
     "type": "git",
     "url": "git@github.com:Unity-Technologies/Unity.Physics.git",
-    "revision": "33497d24f80bea76491bc4b3ebed2e210279b707"
+    "revision": "679fd91f5a7df6e1d83eb7a5b00a38029895a9eb"
   }
 }

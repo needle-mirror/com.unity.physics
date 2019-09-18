@@ -1171,7 +1171,8 @@ namespace Unity.Physics.Tests.Utils
             staticLayerChangeInfo.HaveStaticBodiesChanged = 1;
 
             // Build the broadphase
-            world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, timeStep: 1.0f, numThreadsHint: 1, ref staticLayerChangeInfo, inputDeps: new JobHandle()).Complete();
+            world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, timeStep: 1.0f, gravity: -9.81f * math.up(),
+                numThreadsHint: 1, ref staticLayerChangeInfo, inputDeps: new JobHandle()).Complete();
             staticLayerChangeInfo.Deallocate();
 
             return world;

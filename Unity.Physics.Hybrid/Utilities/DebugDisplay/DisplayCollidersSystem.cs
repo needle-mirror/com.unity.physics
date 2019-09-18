@@ -455,6 +455,7 @@ namespace Unity.Physics.Authoring
                             trianglePairEdges.Add(new Edge { A = v[1], B = v[2] });
                             trianglePairEdges.Add(new Edge { A = v[2], B = v[3] });
                             trianglePairEdges.Add(new Edge { A = v[3], B = v[0] });
+                            trianglePairEdges.Add(new Edge { A = v[0], B = v[2] });
                         }
                         else
                         {
@@ -465,19 +466,18 @@ namespace Unity.Physics.Authoring
                     }
                 }
 
-                Gizmos.color = Color.black;
+                Gizmos.color = new Color(0.0f, 1.0f, 0.0f);
+
                 foreach (Edge edge in triangleEdges)
                 {
                     Gizmos.DrawLine(edge.A, edge.B);
                 }
 
-                Gizmos.color = Color.blue;
                 foreach (Edge edge in trianglePairEdges)
                 {
                     Gizmos.DrawLine(edge.A, edge.B);
                 }
 
-                Gizmos.color = Color.cyan;
                 foreach (Edge edge in quadEdges)
                 {
                     Gizmos.DrawLine(edge.A, edge.B);

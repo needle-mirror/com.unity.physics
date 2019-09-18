@@ -259,7 +259,10 @@ namespace Unity.Physics.Tests.Dynamics.SimplexSolver
             SurfaceConstraintInfo plane4 = CreateConstraint(ColliderKey.Empty, float3.zero, math.normalize(new float3(1, 1, 0)), 1, 0, 0, false, float3.zero);
             SurfaceConstraintInfo plane5 = CreateConstraint(ColliderKey.Empty, float3.zero, math.normalize(new float3(-1, 1, 0)), 1, 0, 0, false, float3.zero);
             SurfaceConstraintInfo plane6 = CreateConstraint(ColliderKey.Empty, float3.zero, new float3(0, 0, 1), 1, 0, 0, false, float3.zero);
-            SurfaceConstraintInfo plane7 = CreateConstraint(ColliderKey.Empty, float3.zero, new float3(0, 0, -1), 1, 0, 0, false, new float3(0, 0, 1));
+            SurfaceConstraintInfo plane7 = CreateConstraint(ColliderKey.Empty, float3.zero, math.normalize(new float3(0, 1, 2)), 1, 0, 0, false, float3.zero);
+            SurfaceConstraintInfo plane8 = CreateConstraint(ColliderKey.Empty, float3.zero, math.normalize(new float3(0, 1, -2)), 1, 0, 0, false, float3.zero);
+            SurfaceConstraintInfo plane9 = CreateConstraint(ColliderKey.Empty, float3.zero, new float3(1, 0, 0), 1, 0, 0, false, float3.zero);
+            SurfaceConstraintInfo plane10 = CreateConstraint(ColliderKey.Empty, float3.zero, new float3(-1, 0, 0), 1, 0, 0, false, new float3(-1, 0, 0));
 
             // Test the single plane
             SurfaceConstraintInfo* supportPlanes = stackalloc SurfaceConstraintInfo[4];
@@ -371,11 +374,11 @@ namespace Unity.Physics.Tests.Dynamics.SimplexSolver
 
             // 4 planes, all necessary
             numSupportPlanes = 4;
-            supportPlanes[0] = plane4;
-            supportPlanes[1] = plane5;
-            supportPlanes[2] = plane6;
-            supportPlanes[3] = plane7;
-            velocity = new float3(0, -1, 0);
+            supportPlanes[0] = plane7;
+            supportPlanes[1] = plane8;
+            supportPlanes[2] = plane9;
+            supportPlanes[3] = plane10;
+            velocity = new float3(1, -1, 0);
             ExamineActivePlanes(up, supportPlanes, ref numSupportPlanes, ref velocity);
             Assert.AreApproximatelyEqual(velocity.x, 0);
             Assert.AreApproximatelyEqual(velocity.y, 0);

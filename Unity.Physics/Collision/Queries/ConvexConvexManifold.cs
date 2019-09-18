@@ -225,9 +225,10 @@ namespace Unity.Physics
                 // Build manifold
                 if (!FaceFace(ref boxA->ConvexHull, ref boxB->ConvexHull, faceIndexA, faceIndexB, worldFromA, aFromB, normalInA, distance, ref manifold))
                 {
-                    // TODO.ma - the closest points are vertices, we need GJK to find them.
-                    // We could call GJK here, or always use GJK instead of BoxTriangle(), or do nothing and live with possible tunneling.
-                    // This method is ~2.5x faster than GJK, so if it gets the right result without calling GJK most of the time, it's worth keeping even if we call GJK when it fails.
+                    // The closest points are vertices, we need GJK to find them
+                    ConvexConvex(
+                        ref ((ConvexCollider*)boxA)->ConvexHull, ref ((ConvexCollider*)boxB)->ConvexHull,
+                        worldFromA, aFromB, maxDistance, out manifold);
                 }
             }
         }
@@ -371,9 +372,10 @@ namespace Unity.Physics
                 // Build manifold
                 if (!FaceFace(ref boxA->ConvexHull, ref triangleB->ConvexHull, faceIndexA, faceIndexB, worldFromA, aFromB, normalInA, float.MaxValue, ref manifold))
                 {
-                    // TODO.ma - the closest points are vertices, we need GJK to find them.
-                    // We could call GJK here, or always use GJK instead of BoxTriangle(), or do nothing and live with possible tunneling.
-                    // This method is ~2x faster than GJK, so if it gets the right result without calling GJK most of the time, it's worth keeping even if we call GJK when it fails.
+                    // The closest points are vertices, we need GJK to find them
+                    ConvexConvex(
+                        ref ((ConvexCollider*)boxA)->ConvexHull, ref ((ConvexCollider*)triangleB)->ConvexHull,
+                        worldFromA, aFromB, maxDistance, out manifold);
                 }
             }
         }

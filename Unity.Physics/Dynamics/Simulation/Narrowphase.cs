@@ -67,7 +67,16 @@ namespace Unity.Physics
                                 BodyBIndex = dispatchPair.BodyBIndex
                             };
 
-                            ManifoldQueries.BodyBody(ref World, pair, TimeStep, ref ContactWriter);
+                            RigidBody rigidBodyA = World.Bodies[pair.BodyAIndex];
+                            RigidBody rigidBodyB = World.Bodies[pair.BodyBIndex];
+
+                            MotionVelocity motionVelocityA = pair.BodyAIndex < World.MotionVelocities.Length ?
+                                World.MotionVelocities[pair.BodyAIndex] : MotionVelocity.Zero;
+                            MotionVelocity motionVelocityB = pair.BodyBIndex < World.MotionVelocities.Length ?
+                                World.MotionVelocities[pair.BodyBIndex] : MotionVelocity.Zero;
+
+                            ManifoldQueries.BodyBody(rigidBodyA, rigidBodyB, motionVelocityA, motionVelocityB,
+                                World.CollisionWorld.CollisionTolerance, TimeStep, pair, ref ContactWriter);
                         }
                         else
                         {
@@ -78,6 +87,7 @@ namespace Unity.Physics
 
                             GetMotion(ref World, bodyAIndex, out MotionVelocity velocityA, out MotionData motionA);
                             GetMotion(ref World, bodyBIndex, out MotionVelocity velocityB, out MotionData motionB);
+
                             Solver.BuildJointJacobian(joint.JointData, joint.BodyPair, velocityA, velocityB, motionA, motionB, TimeStep, NumIterations, ref JointJacobianWriter);
                         }
                     }

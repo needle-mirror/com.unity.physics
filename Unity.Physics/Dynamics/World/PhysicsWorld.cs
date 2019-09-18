@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using Unity.Collections;
 using Unity.Mathematics;
 
@@ -21,8 +22,6 @@ namespace Unity.Physics
         public NativeSlice<MotionData> MotionDatas => DynamicsWorld.MotionDatas;
         public NativeSlice<MotionVelocity> MotionVelocities => DynamicsWorld.MotionVelocities;
         public NativeSlice<Joint> Joints => DynamicsWorld.Joints;
-
-        public float CollisionTolerance => 0.1f; // todo - make this configurable?
 
         // Construct a world with the given number of uninitialized bodies and joints
         public PhysicsWorld(int numStaticBodies, int numDynamicBodies, int numJoints)
@@ -101,6 +100,12 @@ namespace Unity.Physics
             return CollisionWorld.CalculateDistance(input, ref collector);
         }
 
+        #endregion
+
+        #region Obsolete
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("This property has been deprecated. Get it from CollisionWorld instead. (RemovedAfter 2019-12-09)")]
+        public float CollisionTolerance => CollisionWorld.CollisionTolerance;
         #endregion
     }
 }

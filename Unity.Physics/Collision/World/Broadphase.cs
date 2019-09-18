@@ -101,7 +101,7 @@ namespace Unity.Physics
                 FiltersOut = new NativeSlice<CollisionFilter>(m_BodyFilters, world.NumDynamicBodies, world.NumStaticBodies),
                 Lookup = lookup,
                 Offset = world.NumDynamicBodies,
-                AabbMargin = world.CollisionTolerance / 2.0f // each body contributes half,
+                AabbMargin = world.CollisionWorld.CollisionTolerance / 2.0f // each body contributes half,
             }.ScheduleUnsafeIndex0(staticLayerChangeInfo.NumStaticBodiesArray, 32, handle);
 
             return m_StaticTree.BoundingVolumeHierarchy.ScheduleBuildJobs(
@@ -116,7 +116,7 @@ namespace Unity.Physics
             public void Execute() { }
         }
 
-        private JobHandle ScheduleDynamicTreeBuildJobs(ref PhysicsWorld world, float timeStep, int numThreadsHint, JobHandle inputDeps)
+        private JobHandle ScheduleDynamicTreeBuildJobs(ref PhysicsWorld world, float timeStep, float3 gravity, int numThreadsHint, JobHandle inputDeps)
         {
             JobHandle handle = inputDeps;
             var aabbs = new NativeArray<Aabb>(world.NumBodies, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
@@ -128,11 +128,13 @@ namespace Unity.Physics
             {
                 RigidBodies = world.DynamicBodies,
                 MotionVelocities = world.MotionVelocities,
+                MotionDatas = world.MotionDatas,
                 Aabbs = aabbs,
                 FiltersOut = new NativeSlice<CollisionFilter>(m_BodyFilters, 0, world.NumDynamicBodies),
                 Lookup = lookup,
-                AabbMargin = world.CollisionTolerance / 2.0f, // each body contributes half
-                TimeStep = timeStep
+                AabbMargin = world.CollisionWorld.CollisionTolerance / 2.0f, // each body contributes half
+                TimeStep = timeStep,
+                Gravity = gravity
             }.Schedule(world.NumDynamicBodies, 32, handle);
 
             m_DynamicTree.NodeCount = world.NumDynamicBodies + BoundingVolumeHierarchy.Constants.MaxNumTreeBranches;
@@ -144,10 +146,17 @@ namespace Unity.Physics
             return new DisposeArrayJob { Array = shouldDoWork }.Schedule(handle);
         }
 
+        [Obsolete("Broadphase.ScheduleBuildJobs() has been deprecated. Use the new implementation that takes gravity instead. (RemovedAfter 2019-12-06)", true)]
+        public JobHandle ScheduleBuildJobs(ref PhysicsWorld world, float timeStep, int numThreadsHint, ref StaticLayerChangeInfo staticLayerChangeInfo, JobHandle inputDeps)
+        {
+            PhysicsStep stepComponent = PhysicsStep.Default;
+            return ScheduleBuildJobs(ref world, timeStep, stepComponent.Gravity, numThreadsHint, ref staticLayerChangeInfo, inputDeps);
+        }
+
         /// <summary>
         /// Schedule a set of jobs to build the broadphase based on the given world.
         /// </summary>       
-        public JobHandle ScheduleBuildJobs(ref PhysicsWorld world, float timeStep, int numThreadsHint, ref StaticLayerChangeInfo staticLayerChangeInfo, JobHandle inputDeps)
+        public JobHandle ScheduleBuildJobs(ref PhysicsWorld world, float timeStep, float3 gravity, int numThreadsHint, ref StaticLayerChangeInfo staticLayerChangeInfo, JobHandle inputDeps)
         {
             var previousFrameBodyFilters = new NativeArray<CollisionFilter>(m_BodyFilters, Allocator.TempJob);
 
@@ -164,7 +173,7 @@ namespace Unity.Physics
             JobHandle dynamicTree = inputDeps;
             if (world.NumDynamicBodies > 0)
             {
-                dynamicTree = ScheduleDynamicTreeBuildJobs(ref world, timeStep, numThreadsHint, inputDeps);
+                dynamicTree = ScheduleDynamicTreeBuildJobs(ref world, timeStep, gravity, numThreadsHint, inputDeps);
             }
 
             return JobHandle.CombineDependencies(staticTree, dynamicTree);
@@ -581,7 +590,9 @@ namespace Unity.Physics
         {
             [ReadOnly] public NativeSlice<RigidBody> RigidBodies;
             [ReadOnly] public NativeSlice<MotionVelocity> MotionVelocities;
+            [ReadOnly] public NativeSlice<MotionData> MotionDatas;
             [ReadOnly] public float TimeStep;
+            [ReadOnly] public float3 Gravity;
             [ReadOnly] public float AabbMargin;
 
             public NativeArray<PointAndIndex> Lookup;
@@ -596,7 +607,14 @@ namespace Unity.Physics
                 Aabb aabb;
                 if (body.Collider != null)
                 {
-                    MotionExpansion expansion = MotionVelocities[index].CalculateExpansion(TimeStep);
+                    var mv = MotionVelocities[index];
+                    var md = MotionDatas[index];
+
+                    // Apply gravity only on a copy to get proper expansion for the AABB,
+                    // actual applying of gravity will be done later in the physics step
+                    mv.LinearVelocity += Gravity * TimeStep * md.GravityFactor;
+
+                    MotionExpansion expansion = mv.CalculateExpansion(TimeStep);
                     aabb = expansion.ExpandAabb(body.Collider->CalculateAabb(body.WorldFromBody));
                     aabb.Expand(AabbMargin);
 

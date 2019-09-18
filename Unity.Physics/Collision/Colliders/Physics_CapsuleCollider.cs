@@ -7,7 +7,7 @@ using Unity.Mathematics;
 
 namespace Unity.Physics
 {
-    public struct CapsuleGeometry
+    public struct CapsuleGeometry : IEquatable<CapsuleGeometry>
     {
         // The start position of the capsule's inner line segment
         public float3 Vertex0 { get => m_Vertex0; set => m_Vertex0 = value; }
@@ -20,6 +20,21 @@ namespace Unity.Physics
         // The radius of the capsule around the line segment
         public float Radius { get => m_Radius; set => m_Radius = value; }
         private float m_Radius;
+
+        public bool Equals(CapsuleGeometry other)
+        {
+            return m_Vertex0.Equals(other.m_Vertex0)
+                && m_Vertex1.Equals(other.m_Vertex1)
+                && m_Radius.Equals(other.m_Radius);
+        }
+
+        public override int GetHashCode()
+        {
+            return unchecked((int)math.hash(new uint2(
+                math.hash(m_Vertex0),
+                math.hash(new float4(m_Vertex1, m_Radius))
+            )));
+        }
 
         internal void Validate()
         {

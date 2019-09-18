@@ -55,14 +55,16 @@ namespace Unity.Physics
             set => Flags = value ? (Flags & ~JacobianFlags.Disabled) : (Flags | JacobianFlags.Disabled);
         }
 
+        // Whether the Jacobian contains manifold data for collision events or not
+        public bool HasContactManifold => (Flags & JacobianFlags.EnableCollisionEvents) != 0;
+
         // Collider keys for the collision events
-        public bool HasColliderKeys => (Flags & JacobianFlags.EnableCollisionEvents) != 0;
         public ColliderKeyPair ColliderKeys
         {
-            get => HasColliderKeys ? AccessColliderKeys() : ColliderKeyPair.Empty;
+            get => HasContactManifold ? AccessColliderKeys() : ColliderKeyPair.Empty;
             set
             {
-                if (HasColliderKeys)
+                if (HasContactManifold)
                     AccessColliderKeys() = value;
                 else
                     throw new NotSupportedException("Jacobian does not have collision events enabled");
@@ -135,7 +137,8 @@ namespace Unity.Physics
         {
             return UnsafeUtility.SizeOf<JacobianHeader>() +
                 SizeOfBaseJacobian(type) + SizeOfModifierData(type, flags) +
-                numContactPoints * UnsafeUtility.SizeOf<ContactJacAngAndVelToReachCp>();
+                numContactPoints * UnsafeUtility.SizeOf<ContactJacAngAndVelToReachCp>() +
+                SizeOfContactPointData(type, flags, numContactPoints);
         }
 
         private static int SizeOfColliderKeys(JacobianType type, JacobianFlags flags)
@@ -160,6 +163,12 @@ namespace Unity.Physics
         {
             return SizeOfColliderKeys(type, flags) + SizeOfSurfaceVelocity(type, flags) +
                 SizeOfMassFactors(type, flags);
+        }
+
+        private static int SizeOfContactPointData(JacobianType type, JacobianFlags flags, int numContactPoints = 0)
+        {
+            return (type == JacobianType.Contact && (flags & JacobianFlags.EnableCollisionEvents) != 0) ?
+                numContactPoints * UnsafeUtility.SizeOf<ContactPoint>() : 0;
         }
 
         private static int SizeOfBaseJacobian(JacobianType type)
@@ -224,6 +233,18 @@ namespace Unity.Physics
             ptr += UnsafeUtility.SizeOf<JacobianHeader>() + SizeOfBaseJacobian(Type) + SizeOfModifierData(Type, Flags) +
                 pointIndex * UnsafeUtility.SizeOf<ContactJacAngAndVelToReachCp>();
             return ref UnsafeUtilityEx.AsRef<ContactJacAngAndVelToReachCp>(ptr);
+        }
+
+        public unsafe ref ContactPoint AccessContactPoint(int pointIndex)
+        {
+            Assert.IsTrue(Type == JacobianType.Contact);
+
+            var baseJac = AccessBaseJacobian<ContactJacobian>();
+            byte* ptr = (byte*)UnsafeUtility.AddressOf(ref this);
+            ptr += UnsafeUtility.SizeOf<JacobianHeader>() + SizeOfBaseJacobian(Type) + SizeOfModifierData(Type, Flags) +
+                baseJac.BaseJacobian.NumContacts * UnsafeUtility.SizeOf<ContactJacAngAndVelToReachCp>() +
+                pointIndex * UnsafeUtility.SizeOf<ContactPoint>();
+            return ref UnsafeUtilityEx.AsRef<ContactPoint>(ptr);
         }
 
         #endregion

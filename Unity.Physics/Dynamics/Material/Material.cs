@@ -108,6 +108,19 @@ namespace Unity.Physics
                 Restitution == other.Restitution;
         }
 
+        public override int GetHashCode()
+        {
+            return unchecked((int)math.hash(new uint2(
+                unchecked((uint)(
+                    (byte)Flags
+                    | ((byte)FrictionCombinePolicy << 4)
+                    | ((byte)RestitutionCombinePolicy << 8)
+                    | (CustomTags << 12))
+                ),
+                math.hash(new float2(Friction, Restitution))
+            )));
+        }
+
         #region Obsolete
         [EditorBrowsable(EditorBrowsableState.Never)]
         [Obsolete("EnableMaxImpulse has been deprecated. (RemovedAfter 2019-10-15)", true)]

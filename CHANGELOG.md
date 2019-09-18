@@ -1,8 +1,78 @@
+## [0.2.3-preview] - 2019-09-19
+
+### Upgrade guide
+
+* Implicitly static shapes (i.e. those without a `PhysicsBodyAuthoring` or `Rigidbody`) in a hierarchy under a GameObject with `StaticOptimizeEntity` are now converted into a single compound `PhysicsCollider` on the entity with the `Static` tag. If your queries or contact events need to know about data associated with the entities from which these leaf shapes were created, you need to explicitly add `PhysicsBodyAuthoring` components with static motion type, in order to prevent them from becoming part of the compound.
+
+### Changes
+
+* Run-Time API
+    * Deprecated `Broadphase.ScheduleBuildJobs()` and provided a new implementation that takes gravity as input.
+    * Deprecated `CollisionWorld.ScheduleUpdateDynamicLayer()` and provided a new implementation that takes gravity as input.
+    * Deprecated `PhysicsWorld.CollisionTolerance` and moved it to `CollisionWorld`.
+    * Deprecated `ManifoldQueries.BodyBody()` and provided a new implementation that takes two bodies and two velocities.
+    * Added `CollisionEvent.CalculateDetails()` which provides extra information about the collision event:
+        * Estimated impulse
+        * Estimated impact position
+        * Array of contact point positions
+    * Removed `CollisionEvent.AccumulatedImpulses` and provided `CollisionEvent.CalculateDetails()` which gives a more reliable impulse value.
+    
+* Authoring/Conversion API
+    * Removed the following expired ScriptableObject:
+        * `CustomFlagNames`
+    * Removed the following expired members:
+        * `PhysicsShapeAuthoring.GetBelongsTo()`
+        * `PhysicsShapeAuthoring.SetBelongsTo()`
+        * `PhysicsShapeAuthoring.GetCollidesWith()`
+        * `PhysicsShapeAuthoring.SetCollidesWith()`
+        * `PhysicsShapeAuthoring.OverrideCustomFlags`
+        * `PhysicsShapeAuthoring.CustomFlags`
+        * `PhysicsShapeAuthoring.GetCustomFlag()`
+        * `PhysicsShapeAuthoring.SetCustomFlag()`
+        * `PhysicsMaterialTemplate.GetBelongsTo()`
+        * `PhysicsMaterialTemplate.SetBelongsTo()`
+        * `PhysicsMaterialTemplate.GetCollidesWith()`
+        * `PhysicsMaterialTemplate.SetCollidesWith()`
+        * `PhysicsMaterialTemplate.CustomFlags`
+        * `PhysicsMaterialTemplate.GetCustomFlag()`
+        * `PhysicsMaterialTemplate.SetCustomFlag()`
+        
+* Run-Time Behavior
+    * Gravity is now applied at the beginning of the step, as opposed to previously being applied at the end during integration.
+    
+* Authoring/Conversion Behavior
+    * Implicitly static shapes in a hierarchy under a GameObject with `StaticOptimizeEntity` are now converted into a single compound `PhysicsCollider`.
+
+### Fixes
+
+* Fixed issues preventing compatibility with DOTS Runtime.
+* Fixed occasional tunneling of boxes through other boxes and mesh triangles.
+* Fixed incorrect AABB sweep direction during collisions with composite colliders, potentially allowing tunneling.
+* Fixed obsolete `MeshCollider.Create()` creating an empty mesh.
+* Fixed obsolete `ConvexCollider.Create()` resulting in infinite recursion.
+* Fixed simplex solver bug causing too high output velocities in 3D solve case.
+* Fixed bug causing custom meshes to be ignored on convex shapes when the shape's transform was bound to a skinned mesh.
+* Fixed Burst incompatibilities in the following types:
+    * `BoxGeometry`
+    * `CapsuleGeometry`
+    * `CollisionFilter`
+    * `ConvexHullGenerationParameters`
+    * `CylinderGeometry`
+    * `Material`
+    * `SphereGeometry`
+* Improved performance of `MeshConnectivityBuilder.WeldVertices()`.
+* Fixed a potential assert when joints are created with a static and dynamic body (in that order).
+
+### Known Issues
+
+
+
 ## [0.2.2-preview] - 2019-09-06
 
 ### Fixes
 
 * Added internal API extensions to work around an API updater issue with Unity 2019.1 to provide a better upgrading experience.
+
 
 
 ## [0.2.1-preview] - 2019-09-06

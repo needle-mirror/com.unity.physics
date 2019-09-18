@@ -19,19 +19,6 @@ namespace Unity.Physics.Authoring
         protected virtual byte GetCustomFlags(T shape) => throw new NotImplementedException();
     }
 
-    [Obsolete("CustomFlagNames has been deprecated. Use CustomPhysicsMaterialTagNames instead. (RemovedAfter 2019-09-06) (UnityUpgradable) -> CustomPhysicsMaterialTagNames", true)]
-    public class CustomFlagNames : ScriptableObject
-    {
-        public virtual IReadOnlyList<string> FlagNames => throw new NotImplementedException();
-    }
-
-    public sealed partial class CustomPhysicsMaterialTagNames
-    {
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("FlagNames has been deprecated. Use TagNames instead. (RemovedAfter 2019-09-06) (UnityUpgradable) -> TagNames", true)]
-        public IReadOnlyList<string> FlagNames => throw new NotImplementedException();
-    }
-
     [Obsolete("PhysicsBody has been renamed PhysicsBodyAuthoring. (RemovedAfter 2019-11-27) (UnityUpgradable) -> PhysicsBodyAuthoring", true)]
     public sealed class PhysicsBody : MonoBehaviour { }
 
@@ -49,53 +36,6 @@ namespace Unity.Physics.Authoring
         [FormerlySerializedAs("m_ConvexRadius")]
         [SerializeField, HideInInspector]
         float m_ConvexRadius_Deprecated = -1f;
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("GetBelongsTo() has been deprecated. Use BelongsTo instead. (RemovedAfter 2019-09-06)")]
-        public bool GetBelongsTo(int categoryIndex) => m_Material.BelongsTo[categoryIndex];
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("SetBelongsTo() has been deprecated. Use BelongsTo instead. (RemovedAfter 2019-09-06)")]
-        public void SetBelongsTo(int categoryIndex, bool value)
-        {
-            var tags = m_Material.BelongsTo;
-            tags[categoryIndex] = value;
-            m_Material.BelongsTo = tags;
-        }
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("GetCollidesWith() has been deprecated. Use CollidesWith instead. (RemovedAfter 2019-09-06)")]
-        public bool GetCollidesWith(int categoryIndex) => m_Material.CollidesWith[categoryIndex];
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("SetCollidesWith() has been deprecated. Use CollidesWith instead. (RemovedAfter 2019-09-06)")]
-        public void SetCollidesWith(int categoryIndex, bool value)
-        {
-            var tags = m_Material.CollidesWith;
-            tags[categoryIndex] = value;
-            m_Material.CollidesWith = tags;
-        }
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("OverrideCustomFlags has been deprecated. Use OverrideCustomTags instead. (RemovedAfter 2019-09-06) (UnityUpgradable) -> OverrideCustomTags")]
-        public bool OverrideCustomFlags { get => OverrideCustomTags; set => OverrideCustomTags = value; }
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("CustomFlags has been deprecated. Use CustomTags instead. (RemovedAfter 2019-09-06)")]
-        public byte CustomFlags { get => CustomTags.Value; set => CustomTags = new CustomPhysicsMaterialTags { Value = value }; }
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("GetCustomFlag() has been deprecated. Use GetCustomTag() instead. (RemovedAfter 2019-09-06)")]
-        public bool GetCustomFlag(int customFlagIndex) => m_Material.CustomTags[customFlagIndex];
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("SetCustomFlag() has been deprecated. Use SetCustomTag() instead. (RemovedAfter 2019-09-06)")]
-        public void SetCustomFlag(int customFlagIndex, bool value)
-        {
-            var tags = m_Material.CustomTags;
-            tags[customFlagIndex] = value;
-            m_Material.CustomTags = tags;
-        }
 
         [EditorBrowsable(EditorBrowsableState.Never)]
         [Obsolete("This signature has been deprecated. Please use a signature passing ConvexHullGenerationParameters. (RemovedAfter 2019-11-15)")]
@@ -120,8 +60,10 @@ namespace Unity.Physics.Authoring
         [Obsolete("This signature has been deprecated. Please use the signature returning BoxGeometry instead. (RemovedAfter 2019-11-22")]
         public void GetBoxProperties(out float3 center, out float3 size, out quaternion orientation)
         {
-            GetBoxProperties(out center, out size, out var euler, out _);
-            orientation = euler;
+            var box = GetBoxProperties();
+            center = box.Center;
+            size = box.Size;
+            orientation = box.Orientation;
         }
 
         [EditorBrowsable(EditorBrowsableState.Never)]
@@ -130,7 +72,14 @@ namespace Unity.Physics.Authoring
         {
             var euler = m_PrimitiveOrientation;
             euler.SetValue(orientation);
-            SetBox(center, size, euler);
+            var box = new BoxGeometry
+            {
+                Center = center,
+                Size = size,
+                Orientation = orientation,
+                BevelRadius = BevelRadius
+            };
+            SetBox(box, euler);
         }
 
         [EditorBrowsable(EditorBrowsableState.Never)]
@@ -139,8 +88,10 @@ namespace Unity.Physics.Authoring
             out float3 center, out float height, out float radius, out quaternion orientation
         )
         {
-            GetCapsuleProperties(out center, out height, out radius, out EulerAngles euler);
-            orientation = euler;
+            var capsule = GetCapsuleProperties(out orientation);
+            center = capsule.GetCenter();
+            height = capsule.GetHeight();
+            radius = capsule.Radius;
         }
 
         [EditorBrowsable(EditorBrowsableState.Never)]
@@ -149,7 +100,13 @@ namespace Unity.Physics.Authoring
         {
             var euler = m_PrimitiveOrientation;
             euler.SetValue(orientation);
-            SetCapsule(center, height, radius, euler);
+            var capsule = new CapsuleGeometry
+            {
+                Vertex0 = new float3(0f, 0f, -0.5f * height),
+                Vertex1 = new float3(0f, 0f, 0.5f * height),
+                Radius = radius
+            };
+            SetCapsule(capsule, euler);
         }
 
         [EditorBrowsable(EditorBrowsableState.Never)]
@@ -158,8 +115,11 @@ namespace Unity.Physics.Authoring
             out float3 center, out float height, out float radius, out quaternion orientation
         )
         {
-            GetCylinderProperties(out center, out height, out radius, out var euler, out _, out _);
-            orientation = euler;
+            var cylinder = GetCylinderProperties();
+            center = cylinder.Center;
+            height = cylinder.Height;
+            radius = cylinder.Radius;
+            orientation = cylinder.Orientation;
         }
 
         [EditorBrowsable(EditorBrowsableState.Never)]
@@ -168,15 +128,25 @@ namespace Unity.Physics.Authoring
         {
             var euler = m_PrimitiveOrientation;
             euler.SetValue(orientation);
-            SetCylinder(center, height, radius, euler);
+            var cylinder = new CylinderGeometry
+            {
+                Center = center,
+                Height = height,
+                Radius = radius,
+                Orientation = orientation,
+                BevelRadius = BevelRadius,
+                SideCount = 20
+            };
+            SetCylinder(cylinder, euler);
         }
 
         [EditorBrowsable(EditorBrowsableState.Never)]
         [Obsolete("This signature has been deprecated. Please use the signature returning SphereGeometry instead. (RemovedAfter 2019-11-22")]
         public void GetSphereProperties(out float3 center, out float radius, out quaternion orientation)
         {
-            GetSphereProperties(out center, out radius, out EulerAngles euler);
-            orientation = euler;
+            var sphere = GetSphereProperties(out orientation);
+            center = sphere.Center;
+            radius = sphere.Radius;
         }
 
         [EditorBrowsable(EditorBrowsableState.Never)]
@@ -185,53 +155,7 @@ namespace Unity.Physics.Authoring
         {
             var euler = m_PrimitiveOrientation;
             euler.SetValue(orientation);
-            SetSphere(center, radius, euler);
-        }
-    }
-
-    public sealed partial class PhysicsMaterialTemplate
-    {
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("GetBelongsTo() has been deprecated. Use BelongsTo instead. (RemovedAfter 2019-09-06)")]
-        public bool GetBelongsTo(int categoryIndex) => m_Value.BelongsTo[categoryIndex];
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("SetBelongsTo() has been deprecated. Use BelongsTo instead. (RemovedAfter 2019-09-06)")]
-        public void SetBelongsTo(int categoryIndex, bool value)
-        {
-            var tags = m_Value.BelongsTo;
-            tags[categoryIndex] = value;
-            m_Value.BelongsTo = tags;
-        }
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("GetCollidesWith() has been deprecated. Use CollidesWith instead. (RemovedAfter 2019-09-06)")]
-        public bool GetCollidesWith(int categoryIndex) => m_Value.CollidesWith[categoryIndex];
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("SetCollidesWith() has been deprecated. Use CollidesWith instead. (RemovedAfter 2019-09-06)")]
-        public void SetCollidesWith(int categoryIndex, bool value)
-        {
-            var tags = m_Value.CollidesWith;
-            tags[categoryIndex] = value;
-            m_Value.CollidesWith = tags;
-        }
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("CustomFlags has been deprecated. Use CustomTags instead. (RemovedAfter 2019-09-06)")]
-        public byte CustomFlags { get => CustomTags.Value; set => CustomTags = new CustomPhysicsMaterialTags { Value = value }; }
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("GetCustomFlag() has been deprecated. Use CustomTags instead. (RemovedAfter 2019-09-06)")]
-        public bool GetCustomFlag(int customFlagIndex) => CustomTags[customFlagIndex];
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("SetCustomFlag() has been deprecated. Use CustomTags instead. (RemovedAfter 2019-09-06)")]
-        public void SetCustomFlag(int customFlagIndex, bool value)
-        {
-            var tags = CustomTags;
-            tags[customFlagIndex] = value;
-            CustomTags = tags;
+            SetSphere(new SphereGeometry { Center = center, Radius = radius }, euler);
         }
     }
 }

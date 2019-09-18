@@ -41,7 +41,7 @@ namespace Unity.Physics.Tests.Authoring
             var size = new float3(sizeX, sizeY, sizeZ);
             m_Shape.SetBox(new BoxGeometry { Size = size, Orientation = quaternion.identity });
 
-            var capsule = m_Shape.GetCapsuleProperties(out _);
+            var capsule = m_Shape.GetCapsuleProperties(out quaternion _);
 
             var height = math.length(capsule.Vertex1 - capsule.Vertex0) + 2f * capsule.Radius;
             Assert.That(height, Is.EqualTo(math.cmax(size)));
@@ -57,7 +57,7 @@ namespace Unity.Physics.Tests.Authoring
             var size = new float3(sizeX, sizeY, sizeZ);
             m_Shape.SetBox(new BoxGeometry { Size = size, Orientation = quaternion.identity });
 
-            var capsule = m_Shape.GetCapsuleProperties(out _);
+            var capsule = m_Shape.GetCapsuleProperties(out quaternion _);
 
             var cmaxI = size.GetMaxAxis();
             var expectedRadius = 0.5f * math.cmax(cmaxI == 0 ? size.yz : cmaxI == 1 ? size.xz : size.xy);
@@ -75,7 +75,7 @@ namespace Unity.Physics.Tests.Authoring
         {
             m_Shape.SetBox(new BoxGeometry { Size = boxSize, Orientation = quaternion.identity });
 
-            m_Shape.GetCapsuleProperties(out var orientation);
+            m_Shape.GetCapsuleProperties(out quaternion orientation);
 
             var lookVector = math.mul(orientation, new float3(0f, 0f, 1f));
             Assert.That(
@@ -117,7 +117,7 @@ namespace Unity.Physics.Tests.Authoring
             var expectedCenter = new float3(4f, 5f, 6f);
             m_Shape.SetBox(new BoxGeometry { Size = size, Center = expectedCenter, Orientation = orientation });
 
-            var capsule = m_Shape.GetCapsuleProperties(out _);
+            var capsule = m_Shape.GetCapsuleProperties(out quaternion _);
 
             var midPoint = math.lerp(capsule.Vertex0, capsule.Vertex1, 0.5f);
             Assert.That(midPoint, Is.EqualTo(expectedCenter));
@@ -166,7 +166,7 @@ namespace Unity.Physics.Tests.Authoring
             var size = new float3(sizeX, sizeY, sizeZ);
             m_Shape.SetBox(new BoxGeometry { Size = size, Orientation = quaternion.identity });
 
-            var sphere = m_Shape.GetSphereProperties(out _);
+            var sphere = m_Shape.GetSphereProperties(out quaternion _);
 
             var expectedRadius = 0.5f * math.cmax(size);
             Assert.That(sphere.Radius, Is.EqualTo(expectedRadius));

@@ -619,7 +619,14 @@ namespace Unity.Physics.Tests.Collision.Queries
                         BlockStream contacts = new BlockStream(1, 0, Allocator.Temp);
                         BlockStream.Writer contactWriter = contacts;
                         contactWriter.BeginForEachIndex(0);
-                        ManifoldQueries.BodyBody(ref world, new BodyIndexPair { BodyAIndex = iBodyA, BodyBIndex = iBodyB }, 1.0f, ref contactWriter);
+
+                        MotionVelocity motionVelocityA = iBodyA < world.MotionVelocities.Length ?
+                            world.MotionVelocities[iBodyA] : MotionVelocity.Zero;
+                        MotionVelocity motionVelocityB = iBodyB < world.MotionVelocities.Length ?
+                            world.MotionVelocities[iBodyB] : MotionVelocity.Zero;
+
+                        ManifoldQueries.BodyBody(bodyA, bodyB, motionVelocityA, motionVelocityB,
+                                world.CollisionWorld.CollisionTolerance, 1.0f, new BodyIndexPair { BodyAIndex = iBodyA, BodyBIndex = iBodyB }, ref contactWriter);
                         contactWriter.EndForEachIndex();
 
                         // Read each manifold

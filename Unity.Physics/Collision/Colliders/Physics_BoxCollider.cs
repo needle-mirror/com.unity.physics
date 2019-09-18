@@ -7,7 +7,7 @@ using Unity.Mathematics;
 
 namespace Unity.Physics
 {
-    public struct BoxGeometry
+    public struct BoxGeometry : IEquatable<BoxGeometry>
     {
         // The center of the box
         public float3 Center { get => m_Center; set => m_Center = value; }
@@ -26,6 +26,23 @@ namespace Unity.Physics
         // of the inner hull being penetrated and incurring expensive collision algorithms.
         public float BevelRadius { get => m_BevelRadius; set => m_BevelRadius = value; }
         private float m_BevelRadius;
+
+        public bool Equals(BoxGeometry other)
+        {
+            return m_Center.Equals(other.m_Center)
+                && m_Orientation.Equals(other.m_Orientation)
+                && m_Size.Equals(other.m_Size)
+                && m_BevelRadius.Equals(other.m_BevelRadius);
+        }
+
+        public override int GetHashCode()
+        {
+            return unchecked((int)math.hash(new uint3(
+                math.hash(m_Center),
+                math.hash(m_Orientation),
+                math.hash(new float4(m_Size, m_BevelRadius))
+            )));
+        }
 
         internal void Validate()
         {

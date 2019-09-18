@@ -28,15 +28,19 @@
  **TriggerJacobian**              |              |                                             |
  0                                | 15           | BaseJac (BaseContactJacobian)               |
  16                               | 23           | ColliderKeys (2 ints)                       |
+ **ContactPoint**
+ 0                                | 11           | Position (float3)                           |
+ 12                               | 15           | Distance (float)                            |
 
-  **Contact jacobian types**                     |
--------------------------------------------------|
- **JacobianType.Contact**                        |
- JacobianHeader                                  |
- ContactJacobian                                 |
- Modifier data (based on JacModFlags)            |
- NumContacts * ContactJacAngAndVelToReachCP      |
- **JacobianType.Trigger**                        |
- JacobianHeader                                  |
- TriggerJacobian                                 |
- NumContacts * ContactJacAngAndVelToReachCP      |
+  **Contact jacobian types**                      |
+--------------------------------------------------|
+ **JacobianType.Contact**                         |
+ JacobianHeader                                   |
+ ContactJacobian                                  |
+ Modifier data (based on JacModFlags)             |
+ NumContacts * ContactJacAngAndVelToReachCP       |
+ NumContacts * ContactPoint (based on JacModFlags)|
+ **JacobianType.Trigger**                         |
+ JacobianHeader                                   |
+ TriggerJacobian                                  |
+ NumContacts * ContactJacAngAndVelToReachCP       |

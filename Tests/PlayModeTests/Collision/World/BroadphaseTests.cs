@@ -3,6 +3,7 @@ using NUnit.Framework;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
+using Unity.Mathematics;
 using UnityEngine;
 using Assert = UnityEngine.Assertions.Assert;
 
@@ -74,7 +75,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             staticLayerChangeInfo.Init(Allocator.TempJob);
             staticLayerChangeInfo.NumStaticBodies = 1;
             staticLayerChangeInfo.HaveStaticBodiesChanged = 1;
-            JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, 1, ref staticLayerChangeInfo, handle);
+            JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), 1, ref staticLayerChangeInfo, handle);
             result.Complete();
             Assert.IsTrue(result.IsCompleted);
             world.Dispose();
@@ -95,7 +96,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             staticLayerChangeInfo.Init(Allocator.TempJob);
             staticLayerChangeInfo.NumStaticBodies = 10;
             staticLayerChangeInfo.HaveStaticBodiesChanged = 1;
-            JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, 1, ref staticLayerChangeInfo, handle);
+            JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), 1, ref staticLayerChangeInfo, handle);
             result.Complete();
             Assert.IsTrue(result.IsCompleted);
             world.Dispose();
@@ -116,7 +117,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             staticLayerChangeInfo.Init(Allocator.TempJob);
             staticLayerChangeInfo.NumStaticBodies = 100;
             staticLayerChangeInfo.HaveStaticBodiesChanged = 1;
-            JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, 1, ref staticLayerChangeInfo, handle);
+            JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), 1, ref staticLayerChangeInfo, handle);
             result.Complete();
             Assert.IsTrue(result.IsCompleted);
             world.Dispose();

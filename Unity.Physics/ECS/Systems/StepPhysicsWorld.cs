@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using Unity.Entities;
 using Unity.Jobs;
+using UnityEngine.Assertions;
 
 namespace Unity.Physics.Systems
 {
@@ -25,22 +26,29 @@ namespace Unity.Physics.Systems
 
         // Simulation factory
         public delegate ISimulation SimulationCreator();
-        private readonly SimulationCreator[] m_SimulationCreators = new SimulationCreator[Enum.GetValues(typeof(SimulationType)).Length];
+        private readonly SimulationCreator[] m_SimulationCreators = new SimulationCreator[k_NumSimulationTypes];
 
         BuildPhysicsWorld m_BuildPhysicsWorldSystem;
 
         // Entity group queries
         private EntityQuery m_PhysicsEntityGroup;
 
+        // needs to match the number of SimulationType enum members
+        internal static int k_NumSimulationTypes = 3;
 
         protected override void OnCreate()
         {
             m_BuildPhysicsWorldSystem = World.GetOrCreateSystem<BuildPhysicsWorld>();
 
+#if !NET_DOTS
+            Assert.AreEqual(Enum.GetValues(typeof(SimulationType)).Length, k_NumSimulationTypes);
+#endif
+
             Simulation = new DummySimulation();
             RegisterSimulation(SimulationType.NoPhysics, () => new DummySimulation());
             RegisterSimulation(SimulationType.UnityPhysics, () => new Simulation());
-            RegisterSimulation(SimulationType.HavokPhysics, () => throw new NotSupportedException("Havok Physics package not present. Available Summer 2019."));
+            RegisterSimulation(SimulationType.HavokPhysics, () =>
+                throw new NotSupportedException("Havok Physics package not present. Use the package manager to add it."));
 
             FinalSimulationJobHandle = new JobHandle();
             FinalJobHandle = new JobHandle();
@@ -94,11 +102,17 @@ namespace Unity.Physics.Systems
                 Simulation = m_SimulationCreators[(int)stepComponent.SimulationType]();
             }
 
+#if !UNITY_DOTSPLAYER
+            float timeStep = UnityEngine.Time.fixedDeltaTime;
+#else
+            float timeStep = Time.DeltaTime;
+#endif
+
             // Schedule the simulation jobs
             var stepInput = new SimulationStepInput
             {
                 World = m_BuildPhysicsWorldSystem.PhysicsWorld,
-                TimeStep = UnityEngine.Time.fixedDeltaTime,
+                TimeStep = timeStep,
                 ThreadCountHint = stepComponent.ThreadCountHint,
                 Gravity = stepComponent.Gravity,
                 SynchronizeCollisionWorld = false,

@@ -265,8 +265,11 @@ namespace Unity.Physics.Systems
 
                 // Build the broadphase
                 // TODO: could optimize this by gathering the AABBs and filters at the same time as building the bodies above
-
+#if !UNITY_DOTSPLAYER
                 float timeStep = UnityEngine.Time.fixedDeltaTime;
+#else
+                float timeStep = Time.DeltaTime;
+#endif
 
                 PhysicsStep stepComponent = PhysicsStep.Default;
                 if (HasSingleton<PhysicsStep>())
@@ -274,7 +277,8 @@ namespace Unity.Physics.Systems
                     stepComponent = GetSingleton<PhysicsStep>();
                 }
 
-                jobHandles.Add(PhysicsWorld.CollisionWorld.Broadphase.ScheduleBuildJobs(ref PhysicsWorld, timeStep, stepComponent.ThreadCountHint, ref m_StaticLayerChangeInfo, handle));
+                jobHandles.Add(PhysicsWorld.CollisionWorld.Broadphase.ScheduleBuildJobs(ref PhysicsWorld, timeStep, stepComponent.Gravity,
+                    stepComponent.ThreadCountHint, ref m_StaticLayerChangeInfo, handle));
 
                 FinalJobHandle = JobHandle.CombineDependencies(jobHandles);
             }

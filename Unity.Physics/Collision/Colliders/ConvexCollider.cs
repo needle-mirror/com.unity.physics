@@ -9,7 +9,7 @@ using UnityEngine.Assertions;
 namespace Unity.Physics
 {
     [Serializable]
-    public struct ConvexHullGenerationParameters
+    public struct ConvexHullGenerationParameters : IEquatable<ConvexHullGenerationParameters>
     {
         internal const string k_BevelRadiusTooltip =
             "Determines how rounded the edges of the convex shape will be. A value greater than 0 results in more optimized collision, at the expense of some shape detail.";
@@ -39,6 +39,11 @@ namespace Unity.Physics
         [UnityEngine.Tooltip("Specifies the angle between adjacent faces below which they should be made coplanar.")]
         [UnityEngine.SerializeField]
         float m_MinimumAngle;
+
+        public bool Equals(ConvexHullGenerationParameters other) =>
+            m_SimplificationTolerance == other.m_SimplificationTolerance
+            && m_BevelRadius == other.m_BevelRadius
+            && m_MinimumAngle == other.m_MinimumAngle;
 
         public override int GetHashCode() =>
             unchecked((int)math.hash(new float3(m_SimplificationTolerance, m_BevelRadius, m_MinimumAngle)));
@@ -476,8 +481,19 @@ namespace Unity.Physics
         [Obsolete("This signature has been deprecated. Please use a signature that does not pass nullable arguments instead. (RemovedAfter 2019-10-30)")]
         public static unsafe BlobAssetReference<Collider> Create(
             NativeArray<float3> points, float convexRadius, float3? scale = null, CollisionFilter? filter = null, Material? material = null
-        ) =>
-            Create(points, convexRadius, scale ?? 1f, filter ?? CollisionFilter.Default, material ?? Material.Default);
+        )
+        {
+            var hullGenerationParameters = ConvexHullGenerationParameters.Default;
+            hullGenerationParameters.BevelRadius = convexRadius;
+            var s = scale ?? new float3(1f);
+            if (!s.Equals(new float3(1f)))
+            {
+                points = new NativeArray<float3>(points, Allocator.Temp);
+                for (var i = 0; i < points.Length; ++i)
+                    points[i] *= s;
+            }
+            return Create(points, hullGenerationParameters, filter ?? CollisionFilter.Default, material ?? Material.Default);
+        }
 
         #endregion
     }

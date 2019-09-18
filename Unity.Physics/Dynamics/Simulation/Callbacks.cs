@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Unity.Jobs;
+using UnityEngine.Assertions;
 
 namespace Unity.Physics
 {
@@ -15,9 +16,11 @@ namespace Unity.Physics
             PostSolveJacobians
         }
 
+        // this needs to match the number of phase values above
+        private static readonly int k_NumPhases = 4;
+
         public delegate JobHandle Callback(ref ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps);
 
-        private static readonly int k_NumPhases = Enum.GetValues(typeof(Phase)).Length;
 
         private struct CallbackAndDependency
         {
@@ -29,6 +32,10 @@ namespace Unity.Physics
 
         public SimulationCallbacks()
         {
+#if !NET_DOTS
+            Assert.AreEqual(Enum.GetValues(typeof(Phase)).Length, k_NumPhases);
+#endif
+
             for (int i = 0; i < k_NumPhases; ++i)
             {
                 m_Callbacks[i] = new List<CallbackAndDependency>(8);

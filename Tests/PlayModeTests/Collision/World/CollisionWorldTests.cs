@@ -45,7 +45,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             Unity.Physics.PhysicsWorld world = BroadPhaseTests.createTestWorld(1);
             BroadPhaseTests.addStaticBoxToWorld(world, 0, Vector3.zero, quaternion.identity, new Vector3(10, .1f, 10));
             Unity.Jobs.JobHandle handle = new Unity.Jobs.JobHandle();
-            Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicLayer(ref world, 1 / 60, 1, handle);
+            Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicLayer(ref world, 1 / 60, -9.81f * math.up(), 1, handle);
             worldJobHandle.Complete();
             Assert.IsTrue(worldJobHandle.IsCompleted);
             world.Dispose();
@@ -59,7 +59,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             for (int i = 0; i < 10; ++i)
                 BroadPhaseTests.addStaticBoxToWorld(world, i, new Vector3(11 * i, 0, 0), quaternion.identity, new Vector3(10, .1f, 10));
             Unity.Jobs.JobHandle handle = new Unity.Jobs.JobHandle();
-            Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicLayer(ref world, 1 / 60, 1, handle);
+            Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicLayer(ref world, 1 / 60, -9.81f * math.up(), 1, handle);
             worldJobHandle.Complete();
             Assert.IsTrue(worldJobHandle.IsCompleted);
             world.Dispose();
@@ -73,7 +73,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             for (int i = 0; i < 100; ++i)
                 BroadPhaseTests.addStaticBoxToWorld(world, i, new Vector3(11 * i, 0, 0), quaternion.identity, new Vector3(10, .1f, 10));
             Unity.Jobs.JobHandle handle = new Unity.Jobs.JobHandle();
-            Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicLayer(ref world, 1 / 60, 1, handle);
+            Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicLayer(ref world, 1 / 60, -9.81f * math.up(), 1, handle);
             worldJobHandle.Complete();
             Assert.IsTrue(worldJobHandle.IsCompleted);
             world.Dispose();

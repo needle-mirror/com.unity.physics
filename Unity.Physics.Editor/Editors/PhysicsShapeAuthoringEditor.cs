@@ -666,23 +666,19 @@ namespace Unity.Physics.Editor
                 switch ((ShapeType)m_ShapeType.intValue)
                 {
                     case ShapeType.Box:
-                        shape.GetBoxProperties(out var center, out var size, out var orientation, out _);
-                        shape.SetBox(center, size, orientation);
+                        shape.SetBox(shape.GetBoxProperties(out var orientation), orientation);
                         break;
                     case ShapeType.Capsule:
-                        shape.GetCapsuleProperties(out center, out var height, out var radius, out orientation);
-                        shape.SetCapsule(center, height, radius, orientation);
+                        shape.SetCapsule(shape.GetCapsuleProperties(out orientation), orientation);
                         break;
                     case ShapeType.Sphere:
-                        shape.GetSphereProperties(out center, out radius, out orientation);
-                        shape.SetSphere(center, radius, orientation);
+                        shape.SetSphere(shape.GetSphereProperties(out orientation), orientation);
                         break;
                     case ShapeType.Cylinder:
-                        shape.GetCylinderProperties(out center, out height, out radius, out orientation, out _, out _);
-                        shape.SetCylinder(center, height, radius, orientation);
+                        shape.SetCylinder(shape.GetCylinderProperties(out orientation), orientation);
                         break;
                     case ShapeType.Plane:
-                        shape.GetPlaneProperties(out center, out var size2D, out orientation);
+                        shape.GetPlaneProperties(out var center, out var size2D, out orientation);
                         shape.SetPlane(center, size2D, orientation);
                         break;
                     case ShapeType.ConvexHull:
@@ -853,10 +849,7 @@ namespace Unity.Physics.Editor
                 Undo.RecordObjects(targets, Styles.GenericUndoMessage);
                 foreach (PhysicsShapeAuthoring shape in targets)
                 {
-                    shape.GetCapsuleProperties(
-                        out var center, out var height, out var radius, out EulerAngles orientation
-                    );
-                    shape.SetCapsule(center, height, radius, orientation);
+                    shape.SetCapsule(shape.GetCapsuleProperties(out EulerAngles orientation), orientation);
                     EditorUtility.SetDirty(shape);
                 }
             }
@@ -874,8 +867,7 @@ namespace Unity.Physics.Editor
                 Undo.RecordObjects(targets, Styles.GenericUndoMessage);
                 foreach (PhysicsShapeAuthoring shape in targets)
                 {
-                    shape.GetSphereProperties(out var center, out var radius, out EulerAngles orientation);
-                    shape.SetSphere(center, m_SphereRadius.floatValue, orientation);
+                    shape.SetSphere(shape.GetSphereProperties(out EulerAngles orientation), orientation);
                     EditorUtility.SetDirty(shape);
                 }
             }
@@ -893,10 +885,7 @@ namespace Unity.Physics.Editor
                 Undo.RecordObjects(targets, Styles.GenericUndoMessage);
                 foreach (PhysicsShapeAuthoring shape in targets)
                 {
-                    shape.GetCylinderProperties(
-                        out var center, out var height, out var radius, out var orientation, out _, out _
-                    );
-                    shape.SetCylinder(center, height, radius, orientation);
+                    shape.SetCylinder(shape.GetCylinderProperties(out var orientation), orientation);
                     EditorUtility.SetDirty(shape);
                 }
             }

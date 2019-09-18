@@ -475,7 +475,7 @@ namespace Unity.Physics
         public ColliderKey ColliderKeyB;
         public ColliderKey ColliderKeyA;
 
-        public static readonly ColliderKeyPair Empty = new ColliderKeyPair { ColliderKeyB = ColliderKey.Empty, ColliderKeyA = ColliderKey.Empty };
+        public static ColliderKeyPair Empty => new ColliderKeyPair { ColliderKeyB = ColliderKey.Empty, ColliderKeyA = ColliderKey.Empty };
     }
 
     // A child/leaf collider.

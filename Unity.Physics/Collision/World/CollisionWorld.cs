@@ -14,7 +14,7 @@ namespace Unity.Physics
         private NativeArray<RigidBody> m_Bodies;    // storage for the rigid bodies
         private int m_NumBodies;                    // number of rigid bodies currently in use
 
-        internal Broadphase Broadphase;               // a bounding volume hierarchy around the rigid bodies
+        internal Broadphase Broadphase;             // a bounding volume hierarchy around the rigid bodies
 
         public NativeSlice<RigidBody> Bodies => new NativeSlice<RigidBody>(m_Bodies, 0, m_NumBodies);
 
@@ -31,6 +31,9 @@ namespace Unity.Physics
                 }
             }
         }
+
+        // Contacts are always created between rigid bodies if they are closer than this distance threshold.
+        public float CollisionTolerance => 0.1f; // todo - make this configurable?
 
         // Construct a collision world with the given number of uninitialized rigid bodies
         public CollisionWorld(int numBodies)
@@ -72,8 +75,15 @@ namespace Unity.Physics
             public void Execute() { }
         }
 
-        // Schedule a set of jobs to synchronize the collision world with the dynamics world.
+        [Obsolete("CollisionWorld.ScheduleUpdateDynamicLayer() has been deprecated. Use the new implementation that takes gravity instead. (RemovedAfter 2019-12-06)", true)]
         public JobHandle ScheduleUpdateDynamicLayer(ref PhysicsWorld world, float timeStep, int numThreadsHint, JobHandle inputDeps)
+        {
+            PhysicsStep stepComponent = PhysicsStep.Default;
+            return ScheduleUpdateDynamicLayer(ref world, timeStep, stepComponent.Gravity, numThreadsHint, inputDeps);
+        }
+
+        // Schedule a set of jobs to synchronize the collision world with the dynamics world.
+        public JobHandle ScheduleUpdateDynamicLayer(ref PhysicsWorld world, float timeStep, float3 gravity, int numThreadsHint, JobHandle inputDeps)
         {
             JobHandle handle = new UpdateRigidBodyTransformsJob
             {
@@ -87,7 +97,7 @@ namespace Unity.Physics
 
             // TODO: Instead of a full build we could probably incrementally update the existing broadphase,
             // since the number of bodies will be the same and their positions should be similar.
-            handle = Broadphase.ScheduleBuildJobs(ref world, timeStep, numThreadsHint, ref staticLayerChangeInfo, inputDeps: handle);
+            handle = Broadphase.ScheduleBuildJobs(ref world, timeStep, gravity, numThreadsHint, ref staticLayerChangeInfo, inputDeps: handle);
 
             return JobHandle.CombineDependencies(
                 new DiposeArrayJob { Array = staticLayerChangeInfo.HaveStaticBodiesChangedArray }.Schedule(handle),

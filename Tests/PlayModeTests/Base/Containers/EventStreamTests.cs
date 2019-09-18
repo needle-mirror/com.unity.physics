@@ -1,11 +1,27 @@
 ﻿using System;
 using NUnit.Framework;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 
 namespace Unity.Physics.Tests.Base.Containers
 {
     class EventStreamTests
     {
+        private unsafe void WriteEvent(LowLevel.CollisionEvent collisionEvent, ref BlockStream.Writer collisionEventWriter)
+        {
+            int numContactPoints = collisionEvent.NumNarrowPhaseContactPoints;
+            int size = UnsafeUtility.SizeOf<LowLevel.CollisionEvent>() + numContactPoints * UnsafeUtility.SizeOf<ContactPoint>();
+
+            collisionEventWriter.Write(size);
+            byte* eventPtr = collisionEventWriter.Allocate(size);
+            ref LowLevel.CollisionEvent eventRef = ref UnsafeUtilityEx.AsRef<LowLevel.CollisionEvent>(eventPtr);
+            eventRef = collisionEvent;
+            for (int i = 0; i < numContactPoints; i++)
+            {
+                eventRef.AccessContactPoint(i) = new ContactPoint();
+            }
+        }
+
         [Test]
         public void ReadCollisionEvents()
         {
@@ -14,38 +30,62 @@ namespace Unity.Physics.Tests.Base.Containers
 
             // Do a couple of writes to different forEach indices
             int writeCount = 0;
+            unsafe
             {
                 BlockStream.Writer collisionEventWriter = collisionEventStream;
 
+                var collisionEvent = new LowLevel.CollisionEvent();
+
                 collisionEventWriter.BeginForEachIndex(1);
-                collisionEventWriter.Write(new CollisionEvent());
-                writeCount++;
-                collisionEventWriter.Write(new CollisionEvent());
-                writeCount++;
+                {
+                    collisionEvent.NumNarrowPhaseContactPoints = 1;
+                    WriteEvent(collisionEvent, ref collisionEventWriter);
+                    writeCount++;
+
+                    collisionEvent.NumNarrowPhaseContactPoints = 4;
+                    WriteEvent(collisionEvent, ref collisionEventWriter);
+                    writeCount++;
+                }
                 collisionEventWriter.EndForEachIndex();
 
                 collisionEventWriter.BeginForEachIndex(3);
-                collisionEventWriter.Write(new CollisionEvent());
-                writeCount++;
+                {
+                    collisionEvent.NumNarrowPhaseContactPoints = 3;
+                    WriteEvent(collisionEvent, ref collisionEventWriter);
+                    writeCount++;
+                }
                 collisionEventWriter.EndForEachIndex();
 
                 collisionEventWriter.BeginForEachIndex(5);
-                collisionEventWriter.Write(new CollisionEvent());
-                writeCount++;
-                collisionEventWriter.Write(new CollisionEvent());
-                writeCount++;
+                {
+                    collisionEvent.NumNarrowPhaseContactPoints = 4;
+                    WriteEvent(collisionEvent, ref collisionEventWriter);
+                    writeCount++;
+
+                    collisionEvent.NumNarrowPhaseContactPoints = 2;
+                    WriteEvent(collisionEvent, ref collisionEventWriter);
+                    writeCount++;
+                }
                 collisionEventWriter.EndForEachIndex();
 
                 collisionEventWriter.BeginForEachIndex(7);
-                collisionEventWriter.Write(new CollisionEvent());
-                writeCount++;
+                {
+                    collisionEvent.NumNarrowPhaseContactPoints = 1;
+                    WriteEvent(collisionEvent, ref collisionEventWriter);
+                    writeCount++;
+                }
                 collisionEventWriter.EndForEachIndex();
 
                 collisionEventWriter.BeginForEachIndex(9);
-                collisionEventWriter.Write(new CollisionEvent());
-                writeCount++;
-                collisionEventWriter.Write(new CollisionEvent());
-                writeCount++;
+                {
+                    collisionEvent.NumNarrowPhaseContactPoints = 4;
+                    WriteEvent(collisionEvent, ref collisionEventWriter);
+                    writeCount++;
+
+                    collisionEvent.NumNarrowPhaseContactPoints = 1;
+                    WriteEvent(collisionEvent, ref collisionEventWriter);
+                    writeCount++;
+                }
                 collisionEventWriter.EndForEachIndex();
             }
 

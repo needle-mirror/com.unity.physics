@@ -36,13 +36,15 @@ namespace Unity.Physics
         // Step the simulation (single threaded)
         void Step(SimulationStepInput input);
 
-        // Schedule a set of jobs to step the simulation. Returns two job handles:
+        // Schedule a set of jobs to step the simulation
         void ScheduleStepJobs(SimulationStepInput input, JobHandle inputDeps);
 
-        // The last simulation job; jobs which use the simulation results should depend on this
+        // The final scheduled simulation job.
+        // Jobs which use the simulation results should depend on this.
         JobHandle FinalSimulationJobHandle { get; }
 
-        // All simulation and cleanup; the end of each step should depend ont this
+        // The final scheduled job, including all simulation and cleanup.
+        // The end of each step should depend on this.
         JobHandle FinalJobHandle { get; }
 
         #region Obsolete
@@ -56,22 +58,27 @@ namespace Unity.Physics
     public class Simulation : ISimulation
     {
         public SimulationType Type => SimulationType.UnityPhysics;
+        public JobHandle FinalSimulationJobHandle { get; protected set; }
+        public JobHandle FinalJobHandle { get; protected set; }
 
         internal Context m_Context;
         internal LowLevel.CollisionEvents CollisionEvents => new LowLevel.CollisionEvents(m_Context.CollisionEventStream);
         internal LowLevel.TriggerEvents TriggerEvents => new LowLevel.TriggerEvents(m_Context.TriggerEventStream);
 
+        private Storage m_Storage;
         private readonly Scheduler m_Scheduler;
 
         public Simulation()
         {
             m_Scheduler = new Scheduler();
             m_Context = new Context();
+            m_Storage = new Storage();
         }
 
         public void Dispose()
         {
             m_Scheduler.Dispose();
+            m_Storage.Dispose();
             DisposeEventStreams(new JobHandle()).Complete();
         }
 
@@ -96,7 +103,14 @@ namespace Unity.Physics
             // Dispose event streams from previous frame
             JobHandle handle = DisposeEventStreams(inputDeps);
 
-            m_Context = new Context();
+            // Allocate storage for input velocities
+            m_Storage.InputVelocityCount = input.World.NumDynamicBodies;
+
+            m_Context = new Context
+            {
+                TimeStep = input.TimeStep,
+                InputVelocities = m_Storage.InputVelocities
+            };
 
             if (input.World.NumDynamicBodies == 0)
             {
@@ -111,10 +125,17 @@ namespace Unity.Physics
             // Find all body pairs that overlap in the broadphase
             handle = input.World.CollisionWorld.Broadphase.ScheduleFindOverlapsJobs(
                 out BlockStream dynamicVsDynamicBodyPairs, out BlockStream dynamicVsStaticBodyPairs, ref m_Context, handle);
+            var postOverlapsHandle = handle;
 
             // Sort all overlapping and jointed body pairs into phases
             handle = m_Scheduler.ScheduleCreatePhasedDispatchPairsJob(
                 ref input.World, ref dynamicVsDynamicBodyPairs, ref dynamicVsStaticBodyPairs, ref m_Context, handle);
+
+            // Apply gravity and copy input velocities at this point (in parallel with the scheduler, but before the callbacks)
+            var applyGravityAndCopyInputVelocitiesHandle = Solver.ScheduleApplyGravityAndCopyInputVelocitiesJob(
+                ref input.World.DynamicsWorld, m_Storage.InputVelocities, input.TimeStep * input.Gravity, postOverlapsHandle);
+
+            handle = JobHandle.CombineDependencies(handle, applyGravityAndCopyInputVelocitiesHandle);
             handle = callbacks.Execute(SimulationCallbacks.Phase.PostCreateDispatchPairs, this, ref input.World, handle);
 
             // Create contact points & joint Jacobians
@@ -130,12 +151,12 @@ namespace Unity.Physics
             handle = callbacks.Execute(SimulationCallbacks.Phase.PostSolveJacobians, this, ref input.World, handle);
 
             // Integrate motions
-            handle = Integrator.ScheduleIntegrateJobs(ref input.World.DynamicsWorld, input.TimeStep, input.Gravity, handle);
+            handle = Integrator.ScheduleIntegrateJobs(ref input.World.DynamicsWorld, input.TimeStep, handle);
 
             // Synchronize the collision world
             if (input.SynchronizeCollisionWorld)
             {
-                handle = input.World.CollisionWorld.ScheduleUpdateDynamicLayer(ref input.World, input.TimeStep, input.ThreadCountHint, handle);  // TODO: timeStep = 0?
+                handle = input.World.CollisionWorld.ScheduleUpdateDynamicLayer(ref input.World, input.TimeStep, input.Gravity, input.ThreadCountHint, handle);  // TODO: timeStep = 0?
             }
 
             // Return the final simulation handle
@@ -159,9 +180,6 @@ namespace Unity.Physics
             FinalJobHandle = JobHandleUnsafeUtility.CombineDependencies(deps, 11);
         }
 
-        public JobHandle FinalSimulationJobHandle { get; protected set; }
-        public JobHandle FinalJobHandle { get; protected set; }
-
         // Event streams live until the next step, so they should be disposed at the beginning of it
         private JobHandle DisposeEventStreams(JobHandle inDeps)
         {
@@ -177,9 +195,48 @@ namespace Unity.Physics
             return inDeps;
         }
 
+        // Holds temporary data in a storage that lives as long as simulation lives
+        // and is only re-allocated if necessary.
+        private struct Storage : IDisposable
+        {
+            private int m_InputVelocityCount;
+
+            private NativeArray<Velocity> m_InputVelocities;
+
+            public NativeSlice<Velocity> InputVelocities => new NativeSlice<Velocity>(m_InputVelocities, 0, m_InputVelocityCount);
+
+            public int InputVelocityCount
+            {
+                get => m_InputVelocityCount;
+                set
+                {
+                    m_InputVelocityCount = value;
+                    if (m_InputVelocities.Length < m_InputVelocityCount)
+                    {
+                        if (m_InputVelocities.IsCreated)
+                        {
+                            m_InputVelocities.Dispose();
+                        }
+                        m_InputVelocities = new NativeArray<Velocity>(m_InputVelocityCount, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+                    }
+                }
+            }
+
+            public void Dispose()
+            {
+                m_InputVelocities.Dispose();
+            }
+        }
+
         // Temporary data created and destroyed during the step
         internal struct Context
         {
+            // Delta time used to step the simulation
+            public float TimeStep;
+
+            // Copy of MotionVelocity velocities from the start of the step
+            public NativeSlice<Velocity> InputVelocities;
+
             // Built by the scheduler. Groups body pairs into phases in which each
             // body appears at most once, so that the interactions within each phase can be solved
             // in parallel with each other but not with other phases. This is consumed by the

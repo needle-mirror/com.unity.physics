@@ -7,7 +7,7 @@ using Unity.Mathematics;
 
 namespace Unity.Physics
 {
-    public struct SphereGeometry
+    public struct SphereGeometry : IEquatable<SphereGeometry>
     {
         // The center of the sphere
         public float3 Center { get => m_Center; set => m_Center = value; }
@@ -16,6 +16,14 @@ namespace Unity.Physics
         // The radius of the sphere
         public float Radius { get => m_Radius; set => m_Radius = value; }
         private float m_Radius;
+
+        public bool Equals(SphereGeometry other)
+        {
+            return m_Center.Equals(other.m_Center)
+                && m_Radius.Equals(other.m_Radius);
+        }
+
+        public override int GetHashCode() => unchecked((int)math.hash(new float4(m_Center, m_Radius)));
 
         internal void Validate()
         {

@@ -140,4 +140,17 @@ namespace Unity.Physics
             Min = math.min(aabb.Min, aabb.Min + Linear) - Uniform
         };
     }
+
+    // A linear and angular velocity
+    internal struct Velocity
+    {
+        public float3 Linear;   // world space
+        public float3 Angular;  // motion space
+
+        public static readonly Velocity Zero = new Velocity
+        {
+            Linear = new float3(0),
+            Angular = new float3(0)
+        };
+    }
 }

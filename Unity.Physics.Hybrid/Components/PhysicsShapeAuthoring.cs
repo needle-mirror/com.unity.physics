@@ -111,8 +111,8 @@ namespace Unity.Physics.Authoring
                         maxRadius = 0.5f * math.cmin(m_PrimitiveSize);
                         break;
                     case ShapeType.Cylinder:
-                        GetCylinderProperties(out _, out var height, out var radius, out _, out _, out _);
-                        maxRadius = math.min(0.5f * height, radius);
+                        var cylinder = GetCylinderProperties();
+                        maxRadius = math.min(0.5f * cylinder.Height, cylinder.Radius);
                         break;
                     case ShapeType.ConvexHull:
                         // TODO: any benefit in clamping this?
@@ -216,26 +216,18 @@ namespace Unity.Physics.Authoring
         [SerializeField]
         PhysicsMaterialProperties m_Material = new PhysicsMaterialProperties(true);
 
-        public BoxGeometry GetBoxProperties()
+        public BoxGeometry GetBoxProperties() => GetBoxProperties(out _);
+
+        internal BoxGeometry GetBoxProperties(out EulerAngles orientation)
         {
-            GetBoxProperties(out var center, out var size, out var orientation, out var bevelRadius);
+            orientation = m_PrimitiveOrientation;
             return new BoxGeometry
             {
-                Center = center,
-                Size = size,
-                Orientation = orientation,
-                BevelRadius = bevelRadius
+                Center = m_PrimitiveCenter,
+                Size = m_PrimitiveSize,
+                Orientation = m_PrimitiveOrientation,
+                BevelRadius = BevelRadius
             };
-        }
-
-        internal void GetBoxProperties(
-            out float3 center, out float3 size, out EulerAngles orientation, out float bevelRadius
-        )
-        {
-            center = m_PrimitiveCenter;
-            size = m_PrimitiveSize;
-            orientation = m_PrimitiveOrientation;
-            bevelRadius = BevelRadius;
         }
 
         void GetCylindricalProperties(
@@ -257,8 +249,16 @@ namespace Unity.Physics.Authoring
 
         public CapsuleGeometry GetCapsuleProperties(out quaternion orientation)
         {
-            GetCapsuleProperties(out var center, out var height, out var radius, out EulerAngles eulerAngles);
-            orientation = eulerAngles;
+            var result = GetCapsuleProperties(out EulerAngles euler);
+            orientation = euler;
+            return result;
+        }
+
+        internal CapsuleGeometry GetCapsuleProperties(out EulerAngles orientation)
+        {
+            GetCylindricalProperties(
+                m_Capsule, out var center, out var height, out var radius, out orientation, m_ShapeType != ShapeType.Capsule
+            );
             var halfDistance = new float3 { z = 0.5f * height - radius };
             return new CapsuleGeometry
             {
@@ -268,19 +268,12 @@ namespace Unity.Physics.Authoring
             };
         }
 
-        internal void GetCapsuleProperties(
-            out float3 center, out float height, out float radius, out EulerAngles orientation
-        )
+        public CylinderGeometry GetCylinderProperties() => GetCylinderProperties(out _);
+
+        internal CylinderGeometry GetCylinderProperties(out EulerAngles orientation)
         {
             GetCylindricalProperties(
-                m_Capsule, out center, out height, out radius, out orientation, m_ShapeType != ShapeType.Capsule
-            );
-        }
-
-        public CylinderGeometry GetCylinderProperties()
-        {
-            GetCylinderProperties(
-                out var center, out var height, out var radius, out var orientation, out var bevelRadius, out var sideCount
+                m_Cylinder, out var center, out var height, out var radius, out orientation, m_ShapeType != ShapeType.Cylinder
             );
             return new CylinderGeometry
             {
@@ -288,38 +281,26 @@ namespace Unity.Physics.Authoring
                 Height = height,
                 Radius = radius,
                 Orientation = orientation,
-                BevelRadius = bevelRadius,
-                SideCount = sideCount
+                BevelRadius = BevelRadius,
+                SideCount = m_CylinderSideCount
             };
-        }
-
-        internal void GetCylinderProperties(
-            out float3 center, out float height, out float radius, out EulerAngles orientation, out float bevelRadius, out int sideCount
-        )
-        {
-            GetCylindricalProperties(
-                m_Cylinder, out center, out height, out radius, out orientation, m_ShapeType != ShapeType.Cylinder
-            );
-            bevelRadius = BevelRadius;
-            sideCount = m_CylinderSideCount;
         }
 
         public SphereGeometry GetSphereProperties(out quaternion orientation)
         {
-            GetSphereProperties(out var center, out var radius, out EulerAngles _);
+            var result = GetSphereProperties(out EulerAngles euler);
+            orientation = euler;
+            return result;
+        }
+
+        internal SphereGeometry GetSphereProperties(out EulerAngles orientation)
+        {
             orientation = m_PrimitiveOrientation;
             return new SphereGeometry
             {
-                Center = center,
-                Radius = radius
+                Center = m_PrimitiveCenter,
+                Radius = m_SphereRadius
             };
-        }
-
-        internal void GetSphereProperties(out float3 center, out float radius, out EulerAngles orientation)
-        {
-            center = m_PrimitiveCenter;
-            radius = m_SphereRadius;
-            orientation = m_PrimitiveOrientation;
         }
 
         public void GetPlaneProperties(out float3 center, out float2 size, out quaternion orientation)
@@ -390,17 +371,17 @@ namespace Unity.Physics.Authoring
                         meshFilter.transform.localToWorldMatrix, meshFilter.sharedMesh, pointCloud, triangles, validate
                     );
                 }
-            }
 
-            using (var skinnedPoints = new NativeList<float3>(8192, Allocator.Temp))
-            {
-                GetAllSkinnedPointsInHierarchyBelongingToShape(this, skinnedPoints, validate);
-                pointCloud.ResizeUninitialized(pointCloud.Length + skinnedPoints.Length);
-                UnsafeUtility.MemCpy(
-                    pointCloud.GetUnsafePtr(),
-                    skinnedPoints.GetUnsafePtr(),
-                    skinnedPoints.Length * UnsafeUtility.SizeOf<float3>()
-                );
+                using (var skinnedPoints = new NativeList<float3>(8192, Allocator.Temp))
+                {
+                    GetAllSkinnedPointsInHierarchyBelongingToShape(this, skinnedPoints, validate);
+                    pointCloud.ResizeUninitialized(pointCloud.Length + skinnedPoints.Length);
+                    UnsafeUtility.MemCpy(
+                        pointCloud.GetUnsafePtr(),
+                        skinnedPoints.GetUnsafePtr(),
+                        skinnedPoints.Length * UnsafeUtility.SizeOf<float3>()
+                    );
+                }
             }
 
             triangles.Dispose();
@@ -622,15 +603,15 @@ namespace Unity.Physics.Authoring
         {
             var euler = m_PrimitiveOrientation;
             euler.SetValue(geometry.Orientation);
-            SetBox(geometry.Center, geometry.Size, euler);
+            SetBox(geometry, euler);
             BevelRadius = geometry.BevelRadius;
         }
 
-        internal void SetBox(float3 center, float3 size, EulerAngles orientation)
+        internal void SetBox(BoxGeometry geometry, EulerAngles orientation)
         {
             m_ShapeType = ShapeType.Box;
-            m_PrimitiveCenter = center;
-            m_PrimitiveSize = math.max(size, new float3());
+            m_PrimitiveCenter = geometry.Center;
+            m_PrimitiveSize = math.max(geometry.Size, new float3());
             m_PrimitiveOrientation = orientation;
             BevelRadius = BevelRadius;
 
@@ -650,17 +631,17 @@ namespace Unity.Physics.Authoring
             );
             var center = math.lerp(geometry.Vertex0, geometry.Vertex1, 0.5f);
             var height = math.length(geometry.Vertex0 - geometry.Vertex1) + 2f * geometry.Radius;
-            SetCapsule(center, height, geometry.Radius, euler);
+            SetCapsule(geometry, euler);
         }
 
-        internal void SetCapsule(float3 center, float height, float radius, EulerAngles orientation)
+        internal void SetCapsule(CapsuleGeometry geometry, EulerAngles orientation)
         {
             m_ShapeType = ShapeType.Capsule;
-            m_PrimitiveCenter = center;
+            m_PrimitiveCenter = geometry.GetCenter();
             m_PrimitiveOrientation = orientation;
 
-            radius = math.max(0f, radius);
-            height = math.max(height, radius * 2f);
+            var radius = math.max(0f, geometry.Radius);
+            var height = math.max(geometry.GetHeight(), radius * 2f);
             m_PrimitiveSize = new float3(radius * 2f, radius * 2f, height);
 
             SyncCapsuleProperties();
@@ -672,18 +653,18 @@ namespace Unity.Physics.Authoring
         {
             var euler = m_PrimitiveOrientation;
             euler.SetValue(geometry.Orientation);
-            SetCylinder(geometry.Center, geometry.Height, geometry.Radius, euler);
+            SetCylinder(geometry, euler);
         }
 
-        internal void SetCylinder(float3 center, float height, float radius, EulerAngles orientation)
+        internal void SetCylinder(CylinderGeometry geometry, EulerAngles orientation)
         {
             m_ShapeType = ShapeType.Cylinder;
-            m_PrimitiveCenter = center;
+            m_PrimitiveCenter = geometry.Center;
             m_PrimitiveOrientation = orientation;
 
-            radius = math.max(0f, radius);
-            height = math.max(0f, height);
-            m_PrimitiveSize = new float3(radius * 2f, radius * 2f, height);
+            geometry.Radius = math.max(0f, geometry.Radius);
+            geometry.Height = math.max(0f, geometry.Height);
+            m_PrimitiveSize = new float3(geometry.Radius * 2f, geometry.Radius * 2f, geometry.Height);
 
             BevelRadius = BevelRadius;
 
@@ -696,15 +677,15 @@ namespace Unity.Physics.Authoring
         {
             var euler = m_PrimitiveOrientation;
             euler.SetValue(orientation);
-            SetSphere(geometry.Center, geometry.Radius, euler);
+            SetSphere(geometry, euler);
         }
 
-        internal void SetSphere(float3 center, float radius, EulerAngles orientation)
+        internal void SetSphere(SphereGeometry geometry, EulerAngles orientation)
         {
             m_ShapeType = ShapeType.Sphere;
-            m_PrimitiveCenter = center;
+            m_PrimitiveCenter = geometry.Center;
 
-            radius = math.max(0f, radius);
+            var radius = math.max(0f, geometry.Radius);
             m_PrimitiveSize = new float3(2f * radius, 2f * radius, 2f * radius);
 
             m_PrimitiveOrientation = orientation;
@@ -784,23 +765,19 @@ namespace Unity.Physics.Authoring
             switch (m_ShapeType)
             {
                 case ShapeType.Box:
-                    GetBoxProperties(out var center, out var size, out var orientation, out _);
-                    SetBox(center, size, orientation);
+                    SetBox(GetBoxProperties(out var orientation), orientation);
                     break;
                 case ShapeType.Capsule:
-                    GetCapsuleProperties(out center, out var height, out var radius, out orientation);
-                    SetCapsule(center, height, radius, orientation);
+                    SetCapsule(GetCapsuleProperties(out orientation), orientation);
                     break;
                 case ShapeType.Cylinder:
-                    GetCylinderProperties(out center, out height, out radius, out orientation, out _, out _);
-                    SetCylinder(center, height, radius, orientation);
+                    SetCylinder(GetCylinderProperties(out orientation), orientation);
                     break;
                 case ShapeType.Sphere:
-                    GetSphereProperties(out center, out radius, out orientation);
-                    SetSphere(center, radius, orientation);
+                    SetSphere(GetSphereProperties(out orientation), orientation);
                     break;
                 case ShapeType.Plane:
-                    GetPlaneProperties(out center, out var size2D, out orientation);
+                    GetPlaneProperties(out var center, out var size2D, out orientation);
                     SetPlane(center, size2D, orientation);
                     break;
                 case ShapeType.ConvexHull:
@@ -865,21 +842,18 @@ namespace Unity.Physics.Authoring
             switch (shapeType)
             {
                 case ShapeType.Capsule:
-                    GetCapsuleProperties(out var center, out var height, out var radius, out EulerAngles orientation);
-                    SetCapsule(center, height, radius, orientation);
+                    SetCapsule(GetCapsuleProperties(out EulerAngles orientation), orientation);
                     break;
                 case ShapeType.Cylinder:
-                    GetCylinderProperties(out center, out height, out radius, out orientation, out _, out _);
-                    SetCylinder(center, height, radius, orientation);
+                    SetCylinder(GetCylinderProperties(out orientation), orientation);
                     break;
                 case ShapeType.Sphere:
-                    GetSphereProperties(out center, out radius, out orientation);
-                    SetSphere(center, radius, orientation);
+                    SetSphere(GetSphereProperties(out orientation), orientation);
                     break;
                 case ShapeType.Plane:
                     // force recalculation of plane orientation by making it think shape type is out of date
                     m_ShapeType = ShapeType.Box;
-                    GetPlaneProperties(out center, out var size2D, out orientation);
+                    GetPlaneProperties(out var center, out var size2D, out orientation);
                     SetPlane(center, size2D, orientation);
                     break;
                 case ShapeType.Box:

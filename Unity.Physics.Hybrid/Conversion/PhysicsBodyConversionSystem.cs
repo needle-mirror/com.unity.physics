@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Unity.Entities;
 using Unity.Mathematics;
 
@@ -14,6 +14,14 @@ namespace Unity.Physics.Authoring
     {
         protected override void OnUpdate()
         {
+            Entities.ForEach(
+                (StaticOptimizeEntity staticOptimized) =>
+                {
+                    var entity = GetPrimaryEntity(staticOptimized.gameObject);
+                    if (DstEntityManager.HasComponent<PhysicsCollider>(entity))
+                        DstEntityManager.RemoveParentAndSetWorldTranslationAndRotation(entity, staticOptimized.transform);
+                }
+            );
             Entities.ForEach(
                 (PhysicsBodyAuthoring body) =>
                 {

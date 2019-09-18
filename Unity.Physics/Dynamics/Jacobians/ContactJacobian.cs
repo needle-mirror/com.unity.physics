@@ -1,5 +1,6 @@
 ﻿using System;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
 
 namespace Unity.Physics
@@ -103,7 +104,7 @@ namespace Unity.Physics
 
             // Solve normal impulses
             float sumImpulses = 0.0f;
-            float4 totalAccumulatedImpulses = float4.zero;
+            float totalAccumulatedImpulse = 0.0f;
             bool forceCollisionEvent = false;
             for (int j = 0; j < BaseJacobian.NumContacts; j++)
             {
@@ -123,24 +124,16 @@ namespace Unity.Physics
 
                 jacAngular.Jac.Impulse = accumulatedImpulse;
                 sumImpulses += accumulatedImpulse;
-
-                // If there are more than 4 contacts, accumulate their impulses to the last contact point
-                totalAccumulatedImpulses[math.min(j, 3)] += jacAngular.Jac.Impulse;
+                totalAccumulatedImpulse += jacAngular.Jac.Impulse;
 
                 // Force contact event even when no impulse is applied, but there is penetration.
                 forceCollisionEvent |= jacAngular.VelToReachCp > 0.0f;
             }
 
             // Export collision event
-            if (stepInput.IsLastIteration && (math.any(totalAccumulatedImpulses > 0.0f) || forceCollisionEvent) && jacHeader.HasColliderKeys)
+            if (stepInput.IsLastIteration && (totalAccumulatedImpulse > 0.0f || forceCollisionEvent) && jacHeader.HasContactManifold)
             {
-                collisionEventsWriter.Write(new LowLevel.CollisionEvent
-                {
-                    BodyIndices = jacHeader.BodyPair,
-                    ColliderKeys = jacHeader.AccessColliderKeys(),
-                    Normal = BaseJacobian.Normal,
-                    AccumulatedImpulses = totalAccumulatedImpulses
-                });
+                ExportCollisionEvent(totalAccumulatedImpulse, ref jacHeader, ref collisionEventsWriter);
             }
 
             // Solve friction
@@ -229,7 +222,7 @@ namespace Unity.Physics
                         BodyIndices = jacHeader.BodyPair,
                         ColliderKeys = jacHeader.AccessColliderKeys(),
                         Normal = BaseJacobian.Normal,
-                        AccumulatedImpulses = float4.zero
+                        SolverImpulse = 0.0f
                     });
 
                     return;
@@ -246,6 +239,29 @@ namespace Unity.Physics
             velocityB.ApplyLinearImpulse(-impulse * linear);
             velocityA.ApplyAngularImpulse(impulse * jacAngular.AngularA);
             velocityB.ApplyAngularImpulse(impulse * jacAngular.AngularB);
+        }
+
+        private unsafe void ExportCollisionEvent(float totalAccumulatedImpulse, ref JacobianHeader jacHeader,
+            ref BlockStream.Writer collisionEventsWriter)
+        {
+            // Write size before every event
+            int collisionEventSize = LowLevel.CollisionEvent.CalculateSize(BaseJacobian.NumContacts);
+            collisionEventsWriter.Write(collisionEventSize);
+
+            // Allocate all necessary data for this event
+            byte* eventPtr = collisionEventsWriter.Allocate(collisionEventSize);
+
+            // Fill up event data
+            ref LowLevel.CollisionEvent collisionEvent = ref UnsafeUtilityEx.AsRef<LowLevel.CollisionEvent>(eventPtr);
+            collisionEvent.BodyIndices = jacHeader.BodyPair;
+            collisionEvent.ColliderKeys = jacHeader.AccessColliderKeys();
+            collisionEvent.Normal = BaseJacobian.Normal;
+            collisionEvent.SolverImpulse = totalAccumulatedImpulse;
+            collisionEvent.NumNarrowPhaseContactPoints = BaseJacobian.NumContacts;
+            for (int i = 0; i < BaseJacobian.NumContacts; i++)
+            {
+                collisionEvent.AccessContactPoint(i) = jacHeader.AccessContactPoint(i);
+            }
         }
     }
 

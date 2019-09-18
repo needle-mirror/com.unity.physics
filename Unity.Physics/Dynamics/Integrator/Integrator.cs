@@ -8,14 +8,13 @@ namespace Unity.Physics
     static class Integrator
     {
         // Schedule a job to integrate the world's motions forward by the given time step.
-        public static JobHandle ScheduleIntegrateJobs(ref DynamicsWorld world, float timeStep, float3 gravity, JobHandle inputDeps)
+        public static JobHandle ScheduleIntegrateJobs(ref DynamicsWorld world, float timeStep, JobHandle inputDeps)
         {
             return new IntegrateMotionsJob
             {
                 MotionDatas = world.MotionDatas,
                 MotionVelocities = world.MotionVelocities,
-                Timestep = timeStep,
-                Gravity = gravity
+                Timestep = timeStep
             }.Schedule(world.NumMotions, 64, inputDeps);
         }
 
@@ -25,7 +24,6 @@ namespace Unity.Physics
             public NativeSlice<MotionData> MotionDatas;
             public NativeSlice<MotionVelocity> MotionVelocities;
             public float Timestep;
-            public float3 Gravity;
 
             public void Execute(int i)
             {
@@ -43,9 +41,6 @@ namespace Unity.Physics
 
                 // Update velocities
                 {
-                    // gravity
-                    motionVelocity.LinearVelocity += Gravity * motionData.GravityFactor * Timestep;
-
                     // damping
                     motionVelocity.LinearVelocity *= math.clamp(1.0f - motionData.LinearDamping * Timestep, 0.0f, 1.0f);
                     motionVelocity.AngularVelocity *= math.clamp(1.0f - motionData.AngularDamping * Timestep, 0.0f, 1.0f);

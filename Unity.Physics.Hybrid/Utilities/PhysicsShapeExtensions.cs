@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Scenes;
 using UnityEngine;
@@ -96,21 +97,31 @@ namespace Unity.Physics.Authoring
         static readonly List<Rigidbody> s_RigidbodiesBuffer = new List<Rigidbody>(16);
         static readonly List<UnityCollider> s_CollidersBuffer = new List<UnityCollider>(16);
         static readonly List<PhysicsShapeAuthoring> s_ShapesBuffer = new List<PhysicsShapeAuthoring>(16);
+        static readonly List<StaticOptimizeEntity> s_StaticOptimizeEntitiesBuffer = new List<StaticOptimizeEntity>(4);
 
         internal static GameObject GetPrimaryBody(GameObject shape)
         {
-            var pb = FindFirstEnabledAncestorBody(shape, s_PhysicsBodiesBuffer);
-            var rb = FindFirstEnabledAncestorBody(shape, s_RigidbodiesBuffer);
+            var pb = FindFirstEnabledAncestor(shape, s_PhysicsBodiesBuffer);
+            var rb = FindFirstEnabledAncestor(shape, s_RigidbodiesBuffer);
+
             if (pb != null)
             {
                 return rb == null ? pb.gameObject :
                     pb.transform.IsChildOf(rb.transform) ? pb.gameObject : rb.gameObject;
             }
+
             if (rb != null)
                 return rb.gameObject;
-            // for implicit static shape, find topmost enabled Collider or PhysicsShapeAuthoring
-            var topCollider = FindTopmostEnabledAncestorShape(shape, s_CollidersBuffer);
-            var topShape = FindTopmostEnabledAncestorShape(shape, s_ShapesBuffer);
+
+            // for implicit static shape, first see if it is part of static optimized hierarchy
+            var topStatic = FindTopmostEnabledAncestor(shape, s_StaticOptimizeEntitiesBuffer);
+            if (topStatic != null)
+                return topStatic;
+
+            // otherwise, find topmost enabled Collider or PhysicsShapeAuthoring
+            var topCollider = FindTopmostEnabledAncestor(shape, s_CollidersBuffer);
+            var topShape = FindTopmostEnabledAncestor(shape, s_ShapesBuffer);
+
             return topCollider == null
                 ? topShape == null ? shape.gameObject : topShape
                 : topShape == null
@@ -120,14 +131,14 @@ namespace Unity.Physics.Authoring
                         : topShape;
         }
 
-        static GameObject FindFirstEnabledAncestorBody<T>(GameObject shape, List<T> buffer) where T : Component
+        static GameObject FindFirstEnabledAncestor<T>(GameObject shape, List<T> buffer) where T : Component
         {
             // include inactive in case the supplied shape GameObject is a prefab that has not been instantiated
             shape.GetComponentsInParent(true, buffer);
             GameObject result = null;
             for (int i = 0, count = buffer.Count; i < count; ++i)
             {
-                if ((buffer[i] as MonoBehaviour)?.enabled ?? true)
+                if ((buffer[i] as UnityCollider)?.enabled ?? (buffer[i] as MonoBehaviour)?.enabled ?? true)
                 {
                     result = buffer[i].gameObject;
                     break;
@@ -137,7 +148,7 @@ namespace Unity.Physics.Authoring
             return result;
         }
         
-        static GameObject FindTopmostEnabledAncestorShape<T>(GameObject shape, List<T> buffer) where T : Component
+        static GameObject FindTopmostEnabledAncestor<T>(GameObject shape, List<T> buffer) where T : Component
         {
             // include inactive in case the supplied shape GameObject is a prefab that has not been instantiated
             shape.GetComponentsInParent(true, buffer);
@@ -246,7 +257,10 @@ namespace Unity.Physics.Authoring
 
         internal static BoxGeometry GetBakedBoxProperties(this PhysicsShapeAuthoring shape)
         {
-            shape.GetBoxProperties(out var center, out var size, out var orientation, out var bevelRadius);
+            var box = shape.GetBoxProperties(out var orientation);
+            var center = box.Center;
+            var size = box.Size;
+            var bevelRadius = box.BevelRadius;
 
             var localToWorld = (float4x4)shape.transform.localToWorldMatrix;
             float4x4 bakeToShape;
@@ -305,12 +319,21 @@ namespace Unity.Physics.Authoring
                 basisPriority = basisPriority.zxy;
         }
 
+        internal static float3 GetCenter(this CapsuleGeometry geometry) =>
+            math.lerp(geometry.Vertex0, geometry.Vertex1, 0.5f);
+
+        internal static float GetHeight(this CapsuleGeometry geometry) =>
+            2f * geometry.Radius + math.length(geometry.Vertex1 - geometry.Vertex0);
+
         internal static CapsuleGeometry GetBakedCapsuleProperties(
             this PhysicsShapeAuthoring shape,
             out float3 center, out float height, out EulerAngles orientation
         )
         {
-            shape.GetCapsuleProperties(out center, out height, out var radius, out orientation);
+            var capsule = shape.GetCapsuleProperties(out orientation);
+            var radius = capsule.Radius;
+            center = capsule.GetCenter();
+            height = capsule.GetHeight();
 
             var s = new float3(radius * 2f, radius * 2f, height);
             var localToWorld = (float4x4)shape.transform.localToWorldMatrix;
@@ -341,9 +364,10 @@ namespace Unity.Physics.Authoring
 
         internal static CylinderGeometry GetBakedCylinderProperties(this PhysicsShapeAuthoring shape)
         {
-            shape.GetCylinderProperties(
-                out var center, out var height, out var radius, out var orientation, out var bevelRadius, out var sideCount
-            );
+            var cylinder = shape.GetCylinderProperties(out var orientation);
+            var center = cylinder.Center;
+            var height = cylinder.Height;
+            var radius = cylinder.Radius;
 
             var size = new float3(radius * 2f, radius * 2f, height);
             var localToWorld = (float4x4)shape.transform.localToWorldMatrix;
@@ -373,14 +397,16 @@ namespace Unity.Physics.Authoring
                 Orientation = orientation,
                 Height = height,
                 Radius = radius,
-                BevelRadius = math.min(bevelRadius * math.cmax(s / size), height * 0.5f),
-                SideCount = sideCount
+                BevelRadius = math.min(cylinder.BevelRadius * math.cmax(s / size), height * 0.5f),
+                SideCount = cylinder.SideCount
             };
         }
 
         internal static SphereGeometry GetBakedSphereProperties(this PhysicsShapeAuthoring shape, out EulerAngles orientation)
         {
-            shape.GetSphereProperties(out var center, out var radius, out orientation);
+            var sphere = shape.GetSphereProperties(out orientation);
+            var center = sphere.Center;
+            var radius = sphere.Radius;
 
             var basisToWorld = GetBasisToWorldMatrix(shape.transform.localToWorldMatrix, center, orientation, 1f);
             var basisPriority = basisToWorld.HasShear() ? GetBasisAxisPriority(basisToWorld) : k_DefaultAxisPriority;

@@ -19,6 +19,19 @@ namespace Unity.Physics
             public float InvTimestep;
         }
 
+        // Schedule the job to apply gravity to all dynamic bodies and copy input velocities
+        public static JobHandle ScheduleApplyGravityAndCopyInputVelocitiesJob(ref DynamicsWorld world, NativeSlice<Velocity> inputVelocities,
+            float3 gravityAcceleration, JobHandle inputDeps)
+        {
+            return new ApplyGravityAndCopyInputVelocitiesJob
+            {
+                MotionDatas = world.MotionDatas,
+                MotionVelocities = world.MotionVelocities,
+                InputVelocities = inputVelocities,
+                GravityAcceleration = gravityAcceleration
+            }.Schedule(world.NumMotions, 64, inputDeps);
+        }
+
         // Schedule some jobs to build Jacobians from the contacts stored in the simulation context
         internal static JobHandle ScheduleBuildContactJacobiansJobs(ref DynamicsWorld world, float timeStep, float gravityAcceleration, ref Simulation.Context context, JobHandle inputDeps)
         {
@@ -110,6 +123,34 @@ namespace Unity.Physics
         }
 
         #region Jobs
+
+        [BurstCompile]
+        private struct ApplyGravityAndCopyInputVelocitiesJob : IJobParallelFor
+        {
+            public NativeSlice<MotionData> MotionDatas;
+            public NativeSlice<MotionVelocity> MotionVelocities;
+            public NativeSlice<Velocity> InputVelocities;
+            public float3 GravityAcceleration;
+
+            public void Execute(int i)
+            {
+                MotionData motionData = MotionDatas[i];
+                MotionVelocity motionVelocity = MotionVelocities[i];
+
+                // Apply gravity
+                motionVelocity.LinearVelocity += GravityAcceleration * motionData.GravityFactor;
+
+                // Write back
+                MotionVelocities[i] = motionVelocity;
+
+                // Make a copy
+                InputVelocities[i] = new Velocity
+                {
+                    Linear = motionVelocity.LinearVelocity,
+                    Angular = motionVelocity.AngularVelocity
+                };
+            }
+        }
 
         [BurstCompile]
         private struct BuildContactJacobiansJob : IJobParallelForDefer
@@ -215,11 +256,17 @@ namespace Unity.Physics
             // Calculate average position for friction
             centerA += armA;
             centerB += armB;
+
+            // Write the contact point to the jacobian stream if requested
+            if (jacobianHeader.HasContactManifold)
+            {
+                jacobianHeader.AccessContactPoint(contactPointIndex) = contact;
+            }
         }
 
         private static void InitModifierData(ref JacobianHeader jacobianHeader, ColliderKeyPair colliderKeys)
         {
-            if (jacobianHeader.HasColliderKeys)
+            if (jacobianHeader.HasContactManifold)
             {
                 jacobianHeader.AccessColliderKeys() = colliderKeys;
             }
@@ -279,17 +326,6 @@ namespace Unity.Physics
                 worldFromA = new MTransform(motionDatas[pair.BodyAIndex].WorldFromMotion);
                 worldFromB = new MTransform(motionDatas[pair.BodyBIndex].WorldFromMotion);
             }
-        }
-
-        private static void GetMotionVelocities(
-            BodyIndexPair pair,
-            ref NativeSlice<MotionVelocity> motionVelocities,
-            out MotionVelocity velocityA,
-            out MotionVelocity velocityB)
-        {
-            Assert.IsTrue(pair.BodyAIndex < motionVelocities.Length); // static-static pairs should have been filtered during broadphase overlap test
-            velocityA = motionVelocities[pair.BodyAIndex];
-            velocityB = pair.BodyBIndex < motionVelocities.Length ? motionVelocities[pair.BodyBIndex] : MotionVelocity.Zero;
         }
 
         private static unsafe void AppendJointJacobiansToContactStream(
@@ -682,8 +718,12 @@ namespace Unity.Physics
             {
                 ref JacobianHeader header = ref jacIterator.ReadJacobianHeader();
 
+                // Static-static pairs should have been filtered during broadphase overlap test
+                Assert.IsTrue(header.BodyPair.BodyAIndex < motionVelocities.Length || header.BodyPair.BodyBIndex < motionVelocities.Length);
+
                 // Get the motion pair
-                GetMotionVelocities(header.BodyPair, ref motionVelocities, out MotionVelocity velocityA, out MotionVelocity velocityB);
+                MotionVelocity velocityA = header.BodyPair.BodyAIndex < motionVelocities.Length ? motionVelocities[header.BodyPair.BodyAIndex] : MotionVelocity.Zero;
+                MotionVelocity velocityB = header.BodyPair.BodyBIndex < motionVelocities.Length ? motionVelocities[header.BodyPair.BodyBIndex] : MotionVelocity.Zero;
 
                 // Solve the jacobian
                 header.Solve(ref velocityA, ref velocityB, stepInput, ref collisionEventsWriter, ref triggerEventsWriter);

@@ -17,20 +17,23 @@ namespace Unity.Physics.Authoring
         public int SolverIterationCount = Default.SolverIterationCount;
         public int ThreadCountHint = Default.ThreadCountHint;
 
-        private Entity convertedEntity = Entity.Null;
+        private Physics.PhysicsStep AsComponent => new Physics.PhysicsStep
+        {
+            SimulationType = SimulationType,
+            Gravity = Gravity,
+            SolverIterationCount = SolverIterationCount,
+            ThreadCountHint = ThreadCountHint
+        };
+
+        private Entity m_ConvertedEntity = Entity.Null;
+        private EntityManager m_ConvertedEntityManager = null;
 
         void IConvertGameObjectToEntity.Convert(Entity entity, EntityManager dstManager, GameObjectConversionSystem conversionSystem)
         {
-            var componentData = new Physics.PhysicsStep
-            {
-                SimulationType = SimulationType,
-                Gravity = Gravity,
-                SolverIterationCount = SolverIterationCount,
-                ThreadCountHint = ThreadCountHint
-            };
-            dstManager.AddComponentData(entity, componentData);
+            dstManager.AddComponentData(entity, AsComponent);
 
-            convertedEntity = entity;
+            m_ConvertedEntity = entity;
+            m_ConvertedEntityManager = dstManager;
         }
 
         void OnValidate()
@@ -39,18 +42,12 @@ namespace Unity.Physics.Authoring
             ThreadCountHint = math.max(1, ThreadCountHint);
 
             if (!enabled) return;
-            if (convertedEntity == Entity.Null) return;
+            if (m_ConvertedEntity == Entity.Null) return;
 
             // This requires Entity Conversion mode to be 'Convert And Inject Game Object'
-            var entityManager = World.Active.EntityManager;
-            if (entityManager.HasComponent<Physics.PhysicsStep>(convertedEntity))
+            if (m_ConvertedEntityManager.HasComponent<Physics.PhysicsStep>(m_ConvertedEntity))
             {
-                var component = entityManager.GetComponentData<Physics.PhysicsStep>(convertedEntity);
-                component.SimulationType = SimulationType;
-                component.Gravity = Gravity;
-                component.SolverIterationCount = SolverIterationCount;
-                component.ThreadCountHint = ThreadCountHint;
-                entityManager.SetComponentData<Physics.PhysicsStep>(convertedEntity, component);
+                m_ConvertedEntityManager.SetComponentData(m_ConvertedEntity, AsComponent);
             }
         }
     }

@@ -70,7 +70,7 @@ namespace Unity.Physics.Authoring
         }
 
         // Job which iterates over collision events and writes display info to a DebugStream.
-        //[BurstCompile]
+        [BurstCompile]
         protected unsafe struct DisplayCollisionEventsJob : ICollisionEventsJob
         {
             [ReadOnly] public PhysicsWorld World;
@@ -79,32 +79,29 @@ namespace Unity.Physics.Authoring
 
             public unsafe void Execute(CollisionEvent collisionEvent)
             {
-                RigidBody bodyA = World.Bodies[collisionEvent.BodyIndices.BodyAIndex];
-                RigidBody bodyB = World.Bodies[collisionEvent.BodyIndices.BodyBIndex];
-                float totalImpulse = math.csum(collisionEvent.AccumulatedImpulses);
+                CollisionEvent.Details details = collisionEvent.CalculateDetails(ref World);
 
-                bool AreCollisionEventsEnabled(Collider* collider, ColliderKey key)
+                // Color code the impulse depending on the collision feature
+                // vertex - blue
+                // edge - cyan
+                // face - magenta
+                UnityEngine.Color color;
+                switch(details.EstimatedContactPointPositions.Length)
                 {
-                    if (collider->CollisionType == CollisionType.Convex)
-                    {
-                        return ((ConvexColliderHeader*)collider)->Material.EnableCollisionEvents;
-                    }
-                    else
-                    {
-                        collider->GetLeaf(key, out ChildCollider child);
-                        collider = child.Collider;
-                        UnityEngine.Assertions.Assert.IsTrue(collider->CollisionType == CollisionType.Convex);
-                        return ((ConvexColliderHeader*)collider)->Material.EnableCollisionEvents;
-                    }
+                    case 1:
+                        color = UnityEngine.Color.blue;
+                        break;
+                    case 2:
+                        color = UnityEngine.Color.cyan;
+                        break;
+                    default:
+                        color = UnityEngine.Color.magenta;
+                        break;
                 }
 
-                bool areBodyACollisionEventsEnabled = AreCollisionEventsEnabled(bodyA.Collider, collisionEvent.ColliderKeys.ColliderKeyA);
-                bool areBodyBCollisionEventsEnabled = AreCollisionEventsEnabled(bodyB.Collider, collisionEvent.ColliderKeys.ColliderKeyB);
-                if (areBodyACollisionEventsEnabled || areBodyBCollisionEventsEnabled)
-                {
-                    OutputStreamContext->Text(totalImpulse.ToString().ToCharArray(),
-                        math.lerp(bodyA.WorldFromBody.pos, bodyB.WorldFromBody.pos, 0.5f), UnityEngine.Color.blue);
-                }
+                var averageContactPosition = details.AverageContactPointPosition;
+                OutputStreamContext->Point(averageContactPosition, 0.01f, color);
+                OutputStreamContext->Arrow(averageContactPosition, collisionEvent.Normal * details.EstimatedImpulse, color);
             }
         }
 

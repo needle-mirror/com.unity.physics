@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using Unity.Mathematics;
 
 namespace Unity.Physics
 {
@@ -66,6 +67,15 @@ namespace Unity.Physics
                 CollidesWith = filterA.CollidesWith | filterB.CollidesWith,
                 GroupIndex = (filterA.GroupIndex == filterB.GroupIndex) ? filterA.GroupIndex : 0
             };
+        }
+
+        public override int GetHashCode()
+        {
+            return unchecked((int)math.hash(new uint3(
+                BelongsTo,
+                CollidesWith,
+                unchecked((uint)GroupIndex)
+            )));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
