@@ -4,8 +4,6 @@ using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Jobs.LowLevel.Unsafe;
 using Unity.Mathematics;
-using EditorBrowsableAttribute = System.ComponentModel.EditorBrowsableAttribute;
-using EditorBrowsableState = System.ComponentModel.EditorBrowsableState;
 
 namespace Unity.Physics
 {
@@ -67,12 +65,6 @@ namespace Unity.Physics
                 Modified = true;
             }
         }
-
-        #region Obsolete
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("BodyCustomDatas has been deprecated. Use BodyCustomTags instead. (RemovedAfter 2019-10-03)", true)]
-        public CustomDataPair BodyCustomDatas => throw new NotImplementedException();
-        #endregion
     }
 
     public struct ModifiableContactPoint
@@ -139,7 +131,7 @@ namespace Unity.Physics
                 var data = new ContactsJobData<T>
                 {
                     UserJobData = jobData,
-                    ContactReader = ((Simulation)simulation).m_Context.Contacts,
+                    ContactReader = ((Simulation)simulation).m_Context.Contacts.AsReader(),
                     NumWorkItems = ((Simulation)simulation).m_Context.SolverSchedulerInfo.NumWorkItems,
                     Bodies = world.Bodies
                 };
@@ -155,7 +147,7 @@ namespace Unity.Physics
         {
             public T UserJobData;
 
-            [NativeDisableContainerSafetyRestriction] public BlockStream.Reader ContactReader;
+            [NativeDisableContainerSafetyRestriction] public NativeStream.Reader ContactReader;
             [ReadOnly] public NativeArray<int> NumWorkItems;
             // Disable aliasing restriction in case T has a NativeSlice of PhysicsWorld.Bodies
             [ReadOnly, NativeDisableContainerSafetyRestriction] public NativeSlice<RigidBody> Bodies;
@@ -221,14 +213,14 @@ namespace Unity.Physics
         // Utility to help iterate over all the items in the contacts job stream
         private unsafe struct ContactsJobIterator
         {
-            [NativeDisableContainerSafetyRestriction] BlockStream.Reader m_ContactReader;
+            [NativeDisableContainerSafetyRestriction] NativeStream.Reader m_ContactReader;
             [NativeDisableUnsafePtrRestriction] public ContactHeader* m_LastHeader;
             [NativeDisableUnsafePtrRestriction] public ContactPoint* m_LastContact;
             int m_NumPointsLeft;
             int m_CurrentWorkItem;
             readonly int m_MaxNumWorkItems;
 
-            public unsafe ContactsJobIterator(BlockStream.Reader reader, int numWorkItems)
+            public unsafe ContactsJobIterator(NativeStream.Reader reader, int numWorkItems)
             {
                 m_ContactReader = reader;
                 m_MaxNumWorkItems = numWorkItems;
@@ -254,12 +246,12 @@ namespace Unity.Physics
                     if (m_NumPointsLeft == 0)
                     {
                         // Need to get a new header
-                        m_LastHeader = (ContactHeader*)m_ContactReader.Read(sizeof(ContactHeader));
+                        m_LastHeader = (ContactHeader*)m_ContactReader.ReadUnsafePtr(sizeof(ContactHeader));
                         m_NumPointsLeft = m_LastHeader->NumContacts;
                         AdvanceForEachIndex();
                     }
 
-                    m_LastContact = (ContactPoint*)m_ContactReader.Read(sizeof(ContactPoint));
+                    m_LastContact = (ContactPoint*)m_ContactReader.ReadUnsafePtr(sizeof(ContactPoint));
                     m_NumPointsLeft--;
                     AdvanceForEachIndex();
                 }

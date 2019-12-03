@@ -211,22 +211,6 @@ namespace Unity.Physics
         }
 
         #endregion
-
-        #region Obsolete
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("This signature has been deprecated. Please use a signature that passes native containers and does not pass nullable arguments instead. (RemovedAfter 2019-11-09)")]
-        public static unsafe BlobAssetReference<Collider> Create(
-            int2 size, float3 scale, float* heights, CollisionMethod collisionMethod,
-            CollisionFilter? filter = null, Material? material = null
-        )
-        {
-            var heightsArray = new NativeArray<float>(size.x * size.y, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-            UnsafeUtility.MemCpy(heightsArray.GetUnsafePtr(), heights, heightsArray.Length * UnsafeUtility.SizeOf<float>());
-            return Create(heightsArray, size, scale, collisionMethod, filter ?? CollisionFilter.Default, material ?? Material.Default);
-        }
-
-        #endregion
     }
 
 

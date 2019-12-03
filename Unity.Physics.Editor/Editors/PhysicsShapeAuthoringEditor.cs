@@ -49,6 +49,12 @@ namespace Unity.Physics.Editor
             );
             public static readonly GUIContent CylinderSideCountLabel = EditorGUIUtility.TrTextContent("Side Count");
             public static readonly GUIContent RadiusLabel = EditorGUIUtility.TrTextContent("Radius");
+            public static readonly GUIContent ForceUniqueLabel = EditorGUIUtility.TrTextContent(
+                "Force Unique",
+                "If set to true, then this object will always produce a unique collider for run-time during conversion. " +
+                "If set to false, then this object may share its collider data with other objects if they have the same inputs. " +
+                "You should enable this option if you plan to modify this instance's collider at run-time."
+            );
             public static readonly GUIContent MaterialLabel = EditorGUIUtility.TrTextContent("Material");
             public static readonly GUIContent SetRecommendedConvexValues = EditorGUIUtility.TrTextContent(
                 "Set Recommended Default Values",
@@ -129,6 +135,7 @@ namespace Unity.Physics.Editor
         [AutoPopulate] SerializedProperty m_MinimumSkinnedVertexWeight;
         [AutoPopulate] SerializedProperty m_CustomMesh;
         [AutoPopulate] SerializedProperty m_Material;
+        [AutoPopulate] SerializedProperty m_ForceUnique;
         #pragma warning restore 649
 
         [Flags]
@@ -196,10 +203,10 @@ namespace Unity.Physics.Editor
                 public NativeArray<float3> Points;
                 [ReadOnly]
                 [DeallocateOnJobCompletion]
-                public NativeArray<int> Indices;
+                public NativeArray<int3> Triangles;
                 public NativeArray<BlobAssetReference<Collider>> Output;
 
-                public void Execute() => Output[0] = MeshCollider.Create(Points, Indices);
+                public void Execute() => Output[0] = MeshCollider.Create(Points, Triangles);
             }
 
             static readonly List<Vector3> s_ReusableEdges = new List<Vector3>(1024);
@@ -227,7 +234,7 @@ namespace Unity.Physics.Editor
                 switch (shape.ShapeType)
                 {
                     case ShapeType.ConvexHull:
-                        shape.GetBakedConvexProperties(currentPoints, out currentConvexProperties);
+                        shape.GetBakedConvexProperties(currentPoints, out currentConvexProperties, out _); // TODO: use HashableShapeInputs
 
                         return math.hash(
                             new uint3(
@@ -238,14 +245,14 @@ namespace Unity.Physics.Editor
                         );
 
                     case ShapeType.Mesh:
-                        var indices = new NativeList<int>(65535, Allocator.Temp);
-                        shape.GetBakedMeshProperties(currentPoints, indices);
+                        var triangles = new NativeList<int3>(1024, Allocator.Temp);
+                        shape.GetBakedMeshProperties(currentPoints, triangles, out _);  // TODO: use HashableShapeInputs
 
                         return math.hash(
                             new uint3(
                                 (uint)shape.ShapeType,
                                 currentPoints.GetStableHash(hashedPoints),
-                                math.hash(indices.GetUnsafePtr(), UnsafeUtility.SizeOf<int>() * indices.Length)
+                                math.hash(triangles.GetUnsafePtr(), UnsafeUtility.SizeOf<int3>() * triangles.Length)
                             )
                         );
 
@@ -284,6 +291,8 @@ namespace Unity.Physics.Editor
                 if (m_PreviewJobsOutput.Count == 1)
                 {
                     CheckPreviewJobsForCompletion();
+                    if (m_MostRecentlyScheduledJob.Equals(default(JobHandle)))
+                        return;
                     EditorApplication.update += CheckPreviewJobsForCompletion;
                     EditorApplication.delayCall += () =>
                     {
@@ -297,7 +306,10 @@ namespace Unity.Physics.Editor
             JobHandle ScheduleConvexHullPreview(PhysicsShapeAuthoring shape, NativeArray<BlobAssetReference<Collider>> output)
             {
                 var pointCloud = new NativeList<float3>(65535, Allocator.Temp);
-                shape.GetBakedConvexProperties(pointCloud, out var generationParameters);
+                shape.GetBakedConvexProperties(pointCloud, out var generationParameters, out _);
+
+                if (pointCloud.Length == 0)
+                    return default;
 
                 // copy to NativeArray because NativeList not yet compatible with DeallocateOnJobCompletion
                 var pointsArray = new NativeArray<float3>(
@@ -317,25 +329,28 @@ namespace Unity.Physics.Editor
 
             JobHandle ScheduleMeshPreview(PhysicsShapeAuthoring shape, NativeArray<BlobAssetReference<Collider>> output)
             {
-                var points = new NativeList<float3>(65535, Allocator.Temp);
-                var indices = new NativeList<int>(65535, Allocator.Temp);
-                shape.GetBakedMeshProperties(points, indices);
+                var points = new NativeList<float3>(1024, Allocator.Temp);
+                var triangles = new NativeList<int3>(1024, Allocator.Temp);
+                shape.GetBakedMeshProperties(points, triangles, out _);
+
+                if (points.Length == 0 || triangles.Length == 0)
+                    return default;
 
                 // copy to NativeArray because NativeList not yet compatible with DeallocateOnJobCompletion
                 var pointsArray = new NativeArray<float3>(
                     points.Length, Allocator.Persistent, NativeArrayOptions.UninitializedMemory
                 );
                 pointsArray.CopyFrom(points);
-                var indicesArray = new NativeArray<int>(
-                    indices.Length, Allocator.Persistent, NativeArrayOptions.UninitializedMemory
+                var triangleArray = new NativeArray<int3>(
+                    triangles.Length, Allocator.Persistent, NativeArrayOptions.UninitializedMemory
                 );
-                indicesArray.CopyFrom(indices);
+                triangleArray.CopyFrom(triangles);
 
                 // TODO: if there is still an active job with the same input data hash, then just set it to be most recently scheduled job
                 return new CreateTempMeshJob
                 {
                     Points = pointsArray,
-                    Indices = indicesArray,
+                    Triangles = triangleArray,
                     Output = output
                 }.Schedule();
             }
@@ -360,25 +375,37 @@ namespace Unity.Physics.Editor
                     // only populate preview edge data if not already disposed and this job was actually the most recent
                     if (!m_Disposed && mostRecentlyScheduledJob)
                     {
-                        switch (((ConvexCollider*)output[0].GetUnsafePtr())->Type)
+                        if (!output[0].IsCreated)
                         {
-                            case ColliderType.Convex:
-                                DrawingUtility.GetConvexHullEdges(
-                                    ref ((ConvexCollider*)output[0].GetUnsafePtr())->ConvexHull, s_ReusableEdges
-                                );
-                                break;
-                            case ColliderType.Mesh:
-                                DrawingUtility.GetMeshEdges(ref ((MeshCollider*)output[0].GetUnsafePtr())->Mesh, s_ReusableEdges);
-                                break;
+                            Edges = Array.Empty<Vector3>();
                         }
+                        else
+                        {
+                            switch (((ConvexCollider*)output[0].GetUnsafePtr())->Type)
+                            {
+                                case ColliderType.Convex:
+                                    DrawingUtility.GetConvexHullEdges(
+                                        ref ((ConvexCollider*)output[0].GetUnsafePtr())->ConvexHull, s_ReusableEdges
+                                    );
+                                    break;
+                                case ColliderType.Mesh:
+                                    DrawingUtility.GetMeshEdges(
+                                        ref ((MeshCollider*)output[0].GetUnsafePtr())->Mesh, s_ReusableEdges
+                                    );
+                                    break;
+                            }
 
-                        Edges = s_ReusableEdges.ToArray();
+                            Edges = s_ReusableEdges.ToArray();
+                        }
 
                         EditorApplication.delayCall += SceneViewUtility.ClearNotificationInSceneView;
                     }
 
-                    output[0].Release();
-                    output.Dispose();
+                    if (output[0].IsCreated)
+                    {
+                        output[0].Release();
+                        output.Dispose();
+                    }
                 }
 
                 if (repaintSceneViews)
@@ -439,7 +466,9 @@ namespace Unity.Physics.Editor
 
                 if (shape.ShapeType == ShapeType.Mesh)
                 {
-                    PhysicsShapeAuthoring.GetAllSkinnedPointsInHierarchyBelongingToShape(shape, skinnedPoints, false);
+                    PhysicsShapeAuthoring.GetAllSkinnedPointsInHierarchyBelongingToShape(
+                        shape, skinnedPoints, false, default, default, default
+                    );
                     if (skinnedPoints.Length > 0)
                         geometryState |= GeometryState.MeshWithSkinnedPoints;
                 }
@@ -520,6 +549,18 @@ namespace Unity.Physics.Editor
                         break;
                     default:
                         throw new UnimplementedShapeException((ShapeType)m_ShapeType.intValue);
+                }
+
+                if (m_ShapeType.intValue == (int)ShapeType.ConvexHull || m_ShapeType.intValue == (int)ShapeType.Mesh)
+                    EditorGUILayout.PropertyField(m_ForceUnique, Styles.ForceUniqueLabel);
+                else
+                {
+                    EditorGUI.BeginDisabledGroup(true);
+                    var position = EditorGUILayout.GetControlRect(true, EditorGUIUtility.singleLineHeight);
+                    EditorGUI.BeginProperty(position, Styles.ForceUniqueLabel, m_ForceUnique);
+                    EditorGUI.Toggle(position, Styles.ForceUniqueLabel, true);
+                    EditorGUI.EndProperty();
+                    EditorGUI.EndDisabledGroup();
                 }
             }
 

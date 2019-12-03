@@ -31,18 +31,18 @@ namespace Unity.Physics.Authoring
             {
                 return inputDeps;
             }
+
             unsafe
             {
-                DebugStream.Context debugOutput = m_DebugStreamSystem.GetContext(1);
-                debugOutput.Begin(0);
                 // Allocate a block of memory to store our debug output, so it can be shared across the display/finish jobs
                 var sharedOutput = (DebugStream.Context*)UnsafeUtility.Malloc(sizeof(DebugStream.Context), 16, Allocator.TempJob);
-                sharedOutput[0] = debugOutput;
+                *sharedOutput = m_DebugStreamSystem.GetContext(1);
+                sharedOutput->Begin(0);
 
                 var job = new DisplayTriggerEventsJob
                 {
                     World = m_BuildPhysicsWorldSystem.PhysicsWorld,
-                    OutputStreamContext = sharedOutput,
+                    OutputStreamContext = sharedOutput
                 };
 
                 JobHandle handle = ScheduleTriggerEventsJob(job, m_StepPhysicsWorldSystem.Simulation, ref m_BuildPhysicsWorldSystem.PhysicsWorld, inputDeps);
@@ -86,8 +86,7 @@ namespace Unity.Physics.Authoring
         }
 
         [BurstCompile]
-        [Obsolete("This type will be made protected in a future release. (RemovedAfter 2019-10-15)")]
-        public unsafe struct FinishDisplayTriggerEventsJob : IJob
+        protected unsafe struct FinishDisplayTriggerEventsJob : IJob
         {
             [NativeDisableUnsafePtrRestriction]
             internal DebugStream.Context* OutputStreamContext;

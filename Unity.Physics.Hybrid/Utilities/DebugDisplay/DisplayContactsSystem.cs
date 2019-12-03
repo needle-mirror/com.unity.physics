@@ -33,12 +33,10 @@ namespace Unity.Physics.Authoring
             {
                 unsafe
                 {
-                    DebugStream.Context debugOutput = m_DebugStreamSystem.GetContext(1);
-                    debugOutput.Begin(0);
-
                     // Allocate a block of memory to store our debug output, so it can be shared across the display/finish jobs
                     var sharedOutput = (DebugStream.Context*)UnsafeUtility.Malloc(sizeof(DebugStream.Context), 16, Allocator.TempJob);
-                    sharedOutput[0] = debugOutput;
+                    *sharedOutput = m_DebugStreamSystem.GetContext(1);
+                    sharedOutput->Begin(0);
 
                     var gatherJob = new DisplayContactsJob
                     {
@@ -100,22 +98,5 @@ namespace Unity.Physics.Authoring
                 UnsafeUtility.Free(OutputStreamContext, Allocator.TempJob);
             }
         }
-    }
-
-    [Obsolete("DisplayContactsJob has been deprecated. Use DisplayContactsSystem.DisplayContactsJob instead. (RemovedAfter 2019-10-15)")]
-    public struct DisplayContactsJob : IContactsJob
-    {
-        public NativeArray<DebugStream.Context> OutputStream;
-
-        public void Execute(ref ModifiableContactHeader header, ref ModifiableContactPoint point) { }
-    }
-
-    [Obsolete("FinishDisplayContactsJob has been deprecated. Use DisplayContactsSystem.FinishDisplayContactsJob instead. (RemovedAfter 2019-10-15)")]
-    public struct FinishDisplayContactsJob : IJob
-    {
-        [DeallocateOnJobCompletion]
-        public NativeArray<DebugStream.Context> OutputStream;
-
-        public void Execute() => OutputStream[0].End();
     }
 }

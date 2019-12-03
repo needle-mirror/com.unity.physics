@@ -122,9 +122,9 @@ namespace Unity.Physics.Tests.Joints
         delegate BlobAssetReference<JointData> GenerateJoint(ref Random rnd);
 
         unsafe void SolveSingleJoint(JointData* jointData, int numIterations, float timestep,
-            ref MotionVelocity velocityA, ref MotionVelocity velocityB, ref MotionData motionA, ref MotionData motionB, out BlockStream jacobiansOut)
+            ref MotionVelocity velocityA, ref MotionVelocity velocityB, ref MotionData motionA, ref MotionData motionB, out NativeStream jacobiansOut)
         {
-            Solver.StepInput stepInput = new Solver.StepInput
+            var stepInput = new Solver.StepInput
             {
                 IsLastIteration = false,
                 InvNumSolverIterations = 1.0f / numIterations,
@@ -133,22 +133,22 @@ namespace Unity.Physics.Tests.Joints
             };
 
             // Build jacobians
-            jacobiansOut = new BlockStream(1, 0);
+            jacobiansOut = new NativeStream(1, Allocator.Temp);
             {
-                BlockStream.Writer jacobianWriter = jacobiansOut;
+                NativeStream.Writer jacobianWriter = jacobiansOut.AsWriter();
                 jacobianWriter.BeginForEachIndex(0);
                 Solver.BuildJointJacobian(jointData, new BodyIndexPair(), velocityA, velocityB, motionA, motionB, timestep, numIterations, ref jacobianWriter);
                 jacobianWriter.EndForEachIndex();
             }
 
-            BlockStream.Writer eventWriter = new BlockStream.Writer(); // no events expected
+            var eventWriter = new NativeStream.Writer(); // no events expected
 
             // Solve the joint
             for (int iIteration = 0; iIteration < numIterations; iIteration++)
             {
                 stepInput.IsLastIteration = (iIteration == numIterations - 1);
-                BlockStream.Reader jacobianReader = jacobiansOut;
-                JacobianIterator jacIterator = new JacobianIterator(jacobianReader, 0);
+                NativeStream.Reader jacobianReader = jacobiansOut.AsReader();
+                var jacIterator = new JacobianIterator(jacobianReader, 0);
                 while (jacIterator.HasJacobiansLeft())
                 {
                     ref JacobianHeader header = ref jacIterator.ReadJacobianHeader();
@@ -204,13 +204,13 @@ namespace Unity.Physics.Tests.Joints
                         applyGravity(ref velocityB, ref motionB, gravity, timestep);
 
                         // Solve and integrate
-                        SolveSingleJoint(jointData, numIterations, timestep, ref velocityA, ref velocityB, ref motionA, ref motionB, out BlockStream jacobians);
+                        SolveSingleJoint(jointData, numIterations, timestep, ref velocityA, ref velocityB, ref motionA, ref motionB, out NativeStream jacobians);
 
                         // Last step, check the joint error
                         if (iStep == numSteps - 1)
                         {
-                            BlockStream.Reader jacobianReader = jacobians;
-                            JacobianIterator jacIterator = new JacobianIterator(jacobianReader, 0);
+                            NativeStream.Reader jacobianReader = jacobians.AsReader();
+                            var jacIterator = new JacobianIterator(jacobianReader, 0);
                             string failureMessage = testName + " failed " + iTest + " (" + state + ")";
                             while (jacIterator.HasJacobiansLeft())
                             {
@@ -383,7 +383,7 @@ namespace Unity.Physics.Tests.Joints
                         {
                             Constraint.Twist(i, minLimit, maxLimit)
                         });
-                    SolveSingleJoint((JointData*)jointData.GetUnsafePtr(), 4, 1.0f, ref velocityA, ref velocityB, ref motionA, ref motionB, out BlockStream jacobians);
+                    SolveSingleJoint((JointData*)jointData.GetUnsafePtr(), 4, 1.0f, ref velocityA, ref velocityB, ref motionA, ref motionB, out NativeStream jacobians);
 
                     quaternion expectedOrientation = quaternion.AxisAngle(axis, minLimit + maxLimit);
                     Utils.TestUtils.AreEqual(expectedOrientation, motionA.WorldFromMotion.rot, 1e-3f);

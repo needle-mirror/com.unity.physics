@@ -74,7 +74,7 @@ namespace Unity.Physics
 
             public static DispatchPair CreateContact(BodyIndexPair pair)
             {
-                return Create(pair, k_InvalidJointIndex, 0);
+                return Create(pair, k_InvalidJointIndex, 1);
             }
 
             public static DispatchPair CreateJoint(BodyIndexPair pair, int jointIndex, int allowCollision)
@@ -105,7 +105,7 @@ namespace Unity.Physics
                 internal int DispatchPairCount; // The total number of pairs in this phase
                 internal int BatchSize; // The number of items per thread work item; at most, the number of pairs
                 internal int NumWorkItems; // The amount of "subtasks" of size BatchSize in this phase
-                internal int FirstWorkItemIndex; // The sum of NumWorkItems in all previous phases. Used for output blockstream.
+                internal int FirstWorkItemIndex; // The sum of NumWorkItems in all previous phases. Used for output native stream.
                 internal int FirstDispatchPairIndex; // Index into the array of DispatchPairs for this phase.
             }
 
@@ -221,7 +221,7 @@ namespace Unity.Physics
 
         // Sort interacting pairs of bodies into phases for multi-threaded simulation
         public unsafe JobHandle ScheduleCreatePhasedDispatchPairsJob(
-            ref PhysicsWorld world, ref BlockStream dynamicVsDynamicBroadphasePairsStream, ref BlockStream staticVsDynamicBroadphasePairStream,
+            ref PhysicsWorld world, ref NativeStream dynamicVsDynamicBroadphasePairsStream, ref NativeStream staticVsDynamicBroadphasePairStream,
             ref Simulation.Context context, JobHandle inputDeps)
         {
             // First build a sorted array of dispatch pairs.
@@ -233,8 +233,8 @@ namespace Unity.Physics
                 // Merge broadphase pairs and joint pairs into the unsorted array
                 JobHandle dispatchHandle = new CreateDispatchPairsJob
                 {
-                    DynamicVsDynamicPairReader = dynamicVsDynamicBroadphasePairsStream,
-                    StaticVsDynamicPairReader = staticVsDynamicBroadphasePairStream,
+                    DynamicVsDynamicPairReader = dynamicVsDynamicBroadphasePairsStream.AsReader(),
+                    StaticVsDynamicPairReader = staticVsDynamicBroadphasePairStream.AsReader(),
                     Joints = world.Joints,
                     DispatchPairs = unsortedPairs,
                     DispatchPairsUninitialized = sortedPairs
@@ -405,8 +405,8 @@ namespace Unity.Physics
         private struct CreateDispatchPairsJob : IJob
         {
             // Body pairs from broadphase overlap jobs
-            public BlockStream.Reader DynamicVsDynamicPairReader;
-            public BlockStream.Reader StaticVsDynamicPairReader;
+            public NativeStream.Reader DynamicVsDynamicPairReader;
+            public NativeStream.Reader StaticVsDynamicPairReader;
 
             // Joints from dynamics world
             [ReadOnly]

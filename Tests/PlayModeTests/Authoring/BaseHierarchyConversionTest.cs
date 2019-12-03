@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
 using Unity.Collections;
@@ -50,22 +51,27 @@ namespace Unity.Physics.Tests.Authoring
         }
 
 
-        protected void TestConvertedData<T>(Action<T> checkValue) where T : struct, IComponentData
+        protected void TestConvertedData<T>(Action<T> checkValue) where T : struct, IComponentData =>
+            TestConvertedData((Action<NativeArray<T>>)(components => { checkValue(components[0]); }), 1);
+
+        protected void TestConvertedData<T>(Action<NativeArray<T>> checkValues, int assumeCount) where T : struct, IComponentData
         {
             var world = new World("Test world");
 
             try
             {
-                GameObjectConversionUtility.ConvertGameObjectHierarchy(Root, world);
-
-                using (var group = world.EntityManager.CreateEntityQuery(typeof(T)))
+                using (var blobAssetStore = new BlobAssetStore())
                 {
-                    using (var bodies = group.ToComponentDataArray<T>(Allocator.Persistent))
-                    {
-                        Assume.That(bodies, Has.Length.EqualTo(1));
-                        var componentData = bodies[0];
+                    var settings = GameObjectConversionSettings.FromWorld(world, blobAssetStore);
+                    GameObjectConversionUtility.ConvertGameObjectHierarchy(Root, settings);
 
-                        checkValue(componentData);
+                    using (var group = world.EntityManager.CreateEntityQuery(typeof(T)))
+                    {
+                        using (var components = group.ToComponentDataArray<T>(Allocator.Persistent))
+                        {
+                            Assume.That(components, Has.Length.EqualTo(assumeCount));
+                            checkValues(components);
+                        }
                     }
                 }
             }
@@ -80,8 +86,12 @@ namespace Unity.Physics.Tests.Authoring
             var world = new World("Test world");
             try
             {
-                LogAssert.Expect(LogType.Exception, message ?? new Regex($"\b{typeof(T).Name}\b"));
-                GameObjectConversionUtility.ConvertGameObjectHierarchy(Root, world);
+                using (var blobAssetStore = new BlobAssetStore())
+                {
+                    LogAssert.Expect(LogType.Exception, message ?? new Regex($"\b{typeof(T).Name}\b"));
+                    var settings = GameObjectConversionSettings.FromWorld(world, blobAssetStore);
+                    GameObjectConversionUtility.ConvertGameObjectHierarchy(Root, settings);
+                }
             }
             finally
             {
@@ -95,11 +105,15 @@ namespace Unity.Physics.Tests.Authoring
 
             try
             {
-                GameObjectConversionUtility.ConvertGameObjectHierarchy(Root, world);
+                using (var blobAssetStore = new BlobAssetStore())
+                {
+                    var settings = GameObjectConversionSettings.FromWorld(world, blobAssetStore);
+                    GameObjectConversionUtility.ConvertGameObjectHierarchy(Root, settings);
 
-                using (var group = world.EntityManager.CreateEntityQuery(typeof(T)))
-                using (var bodies = group.ToComponentDataArray<T>(Allocator.Persistent))
-                    Assert.That(bodies.Length, Is.EqualTo(0), $"Conversion pipeline produced {typeof(T).Name}");
+                    using (var group = world.EntityManager.CreateEntityQuery(typeof(T)))
+                    using (var bodies = group.ToComponentDataArray<T>(Allocator.Persistent))
+                        Assert.That(bodies.Length, Is.EqualTo(0), $"Conversion pipeline produced {typeof(T).Name}");
+                }
             }
             finally
             {

@@ -55,10 +55,8 @@ namespace Unity.Physics.Authoring
                     float3 pivotA = worldFromJointA.Translation;
                     float3 pivotB = worldFromJointB.Translation;
 
-                    for (int iConstraint = 0; iConstraint < jointData->NumConstraints; iConstraint++)
+                    foreach( Constraint constraint in jointData->Constraints )
                     {
-                        Constraint constraint = jointData->Constraints[iConstraint];
-
                         switch (constraint.Type)
                         {
                             case ConstraintType.Linear:
@@ -222,15 +220,5 @@ namespace Unity.Physics.Authoring
 
             return handle;
         }
-    }
-
-    [Obsolete("DisplayJointsJob has been deprecated. Use DisplayJointsSystem.DisplayJointsJob instead. (RemovedAfter 2019-10-15)")]
-    public struct DisplayJointsJob : IJob
-    {
-        public DebugStream.Context OutputStream;
-        [ReadOnly] public NativeSlice<RigidBody> Bodies;
-        [ReadOnly] public NativeSlice<Joint> Joints;
-
-        public void Execute() { }
     }
 }

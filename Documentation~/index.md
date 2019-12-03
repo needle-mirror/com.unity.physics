@@ -1,17 +1,23 @@
-Introduction to Unity Physics
+About Unity Physics
 ======
 
-Unity Physics is a deterministic rigid body dynamics system and spatial query system written from the ground up using the Unity data oriented tech stack. Unity Physics originates from a close collaboration between Unity and the Havok Physics team at Microsoft.  
+Use the Unity Physics package to benefit from a deterministic rigid body dynamics system and spatial query system that uses the Unity data oriented tech stack (DOTS).
 
-## About these documents
+## Preview package
 
-These are very early stage documents which will be extended over time. Please read through the Design Philosophy and Getting Started at least, which should give you an good overview of how to use the physics system at a high level. As the code settles down we will add more explanation on how to modify the simulation and expand on how the algorithms work. The most up to date use of Unity Physics is the Samples for it in the main DOTs sample repository and they cover a wide range of use cases not yet covered in these documents, such as  character controllers, ray cast driven cars, and examples of all the joints.
+This package is available as a preview, so it is not ready for production use. The features and documentation in this package might change before it is verified for release.
 
-## Read
+## Installation
 
-* [Design Philosophy](design.md)
-* [Getting started](getting_started.md)
-* [Collision queries](collision_queries.md)
-* [Core components](core_components.md)
-* [Modifying simulation behaviour](simulation_modification.md)
-* [Glossary](glossary.md)
+To install this package, follow the instructions in the [Package Manager documentation](https://docs.unity3d.com/Manual/upm-ui-install.html).
+
+## Requirements
+
+This version of Unity Physics is compatible with the following versions of the Unity Editor:
+* 2019.3 and later (recommended)
+
+## Overview
+
+To get an overview of the Unity Physics system at a high level:
+* Read through the [Design Philosophy](design.md) and [Getting Started](getting_started.md) sections – and then further explore the concepts currently documented in the other sections.
+* Get and use the [Unity Physics Samples](https://github.com/Unity-Technologies/EntityComponentSystemSamples/blob/master/UnityPhysicsSamples/Documentation/samples.md) project, which includes use cases such as character controllers, ray cast driven cars, and examples of all the joints.

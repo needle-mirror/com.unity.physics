@@ -39,7 +39,7 @@ namespace Unity.Physics.Tests.Authoring
             return PhysicsShapeExtensions.GetMaxAxis(v);
         }
 
-        const float k_Small = 1f / float.MaxValue;
+        const float k_Small = math.FLT_MIN_NORMAL;
         const float k_Large = float.MaxValue;
 
         static readonly float4x4 k_Orthogonal = new float4x4(quaternion.Euler(math.PI / 8f, math.PI / 8f, math.PI / 8f), 0f);

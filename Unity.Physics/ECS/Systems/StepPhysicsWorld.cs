@@ -1,5 +1,4 @@
 using System;
-using System.ComponentModel;
 using Unity.Entities;
 using Unity.Jobs;
 using UnityEngine.Assertions;
@@ -7,31 +6,28 @@ using UnityEngine.Assertions;
 namespace Unity.Physics.Systems
 {
     // Simulates the physics world forwards in time
-    [UpdateAfter(typeof(BuildPhysicsWorld)), UpdateBefore(typeof(ExportPhysicsWorld))]
+    [UpdateAfter(typeof(BuildPhysicsWorld)), UpdateBefore(typeof(ExportPhysicsWorld)), AlwaysUpdateSystem]
     public class StepPhysicsWorld : JobComponentSystem
     {
         // The simulation implementation
-        public ISimulation Simulation { get; private set; }
+        public ISimulation Simulation { get; private set; } = new DummySimulation();
 
         // The final job handle produced by this system.
         // This includes all simulation jobs as well as array disposal jobs.
-        public JobHandle FinalJobHandle { get; private set; }
+        public JobHandle FinalJobHandle => Simulation.FinalJobHandle;
 
         // The final simulation job handle produced by this system.
         // Systems which read the simulation results should depend on this.
-        public JobHandle FinalSimulationJobHandle { get; private set; }
+        public JobHandle FinalSimulationJobHandle => Simulation.FinalSimulationJobHandle;
 
         // Optional callbacks to execute while scheduling the next simulation step
-        private SimulationCallbacks m_Callbacks;
+        private SimulationCallbacks m_Callbacks = new SimulationCallbacks();
 
         // Simulation factory
         public delegate ISimulation SimulationCreator();
         private readonly SimulationCreator[] m_SimulationCreators = new SimulationCreator[k_NumSimulationTypes];
 
         BuildPhysicsWorld m_BuildPhysicsWorldSystem;
-
-        // Entity group queries
-        private EntityQuery m_PhysicsEntityGroup;
 
         // needs to match the number of SimulationType enum members
         internal static int k_NumSimulationTypes = 3;
@@ -44,27 +40,12 @@ namespace Unity.Physics.Systems
             Assert.AreEqual(Enum.GetValues(typeof(SimulationType)).Length, k_NumSimulationTypes);
 #endif
 
-            Simulation = new DummySimulation();
             RegisterSimulation(SimulationType.NoPhysics, () => new DummySimulation());
             RegisterSimulation(SimulationType.UnityPhysics, () => new Simulation());
             RegisterSimulation(SimulationType.HavokPhysics, () =>
                 throw new NotSupportedException("Havok Physics package not present. Use the package manager to add it."));
 
-            FinalSimulationJobHandle = new JobHandle();
-            FinalJobHandle = new JobHandle();
-
-            m_Callbacks = new SimulationCallbacks();
-
             base.OnCreate();
-
-            // Needed to keep ComponentSystem active when no Entity has PhysicsStep component
-            m_PhysicsEntityGroup = GetEntityQuery(new EntityQueryDesc
-            {
-                All = new ComponentType[]
-                {
-                    typeof(PhysicsVelocity)
-                }
-            });
         }
 
         protected override void OnDestroy()
@@ -109,7 +90,7 @@ namespace Unity.Physics.Systems
 #endif
 
             // Schedule the simulation jobs
-            var stepInput = new SimulationStepInput
+            Simulation.ScheduleStepJobs(new SimulationStepInput()
             {
                 World = m_BuildPhysicsWorldSystem.PhysicsWorld,
                 TimeStep = timeStep,
@@ -118,15 +99,14 @@ namespace Unity.Physics.Systems
                 SynchronizeCollisionWorld = false,
                 NumSolverIterations = stepComponent.SolverIterationCount,
                 Callbacks = m_Callbacks
-            };
-            Simulation.ScheduleStepJobs(stepInput, handle);
-            FinalSimulationJobHandle = Simulation.FinalSimulationJobHandle;
-            FinalJobHandle = Simulation.FinalJobHandle;
+            }, handle);
 
             // Clear the callbacks. User must enqueue them again before the next step.
             m_Callbacks.Clear();
 
-            return handle;
+            // Return the final simulation handle
+            // (Not FinalJobHandle since other systems shouldn't need to depend on the dispose jobs) 
+            return JobHandle.CombineDependencies(Simulation.FinalSimulationJobHandle, handle);
         }
 
         // A simulation which does nothing
@@ -139,13 +119,6 @@ namespace Unity.Physics.Systems
             public void ScheduleStepJobs(SimulationStepInput input, JobHandle inputDeps) { }
             public JobHandle FinalSimulationJobHandle => new JobHandle();
             public JobHandle FinalJobHandle => new JobHandle();
-
-            #region Obsolete
-            [EditorBrowsable(EditorBrowsableState.Never)]
-            [Obsolete("ScheduleStepJobs(SimulationStepInput, JobHandle, out JobHandle, out JobHandle) has been deprecated. Use ScheduleStepJobs(SimulationStepInput, JobHandle) instead. (RemovedAfter 2019-10-15)", true)]
-            void ISimulation.ScheduleStepJobs(SimulationStepInput input, JobHandle inputDeps, out JobHandle finalSimulationJobHandle, out JobHandle finalJobHandle) =>
-                throw new NotImplementedException();
-            #endregion
         }
     }
 }

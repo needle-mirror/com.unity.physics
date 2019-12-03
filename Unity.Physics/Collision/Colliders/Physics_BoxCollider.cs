@@ -50,6 +50,10 @@ namespace Unity.Physics
             {
                 throw new ArgumentException("Invalid box center");
             }
+            if (m_Orientation.value.Equals(float4.zero) || math.any(!math.isfinite(m_Orientation.value)))
+            {
+                throw new ArgumentException("Invalid box orientation");
+            }
             if (math.any(m_Size <= 0) || math.any(!math.isfinite(m_Size)))
             {
                 throw new ArgumentOutOfRangeException("Invalid box size");
@@ -331,28 +335,6 @@ namespace Unity.Physics
                 return DistanceQueries.ColliderCollider(input, (Collider*)target, ref collector);
             }
         }
-
-        #endregion
-
-        #region Obsolete
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("ConvexRadius has been renamed BevelRadius. (RemovedAfter 2019-11-28) (UnityUpgradable) -> BevelRadius", true)]
-        public float ConvexRadius
-        {
-            get => BevelRadius;
-            set
-            {
-                var geometry = Geometry;
-                geometry.BevelRadius = value;
-                Geometry = geometry;
-            }
-        }
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("This signature has been deprecated. Please use a signature that does not pass nullable arguments instead. (RemovedAfter 2019-11-15)")]
-        public static BlobAssetReference<Collider> Create(float3 center, quaternion orientation, float3 size, float convexRadius, CollisionFilter? filter = null, Material? material = null) =>
-            Create(new BoxGeometry { Center = center, Orientation = orientation, Size = size, BevelRadius = convexRadius }, filter ?? CollisionFilter.Default, material ?? Material.Default);
 
         #endregion
     }

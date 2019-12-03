@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
@@ -9,9 +11,6 @@ using LegacyBox = UnityEngine.BoxCollider;
 using LegacyCapsule = UnityEngine.CapsuleCollider;
 using LegacyMesh = UnityEngine.MeshCollider;
 using LegacySphere = UnityEngine.SphereCollider;
-using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
-using Unity.Jobs;
 
 namespace Unity.Physics.Authoring
 {
@@ -71,6 +70,19 @@ namespace Unity.Physics.Authoring
             return material;
         }
 
+        internal override ShapeComputationData GenerateComputationData(
+            T shape, ColliderInstance colliderInstance,
+            NativeList<float3> allConvexHullPoints, NativeList<float3> allMeshVertices, NativeList<int3> allMeshTriangles
+        )
+        {
+            return new ShapeComputationData
+            {
+                Instance = colliderInstance,
+                Material = ProduceMaterial(shape),
+                CollisionFilter = ProduceCollisionFilter(shape)
+            };
+        }
+
         protected static CollisionFilter ProduceCollisionFilter(LegacyCollider collider)
         {
             var layer = collider.gameObject.layer;
@@ -84,10 +96,18 @@ namespace Unity.Physics.Authoring
         protected override GameObject GetPrimaryBody(T shape) => shape.GetPrimaryBody();
     }
 
+    [UpdateAfter(typeof(BeginColliderConversionSystem))]
+    [UpdateBefore(typeof(BuildCompoundCollidersConversionSystem))]
     public sealed class LegacyBoxColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacyBox>
     {
-        protected override BlobAssetReference<Collider> ProduceColliderBlob(LegacyBox shape)
+        internal override ShapeComputationData GenerateComputationData(
+            LegacyBox shape, ColliderInstance colliderInstance,
+            NativeList<float3> allConvexHullPoints, NativeList<float3> allMeshVertices, NativeList<int3> allMeshTriangles
+        )
         {
+            var res = base.GenerateComputationData(shape, colliderInstance, allConvexHullPoints, allMeshVertices, allMeshTriangles);
+            res.ShapeType = ShapeType.Box;
+
             var worldCenter = math.mul(shape.transform.localToWorldMatrix, new float4(shape.center, 1f));
             var shapeFromWorld = math.inverse(
                 new float4x4(new RigidTransform(shape.transform.rotation, shape.transform.position))
@@ -104,18 +124,25 @@ namespace Unity.Physics.Authoring
 
             geometry.BevelRadius = math.min(ConvexHullGenerationParameters.Default.BevelRadius, math.cmin(geometry.Size) * 0.5f);
 
-            return BoxCollider.Create(
-                geometry,
-                ProduceCollisionFilter(shape),
-                ProduceMaterial(shape)
-            );
+            res.BoxProperties = geometry;
+
+            return res;
         }
     }
 
+    [UpdateAfter(typeof(BeginColliderConversionSystem))]
+    [UpdateBefore(typeof(BuildCompoundCollidersConversionSystem))]
     public sealed class LegacyCapsuleColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacyCapsule>
     {
-        protected override BlobAssetReference<Collider> ProduceColliderBlob(LegacyCapsule shape)
+        internal override ShapeComputationData GenerateComputationData(
+            LegacyCapsule shape, ColliderInstance colliderInstance,
+            NativeList<float3> allConvexHullPoints, NativeList<float3> allMeshVertices, NativeList<int3> allMeshTriangles
+        )
         {
+            var res = base.GenerateComputationData(shape, colliderInstance, allConvexHullPoints, allMeshVertices, allMeshTriangles);
+
+            res.ShapeType = ShapeType.Capsule;
+
             var linearScale = (float3)shape.transform.lossyScale;
 
             // radius is max of the two non-height axes
@@ -130,18 +157,24 @@ namespace Unity.Physics.Authoring
             var v0 = offset + ((float3)shape.center + vertex) * math.abs(linearScale) - ax * radius;
             var v1 = offset + ((float3)shape.center - vertex) * math.abs(linearScale) + ax * radius;
 
-            return CapsuleCollider.Create(
-                new CapsuleGeometry { Vertex0 = v0, Vertex1 = v1, Radius = radius },
-                ProduceCollisionFilter(shape),
-                ProduceMaterial(shape)
-            );
+            res.CapsuleProperties = new CapsuleGeometry { Vertex0 = v0, Vertex1 = v1, Radius = radius };
+            
+            return res;
         }
     }
 
+    [UpdateAfter(typeof(BeginColliderConversionSystem))]
+    [UpdateBefore(typeof(BuildCompoundCollidersConversionSystem))]
     public sealed class LegacySphereColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacySphere>
     {
-        protected override BlobAssetReference<Collider> ProduceColliderBlob(LegacySphere shape)
+        internal override ShapeComputationData GenerateComputationData(
+            LegacySphere shape, ColliderInstance colliderInstance,
+            NativeList<float3> allConvexHullPoints, NativeList<float3> allMeshVertices, NativeList<int3> allMeshTriangles
+        )
         {
+            var res = base.GenerateComputationData(shape, colliderInstance, allConvexHullPoints, allMeshVertices, allMeshTriangles);
+            res.ShapeType = ShapeType.Sphere;
+
             var worldCenter = math.mul(shape.transform.localToWorldMatrix, new float4(shape.center, 1f));
             var shapeFromWorld = math.inverse(
                 new float4x4(new RigidTransform(shape.transform.rotation, shape.transform.position))
@@ -151,19 +184,22 @@ namespace Unity.Physics.Authoring
             var linearScale = (float3)shape.transform.lossyScale;
             var radius = shape.radius * math.cmax(math.abs(linearScale));
 
-            return SphereCollider.Create(
-                new SphereGeometry { Center = center, Radius = radius },
-                ProduceCollisionFilter(shape),
-                ProduceMaterial(shape)
-            );
+            res.SphereProperties = new SphereGeometry { Center = center, Radius = radius };
+            
+            return res;
         }
     }
 
+    [UpdateAfter(typeof(BeginColliderConversionSystem))]
+    [UpdateBefore(typeof(BuildCompoundCollidersConversionSystem))]
     public sealed class LegacyMeshColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacyMesh>
     {
         List<Vector3> m_Vertices = new List<Vector3>(65535 / 2);
 
-        protected override BlobAssetReference<Collider> ProduceColliderBlob(LegacyMesh shape)
+        internal override ShapeComputationData GenerateComputationData(
+            LegacyMesh shape, ColliderInstance colliderInstance,
+            NativeList<float3> allConvexHullPoints, NativeList<float3> allMeshVertices, NativeList<int3> allMeshTriangles
+        )
         {
             if (shape.sharedMesh == null)
             {
@@ -179,10 +215,8 @@ namespace Unity.Physics.Authoring
                 );
             }
 
-            var filter = ProduceCollisionFilter(shape);
-            var material = ProduceMaterial(shape);
+            var res = base.GenerateComputationData(shape, colliderInstance, allConvexHullPoints, allMeshVertices, allMeshTriangles);
 
-            // transform points into world space and back into shape space
             shape.sharedMesh.GetVertices(m_Vertices);
             var shapeFromWorld = math.inverse(
                 new float4x4(new RigidTransform(shape.transform.rotation, shape.transform.position))
@@ -193,19 +227,45 @@ namespace Unity.Physics.Authoring
                 var worldPt = math.mul(shape.transform.localToWorldMatrix, new float4(m_Vertices[i], 1f));
                 pointCloud.Add(math.mul(shapeFromWorld, worldPt).xyz);
             }
-
             if (shape.convex)
-                RegisterConvexColliderDeferred(shape, pointCloud, ConvexHullGenerationParameters.Default, filter, material);
+            {
+                res.ShapeType = ShapeType.ConvexHull;
+                res.ConvexHullProperties = new ConvexInput
+                {
+                    GenerationParameters = ConvexHullGenerationParameters.Default,
+                    PointsStart = allConvexHullPoints.Length,
+                    PointCount = pointCloud.Length,
+                    Filter = res.CollisionFilter,
+                    Material =  res.Material
+                };
+                allConvexHullPoints.AddRange(pointCloud);
+            }
             else
             {
-                var triangles = new NativeArray<int>(shape.sharedMesh.triangles, Allocator.Temp);
-                RegisterMeshColliderDeferred(shape, pointCloud, triangles, filter, material);
-                triangles.Dispose();
+                var indices = new NativeArray<int>(shape.sharedMesh.triangles, Allocator.Temp);
+                var triangles = indices.Reinterpret<int3>(UnsafeUtility.SizeOf<int>());
+                if (pointCloud.Length == 0 || triangles.Length == 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Invalid mesh data associated with {shape.name}. " +
+                        "Ensure that you have enabled Read/Write on the mesh's import settings."
+                    );
+                }
+                res.ShapeType = ShapeType.Mesh;
+                res.MeshProperties = new MeshInput
+                {
+                    VerticesStart = allMeshVertices.Length,
+                    VertexCount = pointCloud.Length,
+                    TrianglesStart = allMeshTriangles.Length,
+                    TriangleCount = triangles.Length,
+                    Filter = res.CollisionFilter,
+                    Material =  res.Material
+                };
+                allMeshVertices.AddRange(pointCloud);
+                allMeshTriangles.AddRange(triangles);
             }
 
-            pointCloud.Dispose();
-
-            return default;
+            return res;
         }
     }
 }

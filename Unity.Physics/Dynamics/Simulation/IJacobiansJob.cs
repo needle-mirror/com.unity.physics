@@ -4,8 +4,6 @@ using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Jobs.LowLevel.Unsafe;
 using Unity.Mathematics;
-using EditorBrowsableAttribute = System.ComponentModel.EditorBrowsableAttribute;
-using EditorBrowsableState = System.ComponentModel.EditorBrowsableState;
 
 namespace Unity.Physics
 {
@@ -80,16 +78,6 @@ namespace Unity.Physics
             m_Header->AccessAngularJacobian(i) = j;
             AngularChanged = true;
         }
-
-        #region Obsolete
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("HasMaxImpulse has been deprecated. (RemovedAfter 2019-10-15)", true)]
-        public bool HasMaxImpulse => throw new NotImplementedException();
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("MaxImpulse has been deprecated. (RemovedAfter 2019-10-15)", true)]
-        public float MaxImpulse { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        #endregion
     }
 
     public unsafe struct ModifiableContactJacobian
@@ -148,16 +136,6 @@ namespace Unity.Physics
                 Modified = true;
             }
         }
-
-        #region Obsolete
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("CoefficientOfRestitution has been deprecated. (RemovedAfter 2019-10-15)", true)]
-        public float CoefficientOfRestitution { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("FrictionEffectiveMassOffDiag has been deprecated. (RemovedAfter 2019-10-15)", true)]
-        public float3 FrictionEffectiveMassOffDiag { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-        #endregion
     }
 
     public struct ModifiableTriggerJacobian
@@ -200,7 +178,7 @@ namespace Unity.Physics
                 var data = new JacobiansJobData<T>
                 {
                     UserJobData = jobData,
-                    StreamReader = ((Simulation)simulation).m_Context.Jacobians,
+                    StreamReader = ((Simulation)simulation).m_Context.Jacobians.AsReader(),
                     NumWorkItems = ((Simulation)simulation).m_Context.SolverSchedulerInfo.NumWorkItems,
                     Bodies = world.Bodies
                 };
@@ -215,7 +193,7 @@ namespace Unity.Physics
         internal unsafe struct JacobiansJobData<T> where T : struct
         {
             public T UserJobData;
-            public BlockStream.Reader StreamReader;
+            public NativeStream.Reader StreamReader;
 
             [ReadOnly] public NativeArray<int> NumWorkItems;
 
@@ -234,7 +212,7 @@ namespace Unity.Physics
 
             private byte* Read(int size)
             {
-                byte* dataPtr = StreamReader.Read(size);
+                byte* dataPtr = StreamReader.ReadUnsafePtr(size);
                 MoveReaderToNextForEachIndex();
                 return dataPtr;
             }

@@ -16,9 +16,9 @@ namespace Unity.Physics.LowLevel
     {
         //@TODO: Unity should have a Allow null safety restriction
         [NativeDisableContainerSafetyRestriction]
-        private readonly BlockStream m_EventStream;
+        private readonly NativeStream m_EventStream;
 
-        public TriggerEvents(BlockStream eventStream)
+        public TriggerEvents(NativeStream eventStream)
         {
             m_EventStream = eventStream;
         }
@@ -30,14 +30,14 @@ namespace Unity.Physics.LowLevel
 
         public struct Enumerator /* : IEnumerator<TriggerEvent> */
         {
-            private BlockStream.Reader m_Reader;
+            private NativeStream.Reader m_Reader;
             private int m_CurrentWorkItem;
             private readonly int m_NumWorkItems;
             public TriggerEvent Current { get; private set; }
 
-            public Enumerator(BlockStream stream)
+            public Enumerator(NativeStream stream)
             {
-                m_Reader = stream.IsCreated ? stream : new BlockStream.Reader();
+                m_Reader = stream.IsCreated ? stream.AsReader() : new NativeStream.Reader();
                 m_CurrentWorkItem = 0;
                 m_NumWorkItems = stream.IsCreated ? stream.ForEachCount : 0;
                 Current = default;

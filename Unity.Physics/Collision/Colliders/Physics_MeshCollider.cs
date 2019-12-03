@@ -1,5 +1,4 @@
 using System;
-using System.ComponentModel;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -21,47 +20,45 @@ namespace Unity.Physics
         #region Construction
 
         // Create a mesh collider asset from a set of triangles
-        public static BlobAssetReference<Collider> Create(NativeArray<float3> vertices, NativeArray<int> indices) =>
-            Create(vertices, indices, CollisionFilter.Default, Material.Default);
+        public static BlobAssetReference<Collider> Create(NativeArray<float3> vertices, NativeArray<int3> triangles) =>
+            Create(vertices, triangles, CollisionFilter.Default, Material.Default);
 
-        public static BlobAssetReference<Collider> Create(NativeArray<float3> vertices, NativeArray<int> indices, CollisionFilter filter) =>
-            Create(vertices, indices, filter, Material.Default);
+        public static BlobAssetReference<Collider> Create(NativeArray<float3> vertices, NativeArray<int3> triangles, CollisionFilter filter) =>
+            Create(vertices, triangles, filter, Material.Default);
 
-        public static unsafe BlobAssetReference<Collider> Create(NativeArray<float3> vertices, NativeArray<int> indices, CollisionFilter filter, Material material)
+        public static unsafe BlobAssetReference<Collider> Create(NativeArray<float3> vertices, NativeArray<int3> triangles, CollisionFilter filter, Material material)
         {
-            int numIndices = indices.Length;
-            int numTriangles = numIndices / 3;
-
             // Copy vertices
             var tempVertices = new NativeArray<float3>(vertices, Allocator.Temp);
 
-            // Copy indices
-            var tempIndices = new NativeArray<int>(numIndices, Allocator.Temp);
-            for (int iTriangle = 0; iTriangle < numTriangles; iTriangle++)
-            {
-                int iIndex0 = iTriangle * 3;
-                int iIndex1 = iIndex0 + 1;
-                int iIndex2 = iIndex0 + 2;
+            // Triangle indices - needed for WeldVertices
+            var tempIndices = new NativeArray<int>(triangles.Length * 3, Allocator.Temp);
 
-                if (indices[iIndex0] >= 0 && indices[iIndex0] < vertices.Length
-                    && indices[iIndex1] >= 0 && indices[iIndex1] < vertices.Length
-                    && indices[iIndex2] >= 0 && indices[iIndex2] < vertices.Length)
+            for (int iTriangle = 0; iTriangle < triangles.Length; iTriangle++)
+            {
+                if (triangles[iTriangle][0]>= 0 && triangles[iTriangle][0] < vertices.Length
+                    && triangles[iTriangle][1] >= 0 && triangles[iTriangle][1] < vertices.Length
+                    && triangles[iTriangle][2] >= 0 && triangles[iTriangle][2] < vertices.Length)
                 {
-                    tempIndices[iIndex0] = indices[iIndex0];
-                    tempIndices[iIndex1] = indices[iIndex1];
-                    tempIndices[iIndex2] = indices[iIndex2];
+                    tempIndices[iTriangle * 3] = triangles[iTriangle][0];
+                    tempIndices[iTriangle * 3 + 1] = triangles[iTriangle][1];
+                    tempIndices[iTriangle * 3 + 2] = triangles[iTriangle][2];
                 }
                 else
                 {
                     throw new ArgumentException("Tried to create a MeshCollider with indices referencing outside vertex array");
                 }
             }
-            
+
             // Build connectivity and primitives
-            
+
             NativeList<float3> uniqueVertices = MeshConnectivityBuilder.WeldVertices(tempIndices, tempVertices);
-            var connectivity = new MeshConnectivityBuilder(tempIndices, uniqueVertices);
-            NativeList<MeshConnectivityBuilder.Primitive> primitives = connectivity.EnumerateQuadDominantGeometry(tempIndices, uniqueVertices);
+
+            var tempTriangleIndices = new NativeArray<int3>(triangles.Length, Allocator.Temp);
+            UnsafeUtility.MemCpy(tempTriangleIndices.GetUnsafePtr(), tempIndices.GetUnsafePtr(), tempIndices.Length * UnsafeUtility.SizeOf<int>());
+
+            var connectivity = new MeshConnectivityBuilder(tempTriangleIndices, uniqueVertices);
+            NativeList<MeshConnectivityBuilder.Primitive> primitives = connectivity.EnumerateQuadDominantGeometry(tempTriangleIndices, uniqueVertices);
             
             // Build bounding volume hierarchy
             int nodeCount = math.max(primitives.Length * 2 + 1, 2); // We need at least two nodes - an "invalid" node and a root node.
@@ -139,6 +136,32 @@ namespace Unity.Physics
             var blob = BlobAssetReference<Collider>.Create(meshCollider, totalColliderSize);
             UnsafeUtility.Free(meshCollider, Allocator.Temp);
             return blob;
+        }
+
+        #endregion
+
+        #region Obsolete
+
+        [Obsolete("MeshCollider.Create() taking indices has been deprecated. Use the new Create() method that takes grouped triangle indices instead. (RemovedAfter 2020-01-24)")]
+        public static BlobAssetReference<Collider> Create(NativeArray<float3> vertices, NativeArray<int> indices)
+        {
+            NativeArray<int3> triangles = indices.Reinterpret<int, int3>();
+            return Create(vertices, triangles);
+
+        }
+
+        [Obsolete("MeshCollider.Create() taking indices has been deprecated. Use the new Create() method that takes grouped triangle indices instead. (RemovedAfter 2020-01-24)")]
+        public static BlobAssetReference<Collider> Create (NativeArray<float3> vertices, NativeArray<int> indices, CollisionFilter filter)
+        {
+            NativeArray<int3> triangles = indices.Reinterpret<int, int3>();
+            return Create(vertices, triangles, filter);
+        }
+
+        [Obsolete("MeshCollider.Create() taking indices has been deprecated. Use the new Create() method that takes grouped triangle indices instead. (RemovedAfter 2020-01-24)")]
+        public static unsafe BlobAssetReference<Collider> Create(NativeArray<float3> vertices, NativeArray<int> indices, CollisionFilter filter, Material material)
+        {
+            NativeArray<int3> triangles = indices.Reinterpret<int, int3>();
+            return Create(vertices, triangles, filter, material);
         }
 
         #endregion
@@ -279,17 +302,6 @@ namespace Unity.Physics
             }
         }
 
-        #endregion
-
-        #region Obsolete
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("This signature has been deprecated. Use a signature passing native containers instead. (RemovedAfter 2019-10-25)")]
-        public static unsafe BlobAssetReference<Collider> Create(float3[] vertices, int[] indices, CollisionFilter? filter = null, Material? material = null)
-        {
-            var v = new NativeArray<float3>(vertices, Allocator.Temp);
-            var i = new NativeArray<int>(indices, Allocator.Temp);
-            return Create(v, i, filter ?? CollisionFilter.Default, material ?? Material.Default);
-        }
         #endregion
     }
 }

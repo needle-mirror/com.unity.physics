@@ -1,10 +1,8 @@
-﻿using System;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
+using System;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
-using Unity.Mathematics;
 using Unity.Entities;
+using Unity.Mathematics;
 using static Unity.Physics.Math;
 
 namespace Unity.Physics
@@ -74,10 +72,16 @@ namespace Unity.Physics
             // TODO: Verify that the size is enough
             int totalSize = Math.NextMultipleOf16(UnsafeUtility.SizeOf<CompoundCollider>());
             CollisionFilter filter = children[0].Collider.Value.Filter;
-            foreach (var child in children)
+            var srcToDestInstanceAddrs = new NativeHashMap<long, long>(children.Length, Allocator.Temp);
+            for (var childIndex = 0; childIndex < children.Length; childIndex++)
             {
+                var child = children[childIndex];
+                var instanceKey = (long)child.Collider.GetUnsafePtr();
+                if (srcToDestInstanceAddrs.ContainsKey(instanceKey))
+                    continue;
                 totalSize += Math.NextMultipleOf16(child.Collider.Value.MemorySize);
                 filter = CollisionFilter.CreateUnion(filter, child.Collider.Value.Filter);
+                srcToDestInstanceAddrs.Add(instanceKey, 0L);
             }
             totalSize += (children.Length + BoundingVolumeHierarchy.Constants.MaxNumTreeBranches) * UnsafeUtility.SizeOf<BoundingVolumeHierarchy.Node>();
 
@@ -101,10 +105,17 @@ namespace Unity.Physics
             for (int i = 0; i < children.Length; i++)
             {
                 Collider* collider = (Collider*)children[i].Collider.GetUnsafePtr();
-                UnsafeUtility.MemCpy(end, collider, collider->MemorySize);
-                childrenPtr[i].m_ColliderOffset = (int)(end - (byte*)(&childrenPtr[i].m_ColliderOffset));
+                var srcInstanceKey = (long)collider;
+                var dstAddr = srcToDestInstanceAddrs[srcInstanceKey];
+                if (dstAddr == 0L)
+                {
+                    dstAddr = (long)end;
+                    srcToDestInstanceAddrs[srcInstanceKey] = dstAddr;
+                    UnsafeUtility.MemCpy(end, collider, collider->MemorySize);
+                    end += Math.NextMultipleOf16(collider->MemorySize);
+                }
+                childrenPtr[i].m_ColliderOffset = (int)((byte*)dstAddr - (byte*)(&childrenPtr[i].m_ColliderOffset));
                 childrenPtr[i].CompoundFromChild = children[i].CompoundFromChild;
-                end += Math.NextMultipleOf16(collider->MemorySize);
             }
 
             // Build mass properties
@@ -117,7 +128,6 @@ namespace Unity.Physics
             compoundCollider->m_BvhNodesBlob.Length = numNodes;
             UnsafeUtility.MemCpy(end, nodes.GetUnsafeReadOnlyPtr(), bvhSize);
             end += bvhSize;
-            nodes.Dispose();
 
             // Copy to blob asset
             int usedSize = (int)(end - (byte*)compoundCollider);
@@ -125,7 +135,7 @@ namespace Unity.Physics
             compoundCollider->MemorySize = usedSize;
             var blob = BlobAssetReference<Collider>.Create(compoundCollider, usedSize);
             UnsafeUtility.Free(compoundCollider, Allocator.Temp);
-            
+
             return blob;
         }
 
@@ -150,9 +160,6 @@ namespace Unity.Physics
 
             var bvh = new BoundingVolumeHierarchy(nodes);
             bvh.Build(points, aabbs, out int numNodes);
-
-            points.Dispose();
-            aabbs.Dispose();
 
             return numNodes;
         }
@@ -225,7 +232,7 @@ namespace Unity.Physics
                 float expansionFactor = mp.AngularExpansionFactor + math.length(shift);
                 combinedAngularExpansionFactor = math.max(combinedAngularExpansionFactor, expansionFactor);
             }
-            
+
             return new MassProperties
             {
                 MassDistribution = new MassDistribution

@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
@@ -24,9 +25,12 @@ namespace Unity.Physics.Tests.Authoring
         {
             NonReadableMesh = Resources.LoadAll<UnityMesh>("not-readable").Single();
             Assume.That(NonReadableMesh.isReadable, Is.False, $"{NonReadableMesh} was readable.");
+            ReadableMesh = Resources.GetBuiltinResource<UnityMesh>("New-Cylinder.fbx");
+            Assume.That(ReadableMesh.isReadable, Is.True, $"{ReadableMesh} was not readable.");
         }
 
         UnityMesh NonReadableMesh { get; set; }
+        UnityMesh ReadableMesh { get; set; }
 
         [Test]
         public void PhysicsShapeConversionSystem_WhenBodyHasOneSiblingShape_CreatesPrimitive()
@@ -97,10 +101,11 @@ namespace Unity.Physics.Tests.Authoring
         public void PhysicsShapeConversionSystem_WhenBodyHasMultipleDifferentSiblingShapes_CreatesCompound_WithFlatHierarchy()
         {
             CreateHierarchy(
-                new[] { typeof(ConvertToEntity), typeof(PhysicsBodyAuthoring), typeof(PxBox), typeof(PxCapsule), typeof(PxSphere) },
+                new[] { typeof(ConvertToEntity), typeof(PhysicsBodyAuthoring), typeof(PxBox), typeof(PxCapsule), typeof(PxSphere), typeof(PhysicsShapeAuthoring) },
                 new[] { typeof(ConvertToEntity) },
                 new[] { typeof(ConvertToEntity) }
             );
+            Root.GetComponent<PhysicsShapeAuthoring>().SetBox(new BoxGeometry { Size = 1f });
 
             TestConvertedData<PhysicsCollider>(
                 c =>
@@ -113,7 +118,7 @@ namespace Unity.Physics.Tests.Authoring
                         var childTypes = Enumerable.Range(0, compoundCollider->NumChildren)
                             .Select(i => compoundCollider->Children[i].Collider->Type)
                             .ToArray();
-                        Assert.That(childTypes, Is.EquivalentTo(new[] { ColliderType.Box, ColliderType.Capsule, ColliderType.Sphere }));
+                        Assert.That(childTypes, Is.EquivalentTo(new[] { ColliderType.Box, ColliderType.Box, ColliderType.Capsule, ColliderType.Sphere }));
                     }
                 }
             );
@@ -207,6 +212,187 @@ namespace Unity.Physics.Tests.Authoring
             // conversion presumed to create valid PhysicsCollider under default conditions
             // covered by corresponding test ConversionSystems_WhenGOHasShape_GOIsActive_AuthoringComponentEnabled_AuthoringDataConverted
             VerifyNoDataProduced<PhysicsCollider>();
+        }
+
+        void SetDefaultShape(PhysicsShapeAuthoring shape, ShapeType type)
+        {
+            switch (type)
+            {
+                case ShapeType.Box:
+                    shape.SetBox(default);
+                    break;
+                case ShapeType.Capsule:
+                    shape.SetCapsule(default, quaternion.identity);
+                    break;
+                case ShapeType.Sphere:
+                    shape.SetSphere(default, quaternion.identity);
+                    break;
+                case ShapeType.Cylinder:
+                    shape.SetCylinder(new CylinderGeometry { SideCount = CylinderGeometry.MaxSideCount });
+                    break;
+                case ShapeType.Plane:
+                    shape.SetPlane(default, default, quaternion.identity);
+                    break;
+                case ShapeType.ConvexHull:
+                    shape.SetConvexHull(ConvexHullGenerationParameters.Default);
+                    break;
+                case ShapeType.Mesh:
+                    shape.SetMesh();
+                    break;
+            }
+
+            shape.FitToEnabledRenderMeshes();
+        }
+
+        static readonly RigidTransform k_SharedDataChildTransformation =
+            new RigidTransform(quaternion.EulerZXY(math.PI / 4), new float3(1f, 2f, 3f));
+
+        [Test]
+        public unsafe void ConversionSystems_WhenMultipleShapesShareInputs_CollidersShareTheSameData(
+            [Values(ShapeType.ConvexHull, ShapeType.Mesh)] ShapeType shapeType
+        )
+        {
+            CreateHierarchy(
+                Array.Empty<Type>(),
+                new[] { typeof(PhysicsShapeAuthoring), typeof(PhysicsBodyAuthoring), typeof(MeshFilter), typeof(MeshRenderer) },
+                new[] { typeof(PhysicsShapeAuthoring), typeof(PhysicsBodyAuthoring), typeof(MeshFilter), typeof(MeshRenderer) }
+            );
+            foreach (var meshFilter in Root.GetComponentsInChildren<MeshFilter>())
+                meshFilter.sharedMesh = ReadableMesh;
+            foreach (var shape in Root.GetComponentsInChildren<PhysicsShapeAuthoring>())
+            {
+                SetDefaultShape(shape, shapeType);
+                shape.ForceUnique = false;
+            }
+            Child.transform.localPosition = k_SharedDataChildTransformation.pos;
+            Child.transform.localRotation = k_SharedDataChildTransformation.rot;
+
+            TestConvertedData<PhysicsCollider>(colliders =>
+            {
+                var uniqueColliders = new HashSet<int>();
+                foreach (var c in colliders)
+                    uniqueColliders.Add((int)c.ColliderPtr);
+                var numUnique = uniqueColliders.Count;
+                Assert.That(numUnique, Is.EqualTo(1), $"Expected colliders to reference the same data, but found {numUnique} different colliders.");
+            }, 2);
+        }
+
+        [Test]
+        public unsafe void LegacyMeshColliderConversionSystem_WhenMultipleShapesShareInputs_CollidersShareTheSameData(
+            [Values]bool convex
+        )
+        {
+            CreateHierarchy(
+                Array.Empty<Type>(),
+                new[] { typeof(MeshCollider), typeof(Rigidbody) },
+                new[] { typeof(MeshCollider), typeof(Rigidbody) }
+            );
+            foreach (var shape in Root.GetComponentsInChildren<PxMesh>())
+            {
+                shape.convex = convex;
+                shape.sharedMesh = ReadableMesh;
+            }
+            Child.transform.localPosition = k_SharedDataChildTransformation.pos;
+            Child.transform.localRotation = k_SharedDataChildTransformation.rot;
+
+            TestConvertedData<PhysicsCollider>(colliders =>
+            {
+                var uniqueColliders = new HashSet<int>();
+                foreach (var c in colliders)
+                    uniqueColliders.Add((int)c.ColliderPtr);
+                var numUnique = uniqueColliders.Count;
+                Assert.That(numUnique, Is.EqualTo(1), $"Expected colliders to reference the same data, but found {numUnique} different colliders.");
+            }, 2);
+        }
+
+        [Test]
+        public unsafe void ConversionSystems_WhenMultipleShapesShareMeshes_WithDifferentOffsets_CollidersDoNotShareTheSameData(
+            [Values(ShapeType.ConvexHull, ShapeType.Mesh)] ShapeType shapeType
+        )
+        {
+            CreateHierarchy(
+                new[] { typeof(PhysicsShapeAuthoring), typeof(PhysicsBodyAuthoring) },
+                new[] { typeof(MeshFilter), typeof(MeshRenderer) },
+                new[] { typeof(PhysicsShapeAuthoring), typeof(PhysicsBodyAuthoring), typeof(MeshFilter), typeof(MeshRenderer) }
+            );
+            foreach (var meshFilter in Root.GetComponentsInChildren<MeshFilter>())
+                meshFilter.sharedMesh = ReadableMesh;
+            foreach (var shape in Root.GetComponentsInChildren<PhysicsShapeAuthoring>())
+            {
+                SetDefaultShape(shape, shapeType);
+                shape.ForceUnique = false;
+            }
+            // Root will get mesh from Parent (with offset) and Child will get mesh from itself (no offset)
+            Parent.transform.localPosition = k_SharedDataChildTransformation.pos;
+            Parent.transform.localRotation = k_SharedDataChildTransformation.rot;
+
+            TestConvertedData<PhysicsCollider>(colliders =>
+            {
+                var uniqueColliders = new HashSet<int>();
+                foreach (var c in colliders)
+                    uniqueColliders.Add((int)c.ColliderPtr);
+                var numUnique = uniqueColliders.Count;
+                Assert.That(numUnique, Is.EqualTo(2), $"Expected colliders to reference unique data, but found {numUnique} different colliders.");
+            }, 2);
+        }
+
+        [Test]
+        public unsafe void ConversionSystems_WhenMultipleShapesShareMeshes_WithDifferentInheritedScale_CollidersDoNotShareTheSameData(
+            [Values(ShapeType.ConvexHull, ShapeType.Mesh)] ShapeType shapeType
+        )
+        {
+            CreateHierarchy(
+                new[] { typeof(PhysicsShapeAuthoring), typeof(PhysicsBodyAuthoring), typeof(MeshFilter), typeof(MeshRenderer) },
+                Array.Empty<Type>(),
+                new[] { typeof(PhysicsShapeAuthoring), typeof(PhysicsBodyAuthoring), typeof(MeshFilter), typeof(MeshRenderer) }
+            );
+            foreach (var meshFilter in Root.GetComponentsInChildren<MeshFilter>())
+                meshFilter.sharedMesh = ReadableMesh;
+            foreach (var shape in Root.GetComponentsInChildren<PhysicsShapeAuthoring>())
+            {
+                SetDefaultShape(shape, shapeType);
+                shape.ForceUnique = false;
+            }
+            // affects Child scale
+            Parent.transform.localScale = new Vector3(2f, 2f, 2f);
+
+            TestConvertedData<PhysicsCollider>(colliders =>
+            {
+                var uniqueColliders = new HashSet<int>();
+                foreach (var c in colliders)
+                    uniqueColliders.Add((int)c.ColliderPtr);
+                var numUnique = uniqueColliders.Count;
+                Assert.That(numUnique, Is.EqualTo(2), $"Expected colliders to reference unique data, but found {numUnique} different colliders.");
+            }, 2);
+        }
+
+        [Test]
+        public unsafe void ConversionSystems_WhenMultipleShapesShareInputs_AndShapeIsForcedUnique_CollidersDoNotShareTheSameData(
+            [Values] ShapeType shapeType
+        )
+        {
+            CreateHierarchy(
+                Array.Empty<Type>(),
+                new[] { typeof(PhysicsShapeAuthoring), typeof(PhysicsBodyAuthoring), typeof(MeshFilter), typeof(MeshRenderer) },
+                new[] { typeof(PhysicsShapeAuthoring), typeof(PhysicsBodyAuthoring), typeof(MeshFilter), typeof(MeshRenderer) }
+            );
+            foreach (var meshFilter in Root.GetComponentsInChildren<MeshFilter>())
+                meshFilter.sharedMesh = ReadableMesh;
+            foreach (var shape in Root.GetComponentsInChildren<PhysicsShapeAuthoring>())
+            {
+                SetDefaultShape(shape, shapeType);
+                shape.ForceUnique = true;
+            }
+
+            TestConvertedData<PhysicsCollider>(colliders =>
+            {
+                var uniqueColliders = new HashSet<int>();
+                foreach (var c in colliders)
+                    uniqueColliders.Add((int)c.ColliderPtr);
+
+                var numUnique = uniqueColliders.Count;
+                Assert.That(numUnique, Is.EqualTo(2), $"Expected colliders to reference unique data, but found {numUnique} different colliders.");
+            }, 2);
         }
     }
 }

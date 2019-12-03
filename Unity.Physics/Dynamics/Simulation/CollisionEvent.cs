@@ -96,6 +96,8 @@ namespace Unity.Physics.LowLevel
             }
 
             // Then, sub-integrate for time of impact and keep contact points closer than hitDistanceThreshold
+            int closestContactIndex = -1;
+            float minDistance = float.MaxValue;
             {
                 int estimatedContactPointCount = 0;
                 for (int i = 0; i < narrowPhaseContactPoints.Length; i++)
@@ -108,21 +110,41 @@ namespace Unity.Physics.LowLevel
                         float3 relVel = pointVelB - pointVelA;
                         float projRelVel = math.dot(relVel, Normal);
 
-                        // Position the point on body A
-                        cp.Position += Normal * cp.Distance;
+                        // Only sub integrate if approaching, otherwise leave it as is
+                        // (it can happen that input velocity was separating but there
+                        // still was a collision event - penetration recovery, or other
+                        // body pushing in different direction).
+                        if (projRelVel > 0.0f)
+                        {
+                            // Position the point on body A
+                            cp.Position += Normal * cp.Distance;
 
-                        // Sub integrate the point
-                        cp.Position -= relVel * toi;
+                            // Sub integrate the point
+                            cp.Position -= relVel * toi;
 
-                        // Reduce the distance
-                        cp.Distance -= projRelVel * toi;
+                            // Reduce the distance
+                            cp.Distance -= projRelVel * toi;
+                        }
 
                         // Filter out contacts that are still too far away
                         if (cp.Distance <= physicsWorld.CollisionWorld.CollisionTolerance)
                         {
                             narrowPhaseContactPoints[estimatedContactPointCount++] = cp;
                         }
+                        else if (cp.Distance < minDistance)
+                        {
+                            minDistance = cp.Distance;
+                            closestContactIndex = i;
+                        }
                     }
+                }
+
+                // If due to estimation of relative velocity no contact points will
+                // get closer than the tolerance, we need to export the closest one
+                // to make sure at least one contact point is reported.
+                if (estimatedContactPointCount == 0)
+                {
+                    narrowPhaseContactPoints[estimatedContactPointCount++] = narrowPhaseContactPoints[closestContactIndex];
                 }
 
                 // Instantiate collision details and allocate memory
@@ -156,9 +178,9 @@ namespace Unity.Physics.LowLevel
     {
         //@TODO: Unity should have a Allow null safety restriction
         [NativeDisableContainerSafetyRestriction]
-        private readonly BlockStream m_EventStream;
+        private readonly NativeStream m_EventStream;
 
-        public CollisionEvents(BlockStream eventStream)
+        public CollisionEvents(NativeStream eventStream)
         {
             m_EventStream = eventStream;
         }
@@ -170,7 +192,7 @@ namespace Unity.Physics.LowLevel
 
         public struct Enumerator /* : IEnumerator<CollisionEvent> */
         {
-            private BlockStream.Reader m_Reader;
+            private NativeStream.Reader m_Reader;
             private int m_CurrentWorkItem;
             private readonly int m_NumWorkItems;
             private unsafe CollisionEvent* m_Current;
@@ -186,9 +208,9 @@ namespace Unity.Physics.LowLevel
                 }
             }
 
-            public Enumerator(BlockStream stream)
+            public Enumerator(NativeStream stream)
             {
-                m_Reader = stream.IsCreated ? stream : new BlockStream.Reader();
+                m_Reader = stream.IsCreated ? stream.AsReader() : new NativeStream.Reader();
                 m_CurrentWorkItem = 0;
                 m_NumWorkItems = stream.IsCreated ? stream.ForEachCount : 0;
 
@@ -209,7 +231,7 @@ namespace Unity.Physics.LowLevel
 
                     unsafe
                     {
-                        m_Current = (CollisionEvent*)m_Reader.Read(currentSize);
+                        m_Current = (CollisionEvent*)m_Reader.ReadUnsafePtr(currentSize);
                     }
 
                     AdvanceReader();

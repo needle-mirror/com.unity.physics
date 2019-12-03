@@ -182,7 +182,7 @@ namespace Unity.Physics
 
         // Schedule a set of jobs which will write all overlapping body pairs to the given steam,
         // where at least one of the bodies is dynamic. The results are unsorted.
-        internal JobHandle ScheduleFindOverlapsJobs(out BlockStream dynamicVsDynamicPairsStream, out BlockStream staticVsDynamicPairsStream, ref Simulation.Context context, JobHandle inputDeps)
+        internal JobHandle ScheduleFindOverlapsJobs(out NativeStream dynamicVsDynamicPairsStream, out NativeStream staticVsDynamicPairsStream, ref Simulation.Context context, JobHandle inputDeps)
         {
             var dynamicVsDynamicNodePairIndices = new NativeList<int2>(Allocator.TempJob);
             var staticVsDynamicNodePairIndices = new NativeList<int2>(Allocator.TempJob);
@@ -214,8 +214,8 @@ namespace Unity.Physics
 
             //@TODO: We only need a dependency on allocateDeps, but the safety system doesn't understand that we can not change length list in DynamicVsDynamicBuildBranchNodePairsJob & StaticVsDynamicBuildBranchNodePairsJob
             //       if this is a performance issue we can use [NativeDisableContainerSafetyRestriction] on DynamicVsDynamicBuildBranchNodePairsJob & StaticVsDynamicBuildBranchNodePairsJob 
-            JobHandle dynamicConstruct = BlockStream.ScheduleConstruct(out dynamicVsDynamicPairsStream, dynamicVsDynamicNodePairIndices, 0x0a542b34, dynamicVsDynamicPairs);
-            JobHandle staticConstruct = BlockStream.ScheduleConstruct(out staticVsDynamicPairsStream, staticVsDynamicNodePairIndices, 0x0a542666, staticVsDynamicPairs);
+            JobHandle dynamicConstruct = NativeStream.ScheduleConstruct(out dynamicVsDynamicPairsStream, dynamicVsDynamicNodePairIndices, dynamicVsDynamicPairs, Allocator.TempJob);
+            JobHandle staticConstruct = NativeStream.ScheduleConstruct(out staticVsDynamicPairsStream, staticVsDynamicNodePairIndices, staticVsDynamicPairs, Allocator.TempJob);
 
             // Write all overlaps to the stream (also deallocates nodePairIndices)
             JobHandle dynamicVsDynamicHandle = new DynamicVsDynamicFindOverlappingPairsJob
@@ -223,7 +223,7 @@ namespace Unity.Physics
                 DynamicNodes = m_DynamicTree.Nodes,
                 BodyFilters = m_BodyFilters,
                 DynamicNodeFilters = m_DynamicTree.NodeFilters,
-                PairWriter = dynamicVsDynamicPairsStream,
+                PairWriter = dynamicVsDynamicPairsStream.AsWriter(),
                 NodePairIndices = dynamicVsDynamicNodePairIndices.AsDeferredJobArray()
             }.Schedule(dynamicVsDynamicNodePairIndices, 1, JobHandle.CombineDependencies(dynamicVsDynamicPairs, dynamicConstruct));
 
@@ -235,7 +235,7 @@ namespace Unity.Physics
                 BodyFilters = m_BodyFilters,
                 StaticNodeFilters = m_StaticTree.NodeFilters,
                 DynamicNodeFilters = m_DynamicTree.NodeFilters,
-                PairWriter = staticVsDynamicPairsStream,
+                PairWriter = staticVsDynamicPairsStream.AsWriter(),
                 NodePairIndices = staticVsDynamicNodePairIndices.AsDeferredJobArray()
             }.Schedule(staticVsDynamicNodePairIndices, 1, JobHandle.CombineDependencies(staticVsDynamicPairs, staticConstruct));
 
@@ -741,7 +741,7 @@ namespace Unity.Physics
             }
         }
 
-        // An implementation of IOverlapCollector which filters and writes body pairs to a block stream
+        // An implementation of IOverlapCollector which filters and writes body pairs to a native stream
         internal unsafe struct BodyPairWriter : ITreeOverlapCollector
         {
             const int k_Capacity = 256;
@@ -751,11 +751,11 @@ namespace Unity.Physics
             fixed int m_PairsLeft[k_Capacity];
             fixed int m_PairsRight[k_Capacity];
 
-            private readonly BlockStream.Writer* m_CollidingPairs;
+            private readonly NativeStream.Writer* m_CollidingPairs;
             private readonly CollisionFilter* m_BodyFilters;
             private int m_Count;
 
-            public BodyPairWriter(BlockStream.Writer* collidingPairs, CollisionFilter* bodyFilters)
+            public BodyPairWriter(NativeStream.Writer* collidingPairs, CollisionFilter* bodyFilters)
             {
                 m_CollidingPairs = collidingPairs;
                 m_BodyFilters = bodyFilters;
@@ -843,7 +843,7 @@ namespace Unity.Physics
             [ReadOnly] public NativeArray<CollisionFilter> BodyFilters;
             [ReadOnly] public NativeArray<int2> NodePairIndices;
 
-            public BlockStream.Writer PairWriter;
+            public NativeStream.Writer PairWriter;
 
             public void Execute(int index)
             {
@@ -852,7 +852,7 @@ namespace Unity.Physics
                 int2 pair = NodePairIndices[index];
 
                 var bodyFiltersPtr = (CollisionFilter*)BodyFilters.GetUnsafeReadOnlyPtr();
-                var bufferedPairs = new BodyPairWriter((BlockStream.Writer*)UnsafeUtility.AddressOf(ref PairWriter), bodyFiltersPtr);
+                var bufferedPairs = new BodyPairWriter((NativeStream.Writer*)UnsafeUtility.AddressOf(ref PairWriter), bodyFiltersPtr);
 
                 new BoundingVolumeHierarchy(DynamicNodes, DynamicNodeFilters).SelfBvhOverlap(ref bufferedPairs, pair.x, pair.y);
 
@@ -873,7 +873,7 @@ namespace Unity.Physics
 
             [ReadOnly] public NativeArray<int2> NodePairIndices;
 
-            public BlockStream.Writer PairWriter;
+            public NativeStream.Writer PairWriter;
 
             public void Execute(int index)
             {
@@ -882,7 +882,7 @@ namespace Unity.Physics
                 int2 pair = NodePairIndices[index];
 
                 var bodyFiltersPtr = (CollisionFilter*)BodyFilters.GetUnsafeReadOnlyPtr();
-                var bufferedPairs = new BodyPairWriter((BlockStream.Writer*)UnsafeUtility.AddressOf(ref PairWriter), bodyFiltersPtr);
+                var bufferedPairs = new BodyPairWriter((NativeStream.Writer*)UnsafeUtility.AddressOf(ref PairWriter), bodyFiltersPtr);
 
                 var staticBvh = new BoundingVolumeHierarchy(StaticNodes, StaticNodeFilters);
                 var dynamicBvh = new BoundingVolumeHierarchy(DynamicNodes, DynamicNodeFilters);

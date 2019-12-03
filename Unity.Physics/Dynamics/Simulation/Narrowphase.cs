@@ -12,9 +12,9 @@ namespace Unity.Physics
         internal static JobHandle ScheduleProcessBodyPairsJobs(ref PhysicsWorld world, float timeStep, int numIterations, ref Simulation.Context context, JobHandle inputDeps)
         {
             var numWorkItems = context.SolverSchedulerInfo.NumWorkItems;
-            var contactsHandle = BlockStream.ScheduleConstruct(out context.Contacts, numWorkItems, 0xcf97529c, inputDeps);
-            var jointJacobiansHandle = BlockStream.ScheduleConstruct(out context.JointJacobians, numWorkItems, 0xd3185f82, inputDeps);
-            var jacobiansHandle = BlockStream.ScheduleConstruct(out context.Jacobians, numWorkItems, 0x8d8f394d, inputDeps);
+            var contactsHandle = NativeStream.ScheduleConstruct(out context.Contacts, numWorkItems, inputDeps, Allocator.TempJob);
+            var jointJacobiansHandle = NativeStream.ScheduleConstruct(out context.JointJacobians, numWorkItems, inputDeps, Allocator.TempJob);
+            var jacobiansHandle = NativeStream.ScheduleConstruct(out context.Jacobians, numWorkItems, inputDeps, Allocator.TempJob);
 
             var processHandle = new ProcessBodyPairsJob
             {
@@ -23,8 +23,8 @@ namespace Unity.Physics
                 NumIterations = numIterations,
                 PhasedDispatchPairs = context.PhasedDispatchPairs.AsDeferredJobArray(),
                 SolverSchedulerInfo = context.SolverSchedulerInfo,
-                ContactWriter = context.Contacts,
-                JointJacobianWriter = context.JointJacobians,
+                ContactWriter = context.Contacts.AsWriter(),
+                JointJacobianWriter = context.JointJacobians.AsWriter(),
             }.ScheduleUnsafeIndex0(numWorkItems, 1, JobHandle.CombineDependencies(contactsHandle, jointJacobiansHandle, jacobiansHandle));
 
             
@@ -41,8 +41,8 @@ namespace Unity.Physics
             [ReadOnly] public int NumIterations;
             [ReadOnly] public NativeArray<Scheduler.DispatchPair> PhasedDispatchPairs;
             [ReadOnly] public Scheduler.SolverSchedulerInfo SolverSchedulerInfo;
-            public BlockStream.Writer ContactWriter;
-            public BlockStream.Writer JointJacobianWriter;
+            public NativeStream.Writer ContactWriter;
+            public NativeStream.Writer JointJacobianWriter;
 
             public unsafe void Execute(int workItemIndex)
             {

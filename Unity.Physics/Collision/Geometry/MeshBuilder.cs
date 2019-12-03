@@ -36,7 +36,7 @@ namespace Unity.Physics
                 Vertices = new NativeList<float3>(Allocator.Temp),
                 Ranges = new NativeList<TempSectionRanges>(Allocator.Temp)
             };
-            
+
             if (primitives.Length == 0)
             {
                 // Early-out in the case of no input primitives
@@ -463,14 +463,14 @@ namespace Unity.Physics
 
         internal int GetEndVertexIndex(Edge e) => Triangles[e.Triangle].Links((e.Start + 1) % 3).Start;
 
-        internal bool IsEdgeConcaveOrFlat(Edge edge, NativeArray<int> indices, NativeArray<float3> vertices, NativeArray<float4> planes)
+        internal bool IsEdgeConcaveOrFlat(Edge edge, NativeArray<int3> triangles, NativeArray<float3> vertices, NativeArray<float4> planes)
         {
             if (IsNaked(edge))
             {
                 return false;
             }
 
-            float3 apex = vertices[GetApexVertexIndex(indices, edge)];
+            float3 apex = vertices[GetApexVertexIndex(triangles, edge)];
             if (Math.Dotxyz1(planes[edge.Triangle], apex) < -k_MergeCoplanarTrianglesTolerance)
             {
                 return false;
@@ -479,12 +479,12 @@ namespace Unity.Physics
             return true;
         }
 
-        internal bool IsTriangleConcaveOrFlat(Edge edge, NativeArray<int> indices, NativeArray<float3> vertices, NativeArray<float4> planes)
+        internal bool IsTriangleConcaveOrFlat(Edge edge, NativeArray<int3> triangles, NativeArray<float3> vertices, NativeArray<float4> planes)
         {
             for (int i = 0; i < 3; i++)
             {
                 Edge e = GetNext(edge);
-                if (!IsEdgeConcaveOrFlat(e, indices, vertices, planes))
+                if (!IsEdgeConcaveOrFlat(e, triangles, vertices, planes))
                 {
                     return false;
                 }
@@ -493,7 +493,7 @@ namespace Unity.Physics
             return true;
         }
 
-        internal bool IsFlat(Edge edge, NativeArray<int> indices, NativeArray<float3> vertices, NativeArray<float4> planes)
+        internal bool IsFlat(Edge edge, NativeArray<int3> triangles, NativeArray<float3> vertices, NativeArray<float4> planes)
         {
             Edge link = GetLink(edge);
             if (!link.IsValid)
@@ -501,10 +501,10 @@ namespace Unity.Physics
                 return false;
             }
 
-            float3 apex = vertices[GetApexVertexIndex(indices, link)];
+            float3 apex = vertices[GetApexVertexIndex(triangles, link)];
             bool flat = math.abs(Math.Dotxyz1(planes[edge.Triangle], apex)) < k_MergeCoplanarTrianglesTolerance;
 
-            apex = vertices[GetApexVertexIndex(indices, edge)];
+            apex = vertices[GetApexVertexIndex(triangles, edge)];
             flat |= math.abs(Math.Dotxyz1(planes[link.Triangle], apex)) < k_MergeCoplanarTrianglesTolerance;
 
             return flat;
@@ -541,9 +541,9 @@ namespace Unity.Physics
             return false;
         }
 
-        internal bool CanEdgeBeDisabled(Edge e, NativeArray<PrimitiveFlags> flags, NativeArray<int> indices, NativeArray<float3> vertices, NativeArray<float4> planes)
+        internal bool CanEdgeBeDisabled(Edge e, NativeArray<PrimitiveFlags> flags, NativeArray<int3> triangles, NativeArray<float3> vertices, NativeArray<float4> planes)
         {
-            if (!e.IsValid || IsEdgeConcaveOrFlat(e, indices, vertices, planes) || (flags[e.Triangle] & PrimitiveFlags.DisableAllEdges) != 0)
+            if (!e.IsValid || IsEdgeConcaveOrFlat(e, triangles, vertices, planes) || (flags[e.Triangle] & PrimitiveFlags.DisableAllEdges) != 0)
             {
                 return false;
             }
@@ -551,12 +551,12 @@ namespace Unity.Physics
             return true;
         }
 
-        internal bool CanAllEdgesBeDisabled(NativeArray<Edge> edges, NativeArray<PrimitiveFlags> flags, NativeArray<int> indices, NativeArray<float3> vertices, NativeArray<float4> planes)
+        internal bool CanAllEdgesBeDisabled(NativeArray<Edge> edges, NativeArray<PrimitiveFlags> flags, NativeArray<int3> triangles, NativeArray<float3> vertices, NativeArray<float4> planes)
         {
             bool allDisabled = true;
             for(var i = 0; i < edges.Length; ++i)
             {
-                allDisabled &= CanEdgeBeDisabled(edges[i], flags, indices, vertices, planes);
+                allDisabled &= CanEdgeBeDisabled(edges[i], flags, triangles, vertices, planes);
             }
 
             return allDisabled;
@@ -615,8 +615,8 @@ namespace Unity.Physics
             {
                 verticesAndHashes[i] = new VertexWithHash()
                 {
-                    Index = i, 
-                    Vertex = vertices[i], 
+                    Index = i,
+                    Vertex = vertices[i],
                     Hash = SpatialHash(vertices[i])
                 };
             }
@@ -664,7 +664,7 @@ namespace Unity.Physics
                     }
                 }
             }
-            
+
             for (int i = 0; i < indices.Length; i++)
             {
                 indices[i] = remap[indices[i]];
@@ -712,10 +712,9 @@ namespace Unity.Physics
             }
         }
 
-        internal unsafe MeshConnectivityBuilder(NativeArray<int> indices, NativeArray<float3> vertices)
+        internal unsafe MeshConnectivityBuilder(NativeArray<int3> triangles, NativeArray<float3> vertices)
         {
-            int numIndices = indices.Length;
-            int numTriangles = numIndices / 3;
+            int numTriangles = triangles.Length;
             int numVertices = vertices.Length;
 
             Vertices = new NativeArray<Vertex>(numVertices, Allocator.Temp);
@@ -734,15 +733,14 @@ namespace Unity.Physics
             for (int triangleIndex = 0; triangleIndex < numTriangles; triangleIndex++)
             {
                 ((Triangle*)Triangles.GetUnsafePtr())[triangleIndex].IsValid =
-                    indices[triangleIndex * 3 + 0] != indices[triangleIndex * 3 + 1] &&
-                    indices[triangleIndex * 3 + 1] != indices[triangleIndex * 3 + 2] &&
-                    indices[triangleIndex * 3 + 0] != indices[triangleIndex * 3 + 2];
-
+                    triangles[triangleIndex][0] != triangles[triangleIndex][1] &&
+                    triangles[triangleIndex][1] != triangles[triangleIndex][2] &&
+                    triangles[triangleIndex][0] != triangles[triangleIndex][2];
                 if (Triangles[triangleIndex].IsValid)
                 {
-                    ((Vertex*)Vertices.GetUnsafePtr())[indices[triangleIndex * 3 + 0]].Cardinality++;
-                    ((Vertex*)Vertices.GetUnsafePtr())[indices[triangleIndex * 3 + 1]].Cardinality++;
-                    ((Vertex*)Vertices.GetUnsafePtr())[indices[triangleIndex * 3 + 2]].Cardinality++;
+                    ((Vertex*)Vertices.GetUnsafePtr())[triangles[triangleIndex][0]].Cardinality++;
+                    ((Vertex*)Vertices.GetUnsafePtr())[triangles[triangleIndex][1]].Cardinality++;
+                    ((Vertex*)Vertices.GetUnsafePtr())[triangles[triangleIndex][2]].Cardinality++;
                 }
             }
 
@@ -765,14 +763,13 @@ namespace Unity.Physics
                     continue;
                 }
 
-                int indexInIndices = triangleIndex * 3;
                 for (int i = 2, j = 0; j < 3; i = j++)
                 {
-                    int vertexI = indices[indexInIndices + i];
+                    int vertexI = triangles[triangleIndex][i];
                     int thisEdgeIndex = Vertices[vertexI].FirstEdge + counters[vertexI]++;
                     Edges[thisEdgeIndex] = new Edge { Triangle = triangleIndex, Start = i, IsValid = true };
 
-                    int vertexJ = indices[indexInIndices + j];
+                    int vertexJ = triangles[triangleIndex][j]; ;
                     Vertex other = Vertices[vertexJ];
                     int count = counters[vertexJ];
 
@@ -781,7 +778,7 @@ namespace Unity.Physics
                         Edge edge = Edges[other.FirstEdge + k];
 
                         int endVertexOffset = (edge.Start + 1) % 3;
-                        int endVertex = indices[edge.Triangle * 3 + endVertexOffset];
+                        int endVertex = triangles[edge.Triangle][endVertexOffset];
                         if (endVertex == vertexI)
                         {
                             ((Triangle*)Triangles.GetUnsafePtr())[triangleIndex].SetLinks(i, edge);
@@ -890,21 +887,21 @@ namespace Unity.Physics
             }
         }
 
-        private static int4 GetVertexIndices(NativeArray<int> indices, Edge edge)
+        private static int4 GetVertexIndices(NativeArray<int3> triangles, Edge edge)
         {
             int4 vertexIndices;
-            int triangleIndicesIndex = edge.Triangle * 3;
-            vertexIndices.x = indices[triangleIndicesIndex + edge.Start];
-            vertexIndices.y = indices[triangleIndicesIndex + ((edge.Start + 1) % 3)];
-            vertexIndices.z = indices[triangleIndicesIndex + ((edge.Start + 2) % 3)];
+            int triangle = edge.Triangle;
+            vertexIndices.x = triangles[triangle][edge.Start];
+            vertexIndices.y = triangles[triangle][(edge.Start + 1) % 3];
+            vertexIndices.z = triangles[triangle][(edge.Start + 2) % 3];
             vertexIndices.w = 0;
             return vertexIndices;
         }
 
-        private static int GetApexVertexIndex(NativeArray<int> indices, Edge edge)
+        private static int GetApexVertexIndex(NativeArray<int3> triangles, Edge edge)
         {
-            int triangleIndicesIndex = edge.Triangle * 3;
-            return indices[triangleIndicesIndex + ((edge.Start + 2) % 3)];
+            int triangleIndex = edge.Triangle;
+            return triangles[triangleIndex][(edge.Start + 2) % 3];
         }
 
         private static float CalcTwiceSurfaceArea(float3 a, float3 b, float3 c)
@@ -914,22 +911,21 @@ namespace Unity.Physics
             return math.length(math.cross(d0, d1));
         }
 
-        internal unsafe NativeList<Primitive> EnumerateQuadDominantGeometry(NativeArray<int> indices, NativeList<float3> vertices)
+        internal unsafe NativeList<Primitive> EnumerateQuadDominantGeometry(NativeArray<int3> triangles, NativeList<float3> vertices)
         {
-            int numTriangles = indices.Length / 3;
+            int numTriangles = triangles.Length;
             var flags = new NativeArray<PrimitiveFlags>(numTriangles, Allocator.Temp);
             var quadRoots = new NativeList<Edge>(Allocator.Temp);
             var triangleRoots = new NativeList<Edge>(Allocator.Temp);
 
             // Generate triangle planes
-            var planes = new NativeArray<float4>(indices.Length / 3, Allocator.Temp);
+            var planes = new NativeArray<float4>(numTriangles, Allocator.Temp);
             
             for (int i = 0; i < numTriangles; i++)
             {
-                int triangleIndex = i * 3;
-                float3 v0 = vertices[indices[triangleIndex]];
-                float3 v1 = vertices[indices[triangleIndex + 1]];
-                float3 v2 = vertices[indices[triangleIndex + 2]];
+                float3 v0 = vertices[triangles[i][0]];
+                float3 v1 = vertices[triangles[i][1]];
+                float3 v2 = vertices[triangles[i][2]];
 
                 float3 normal = math.normalize(math.cross(v0 - v1, v0 - v2));
                 planes[i] = new float4(normal, -math.dot(normal, v0));
@@ -948,8 +944,8 @@ namespace Unity.Physics
                 if (IsBound(e))
                 {
                     Edge linkEdge = GetLink(e);
-                    int4 vis = GetVertexIndices(indices, e);
-                    vis[3] = GetApexVertexIndex(indices, linkEdge);
+                    int4 vis = GetVertexIndices(triangles, e);
+                    vis[3] = GetApexVertexIndex(triangles, linkEdge);
 
                     float3x4 quadVertices = new float3x4(vertices[vis[0]], vertices[vis[1]], vertices[vis[2]], vertices[vis[3]]);
                     Aabb quadAabb = Aabb.CreateFromPoints(quadVertices);
@@ -992,8 +988,8 @@ namespace Unity.Physics
                 if (freeTriangles[t0] && freeTriangles[t1])
                 {
                     Edge nextEdge = GetNext(edgeData.Edge);
-                    int4 vis = GetVertexIndices(indices, nextEdge);
-                    vis[3] = GetApexVertexIndex(indices, linkEdge);
+                    int4 vis = GetVertexIndices(triangles, nextEdge);
+                    vis[3] = GetApexVertexIndex(triangles, linkEdge);
 
                     var primitive = new Primitive
                     {
@@ -1007,18 +1003,18 @@ namespace Unity.Physics
                         continue;
                     }
 
-                    if (IsEdgeConcaveOrFlat(edgeData.Edge, indices, vertices, planes))
+                    if (IsEdgeConcaveOrFlat(edgeData.Edge, triangles, vertices, planes))
                     {
                         primitive.Flags |= PrimitiveFlags.DisableInternalEdge;
 
-                        if (IsTriangleConcaveOrFlat(edgeData.Edge, indices, vertices, planes) &&
-                            IsTriangleConcaveOrFlat(linkEdge, indices, vertices, planes))
+                        if (IsTriangleConcaveOrFlat(edgeData.Edge, triangles, vertices, planes) &&
+                            IsTriangleConcaveOrFlat(linkEdge, triangles, vertices, planes))
                         {
                             primitive.Flags |= PrimitiveFlags.DisableAllEdges;
                         }
                     }
 
-                    if (IsFlat(edgeData.Edge, indices, vertices, planes))
+                    if (IsFlat(edgeData.Edge, triangles, vertices, planes))
                     {
                         primitive.Flags |= PrimitiveFlags.IsFlat;
                     }
@@ -1054,7 +1050,7 @@ namespace Unity.Physics
                     edge = GetNext(edge);
                 }
 
-                int4 vis = GetVertexIndices(indices, edge);
+                int4 vis = GetVertexIndices(triangles, edge);
 
                 var primitive = new Primitive
                 {
@@ -1062,7 +1058,7 @@ namespace Unity.Physics
                     Flags = PrimitiveFlags.DefaultTriangleFlags
                 };
 
-                if (IsTriangleConcaveOrFlat(edge, indices, vertices, planes))
+                if (IsTriangleConcaveOrFlat(edge, triangles, vertices, planes))
                 {
                     primitive.Flags |= PrimitiveFlags.DisableAllEdges;
                 }
@@ -1072,13 +1068,13 @@ namespace Unity.Physics
                 flags[edge.Triangle] = primitive.Flags;
             }
 
-            DisableEdgesOfAdjacentPrimitives(primitives, indices, vertices, planes, flags, quadRoots, triangleRoots);
+            DisableEdgesOfAdjacentPrimitives(primitives, triangles, vertices, planes, flags, quadRoots, triangleRoots);
             
             return primitives;
         }
 
         private void DisableEdgesOfAdjacentPrimitives(
-            NativeList<Primitive> primitives, NativeArray<int> indices, NativeArray<float3> vertices, NativeArray<float4> planes, NativeArray<PrimitiveFlags> flags,
+            NativeList<Primitive> primitives, NativeArray<int3> triangles, NativeArray<float3> vertices, NativeArray<float4> planes, NativeArray<PrimitiveFlags> flags,
             NativeList<Edge> quadRoots, NativeList<Edge> triangleRoots)
         {
             var outerBoundary = new NativeArray<Edge>(4, Allocator.Temp);
@@ -1096,7 +1092,7 @@ namespace Unity.Physics
                     outerBoundary[2] = GetLink(GetNext(link));
                     outerBoundary[3] = GetLink(GetPrev(link));
 
-                    if (CanAllEdgesBeDisabled(outerBoundary, flags, indices, vertices, planes))
+                    if (CanAllEdgesBeDisabled(outerBoundary, flags, triangles, vertices, planes))
                     {
                         quadFlags |= PrimitiveFlags.DisableAllEdges;
                     }
@@ -1126,7 +1122,7 @@ namespace Unity.Physics
                     outerBoundary[1] = GetLink(GetNext(root));
                     outerBoundary[2] = GetLink(GetPrev(root));
 
-                    if (CanAllEdgesBeDisabled(outerBoundary, flags, indices, vertices, planes))
+                    if (CanAllEdgesBeDisabled(outerBoundary, flags, triangles, vertices, planes))
                     {
                         triangleFlags |= PrimitiveFlags.DisableAllEdges;
                     }

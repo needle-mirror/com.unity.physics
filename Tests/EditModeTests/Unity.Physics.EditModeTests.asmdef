@@ -2,6 +2,7 @@
     "name": "Unity.Physics.EditModeTests",
     "references": [
         "Unity.Collections",
+        "Unity.Entities",
         "Unity.Mathematics",
         "Unity.Physics",
         "Unity.Physics.Editor",

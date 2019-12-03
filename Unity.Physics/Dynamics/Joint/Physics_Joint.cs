@@ -1,5 +1,4 @@
-﻿using System;
-using System.Runtime.InteropServices;
+using System;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -16,7 +15,7 @@ namespace Unity.Physics
     }
 
     // A linear or angular constraint in 1, 2, or 3 dimensions.
-    public struct Constraint
+    public struct Constraint : IEquatable<Constraint>
     {
         // TODO think more about these
         // Current values give tau = 0.6 damping = 0.99 at 50hz
@@ -179,6 +178,29 @@ namespace Unity.Physics
         }
 
         #endregion
+
+        public bool Equals(Constraint other)
+        {
+            return ConstrainedAxes.Equals(other.ConstrainedAxes)
+                && Type == other.Type
+                && Min.Equals(other.Min)
+                && Max.Equals(other.Max)
+                && SpringFrequency.Equals(other.SpringFrequency)
+                && SpringDamping.Equals(other.SpringDamping);
+        }
+
+        public override bool Equals(object obj) => obj is Constraint other && Equals(other);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                return (int)math.hash(new uint3x2(
+                    new uint3((uint)Type, (uint)Min.GetHashCode(), (uint)Max.GetHashCode()),
+                    new uint3(math.hash(ConstrainedAxes), (uint)SpringFrequency.GetHashCode(), (uint)SpringDamping.GetHashCode())
+                ));
+            }
+        }
     }
 
     // A set of constraints on the relative motion between a pair of rigid bodies.
@@ -186,17 +208,72 @@ namespace Unity.Physics
     // Therefore this struct must always be passed by reference, never by value.
     public struct JointData
     {
-        // Transform from joint definition space to body space
-        public MTransform AFromJoint { get; private set; }
-        public MTransform BFromJoint { get; private set; }
+        // Transform from joint definition space to body A space
+        public MTransform AFromJoint
+        {
+            get => m_AFromJoint;
+            set
+            {
+                if (!m_AFromJoint.Equals(value))
+                {
+                    m_AFromJoint = value;
+                    Constraints.m_Version++;
+                }
+            }
+        }
+        private MTransform m_AFromJoint;
 
-        // Array of constraints
-        private BlobArray m_ConstraintsBlob;
-        public byte Version { get; private set; }
+        // Transform from joint definition space to body B space
+        public MTransform BFromJoint
+        {
+            get => m_BFromJoint;
+            set
+            {
+                if (!m_BFromJoint.Equals(value))
+                {
+                    m_BFromJoint = value;
+                    Constraints.m_Version++;
+                }
+            }
+        }
+        private MTransform m_BFromJoint;
 
-        // Accessor for the constraints
-        public BlobArray.Accessor<Constraint> Constraints => new BlobArray.Accessor<Constraint>(ref m_ConstraintsBlob);
-        public int NumConstraints => m_ConstraintsBlob.Length;
+        // Array of individual axis constraints
+        public ConstraintsBlob Constraints;
+
+        // Version number, incremented whenever the joint data has changed
+        public byte Version => Constraints.m_Version;
+
+        // Container for blob array of constraints
+        public struct ConstraintsBlob
+        {
+            internal BlobArray m_BlobArray;
+            internal byte m_Version;
+
+            BlobArray.Accessor<Constraint> Accessor => new BlobArray.Accessor<Constraint>(ref m_BlobArray);
+
+            public int Length => m_BlobArray.Length;
+
+            // Enumerator for the constraints, allowing use of foreach()
+            public BlobArray.Accessor<Constraint>.Enumerator GetEnumerator() => Accessor.GetEnumerator();
+
+            // Indexer for the constraints
+            // TODO: Add accessor for the constraints based on type? e.g. [LimitedHinge.Axis]
+            [System.Runtime.CompilerServices.IndexerName("Constraints")]
+            public Constraint this[int index]
+            {
+                get => Accessor[index];
+                set
+                {
+                    if (!value.Equals(Accessor[index]))
+                    {
+                        Accessor[index] = value;
+                        m_Version++;
+                    }
+                }
+            }
+        }
+
 
         // Create a joint asset with the given constraints
         public static unsafe BlobAssetReference<JointData> Create(MTransform aFromJoint, MTransform bFromJoint, Constraint[] constraints)
@@ -210,11 +287,11 @@ namespace Unity.Physics
             {
                 jointData->AFromJoint = aFromJoint;
                 jointData->BFromJoint = bFromJoint;
-                jointData->Version = 1;
+                jointData->Constraints.m_Version = 1;
 
                 byte* end = (byte*)jointData + sizeof(JointData);
-                jointData->m_ConstraintsBlob.Offset = UnsafeEx.CalculateOffset(end, ref jointData->m_ConstraintsBlob);
-                jointData->m_ConstraintsBlob.Length = constraints.Length;
+                jointData->Constraints.m_BlobArray.Offset = UnsafeEx.CalculateOffset(end, ref jointData->Constraints.m_BlobArray);
+                jointData->Constraints.m_BlobArray.Length = constraints.Length;
 
                 for (int i = 0; i < constraints.Length; i++)
                 {
@@ -223,7 +300,7 @@ namespace Unity.Physics
             }
 
             var blob = BlobAssetReference<JointData>.Create(jointData, totalSize);
-            
+
             UnsafeUtility.Free(jointData, Allocator.Temp);
 
             return blob;
@@ -355,6 +432,13 @@ namespace Unity.Physics
                 }
             );
         }
+
+        #endregion
+
+        #region Obsolete
+
+        [Obsolete("NumConstraints has been deprecated. Use Constraints.Length instead. (RemovedAfter 2020-01-14)")]
+        public int NumConstraints => Constraints.Length;
 
         #endregion
     }

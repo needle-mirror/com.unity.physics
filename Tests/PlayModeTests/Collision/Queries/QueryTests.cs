@@ -616,8 +616,8 @@ namespace Unity.Physics.Tests.Collision.Queries
                         }
 
                         // Build manifolds
-                        BlockStream contacts = new BlockStream(1, 0, Allocator.Temp);
-                        BlockStream.Writer contactWriter = contacts;
+                        var contacts = new NativeStream(1, Allocator.Temp);
+                        NativeStream.Writer contactWriter = contacts.AsWriter();
                         contactWriter.BeginForEachIndex(0);
 
                         MotionVelocity motionVelocityA = iBodyA < world.MotionVelocities.Length ?
@@ -630,7 +630,7 @@ namespace Unity.Physics.Tests.Collision.Queries
                         contactWriter.EndForEachIndex();
 
                         // Read each manifold
-                        BlockStream.Reader contactReader = contacts;
+                        NativeStream.Reader contactReader = contacts.AsReader();
                         contactReader.BeginForEachIndex(0);
                         int manifoldIndex = 0;
                         while (contactReader.RemainingItemCount > 0)

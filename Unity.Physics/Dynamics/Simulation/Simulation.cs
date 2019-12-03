@@ -1,5 +1,4 @@
 ﻿using System;
-using System.ComponentModel;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Jobs.LowLevel.Unsafe;
@@ -46,12 +45,6 @@ namespace Unity.Physics
         // The final scheduled job, including all simulation and cleanup.
         // The end of each step should depend on this.
         JobHandle FinalJobHandle { get; }
-
-        #region Obsolete
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("ScheduleStepJobs(SimulationStepInput, JobHandle, out JobHandle, out JobHandle) has been deprecated. Use ScheduleStepJobs(SimulationStepInput, JobHandle) instead. (RemovedAfter 2019-10-15)", true)]
-        void ScheduleStepJobs(SimulationStepInput input, JobHandle inputDeps, out JobHandle finalSimulationJobHandle, out JobHandle finalJobHandle);
-        #endregion
     }
 
     // Default simulation implementation
@@ -73,6 +66,7 @@ namespace Unity.Physics
             m_Scheduler = new Scheduler();
             m_Context = new Context();
             m_Storage = new Storage();
+            m_Storage.Initialize();
         }
 
         public void Dispose()
@@ -124,7 +118,7 @@ namespace Unity.Physics
 
             // Find all body pairs that overlap in the broadphase
             handle = input.World.CollisionWorld.Broadphase.ScheduleFindOverlapsJobs(
-                out BlockStream dynamicVsDynamicBodyPairs, out BlockStream dynamicVsStaticBodyPairs, ref m_Context, handle);
+                out NativeStream dynamicVsDynamicBodyPairs, out NativeStream dynamicVsStaticBodyPairs, ref m_Context, handle);
             var postOverlapsHandle = handle;
 
             // Sort all overlapping and jointed body pairs into phases
@@ -205,6 +199,12 @@ namespace Unity.Physics
 
             public NativeSlice<Velocity> InputVelocities => new NativeSlice<Velocity>(m_InputVelocities, 0, m_InputVelocityCount);
 
+            public void Initialize()
+            {
+                m_InputVelocityCount = 0;
+                m_InputVelocities = new NativeArray<Velocity>(0, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+            }
+
             public int InputVelocityCount
             {
                 get => m_InputVelocityCount;
@@ -213,10 +213,7 @@ namespace Unity.Physics
                     m_InputVelocityCount = value;
                     if (m_InputVelocities.Length < m_InputVelocityCount)
                     {
-                        if (m_InputVelocities.IsCreated)
-                        {
-                            m_InputVelocities.Dispose();
-                        }
+                        m_InputVelocities.Dispose();
                         m_InputVelocities = new NativeArray<Velocity>(m_InputVelocityCount, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
                     }
                 }
@@ -247,11 +244,11 @@ namespace Unity.Physics
             // which informs how we can schedule the solver jobs and where they read info from.
             public Scheduler.SolverSchedulerInfo SolverSchedulerInfo;
 
-            public BlockStream Contacts;
-            public BlockStream Jacobians;
-            public BlockStream JointJacobians;
-            public BlockStream CollisionEventStream;
-            public BlockStream TriggerEventStream;
+            public NativeStream Contacts;
+            public NativeStream Jacobians;
+            public NativeStream JointJacobians;
+            public NativeStream CollisionEventStream;
+            public NativeStream TriggerEventStream;
 
             public JobHandle DisposeOverlapPairs0;
             public JobHandle DisposeOverlapPairs1;
@@ -264,16 +261,5 @@ namespace Unity.Physics
             public JobHandle DisposeProcessBodyPairs;
             public JobHandle DisposePhasedDispatchPairs;
         }
-
-        #region Obsolete
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("ScheduleStepJobs(SimulationStepInput, JobHandle, out JobHandle, out JobHandle) has been deprecated. Use ScheduleStepJobs(SimulationStepInput, JobHandle) instead. (RemovedAfter 2019-10-15)")]
-        public void ScheduleStepJobs(SimulationStepInput input, JobHandle inputDeps, out JobHandle finalSimulationJobHandle, out JobHandle finalJobHandle)
-        {
-            finalSimulationJobHandle = FinalSimulationJobHandle;
-            finalJobHandle = FinalJobHandle;
-            ScheduleStepJobs(input, inputDeps);
-        }
-        #endregion
     }
 }

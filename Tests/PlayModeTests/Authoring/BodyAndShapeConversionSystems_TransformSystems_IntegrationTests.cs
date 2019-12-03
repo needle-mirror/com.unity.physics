@@ -40,9 +40,11 @@ namespace Unity.Physics.Tests.Authoring
             var queryStr = query.ToReadableString();
 
             using (var world = new World("Test world"))
+            using (var blobAssetStore = new BlobAssetStore())
             {
                 // convert GameObject hierarchy
-                GameObjectConversionUtility.ConvertGameObjectHierarchy(gameObjectHierarchyRoot, world);
+                var settings = GameObjectConversionSettings.FromWorld(world, blobAssetStore);
+                GameObjectConversionUtility.ConvertGameObjectHierarchy(gameObjectHierarchyRoot, settings);
 
                 // trigger update of transform systems
                 using (var group = world.EntityManager.CreateEntityQuery(query))

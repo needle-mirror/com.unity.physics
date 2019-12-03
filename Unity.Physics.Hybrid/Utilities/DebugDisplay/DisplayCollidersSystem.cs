@@ -18,8 +18,7 @@ namespace Unity.Physics.Authoring
         //< system or jobify this system, since we couldn't guarantee the lifetime of the debug
         //< display objects. Caching those objects across frames should allow for improving this
         //< and some reuse of the DebugDraw code.
-        [Obsolete("This type will be made internal in a future release. (RemovedAfter 2019-10-15)")]
-        public unsafe class DrawComponent : MonoBehaviour
+        unsafe class DrawComponent : MonoBehaviour
         {
             public NativeSlice<RigidBody> Bodies;
             public int NumDynamicBodies;
@@ -61,6 +60,8 @@ namespace Unity.Physics.Authoring
                 public Vector3 Scale;
                 public Vector3 Position;
                 public Quaternion Orientation;
+
+                public float4x4 Transform => float4x4.TRS(Position, Orientation, Scale);
             }
 
             private static void AppendConvex(ref ConvexHull hull, RigidTransform worldFromCollider, ref List<DisplayResult> results)
@@ -316,7 +317,10 @@ namespace Unity.Physics.Authoring
                 }
             }
 
-            public static List<DisplayResult> BuildDebugDisplayMesh(Collider* collider)
+            static List<DisplayResult> BuildDebugDisplayMesh(BlobAssetReference<Collider> collider) =>
+                BuildDebugDisplayMesh((Collider*)collider.GetUnsafePtr());
+
+            static List<DisplayResult> BuildDebugDisplayMesh(Collider* collider)
             {
                 List<DisplayResult> results = new List<DisplayResult>();
                 AppendCollider(collider, RigidTransform.identity, ref results);

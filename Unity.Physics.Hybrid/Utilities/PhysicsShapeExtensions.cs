@@ -1,15 +1,27 @@
 using System;
 using System.Collections.Generic;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Mathematics;
-using Unity.Scenes;
 using UnityEngine;
+using Hash128 = Unity.Entities.Hash128;
 using UnityCollider = UnityEngine.Collider;
 
 namespace Unity.Physics.Authoring
 {
+    // put static UnityObject buffers in separate utility class so other methods can Burst compile
+    static class PhysicsShapeExtensions_NonBursted
+    {
+        internal static readonly List<PhysicsBodyAuthoring> s_PhysicsBodiesBuffer = new List<PhysicsBodyAuthoring>(16);
+        internal static readonly List<Rigidbody> s_RigidbodiesBuffer = new List<Rigidbody>(16);
+        internal static readonly List<UnityCollider> s_CollidersBuffer = new List<UnityCollider>(16);
+        internal static readonly List<PhysicsShapeAuthoring> s_ShapesBuffer = new List<PhysicsShapeAuthoring>(16);
+        internal static readonly List<StaticOptimizeEntity> s_StaticOptimizeEntitiesBuffer = new List<StaticOptimizeEntity>(4);
+    }
+
     static class PhysicsShapeExtensions
     {
         internal static int GetDeviantAxis(this float3 v)
@@ -59,6 +71,40 @@ namespace Unity.Physics.Authoring
             return math.hash(hashedPoints.GetUnsafePtr(), UnsafeUtility.SizeOf<float3>() * hashedPoints.Length);
         }
 
+        internal static CollisionFilter GetFilter(this PhysicsShapeAuthoring shape)
+        {
+            // TODO: determine optimal workflow for specifying group index
+            return new CollisionFilter
+            {
+                BelongsTo = shape.BelongsTo.Value,
+                CollidesWith = shape.CollidesWith.Value
+            };
+        }
+
+        internal static Material GetMaterial(this PhysicsShapeAuthoring shape)
+        {
+            // TODO: TBD how we will author editor content for other shape flags
+            var flags = new Material.MaterialFlags();
+            if (shape.IsTrigger)
+            {
+                flags = Material.MaterialFlags.IsTrigger;
+            }
+            else if (shape.RaisesCollisionEvents)
+            {
+                flags = Material.MaterialFlags.EnableCollisionEvents;
+            }
+
+            return new Material
+            {
+                Friction = shape.Friction.Value,
+                FrictionCombinePolicy = shape.Friction.CombineMode,
+                Restitution = shape.Restitution.Value,
+                RestitutionCombinePolicy = shape.Restitution.CombineMode,
+                Flags = flags,
+                CustomTags = shape.CustomTags.Value
+            };
+        }
+
         static bool HasNonUniformScale(this float4x4 m)
         {
             var s = new float3(math.lengthsq(m.c0.xyz), math.lengthsq(m.c1.xyz), math.lengthsq(m.c2.xyz));
@@ -84,25 +130,27 @@ namespace Unity.Physics.Authoring
         {
             if (mesh.isReadable)
                 return true;
+            // non-readable meshes are readable at edit time
             if (Application.isPlaying)
                 return false;
-            var subScene = host.GetComponentInParent<SubScene>();
-            return subScene != null;
+            // anything in a sub-scene is fine because it is converted at edit time, but run-time ConvertToEntity will fail
+            if (host.gameObject.scene.isSubScene)
+                return true;
+            // TODO: isSubScene is currently false in AssetImportWorker during sub-scene import (dots issue 3629)
+            #if UNITY_EDITOR
+            return UnityEditor.Experimental.AssetDatabaseExperimental.IsAssetImportWorkerProcess();
+            #else
+            return false;
+            #endif
         }
 
         internal static GameObject GetPrimaryBody(this UnityCollider collider) => GetPrimaryBody(collider.gameObject);
         internal static GameObject GetPrimaryBody(this PhysicsShapeAuthoring shape) => GetPrimaryBody(shape.gameObject);
 
-        static readonly List<PhysicsBodyAuthoring> s_PhysicsBodiesBuffer = new List<PhysicsBodyAuthoring>(16);
-        static readonly List<Rigidbody> s_RigidbodiesBuffer = new List<Rigidbody>(16);
-        static readonly List<UnityCollider> s_CollidersBuffer = new List<UnityCollider>(16);
-        static readonly List<PhysicsShapeAuthoring> s_ShapesBuffer = new List<PhysicsShapeAuthoring>(16);
-        static readonly List<StaticOptimizeEntity> s_StaticOptimizeEntitiesBuffer = new List<StaticOptimizeEntity>(4);
-
         internal static GameObject GetPrimaryBody(GameObject shape)
         {
-            var pb = FindFirstEnabledAncestor(shape, s_PhysicsBodiesBuffer);
-            var rb = FindFirstEnabledAncestor(shape, s_RigidbodiesBuffer);
+            var pb = FindFirstEnabledAncestor(shape, PhysicsShapeExtensions_NonBursted.s_PhysicsBodiesBuffer);
+            var rb = FindFirstEnabledAncestor(shape, PhysicsShapeExtensions_NonBursted.s_RigidbodiesBuffer);
 
             if (pb != null)
             {
@@ -114,13 +162,13 @@ namespace Unity.Physics.Authoring
                 return rb.gameObject;
 
             // for implicit static shape, first see if it is part of static optimized hierarchy
-            var topStatic = FindTopmostEnabledAncestor(shape, s_StaticOptimizeEntitiesBuffer);
+            var topStatic = FindTopmostEnabledAncestor(shape, PhysicsShapeExtensions_NonBursted.s_StaticOptimizeEntitiesBuffer);
             if (topStatic != null)
                 return topStatic;
 
             // otherwise, find topmost enabled Collider or PhysicsShapeAuthoring
-            var topCollider = FindTopmostEnabledAncestor(shape, s_CollidersBuffer);
-            var topShape = FindTopmostEnabledAncestor(shape, s_ShapesBuffer);
+            var topCollider = FindTopmostEnabledAncestor(shape, PhysicsShapeExtensions_NonBursted.s_CollidersBuffer);
+            var topShape = FindTopmostEnabledAncestor(shape, PhysicsShapeExtensions_NonBursted.s_ShapesBuffer);
 
             return topCollider == null
                 ? topShape == null ? shape.gameObject : topShape
@@ -147,7 +195,7 @@ namespace Unity.Physics.Authoring
             buffer.Clear();
             return result;
         }
-        
+
         static GameObject FindTopmostEnabledAncestor<T>(GameObject shape, List<T> buffer) where T : Component
         {
             // include inactive in case the supplied shape GameObject is a prefab that has not been instantiated
@@ -164,7 +212,7 @@ namespace Unity.Physics.Authoring
             buffer.Clear();
             return result;
         }
-        
+
         // matrix to transform point from shape's local basis into world space
         static float4x4 GetBasisToWorldMatrix(
             float4x4 localToWorld, float3 center, quaternion orientation, float3 size
@@ -173,7 +221,7 @@ namespace Unity.Physics.Authoring
 
         // matrix to transform point on a primitive from bake space into space of the shape
         static float4x4 GetPrimitiveBakeToShapeMatrix(
-            PhysicsShapeAuthoring shape, ref float3 center, ref EulerAngles orientation, float3 scale, int3 basisPriority
+            float4x4 localToWorld, float4x4 shapeToWorld, ref float3 center, ref EulerAngles orientation, float3 scale, int3 basisPriority
         )
         {
             if (
@@ -191,7 +239,7 @@ namespace Unity.Physics.Authoring
                 localToBasis.c1 = math.normalizesafe(localToBasis.c1);
                 localToBasis.c2 = math.normalizesafe(localToBasis.c2);
             }
-            var localToBake = math.mul(shape.transform.localToWorldMatrix, localToBasis);
+            var localToBake = math.mul(localToWorld, localToBasis);
 
             if (localToBake.HasNonUniformScale() || localToBake.HasShear())
             {
@@ -206,7 +254,7 @@ namespace Unity.Physics.Authoring
                 localToBake[basisPriority[2]] = n2 * math.dot(localToBake[basisPriority[2]], n2);
             }
 
-            var bakeToShape = math.mul(math.inverse(shape.GetShapeToWorldMatrix()), localToBake);
+            var bakeToShape = math.mul(math.inverse(shapeToWorld), localToBake);
             // transform baked center/orientation (i.e. primitive basis) into shape space
             orientation.SetValue(
                 quaternion.LookRotationSafe(bakeToShape[basisPriority[0]].xyz, bakeToShape[basisPriority[1]].xyz)
@@ -229,7 +277,7 @@ namespace Unity.Physics.Authoring
         // used for de-skewing basis vectors; default priority assumes primary axis is z, secondary axis is y
         static readonly int3 k_DefaultAxisPriority = new int3(2, 1, 0);
 
-        // priority is determined by length of each size dimension in the shape's basis after applying localToWorld transformation 
+        // priority is determined by length of each size dimension in the shape's basis after applying localToWorld transformation
         static int3 GetBasisAxisPriority(float4x4 basisToWorld)
         {
             var basisAxisLengths =
@@ -258,57 +306,88 @@ namespace Unity.Physics.Authoring
         internal static BoxGeometry GetBakedBoxProperties(this PhysicsShapeAuthoring shape)
         {
             var box = shape.GetBoxProperties(out var orientation);
-            var center = box.Center;
-            var size = box.Size;
-            var bevelRadius = box.BevelRadius;
+            return box.BakeToBodySpace(shape.transform.localToWorldMatrix, shape.GetShapeToWorldMatrix(), orientation);
+        }
 
-            var localToWorld = (float4x4)shape.transform.localToWorldMatrix;
-            float4x4 bakeToShape;
-            var basisPriority = k_DefaultAxisPriority;
-            var sheared = localToWorld.HasShear();
-            if (localToWorld.HasNonUniformScale() || sheared)
+        internal static BoxGeometry BakeToBodySpace(
+            this BoxGeometry box, float4x4 localToWorld, float4x4 shapeToWorld, EulerAngles orientation
+        )
+        {
+            using (var geometry = new NativeArray<BoxGeometry>(1, Allocator.TempJob) { [0] = box })
             {
-                if (sheared)
+                var job = new BakeBoxJob
                 {
-                    var basisToWorld =
-                        GetBasisToWorldMatrix(shape.transform.localToWorldMatrix, center, orientation, size);
-                    basisPriority = GetBasisAxisPriority(basisToWorld);
+                    Box = geometry,
+                    localToWorld = localToWorld,
+                    shapeToWorld = shapeToWorld,
+                    orientation = orientation
+                };
+                job.Run();
+                return geometry[0];
+            }
+        }
+
+        [BurstCompile(CompileSynchronously = true)]
+        struct BakeBoxJob : IJob
+        {
+            public NativeArray<BoxGeometry> Box;
+            // TODO: make members PascalCase after merging static query fixes
+            public float4x4 localToWorld;
+            public float4x4 shapeToWorld;
+            public EulerAngles orientation;
+
+            public void Execute()
+            {
+                var center = Box[0].Center;
+                var size = Box[0].Size;
+                var bevelRadius = Box[0].BevelRadius;
+
+                float4x4 bakeToShape;
+                var basisPriority = k_DefaultAxisPriority;
+                var sheared = localToWorld.HasShear();
+                if (localToWorld.HasNonUniformScale() || sheared)
+                {
+                    if (sheared)
+                    {
+                        var basisToWorld = GetBasisToWorldMatrix(localToWorld, center, orientation, size);
+                        basisPriority = GetBasisAxisPriority(basisToWorld);
+                    }
+
+                    bakeToShape =
+                        GetPrimitiveBakeToShapeMatrix(localToWorld, shapeToWorld, ref center, ref orientation, size, basisPriority);
+
+                    var s = new float3(
+                        math.length(bakeToShape[basisPriority[2]]),
+                        math.length(bakeToShape[basisPriority[1]]),
+                        math.length(bakeToShape[basisPriority[0]])
+                    );
+
+                    bevelRadius *= math.cmin(s / size);
+                    size = s;
+                }
+                else
+                {
+                    bakeToShape =
+                        GetPrimitiveBakeToShapeMatrix(localToWorld, shapeToWorld, ref center, ref orientation, 1f, basisPriority);
+
+                    var s = new float3(
+                        math.length(bakeToShape.c0),
+                        math.length(bakeToShape.c1),
+                        math.length(bakeToShape.c2)
+                    );
+
+                    bevelRadius *= math.cmin(s);
+                    size *= s;
                 }
 
-                bakeToShape =
-                    GetPrimitiveBakeToShapeMatrix(shape, ref center, ref orientation, size, basisPriority);
-
-                var s = new float3(
-                    math.length(bakeToShape[basisPriority[2]]),
-                    math.length(bakeToShape[basisPriority[1]]),
-                    math.length(bakeToShape[basisPriority[0]])
-                );
-
-                bevelRadius *= math.cmin(s / size);
-                size = s;
+                Box[0] = new BoxGeometry
+                {
+                    Center = center,
+                    Orientation = orientation,
+                    Size = size,
+                    BevelRadius = bevelRadius
+                };
             }
-            else
-            {
-                bakeToShape =
-                    GetPrimitiveBakeToShapeMatrix(shape, ref center, ref orientation, 1f, basisPriority);
-
-                var s = new float3(
-                    math.length(bakeToShape.c0),
-                    math.length(bakeToShape.c1),
-                    math.length(bakeToShape.c2)
-                );
-
-                bevelRadius *= math.cmin(s);
-                size *= s;
-            }
-
-            return new BoxGeometry
-            {
-                Center = center,
-                Orientation = orientation,
-                Size = size,
-                BevelRadius = bevelRadius
-            };
         }
 
         static void MakeZAxisPrimaryBasis(ref int3 basisPriority)
@@ -326,109 +405,225 @@ namespace Unity.Physics.Authoring
             2f * geometry.Radius + math.length(geometry.Vertex1 - geometry.Vertex0);
 
         internal static CapsuleGeometry GetBakedCapsuleProperties(
-            this PhysicsShapeAuthoring shape,
-            out float3 center, out float height, out EulerAngles orientation
+            this PhysicsShapeAuthoring shape, out float3 center, out float height, out EulerAngles orientation
         )
         {
             var capsule = shape.GetCapsuleProperties(out orientation);
-            var radius = capsule.Radius;
-            center = capsule.GetCenter();
-            height = capsule.GetHeight();
+            return capsule.BakeToBodySpace(shape.transform.localToWorldMatrix, shape.GetShapeToWorldMatrix(), out center, out height, ref orientation);
+        }
 
-            var s = new float3(radius * 2f, radius * 2f, height);
-            var localToWorld = (float4x4)shape.transform.localToWorldMatrix;
-            var basisToWorld = GetBasisToWorldMatrix(localToWorld, center, orientation, s);
-            var basisPriority = k_DefaultAxisPriority;
-            var sheared = localToWorld.HasShear();
-            if (localToWorld.HasNonUniformScale() || sheared)
+        internal static CapsuleGeometry BakeToBodySpace(
+            this CapsuleGeometry capsule, float4x4 localToWorld, float4x4 shapeToWorld,
+            out float3 center, out float height, ref EulerAngles orientation
+        )
+        {
+            using (var geometry = new NativeArray<CapsuleGeometry>(1, Allocator.TempJob) { [0] = capsule })
+            using (var outCenter = new NativeArray<float3>(1, Allocator.TempJob))
+            using (var outHeight = new NativeArray<float>(1, Allocator.TempJob))
+            using (var outOrientation = new NativeArray<EulerAngles>(1, Allocator.TempJob) { [0] = orientation })
             {
-                if (sheared)
-                    basisPriority = GetBasisAxisPriority(basisToWorld);
-                MakeZAxisPrimaryBasis(ref basisPriority);
+                var job = new BakeCapsuleJob
+                {
+                    Capsule = geometry,
+                    Center = outCenter,
+                    Height = outHeight,
+                    Orientation = outOrientation,
+                    localToWorld = localToWorld,
+                    shapeToWorld = shapeToWorld
+                };
+                job.Run();
+                center = outCenter[0];
+                height = outHeight[0];
+                orientation = outOrientation[0];
+                return geometry[0];
             }
-            var bakeToShape = GetPrimitiveBakeToShapeMatrix(shape, ref center, ref orientation, 1f, basisPriority);
+        }
 
-            height *= math.length(bakeToShape.c2);
-            radius *= math.max(math.length(bakeToShape.c0), math.length(bakeToShape.c1));
+        [BurstCompile(CompileSynchronously = true)]
+        struct BakeCapsuleJob : IJob
+        {
+            public NativeArray<CapsuleGeometry> Capsule;
+            public NativeArray<float3> Center;
+            public NativeArray<float> Height;
+            public NativeArray<EulerAngles> Orientation;
+            // TODO: make members PascalCase after merging static query fixes
+            public float4x4 localToWorld;
+            public float4x4 shapeToWorld;
 
-            var axis = math.mul(orientation, new float3 { z = 1f });
-            var endPoint = axis * math.max(0f, 0.5f * height - radius);
-
-            return new CapsuleGeometry
+            public void Execute()
             {
-                Vertex0 = center + endPoint,
-                Vertex1 = center - endPoint,
-                Radius = radius
-            };
+                var radius = Capsule[0].Radius;
+                var center = Capsule[0].GetCenter();
+                var height = Capsule[0].GetHeight();
+                var orientation = Orientation[0];
+
+                var s = new float3(radius * 2f, radius * 2f, height);
+                var basisToWorld = GetBasisToWorldMatrix(localToWorld, center, orientation, s);
+                var basisPriority = k_DefaultAxisPriority;
+                var sheared = localToWorld.HasShear();
+                if (localToWorld.HasNonUniformScale() || sheared)
+                {
+                    if (sheared)
+                        basisPriority = GetBasisAxisPriority(basisToWorld);
+                    MakeZAxisPrimaryBasis(ref basisPriority);
+                }
+
+                var bakeToShape =
+                    GetPrimitiveBakeToShapeMatrix(localToWorld, shapeToWorld, ref center, ref orientation, 1f, basisPriority);
+
+                height *= math.length(bakeToShape.c2);
+                radius *= math.max(math.length(bakeToShape.c0), math.length(bakeToShape.c1));
+
+                var axis = math.mul(orientation, new float3 { z = 1f });
+                var endPoint = axis * math.max(0f, 0.5f * height - radius);
+
+                Capsule[0] = new CapsuleGeometry
+                {
+                    Vertex0 = center + endPoint,
+                    Vertex1 = center - endPoint,
+                    Radius = radius
+                };
+                Center[0] = center;
+                Height[0] = height;
+                Orientation[0] = orientation;
+            }
         }
 
         internal static CylinderGeometry GetBakedCylinderProperties(this PhysicsShapeAuthoring shape)
         {
             var cylinder = shape.GetCylinderProperties(out var orientation);
-            var center = cylinder.Center;
-            var height = cylinder.Height;
-            var radius = cylinder.Radius;
+            return cylinder.BakeToBodySpace(shape.transform.localToWorldMatrix, shape.GetShapeToWorldMatrix(), orientation);
+        }
 
-            var size = new float3(radius * 2f, radius * 2f, height);
-            var localToWorld = (float4x4)shape.transform.localToWorldMatrix;
-            var basisToWorld = GetBasisToWorldMatrix(localToWorld, center, orientation, size);
-            var basisPriority = k_DefaultAxisPriority;
-            var sheared = localToWorld.HasShear();
-            if (localToWorld.HasNonUniformScale() || sheared)
+        internal static CylinderGeometry BakeToBodySpace(
+            this CylinderGeometry cylinder, float4x4 localToWorld, float4x4 shapeToWorld, EulerAngles orientation
+        )
+        {
+            using (var geometry = new NativeArray<CylinderGeometry>(1, Allocator.TempJob) { [0] = cylinder })
             {
-                if (sheared)
-                    basisPriority = GetBasisAxisPriority(basisToWorld);
-                MakeZAxisPrimaryBasis(ref basisPriority);
+                var job = new BakeCylinderJob
+                {
+                    Cylinder = geometry,
+                    localToWorld = localToWorld,
+                    shapeToWorld = shapeToWorld,
+                    orientation = orientation
+                };
+                job.Run();
+                return geometry[0];
             }
-            var bakeToShape = GetPrimitiveBakeToShapeMatrix(shape, ref center, ref orientation, 1f, basisPriority);
+        }
 
-            height *= math.length(bakeToShape.c2);
-            radius *= math.max(math.length(bakeToShape.c0), math.length(bakeToShape.c1));
+        [BurstCompile(CompileSynchronously = true)]
+        struct BakeCylinderJob : IJob
+        {
+            public NativeArray<CylinderGeometry> Cylinder;
+            // TODO: make members PascalCase after merging static query fixes
+            public float4x4 localToWorld;
+            public float4x4 shapeToWorld;
+            public EulerAngles orientation;
 
-            var s = new float3(
-                math.length(bakeToShape[basisPriority[2]]),
-                math.length(bakeToShape[basisPriority[1]]),
-                math.length(bakeToShape[basisPriority[0]])
-            );
-
-            return new CylinderGeometry
+            public void Execute()
             {
-                Center = center,
-                Orientation = orientation,
-                Height = height,
-                Radius = radius,
-                BevelRadius = math.min(cylinder.BevelRadius * math.cmax(s / size), height * 0.5f),
-                SideCount = cylinder.SideCount
-            };
+                var center = Cylinder[0].Center;
+                var height = Cylinder[0].Height;
+                var radius = Cylinder[0].Radius;
+
+                var size = new float3(radius * 2f, radius * 2f, height);
+                var basisToWorld = GetBasisToWorldMatrix(localToWorld, center, orientation, size);
+                var basisPriority = k_DefaultAxisPriority;
+                var sheared = localToWorld.HasShear();
+                if (localToWorld.HasNonUniformScale() || sheared)
+                {
+                    if (sheared)
+                        basisPriority = GetBasisAxisPriority(basisToWorld);
+                    MakeZAxisPrimaryBasis(ref basisPriority);
+                }
+                var bakeToShape = GetPrimitiveBakeToShapeMatrix(localToWorld, shapeToWorld, ref center, ref orientation, 1f, basisPriority);
+
+                height *= math.length(bakeToShape.c2);
+                radius *= math.max(math.length(bakeToShape.c0), math.length(bakeToShape.c1));
+
+                var s = new float3(
+                    math.length(bakeToShape[basisPriority[2]]),
+                    math.length(bakeToShape[basisPriority[1]]),
+                    math.length(bakeToShape[basisPriority[0]])
+                );
+
+                Cylinder[0] = new CylinderGeometry
+                {
+                    Center = center,
+                    Orientation = orientation,
+                    Height = height,
+                    Radius = radius,
+                    BevelRadius = math.min(Cylinder[0].BevelRadius * math.cmax(s / size), height * 0.5f),
+                    SideCount = Cylinder[0].SideCount
+                };
+            }
         }
 
         internal static SphereGeometry GetBakedSphereProperties(this PhysicsShapeAuthoring shape, out EulerAngles orientation)
         {
             var sphere = shape.GetSphereProperties(out orientation);
-            var center = sphere.Center;
-            var radius = sphere.Radius;
+            return sphere.BakeToBodySpace(shape.transform.localToWorldMatrix, shape.GetShapeToWorldMatrix(), ref orientation);
+        }
 
-            var basisToWorld = GetBasisToWorldMatrix(shape.transform.localToWorldMatrix, center, orientation, 1f);
-            var basisPriority = basisToWorld.HasShear() ? GetBasisAxisPriority(basisToWorld) : k_DefaultAxisPriority;
-            var bakeToShape = GetPrimitiveBakeToShapeMatrix(shape, ref center, ref orientation, 1f, basisPriority);
-
-            radius *= math.cmax(
-                new float3(math.length(bakeToShape.c0), math.length(bakeToShape.c1), math.length(bakeToShape.c2))
-            );
-
-            return new SphereGeometry
+        internal static SphereGeometry BakeToBodySpace(
+            this SphereGeometry sphere, float4x4 localToWorld, float4x4 shapeToWorld, ref EulerAngles orientation
+        )
+        {
+            using (var geometry = new NativeArray<SphereGeometry>(1, Allocator.TempJob) { [0] = sphere })
+            using (var outOrientation = new NativeArray<EulerAngles>(1, Allocator.TempJob) { [0] = orientation })
             {
-                Center = center,
-                Radius = radius
-            };
+                var job = new BakeSphereJob
+                {
+                    Sphere = geometry,
+                    Orientation = outOrientation,
+                    localToWorld = localToWorld,
+                    shapeToWorld = shapeToWorld
+                };
+                job.Run();
+                orientation = outOrientation[0];
+                return geometry[0];
+            }
+        }
+
+        [BurstCompile(CompileSynchronously = true)]
+        struct BakeSphereJob : IJob
+        {
+            public NativeArray<SphereGeometry> Sphere;
+            public NativeArray<EulerAngles> Orientation;
+            // TODO: make members PascalCase after merging static query fixes
+            public float4x4 localToWorld;
+            public float4x4 shapeToWorld;
+
+            public void Execute()
+            {
+                var center = Sphere[0].Center;
+                var radius = Sphere[0].Radius;
+                var orientation = Orientation[0];
+
+                var basisToWorld = GetBasisToWorldMatrix(localToWorld, center, orientation, 1f);
+                var basisPriority = basisToWorld.HasShear() ? GetBasisAxisPriority(basisToWorld) : k_DefaultAxisPriority;
+                var bakeToShape = GetPrimitiveBakeToShapeMatrix(localToWorld, shapeToWorld, ref center, ref orientation, 1f, basisPriority);
+
+                radius *= math.cmax(
+                    new float3(math.length(bakeToShape.c0), math.length(bakeToShape.c1), math.length(bakeToShape.c2))
+                );
+
+                Sphere[0] = new SphereGeometry
+                {
+                    Center = center,
+                    Radius = radius
+                };
+                Orientation[0] = orientation;
+            }
         }
 
         internal static void GetPlanePoints(
-            this PhysicsShapeAuthoring shape, out float3 vertex0, out float3 vertex1, out float3 vertex2, out float3 vertex3
+            float3 center, float2 size, EulerAngles orientation,
+            out float3 vertex0, out float3 vertex1, out float3 vertex2, out float3 vertex3
         )
         {
-            shape.GetPlaneProperties(out var center, out var size, out EulerAngles orientation);
-
             var sizeYUp = math.float3(size.x, 0, size.y);
 
             vertex0 = center + math.mul(orientation, sizeYUp * math.float3(-0.5f, 0,  0.5f));
@@ -441,42 +636,181 @@ namespace Unity.Physics.Authoring
             this PhysicsShapeAuthoring shape, out float3 vertex0, out float3 vertex1, out float3 vertex2, out float3 vertex3
         )
         {
-            GetPlanePoints(shape, out vertex0, out vertex1, out vertex2, out vertex3);
-            var localToShape = shape.GetLocalToShapeMatrix();
-            vertex0 = math.mul(localToShape, new float4(vertex0, 1f)).xyz;
-            vertex1 = math.mul(localToShape, new float4(vertex1, 1f)).xyz;
-            vertex2 = math.mul(localToShape, new float4(vertex2, 1f)).xyz;
-            vertex3 = math.mul(localToShape, new float4(vertex3, 1f)).xyz;
+            shape.GetPlaneProperties(out var center, out var size, out EulerAngles orientation);
+            BakeToBodySpace(
+                center, size, orientation, shape.transform.localToWorldMatrix, shape.GetShapeToWorldMatrix(),
+                out vertex0, out vertex1, out vertex2, out vertex3
+            );
+        }
+
+        internal static void BakeToBodySpace(
+            float3 center, float2 size, EulerAngles orientation, float4x4 localToWorld, float4x4 shapeToWorld,
+            out float3 vertex0, out float3 vertex1, out float3 vertex2, out float3 vertex3
+        )
+        {
+            using (var geometry = new NativeArray<float3x4>(1, Allocator.TempJob))
+            {
+                var job = new BakePlaneJob
+                {
+                    Vertices = geometry,
+                    center = center,
+                    size = size,
+                    orientation = orientation,
+                    localToWorld = localToWorld,
+                    shapeToWorld = shapeToWorld
+                };
+                job.Run();
+                vertex0 = geometry[0].c0;
+                vertex1 = geometry[0].c1;
+                vertex2 = geometry[0].c2;
+                vertex3 = geometry[0].c3;
+            }
+        }
+
+        [BurstCompile(CompileSynchronously = true)]
+        struct BakePlaneJob : IJob
+        {
+            public NativeArray<float3x4> Vertices;
+            // TODO: make members PascalCase after merging static query fixes
+            public float3 center;
+            public float2 size;
+            public EulerAngles orientation;
+            public float4x4 localToWorld;
+            public float4x4 shapeToWorld;
+
+            public void Execute()
+            {
+                var v = Vertices[0];
+                GetPlanePoints(center, size, orientation, out v.c0, out v.c1, out v.c2, out v.c3);
+                var localToShape = math.mul(math.inverse(shapeToWorld), localToWorld);
+                v.c0 = math.mul(localToShape, new float4(v.c0, 1f)).xyz;
+                v.c1 = math.mul(localToShape, new float4(v.c1, 1f)).xyz;
+                v.c2 = math.mul(localToShape, new float4(v.c2, 1f)).xyz;
+                v.c3 = math.mul(localToShape, new float4(v.c3, 1f)).xyz;
+                Vertices[0] = v;
+            }
         }
 
         internal static void GetBakedConvexProperties(
-            this PhysicsShapeAuthoring shape, NativeList<float3> pointCloud, out ConvexHullGenerationParameters generationParameters
+            this PhysicsShapeAuthoring shape, NativeList<float3> pointCloud, out ConvexHullGenerationParameters generationParameters,
+            out Hash128 hashedInputs
         )
         {
-            shape.GetConvexHullProperties(pointCloud);
+            using (var inputs = new NativeList<HashableShapeInputs>(8, Allocator.TempJob))
+            using (var allSkinIndices = new NativeList<int>(4096, Allocator.TempJob))
+            using (var allBlendShapeWeights = new NativeList<float>(64, Allocator.TempJob))
+            {
+                shape.GetConvexHullProperties(pointCloud, true, inputs, allSkinIndices, allBlendShapeWeights);
 
-            shape.BakePoints(pointCloud);
+                shape.BakePoints(pointCloud);
 
-            // compute convex radius
-            var center = float3.zero;
-            var orientation = EulerAngles.Default;
-            var bakeToShape =
-                GetPrimitiveBakeToShapeMatrix(shape, ref center, ref orientation, 1f, k_DefaultAxisPriority);
-            var s = new float3(math.length(bakeToShape[0]), math.length(bakeToShape[1]), math.length(bakeToShape[2]));
-            generationParameters = shape.ConvexHullGenerationParameters;
-            generationParameters.SimplificationTolerance = math.max(
-                ConvexHullGenerationParametersExtensions.k_MinRecommendedSimplificationTolerance,
-                math.cmax(s) * generationParameters.SimplificationTolerance
-            );
-            generationParameters.BevelRadius *= math.cmin(s);
+                // compute convex radius
+                var center = float3.zero;
+                var orientation = EulerAngles.Default;
+                var localToWorld = shape.transform.localToWorldMatrix;
+                var shapeToWorld = shape.GetShapeToWorldMatrix();
+                var bakeToShape =
+                    GetPrimitiveBakeToShapeMatrix(localToWorld, shapeToWorld, ref center, ref orientation, 1f, k_DefaultAxisPriority);
+                using (var aabb = new NativeArray<Aabb>(1, Allocator.TempJob))
+                {
+                    new GetAabbJob { Points = pointCloud, Aabb = aabb }.Run();
+                    HashableShapeInputs.GetQuantizedTransformations(bakeToShape, aabb[0], out bakeToShape);
+                }
+                var s = new float3(math.length(bakeToShape[0]), math.length(bakeToShape[1]), math.length(bakeToShape[2]));
+                generationParameters = shape.ConvexHullGenerationParameters;
+                generationParameters.SimplificationTolerance = math.max(
+                    ConvexHullGenerationParametersExtensions.k_MinRecommendedSimplificationTolerance,
+                    math.cmax(s) * generationParameters.SimplificationTolerance
+                );
+                generationParameters.BevelRadius *= math.cmin(s);
+
+                using (var hash = new NativeArray<Hash128>(1, Allocator.TempJob))
+                {
+                    var job = new GetShapeInputsHashJob
+                    {
+                        Result = hash,
+                        ForceUniqueIdentifier = (uint)(shape.ForceUnique ? shape.GetInstanceID() : 0),
+                        GenerationParameters = generationParameters,
+                        Material = shape.GetMaterial(),
+                        CollisionFilter = shape.GetFilter(),
+                        ShapeFromBody = math.inverse(shape.GetLocalToShapeMatrix()),
+                        Inputs = inputs,
+                        AllSkinIndices = allSkinIndices,
+                        AllBlendShapeWeights = allBlendShapeWeights
+                    };
+                    job.Run();
+                    hashedInputs = hash[0];
+                }
+            }
+        }
+
+        [BurstCompile(CompileSynchronously = true)]
+        struct GetShapeInputsHashJob : IJob
+        {
+            public NativeArray<Hash128> Result;
+
+            public uint ForceUniqueIdentifier;
+            public ConvexHullGenerationParameters GenerationParameters;
+            public Material Material;
+            public CollisionFilter CollisionFilter;
+            public float4x4 ShapeFromBody;
+
+            [ReadOnly] public NativeArray<HashableShapeInputs> Inputs;
+            [ReadOnly] public NativeArray<int> AllSkinIndices;
+            [ReadOnly] public NativeArray<float> AllBlendShapeWeights;
+            
+            public void Execute()
+            {
+                Result[0] = HashableShapeInputs.GetHash128(
+                    ForceUniqueIdentifier, GenerationParameters, Material, CollisionFilter, ShapeFromBody,
+                    Inputs, AllSkinIndices, AllBlendShapeWeights
+                );
+            }
+        }
+
+        [BurstCompile(CompileSynchronously = true)]
+        internal struct GetAabbJob : IJob
+        {
+            [ReadOnly] public NativeArray<float3> Points;
+            public NativeArray<Aabb> Aabb;
+
+            public void Execute()
+            {
+                var aabb = new Aabb { Min = float.MaxValue, Max = float.MinValue };
+                for (var i = 0; i < Points.Length; ++i)
+                    aabb.Include(Points[i]);
+                Aabb[0] = aabb;
+            }
         }
 
         internal static void GetBakedMeshProperties(
-            this PhysicsShapeAuthoring shape, NativeList<float3> pointCloud, NativeList<int> triangles
+            this PhysicsShapeAuthoring shape, NativeList<float3> pointCloud, NativeList<int3> triangles, out Hash128 hashedInputs
         )
         {
-            shape.GetMeshProperties(pointCloud, triangles);
-            shape.BakePoints(pointCloud);
+            using (var inputs = new NativeList<HashableShapeInputs>(8, Allocator.TempJob))
+            {
+                shape.GetMeshProperties(pointCloud, triangles, true, inputs);
+                shape.BakePoints(pointCloud);
+
+                using (var hash = new NativeArray<Hash128>(1, Allocator.TempJob))
+                using (var allSkinIndices = new NativeArray<int>(0, Allocator.TempJob))
+                using (var allBlendShapeWeights = new NativeArray<float>(0, Allocator.TempJob))
+                {
+                    var job = new GetShapeInputsHashJob
+                    {
+                        Result = hash,
+                        ForceUniqueIdentifier = (uint)(shape.ForceUnique ? shape.GetInstanceID() : 0),
+                        Material = shape.GetMaterial(),
+                        CollisionFilter = shape.GetFilter(),
+                        ShapeFromBody = math.inverse(shape.GetLocalToShapeMatrix()),
+                        Inputs = inputs,
+                        AllSkinIndices = allSkinIndices,
+                        AllBlendShapeWeights = allBlendShapeWeights
+                    };
+                    job.Run();
+                    hashedInputs = hash[0];
+                }
+            }
         }
     }
 }

@@ -60,6 +60,14 @@ namespace Unity.Physics
 
         internal void Validate()
         {
+            if (math.any(!math.isfinite(m_Center)))
+            {
+                throw new ArgumentException("Invalid cylinder center");
+            }
+            if (m_Orientation.value.Equals(float4.zero) || math.any(!math.isfinite(m_Orientation.value)))
+            {
+                throw new ArgumentException("Invalid cylinder orientation");
+            }
             if (m_Height < 0 || !math.isfinite(m_Height))
             {
                 throw new ArgumentOutOfRangeException("Invalid cylinder height");
@@ -363,50 +371,6 @@ namespace Unity.Physics
                 return DistanceQueries.ColliderCollider(input, (Collider*)target, ref collector);
             }
         }
-
-        #endregion
-
-        #region Obsolete
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("ConvexRadius has been renamed BevelRadius. (RemovedAfter 2019-11-28) (UnityUpgradable) -> BevelRadius", true)]
-        public float ConvexRadius
-        {
-            get => BevelRadius;
-            set
-            {
-                var geometry = Geometry;
-                geometry.BevelRadius = value;
-                Geometry = geometry;
-            }
-        }
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("This signature has been deprecated. Please use a signature that does not pass nullable arguments instead. (RemovedAfter 2019-11-15)")]
-        public static BlobAssetReference<Collider> Create(float3 center, float height, float radius, quaternion orientation, float convexRadius) =>
-            Create(new CylinderGeometry
-            {
-                Center = center,
-                Height = height,
-                Radius = radius,
-                Orientation = orientation,
-                BevelRadius = convexRadius,
-                SideCount = 20
-            },
-            CollisionFilter.Default, Material.Default);
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("This signature has been deprecated. Please use a signature that does not pass nullable arguments instead. (RemovedAfter 2019-11-15)")]
-        public static BlobAssetReference<Collider> Create(float3 center, float height, float radius, quaternion orientation, float convexRadius, CollisionFilter? filter = null, Material? material = null) =>
-            Create(new CylinderGeometry
-            {
-                Center = center,
-                Height = height,
-                Radius = radius,
-                Orientation = orientation,
-                BevelRadius = convexRadius,
-                SideCount = 20
-            },
-            filter ?? CollisionFilter.Default, material ?? Material.Default);
 
         #endregion
     }

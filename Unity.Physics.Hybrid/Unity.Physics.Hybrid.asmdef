@@ -7,10 +7,8 @@
         "Unity.Entities.Hybrid",
         "Unity.Mathematics",
         "Unity.Physics",
-        "Unity.Scenes.Hybrid",
         "Unity.Transforms"
     ],
-    "optionalUnityReferences": [],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": true,
@@ -18,5 +16,6 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": []
+    "versionDefines": [],
+    "noEngineReferences": false
 }

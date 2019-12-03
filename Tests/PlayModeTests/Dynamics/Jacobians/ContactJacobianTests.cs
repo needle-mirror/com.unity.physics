@@ -16,14 +16,14 @@ namespace Unity.Physics.Tests.Dynamics.Jacobians
             var velocityA = MotionVelocity.Zero;
             var velocityB = MotionVelocity.Zero;
             var stepInput = new Solver.StepInput();
-            var collisionEventsWriter = new BlockStream.Writer();
+            var collisionEventsWriter = new NativeStream.Writer();
 
             jacobian.SolveContact(ref jacHeader, ref velocityA, ref velocityB, stepInput, ref collisionEventsWriter);
 
             Assert.AreEqual(new JacobianHeader(), jacHeader);
             Assert.AreEqual(MotionVelocity.Zero, velocityA);
             Assert.AreEqual(MotionVelocity.Zero, velocityB);
-            Assert.AreEqual(new BlockStream.Writer(), collisionEventsWriter);
+            Assert.AreEqual(new NativeStream.Writer(), collisionEventsWriter);
         }
     }
 }

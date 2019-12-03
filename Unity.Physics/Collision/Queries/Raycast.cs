@@ -5,14 +5,23 @@ using static Unity.Physics.Math;
 
 namespace Unity.Physics
 {
-    // Arguably, this is a line segment and not a ray.
-    // However, casting infinite length rays is not performant.
+    /// <summary>
+    /// This struct captures the information needed for ray casting.
+    /// It is technically not a Ray as it includes a length.
+    /// This is to avoid performance issues with infinite length Rays.
+    /// </summary>
     public struct Ray
     {
+        /// <summary>
+        /// The Origin point of the Ray in World Space.
+        /// </summary>
+        /// <value> Point vector coordinate. </value>
         public float3 Origin;
 
-        // Displacement combines the ray direction with a distance 
-        // from the Origin to a second point on the ray
+        /// <summary>
+        /// This represents the line from the Ray's Origin to a second point on the Ray. The second point will be the Ray End if nothing is hit.
+        /// </summary>
+        /// <value> Line vector. </value>
         public float3 Displacement
         {
             get => m_Displacement;
@@ -28,11 +37,14 @@ namespace Unity.Physics
         internal float3 ReciprocalDisplacement { get; private set; }
     }
 
-    // The input to ray cast queries consists of 
-    // the Start & End positions of a line segment,
-    // and a CollisionFilter used to cull potential hits
+    /// <summary>
+    /// The input to RayCastQueries consists of the Start and End positions of a line segment as well as a CollisionFilter to cull potential hits.
+    /// </summary>
     public struct RaycastInput
     {
+        /// <summary>
+        /// The Start position of a Ray.
+        /// </summary>
         public float3 Start
         {
             get => Ray.Origin;
@@ -43,27 +55,62 @@ namespace Unity.Physics
                 Ray.Displacement = end - value;
             }
         }
+        /// <summary>
+        /// The End position of a Ray.
+        /// </summary>
         public float3 End
         {
             get => Ray.Origin + Ray.Displacement;
             set => Ray.Displacement = value - Ray.Origin;
         }
-
+        /// <summary>
+        /// The CollisionFilter is used to determine what objects the Ray is and isn't going to hit.
+        /// </summary>
         public CollisionFilter Filter;
 
         internal Ray Ray;
     }
 
     // A hit from a ray cast query
+    /// <summary>
+    /// A struct representing the hit from a RaycastQuery.
+    /// </summary>
     public struct RaycastHit : IQueryResult
     {
+        /// <summary>
+        /// Fraction of the distance along the Ray where the hit occurred.
+        /// </summary>
+        /// <value> Returns a value between 0 and 1. </value>
         public float Fraction { get; set; }
 
+        /// <summary>
+        /// The point in World Space where the hit occurred.
+        /// </summary>
+        /// <value> The value is 0,0,0 if no hit occurs. </value>
         public float3 Position;
+
+        /// <summary>
+        /// The normal of the point where the hit occurred.
+        /// </summary>
         public float3 SurfaceNormal;
+
+        /// <summary>
+        /// The entity index of the RigidBody that was hit.
+        /// </summary>
         public int RigidBodyIndex;
+
+        /// <summary>
+        /// The ColliderKey is used to identify the hit child in any CompositeCollider (e.g. MeshCollider or CompoundCollider).
+        /// </summary>
+        /// <value> A reference to which triangle or quad in the collider was hit. </value>
         public ColliderKey ColliderKey;
 
+        /// <summary>
+        ///
+        /// </summary>
+        /// <param name="transform"></param>
+        /// <param name="numSubKeyBits"></param>
+        /// <param name="subKey"></param>
         public void Transform(MTransform transform, uint numSubKeyBits, uint subKey)
         {
             Position = Mul(transform, Position);
@@ -71,6 +118,11 @@ namespace Unity.Physics
             ColliderKey.PushSubKey(numSubKeyBits, subKey);
         }
 
+        /// <summary>
+        ///
+        /// </summary>
+        /// <param name="transform"></param>
+        /// <param name="rigidBodyIndex"></param>
         public void Transform(MTransform transform, int rigidBodyIndex)
         {
             Position = Mul(transform, Position);
@@ -85,8 +137,8 @@ namespace Unity.Physics
         #region Ray vs primitives
 
         // Note that the primitives are considered solid.
-        // Any ray originating from within the primitive will return a hit, 
-        // however the hit fraction will be zero, and the hit normal 
+        // Any ray originating from within the primitive will return a hit,
+        // however the hit fraction will be zero, and the hit normal
         // will be the negation of the ray displacement vector.
 
         public static bool RaySphere(
@@ -283,7 +335,7 @@ namespace Unity.Physics
         }
 
         public static bool RayConvex(
-            float3 rayOrigin, float3 rayDisplacement, 
+            float3 rayOrigin, float3 rayDisplacement,
             ref ConvexHull hull, ref float fraction, out float3 normal)
         {
             // TODO: Call RaySphere/Capsule/Triangle() if num vertices <= 3 ?

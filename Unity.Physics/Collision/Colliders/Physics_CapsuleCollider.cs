@@ -155,7 +155,7 @@ namespace Unity.Physics
                 float3 axisInMotion = new float3(0, 1, 0);
                 quaternion orientation = length == 0 ? quaternion.identity :
                     Math.FromToRotation(axisInMotion, math.normalizesafe(Vertex1 - Vertex0, axisInMotion));
-                
+
                 return new MassProperties
                 {
                     MassDistribution = new MassDistribution
@@ -236,15 +236,6 @@ namespace Unity.Physics
                 return DistanceQueries.ColliderCollider(input, (Collider*)target, ref collector);
             }
         }
-
-        #endregion
-
-        #region Obsolete
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("This signature has been deprecated. Please use a signature that does not pass nullable arguments instead. (RemovedAfter 2019-11-15)")]
-        public static BlobAssetReference<Collider> Create(float3 point0, float3 point1, float radius, CollisionFilter? filter = null, Material? material = null) =>
-            Create(new CapsuleGeometry { Vertex0 = point0, Vertex1 = point1, Radius = radius }, filter ?? CollisionFilter.Default, material ?? Material.Default);
 
         #endregion
     }

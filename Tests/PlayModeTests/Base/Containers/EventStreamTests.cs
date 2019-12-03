@@ -7,7 +7,7 @@ namespace Unity.Physics.Tests.Base.Containers
 {
     class EventStreamTests
     {
-        private unsafe void WriteEvent(LowLevel.CollisionEvent collisionEvent, ref BlockStream.Writer collisionEventWriter)
+        private unsafe void WriteEvent(LowLevel.CollisionEvent collisionEvent, ref NativeStream.Writer collisionEventWriter)
         {
             int numContactPoints = collisionEvent.NumNarrowPhaseContactPoints;
             int size = UnsafeUtility.SizeOf<LowLevel.CollisionEvent>() + numContactPoints * UnsafeUtility.SizeOf<ContactPoint>();
@@ -25,14 +25,14 @@ namespace Unity.Physics.Tests.Base.Containers
         [Test]
         public void ReadCollisionEvents()
         {
-            // Allocate a block stream for up to 10 parallel writes
-            BlockStream collisionEventStream = new BlockStream(10, 0xabbaabba);
+            // Allocate a native stream for up to 10 parallel writes
+            var collisionEventStream = new NativeStream(10, Allocator.TempJob);
 
             // Do a couple of writes to different forEach indices
             int writeCount = 0;
             unsafe
             {
-                BlockStream.Writer collisionEventWriter = collisionEventStream;
+                NativeStream.Writer collisionEventWriter = collisionEventStream.AsWriter();
 
                 var collisionEvent = new LowLevel.CollisionEvent();
 
@@ -107,13 +107,13 @@ namespace Unity.Physics.Tests.Base.Containers
         [Test]
         public void ReadTriggerEvents()
         {
-            // Allocate a block stream for up to 10 parallel writes
-            BlockStream triggerEventStream = new BlockStream(10, 0xbccbbccb);
+            // Allocate a native stream for up to 10 parallel writes
+            var triggerEventStream = new NativeStream(10, Allocator.TempJob);
 
             // Do a couple of writes to different forEach indices
             int writeCount = 0;
             {
-                BlockStream.Writer triggerEventWriter = triggerEventStream;
+                NativeStream.Writer triggerEventWriter = triggerEventStream.AsWriter();
 
                 triggerEventWriter.BeginForEachIndex(1);
                 triggerEventWriter.Write(new TriggerEvent());

@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System;
+using System.Diagnostics;
 using Unity.Mathematics;
 
 namespace Unity.Physics
@@ -6,7 +7,7 @@ namespace Unity.Physics
     public static partial class Math
     {
         [DebuggerStepThrough]
-        public struct MTransform // TODO: Replace with Unity float4x4 ?
+        public struct MTransform: IEquatable<MTransform> // TODO: Replace with Unity float4x4 ?
         {
             public float3x3 Rotation;
             public float3 Translation;
@@ -32,6 +33,11 @@ namespace Unity.Physics
             }
 
             public float3x3 InverseRotation => math.transpose(Rotation);
+
+            public bool Equals(MTransform other)
+            {
+                return this.Rotation.Equals(other.Rotation) && this.Translation.Equals(other.Translation);
+            }
         }
 
         public static float3 Mul(MTransform a, float3 x)

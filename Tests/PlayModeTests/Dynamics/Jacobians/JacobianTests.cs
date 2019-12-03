@@ -72,8 +72,8 @@ namespace Unity.Physics.Tests.Dynamics.Jacobians
         [Test]
         public void JacobianIteratorHasJacobiansLeftTest()
         {
-            var jacobianStream = new BlockStream(1, 0x01234567);
-            BlockStream.Reader jacobianStreamReader = jacobianStream;
+            var jacobianStream = new NativeStream(1, Allocator.Temp);
+            NativeStream.Reader jacobianStreamReader = jacobianStream.AsReader();
             int workItemIndex = 0;
             var jacIterator = new JacobianIterator(jacobianStreamReader, workItemIndex);
 

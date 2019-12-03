@@ -37,9 +37,9 @@ namespace Unity.Physics
         {
             var buildJob = new BuildContactJacobiansJob
             {
-                ContactReader = context.Contacts,
-                JointJacobianReader = context.JointJacobians,
-                JacobianWriter = context.Jacobians,
+                ContactReader = context.Contacts.AsReader(),
+                JointJacobianReader = context.JointJacobians.AsReader(),
+                JacobianWriter = context.Jacobians.AsWriter(),
                 TimeStep = timeStep,
                 InvTimeStep = timeStep > 0.0f ? 1.0f / timeStep : 0.0f,
                 GravityAcceleration = gravityAcceleration,
@@ -67,8 +67,8 @@ namespace Unity.Physics
                 NativeArray<int> workItemList = context.SolverSchedulerInfo.NumWorkItems;
 
                 //TODO: Change this to Allocator.TempJob when https://github.com/Unity-Technologies/Unity.Physics/issues/7 is resolved
-                JobHandle collisionEventStreamHandle = BlockStream.ScheduleConstruct(out context.CollisionEventStream, workItemList, 0xb17b474f, inputDeps, Allocator.Persistent);
-                JobHandle triggerEventStreamHandle = BlockStream.ScheduleConstruct(out context.TriggerEventStream, workItemList, 0x43875d8f, inputDeps, Allocator.Persistent);
+                JobHandle collisionEventStreamHandle = NativeStream.ScheduleConstruct(out context.CollisionEventStream, workItemList, inputDeps, Allocator.Persistent);
+                JobHandle triggerEventStreamHandle = NativeStream.ScheduleConstruct(out context.TriggerEventStream, workItemList, inputDeps, Allocator.Persistent);
 
                 handle = JobHandle.CombineDependencies(collisionEventStreamHandle, triggerEventStreamHandle);
 
@@ -83,7 +83,7 @@ namespace Unity.Physics
                     {
                         var job = new SolverJob
                         {
-                            JacobianReader = context.Jacobians,
+                            JacobianReader = context.Jacobians.AsReader(),
                             PhaseIndex = phaseId,
                             Phases = context.SolverSchedulerInfo.PhaseInfo,
                             MotionVelocities = dynamicsWorld.MotionVelocities,
@@ -99,8 +99,8 @@ namespace Unity.Physics
                         // Only initialize event writers for last solver iteration jobs
                         if (lastIteration)
                         {
-                            job.CollisionEventsWriter = context.CollisionEventStream;
-                            job.TriggerEventsWriter = context.TriggerEventStream;
+                            job.CollisionEventsWriter = context.CollisionEventStream.AsWriter();
+                            job.TriggerEventsWriter = context.TriggerEventStream.AsWriter();
                         }
 
                         // NOTE: The last phase must be executed on a single job since it  
@@ -158,9 +158,9 @@ namespace Unity.Physics
             [ReadOnly] public NativeSlice<MotionData> MotionDatas;
             [ReadOnly] public NativeSlice<MotionVelocity> MotionVelocities;
 
-            public BlockStream.Reader ContactReader;
-            public BlockStream.Reader JointJacobianReader;
-            public BlockStream.Writer JacobianWriter;
+            public NativeStream.Reader ContactReader;
+            public NativeStream.Reader JointJacobianReader;
+            public NativeStream.Writer JacobianWriter;
             public float TimeStep;
             public float InvTimeStep;
             public float GravityAcceleration;
@@ -178,14 +178,14 @@ namespace Unity.Physics
             [NativeDisableParallelForRestriction]
             public NativeSlice<MotionVelocity> MotionVelocities;
 
-            public BlockStream.Reader JacobianReader;
+            public NativeStream.Reader JacobianReader;
 
             //@TODO: Unity should have a Allow null safety restriction
             [NativeDisableContainerSafetyRestriction]
-            public BlockStream.Writer CollisionEventsWriter;
+            public NativeStream.Writer CollisionEventsWriter;
             //@TODO: Unity should have a Allow null safety restriction
             [NativeDisableContainerSafetyRestriction]
-            public BlockStream.Writer TriggerEventsWriter;
+            public NativeStream.Writer TriggerEventsWriter;
 
             [ReadOnly]
             public NativeArray<Scheduler.SolverSchedulerInfo.SolvePhaseInfo> Phases;
@@ -233,7 +233,7 @@ namespace Unity.Physics
             ref JacobianHeader jacobianHeader,
             ref float3 centerA,
             ref float3 centerB,
-            ref BlockStream.Reader contactReader)
+            ref NativeStream.Reader contactReader)
         {
             ref ContactJacAngAndVelToReachCp jacAngular = ref jacobianHeader.AccessAngularJacobian(contactPointIndex);
             ContactPoint contact = contactReader.Read<ContactPoint>();
@@ -329,7 +329,7 @@ namespace Unity.Physics
         }
 
         private static unsafe void AppendJointJacobiansToContactStream(
-            int workItemIndex, ref BlockStream.Reader jointJacobianReader, ref BlockStream.Writer jacobianWriter)
+            int workItemIndex, ref NativeStream.Reader jointJacobianReader, ref NativeStream.Writer jacobianWriter)
         {
             var jacIterator = new JacobianIterator(jointJacobianReader, workItemIndex);
             while (jacIterator.HasJacobiansLeft())
@@ -371,9 +371,9 @@ namespace Unity.Physics
         private static unsafe void BuildContactJacobians(
             ref NativeSlice<MotionData> motionDatas,
             ref NativeSlice<MotionVelocity> motionVelocities,
-            ref BlockStream.Reader contactReader,
-            ref BlockStream.Reader jointJacobianReader,
-            ref BlockStream.Writer jacobianWriter,
+            ref NativeStream.Reader contactReader,
+            ref NativeStream.Reader jointJacobianReader,
+            ref NativeStream.Writer jacobianWriter,
             float timestep,
             float invTimestep,
             float gravityAcceleration,
@@ -607,7 +607,7 @@ namespace Unity.Physics
 
         internal static unsafe void BuildJointJacobian(JointData* jointData, BodyIndexPair pair,
             MotionVelocity velocityA, MotionVelocity velocityB, MotionData motionA, MotionData motionB,
-            float timestep, int numIterations, ref BlockStream.Writer jacobianWriter)
+            float timestep, int numIterations, ref NativeStream.Writer jacobianWriter)
         {
             var bodyAFromMotionA = new MTransform(motionA.BodyFromMotion);
             MTransform motionAFromJoint = Mul(Inverse(bodyAFromMotionA), jointData->AFromJoint);
@@ -615,10 +615,8 @@ namespace Unity.Physics
             var bodyBFromMotionB = new MTransform(motionB.BodyFromMotion);
             MTransform motionBFromJoint = Mul(Inverse(bodyBFromMotionB), jointData->BFromJoint);
 
-            for (int i = 0; i < jointData->NumConstraints; i++)
+            foreach( Constraint constraint in jointData->Constraints)
             {
-                Constraint constraint = jointData->Constraints[i];
-
                 JacobianType jacType;
                 switch (constraint.Type)
                 {
@@ -701,9 +699,9 @@ namespace Unity.Physics
 
         private static void Solve(
             NativeSlice<MotionVelocity> motionVelocities,
-            ref BlockStream.Reader jacobianReader,
-            ref BlockStream.Writer collisionEventsWriter,
-            ref BlockStream.Writer triggerEventsWriter,
+            ref NativeStream.Reader jacobianReader,
+            ref NativeStream.Writer collisionEventsWriter,
+            ref NativeStream.Writer triggerEventsWriter,
             int workItemIndex,
             StepInput stepInput)
         {

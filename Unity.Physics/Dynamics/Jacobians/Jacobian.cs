@@ -1,5 +1,4 @@
 ﻿using System;
-using System.ComponentModel;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -34,11 +33,7 @@ namespace Unity.Physics
         // These flags apply only to contact Jacobians
         IsTrigger = 1 << 5,
         EnableCollisionEvents = 1 << 6,
-        EnableSurfaceVelocity = 1 << 7,
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("EnableMaxImpulse has been deprecated. (RemovedAfter 2019-10-15)", true)]
-        EnableEnableMaxImpulse = 0
+        EnableSurfaceVelocity = 1 << 7
     }
 
     // Jacobian header, first part of each Jacobian in the stream
@@ -101,7 +96,7 @@ namespace Unity.Physics
 
         // Solve the Jacobian
         public void Solve(ref MotionVelocity velocityA, ref MotionVelocity velocityB, Solver.StepInput stepInput,
-            ref BlockStream.Writer collisionEventsWriter, ref BlockStream.Writer triggerEventsWriter)
+            ref NativeStream.Writer collisionEventsWriter, ref NativeStream.Writer triggerEventsWriter)
         {
             if (Enabled)
             {
@@ -397,12 +392,12 @@ namespace Unity.Physics
     // Iterator (and modifier) for jacobians
     unsafe struct JacobianIterator
     {
-        BlockStream.Reader m_Reader;
+        NativeStream.Reader m_Reader;
         int m_CurrentWorkItem;
         readonly bool m_IterateAll;
         readonly int m_MaxWorkItemIndex;
 
-        public JacobianIterator(BlockStream.Reader jacobianStreamReader, int workItemIndex, bool iterateAll = false)
+        public JacobianIterator(NativeStream.Reader jacobianStreamReader, int workItemIndex, bool iterateAll = false)
         {
             m_Reader = jacobianStreamReader;
             m_IterateAll = iterateAll;
@@ -448,7 +443,7 @@ namespace Unity.Physics
 
         private byte* Read(int size)
         {
-            byte* dataPtr = m_Reader.Read(size);
+            byte* dataPtr = m_Reader.ReadUnsafePtr(size);
 
             if (m_IterateAll)
             {

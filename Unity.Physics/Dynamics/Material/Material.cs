@@ -1,5 +1,4 @@
 using System;
-using System.ComponentModel;
 using Unity.Mathematics;
 
 namespace Unity.Physics
@@ -32,11 +31,7 @@ namespace Unity.Physics
             IsTrigger = 1 << 0,
             EnableCollisionEvents = 1 << 1,
             EnableMassFactors = 1 << 2,
-            EnableSurfaceVelocity = 1 << 3,
-
-            [EditorBrowsable(EditorBrowsableState.Never)]
-            [Obsolete("EnableMaxImpulse has been deprecated. (RemovedAfter 2019-10-15)", true)]
-            EnableMaxImpulse = 0
+            EnableSurfaceVelocity = 1 << 3
         }
 
         // Defines how a value from a pair of materials should be combined.
@@ -120,11 +115,5 @@ namespace Unity.Physics
                 math.hash(new float2(Friction, Restitution))
             )));
         }
-
-        #region Obsolete
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("EnableMaxImpulse has been deprecated. (RemovedAfter 2019-10-15)", true)]
-        public bool EnableMaxImpulse => throw new NotImplementedException();
-        #endregion
     }
 }

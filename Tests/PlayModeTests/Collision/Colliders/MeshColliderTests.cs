@@ -2,6 +2,7 @@ using NUnit.Framework;
 using System.Collections.Generic;
 using Unity.Burst;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.PerformanceTesting;
@@ -25,30 +26,39 @@ namespace Unity.Physics.Tests.Collision.Colliders
         {
             int numTriangles = 10;
             var vertices = new NativeArray<float3>(numTriangles * 3, Allocator.Persistent);
-            var triangles = new NativeArray<int>(numTriangles * 3, Allocator.Persistent);
+            var triangles = new NativeArray<int3>(numTriangles, Allocator.Persistent);
 
-            for(int i = 0; i < numTriangles * 3; i++)
+            for (int i = 0; i < numTriangles; i++)
             {
-                vertices[i] = new float3((float)i, 1.0f * (float)(i % 2), (float)(i + 1));
-                triangles[i] = i;
+                int firstVertexIndex = i * 3;
+
+                vertices[firstVertexIndex] = new float3((float)firstVertexIndex, 1.0f * (float)(firstVertexIndex % 2), (float)(firstVertexIndex + 1));
+                vertices[firstVertexIndex + 1] = new float3((float)(firstVertexIndex + 1), 1.0f * (float)((firstVertexIndex + 1) % 2), (float)(firstVertexIndex + 2));
+                vertices[firstVertexIndex + 2] = new float3((float)(firstVertexIndex + 2), 1.0f * (float)((firstVertexIndex + 2 ) % 2), (float)(firstVertexIndex + 3));
+                triangles[i] = new int3(firstVertexIndex, firstVertexIndex + 1, firstVertexIndex + 2);
             }
 
             Random rnd = new Random(0x12345678);
 
             for (int i = 0; i < 100; i++)
             {
-                int indexToChange = rnd.NextInt(0, triangles.Length - 1);
+                int indexToChange = rnd.NextInt(0, triangles.Length * 3 - 1);
 
+                int triangleIndex = indexToChange / 3;
+                int vertexInTriangle = indexToChange % 3;
                 int invalidValue = rnd.NextInt() * (rnd.NextBool() ? -1 : 1);
-                triangles[indexToChange] = invalidValue;
+
+                var triangle = triangles[triangleIndex];
+                triangle[vertexInTriangle] = invalidValue;
+                triangles[triangleIndex] = triangle;
 
                 TestUtils.ThrowsException<System.ArgumentException>(
                         () => Unity.Physics.MeshCollider.Create(vertices, triangles)
                 );
 
-                triangles[indexToChange] = indexToChange;
+                triangle[vertexInTriangle] = indexToChange;
+                triangles[triangleIndex] = triangle;
             }
-
 
             triangles.Dispose();
             vertices.Dispose();
@@ -68,15 +78,17 @@ namespace Unity.Physics.Tests.Collision.Colliders
             // Execute dummy job just to get Burst compilation out of the way.
             {
                 var dummyVertices = new NativeArray<float3>(1, Allocator.TempJob);
-                var dummyIndices = new NativeArray<int>(1, Allocator.TempJob);
+                var dummyTriangles = new NativeArray<int3>(1, Allocator.TempJob);
+
                 new TestMeshBuilderJob
                 {
                     DummyRun = true,
                     Vertices = dummyVertices,
-                    Indices = dummyIndices
+                    Triangles = dummyTriangles
                 }.Run();
+
                 dummyVertices.Dispose();
-                dummyIndices.Dispose();
+                dummyTriangles.Dispose();
             }
 
             UnityEngine.Mesh mesh = Resources.Load<UnityEngine.Mesh>("VolcanicTerrain_80000");
@@ -105,9 +117,17 @@ namespace Unity.Physics.Tests.Collision.Colliders
             }
             var indices = new NativeArray<int>(finalIndicesList.Count, Allocator.TempJob);
             int indexCount = 0;
+
             foreach (var i in finalIndicesList)
             {
                 indices[indexCount++] = i;
+            }
+
+            NativeArray<int3> triangles;
+
+            unsafe
+            {
+                triangles = indices.Reinterpret<int3>(UnsafeUtility.SizeOf<int>());
             }
 
             Measure.Method(() =>
@@ -116,7 +136,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
                 {
                     DummyRun = false,
                     Vertices = vertices,
-                    Indices = indices
+                    Triangles = triangles
                 }.Run();
             }).Definition(sampleUnit: SampleUnit.Millisecond)
               .MeasurementCount(1)
@@ -132,7 +152,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             public bool DummyRun;
 
             public NativeArray<float3> Vertices;
-            public NativeArray<int> Indices;
+            public NativeArray<int3> Triangles;
 
             public unsafe void Execute()
             {
@@ -141,7 +161,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
                     return;
                 }
 
-                MeshCollider.Create(Vertices, Indices);
+                MeshCollider.Create(Vertices, Triangles);
             }
         }
     }

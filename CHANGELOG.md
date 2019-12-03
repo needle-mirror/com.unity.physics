@@ -1,3 +1,124 @@
+## [0.2.5-preview] - 2019-12-04
+
+### Upgrade guide
+
+* By default, `PhysicsColliders` that share the same set of inputs and that originate from the same sub-scene should reference the same data at run-time. This change not only reduces memory pressure, but also speeds up conversion. If you were altering `PhysicsCollider` data at run-time, you need to enable the `ForceUnique` setting on the respective `PhysicsColliderAuthoring` component. This setting guarantees the object will always convert into a unique instance.
+* Any usages of `BlockStream` should be replaced with the `NativeStream` type from the com.unity.collections package.
+
+### Changes
+
+* Run-Time API
+    * Removed `BlockStream` and migrated all usages to `NativeSteam`.
+    * Access to `JointData.Constraints` has changed to an indexer. This means that to change the values of a `Constraint`, a copy should be made first. E.g.,
+        ```c#
+        var c = JointData.Constraints[index];
+        c.Min = 0;
+        JointData.Constraints[index] = c;
+        ```
+    * Added `maxVelocity` parameter to `SimplexSolver.Solve()` to clamp the solving results to the maximum value.
+    * Added `SurfaceConstraintInfo.IsTooSteep` to indicate that a particular surface constraint has a slope bigger than the slope character controller supports.
+    * `MeshCollider.Create()` now takes grouped triangle indices (NativeArray<int3>) instead of a flat list of indices (NativeArray<int>) as input.
+    * Removed the following expired members/types:
+        * `BoxCollider.ConvexRadius` (renamed to `BevelRadius`)
+        * `CyllinderCollider.ConvexRadius` (renamed to `BevelRadius`)
+        * Collider factory methods passing nullable types and numeric primitives:
+            * `BoxCollider.Create()`
+            * `CyllinderCollider.Create()`
+            * `CapsuleCollider.Create()`
+            * `ConvexCollider.Create()`
+            * `MeshCollider.Create()`
+            * `PolygonCollider.CreateQuad()`
+            * `PolygonCollider.CreateTriangle()`
+            * `SphereCollider.Create()`
+            * `TerrainCollider.Create()`
+        * `ComponentExtensions` members passing Entity (use components or variants passing component data instead):
+            * `ApplyAngularImpulse()`
+            * `ApplyImpulse()`
+            * `ApplyLinearImpulse()`
+            * `GetAngularVelocity()`
+            * `GetCenterOfMass()`
+            * `GetCollisionFilter()`
+            * `GetEffectiveMass()`
+            * `GetLinearVelocity()`
+            * `GetMass()`
+            * `GetPosition()`
+            * `GetRotation()`
+            * `GetVelocities()`
+            * `SetAngularVelocity()`
+            * `SetLinearVelocity()`
+            * `SetVelocities()`
+        * `CustomDataPair`
+        * `ISimulation.ScheduleStepJobs()`
+        * `JacobianFlags.EnableEnableMaxImpulse`
+        * `MaterialFlags.EnableMaxImpulse`
+        * `ModifiableContactHeader.BodyCustomDatas`
+        * `ModifiableJacobianHeader.HasMaxImpulse`
+        * `ModifiableJacobianHeader.MaxImpulse`
+        * `ModifiableContactJacobian.CoefficientOfRestitution`
+        * `ModifiableContactJacobian.FrictionEffectiveMassOffDiag`
+        * `PhysicsCustomData`
+        * `SimplexSolver.c_SimplexSolverEpsilon`
+        * `SimplexSolver.Solve()` without `minDeltaTime` parameter
+
+* Authoring/Conversion API
+    * Added `PhysicsShapeAuthoring.ForceUnique`.
+    * Added the following conversion systems:
+        * `BeginColliderConversionSystem`
+        * `BuildCompoundCollidersConversionSystem`
+        * `EndColliderConversionSystem`
+    * `PhysicsShapeAuthoring.GetMeshProperties()` now populates a `NativeList<int3>` for indices, instead of a `NativeList<int>`.
+    * The following public members have been made protected:
+        * `DisplayCollisionEventsSystem.FinishDisplayCollisionEventsJob`
+        * `DisplayTriggerEventsSystem.FinishDisplayTriggerEventsJob`
+    * Removed the following expired members/types:
+        * `BaseShapeConversionSystem<T>.GetCustomFlags()`
+        * `DisplayCollidersSystem.DrawComponent`
+        * `DisplayCollidersSystem.DrawComponent.DisplayResult`
+        * `DisplayContactsJob`
+        * `DisplayJointsJob`
+        * `FinishDisplayContactsJob`
+        * `PhysicsShapeAuthoring` members:
+            * `SetConvexHull()` passing only a mesh
+            * `GetMesh()` replaced with `GetMeshProperties`
+            * `ConvexRadius` replaced with `BevelRadius`
+            * `GetBoxProperties()` returning `void`
+            * `SetBox()` passing a box center, size and orientation. Pass `BoxGeometry` instead.
+            * `GetCapsuleProperties()` returning `void`
+            * `SetCapsule()` passing a capsule center, height, radius and orientation. Pass `CapsuleGeometry` instead.
+            * `GetCylinderProperties()` returning `void`
+            * `SetCylinder()` passing a cylinder center, height, radius and orientation. Pass `CylinderGeometry` instead.
+            * `GetSphereProperties()` returning `void`
+            * `SetSphere()` passing a sphere center, radius and orientation. Pass `SphereGeometry` instead.
+        * The following components have been removed:
+            * `PhysicsBody` (renamed to `PhysicsBodyAuthoring`)
+            * `PhysicsShape` (renamed to `PhysicsShapeAuthoring`)
+            * `PhysicsStep` (renamed to `PhysicsStepAuthoring`)
+            * `PhysicsDebugDisplay` (renamed to `PhysicsDebugDisplayAuthoring`)
+
+* Run-Time Behavior
+    * `CompoundCollider.Create()` is now compatible with Burst.
+    * `CompoundCollider.Create()` now correctly shares memory among repeated instances in the list of children.
+
+* Authoring/Conversion Behavior
+    * If mesh and convex `PhysicsShapeAuthoring` components have not explicitly opted in to `ForceUnique`, they may share the same `PhysicsCollider` data at run-time, if their inputs are the same.
+    * Classic `MeshCollider` instances with the same inputs will always share the same data at run-time when converted in a sub-scene.
+    * Further improved performance of collider conversion for all types.
+
+### Fixes
+
+* `JointData.Version` was not being incremented with changes to its properties.
+* Fixed the issue of uninitialized array when scheduling collision event jobs with no dynamic bodies in the scene.
+* Fixed the issue of `CollisionEvent.CalculateDetails()` reporting 0 contact points in some cases.
+* Fixed the issue of joints with enabled collisions being solved after contacts for the same body pair.
+* Fixed exception and leak caused by trying to display a convex hull preview for a physics shape with no render mesh assigned.
+* Fixed bug causing incremental changes to a compound collider to accumulate ghost colliders when using Live Link.
+* Fixed an issue where kinematic (i.e. infinite mass dynamic) bodies did not write to the collision event stream correctly.
+
+### Known Issues
+
+* Compound collider mass properties are not correctly updated while editing using Live Link.
+
+
 ## [0.2.4-preview] - 2019-09-19
 
 ### Changes
@@ -24,7 +145,7 @@
         * Estimated impact position
         * Array of contact point positions
     * Removed `CollisionEvent.AccumulatedImpulses` and provided `CollisionEvent.CalculateDetails()` which gives a more reliable impulse value.
-    
+
 * Authoring/Conversion API
     * Removed the following expired ScriptableObject:
         * `CustomFlagNames`
@@ -44,10 +165,10 @@
         * `PhysicsMaterialTemplate.CustomFlags`
         * `PhysicsMaterialTemplate.GetCustomFlag()`
         * `PhysicsMaterialTemplate.SetCustomFlag()`
-        
+
 * Run-Time Behavior
     * Gravity is now applied at the beginning of the step, as opposed to previously being applied at the end during integration.
-    
+
 * Authoring/Conversion Behavior
     * Implicitly static shapes in a hierarchy under a GameObject with `StaticOptimizeEntity` are now converted into a single compound `PhysicsCollider`.
 
@@ -92,7 +213,7 @@
     * Bevel radius now applies a shrink to the shape rather than an expansion (as with primitive shape types).
 * Mesh `PhysicsShapeAuthoring` objects with no custom mesh assigned now include points from enabled mesh renderers on their children (like convex shapes). Double check any mesh shapes in your projects.
 * Due to a bug in version 0.2.0, any box colliders added to uniformly scaled objects had their scale baked into the box size parameter when initially added and/or when fit to render geometry. Double check box colliders on any uniformly scaled objects and update them as needed (usually by just re-fitting them to the render geometry).
-* The serialization layout of `PhysicsShapeAuthoring` has changed. Values previously saved in the `m_ConvexRadius` field will be migrated to `m_ConvexHullGenerationParameters.m_BevelRadius`, and a `m_ConvexRadius_Deprecated` field will then store a negative value to indicate the old data have been migrated. Because this happens automatically when objects are deserialized, prefab instances may mark this field dirty even if the prefab has already been migrated. Double check prefab overrides for Bevel Radius on your prefab instances. 
+* The serialization layout of `PhysicsShapeAuthoring` has changed. Values previously saved in the `m_ConvexRadius` field will be migrated to `m_ConvexHullGenerationParameters.m_BevelRadius`, and a `m_ConvexRadius_Deprecated` field will then store a negative value to indicate the old data have been migrated. Because this happens automatically when objects are deserialized, prefab instances may mark this field dirty even if the prefab has already been migrated. Double check prefab overrides for Bevel Radius on your prefab instances.
 
 ### Changes
 
@@ -108,6 +229,7 @@
         * `CylinderGeometry`
         * `SphereGeometry`
         * `ConvexHullGenerationParameters`
+    * `Constraint` now implements `IEquatable<Constraint>` to avoid boxing allocations.
     * All previous `SphereCollider`, `CapsuleCollider`, `BoxCollider` and `CylinderCollider` properties are now read only. A new `Geometry` property allows reading or writing all the properties at once.
     * `BoxCollider.Create()` now uses `BoxGeometry`. The signature passing nullable types has been deprecated.
     * `CapsuleCollider.Create()` now uses `CapsuleGeometry`. The signature passing nullable types has been deprecated.
@@ -188,7 +310,7 @@
     * Convex meshes are more accurate and less prone to jitter.
     * `PhysicsShapeAuthoring` components set to convex now display a wire frame preview at edit time.
     * `PhysicsShapeAuthoring` components set to cylinder can now specify how many sides the generated hull should have.
-    * Inspector controls for physics categories, custom material tags, and custom body tags now have a final option to select and edit the corresponding naming asset. 
+    * Inspector controls for physics categories, custom material tags, and custom body tags now have a final option to select and edit the corresponding naming asset.
 
 ### Fixes
 
@@ -214,7 +336,7 @@
 * If you created per-body custom data using `PhysicsShape.CustomFlags` then you should instead do it using `PhysicsBody.CustomTags`.
 * Some public API points were _removed_, either because they were not intended to be public or because they introduce other problems (see Changes below).
     * Some of these API points may later be reintroduced on a case-by-case basis to enable customization for advanced use cases. Please provide feedback on the forums if these removals have affected current use cases so we can prioritize them.
-* Some public API points were _replaced_ with another one in a way that cannot be handled by the script updater, so they must be manually fixed in your own code (see Changes below). 
+* Some public API points were _replaced_ with another one in a way that cannot be handled by the script updater, so they must be manually fixed in your own code (see Changes below).
 * All public types in test assemblies were never intended to be public and have been made internal.
 * Some properties on `PhysicsMaterialTemplate` and `PhysicsShape` now return `PhysicsCategoryTags` instead of `int`. Use its `Value` property if you need to get/set a raw `int` value (see Changes below).
 
@@ -388,7 +510,7 @@
 ### Fixes
 
 * Draw Collider Edges now supports spheres, capsules, cylinders and compound colliders.
-* Fixed bug causing editor to get caught in infinite loop when adding `PhysicsShape` component to a GameObject with deactivated children with `MeshFilter` components. 
+* Fixed bug causing editor to get caught in infinite loop when adding `PhysicsShape` component to a GameObject with deactivated children with `MeshFilter` components.
 * Fixed bug resulting in the creation of `PhysicMaterial` objects in sub-scenes when converting legacy colliders.
 * Fixed bug when scaling down friction on bounce in Jacobian building. Once a body was declared to bounce (apply restitution), all subsequent body Jacobians had their friction scaled down to 25%.
 * Fixed bug resulting in the broadphase for static bodies possibly not being updated when adding or moving a static body, causing queries and collisions to miss.
@@ -398,7 +520,7 @@
 * Removed Solver & Scheduler asserts from Joints between two static bodies #383.
 * Fixed bug preventing the conversion of classic `BoxCollider` components with small sizes.
 * Fixed bug where `PhysicsShape.ConvexRadius` setter was clamping already serialized value instead of newly assigned value.
-* Fixed bug where `PhysicsShape` orientation, size, and convex radius values might undergo changes during conversion resulting in identical volumes; only objects inheriting non-uniform scale now exhibit this behavior. 
+* Fixed bug where `PhysicsShape` orientation, size, and convex radius values might undergo changes during conversion resulting in identical volumes; only objects inheriting non-uniform scale now exhibit this behavior.
 * Fixed bug causing minor drawing error for cylinder `PhysicsShape` with non-zero convex radius.
 * Fixed crash when trying to run-time convert a `MeshCollider` or `PhysicsShape` with a non-readable mesh assigned. Conversion system now logs an exception instead.
 * Fixed crash when constructing a `MeshCollider` with no input triangles. A valid (empty) mesh is still created.
@@ -411,7 +533,7 @@
 
 ### Upgrade guide
 
-* Any run-time code that traversed the transform hierarchy of physics objects to find other entities must instead store references to entity IDs of interest through a different mechanism. 
+* Any run-time code that traversed the transform hierarchy of physics objects to find other entities must instead store references to entity IDs of interest through a different mechanism.
 * Baking of non-uniform scale for parametric `PhysicsShape` types has changed to more predictably approximate skewed render meshes. Double check the results on any non-uniformly scaled objects in your projects.
 * Angular Velocity is currently set in Motion Space. The Motion Space orientation of dynamic bodies may have changed with the changes to the conversion pipeline. If dynamic bodies are now rotating differently, check the values of `Initial Angular Velocity` in the `PhysicsBody` component, or values set to `Angular` in the `PhysicsVelocity` component.
 * Convex `PhysicsShape` objects with no custom mesh assigned now include points from enabled mesh renderers on their children. Double check any convex objects in your projects.
@@ -421,11 +543,11 @@
 
 * Run-Time API
     * Renamed `CollisionFilter.CategoryBits` to `CollisionFilter.BelongsTo`.
-    * Renamed `CollisionFilter.MaskBits` to `CollisionFilter.CollidesWith`. 
+    * Renamed `CollisionFilter.MaskBits` to `CollisionFilter.CollidesWith`.
     * `RaycastInput` and `ColliderCastInput` have changed:
-        * At the input level, start and end positions are now specified rather then an initial position and a displacement. 
+        * At the input level, start and end positions are now specified rather then an initial position and a displacement.
         * `Start` replaces `Position`.
-        * `End` replaces `Direction` which had been confusing as it was actually a displacement vector to a second point on the ray. 
+        * `End` replaces `Direction` which had been confusing as it was actually a displacement vector to a second point on the ray.
         * `Ray` has been made internal as a lower level interface and updated to be less ambiguous.
     * Added job interfaces for easier reading of simulation events, instead of having to work directly with block streams.
         * `ICollisionEventsJob` calls `Execute()` for every collision event produced by the solver.
@@ -476,7 +598,7 @@
 * Attempting to fit a non-uniformly scaled `PhysicsShape` to its render meshes may produce unexpected results.
 * Physics objects loaded from sub-scenes may have the wrong transformations applied on Android.
 * Dragging a control label to modify the orientation of a `PhysicsShape` sometimes produces small changes in its size.
-* If gizmos are enabled in the Game tab, the 'Physics Debug Display' viewers are incorrectly rendered. Debug viewers render correctly in the Scene tab. 
+* If gizmos are enabled in the Game tab, the 'Physics Debug Display' viewers are incorrectly rendered. Debug viewers render correctly in the Scene tab.
 
 
 

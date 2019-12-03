@@ -4,12 +4,7 @@ using Unity.Mathematics;
 
 namespace Unity.Physics.Authoring
 {
-    [UpdateAfter(typeof(LegacyBoxColliderConversionSystem))]
-    [UpdateAfter(typeof(LegacyCapsuleColliderConversionSystem))]
-    [UpdateAfter(typeof(LegacySphereColliderConversionSystem))]
-    [UpdateAfter(typeof(LegacyMeshColliderConversionSystem))]
-    [UpdateAfter(typeof(PhysicsShapeConversionSystem))]
-    [UpdateBefore(typeof(LegacyRigidbodyConversionSystem))]
+    [UpdateAfter(typeof(EndColliderConversionSystem))]
     public sealed class PhysicsBodyConversionSystem : GameObjectConversionSystem
     {
         protected override void OnUpdate()

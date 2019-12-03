@@ -44,7 +44,7 @@ namespace Unity.Physics
 
             var collider = new PolygonCollider();
             collider.InitAsTriangle(vertex0, vertex1, vertex2, filter, material);
-            
+
             return BlobAssetReference<Collider>.Create(&collider, UnsafeUtility.SizeOf<PolygonCollider>());
         }
 
@@ -302,24 +302,6 @@ namespace Unity.Physics
                 return DistanceQueries.ColliderCollider(input, (Collider*)target, ref collector);
             }
         }
-
-        #endregion
-
-        #region Obsolete
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("This signature has been deprecated. Please use a signature that does not pass nullable arguments instead. (RemovedAfter 2019-11-27)")]
-        public static unsafe BlobAssetReference<Collider> CreateTriangle(
-            float3 vertex0, float3 vertex1, float3 vertex2, CollisionFilter? filter = null, Material? material = null
-        ) =>
-            CreateTriangle(vertex0, vertex1, vertex2, filter ?? CollisionFilter.Default, material ?? Material.Default);
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("This signature has been deprecated. Please use a signature that does not pass nullable arguments instead. (RemovedAfter 2019-11-27)")]
-        public static unsafe BlobAssetReference<Collider> CreateQuad(
-            float3 vertex0, float3 vertex1, float3 vertex2, float3 vertex3, CollisionFilter? filter = null, Material? material = null
-        ) =>
-            CreateQuad(vertex0, vertex1, vertex2, vertex3, filter ?? CollisionFilter.Default, material ?? Material.Default);
 
         #endregion
     }

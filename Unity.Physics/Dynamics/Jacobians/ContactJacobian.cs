@@ -74,7 +74,7 @@ namespace Unity.Physics
         // Generic solve method that dispatches to specific ones
         public void Solve(
             ref JacobianHeader jacHeader, ref MotionVelocity velocityA, ref MotionVelocity velocityB,
-            Solver.StepInput stepInput, ref BlockStream.Writer collisionEventsWriter)
+            Solver.StepInput stepInput, ref NativeStream.Writer collisionEventsWriter)
         {
             bool bothBodiesWithInfInertiaAndMass = math.all(velocityA.InverseInertiaAndMass == float4.zero) && math.all(velocityB.InverseInertiaAndMass == float4.zero);
             if (bothBodiesWithInfInertiaAndMass)
@@ -90,7 +90,7 @@ namespace Unity.Physics
         // Solve the Jacobian
         public void SolveContact(
             ref JacobianHeader jacHeader, ref MotionVelocity velocityA, ref MotionVelocity velocityB,
-            Solver.StepInput stepInput, ref BlockStream.Writer collisionEventsWriter)
+            Solver.StepInput stepInput, ref NativeStream.Writer collisionEventsWriter)
         {
             // Copy velocity data
             MotionVelocity tempVelocityA = velocityA;
@@ -197,7 +197,7 @@ namespace Unity.Physics
         // Solve the infinite mass pair Jacobian
         public void SolveInfMassPair(
             ref JacobianHeader jacHeader, MotionVelocity velocityA, MotionVelocity velocityB,
-            Solver.StepInput stepInput, ref BlockStream.Writer collisionEventsWriter)
+            Solver.StepInput stepInput, ref NativeStream.Writer collisionEventsWriter)
         {
             // Infinite mass pairs are only interested in collision events,
             // so only last iteration is performed in that case
@@ -217,14 +217,8 @@ namespace Unity.Physics
                 if (jacAngular.VelToReachCp > 0 || dv > 0)
                 {
                     // Export collision event only if impulse would be applied, or objects are penetrating
-                    collisionEventsWriter.Write(new LowLevel.CollisionEvent
-                    {
-                        BodyIndices = jacHeader.BodyPair,
-                        ColliderKeys = jacHeader.AccessColliderKeys(),
-                        Normal = BaseJacobian.Normal,
-                        SolverImpulse = 0.0f
-                    });
-
+                    ExportCollisionEvent(0.0f, ref jacHeader, ref collisionEventsWriter);
+ 
                     return;
                 }
             }
@@ -242,7 +236,7 @@ namespace Unity.Physics
         }
 
         private unsafe void ExportCollisionEvent(float totalAccumulatedImpulse, ref JacobianHeader jacHeader,
-            ref BlockStream.Writer collisionEventsWriter)
+            ref NativeStream.Writer collisionEventsWriter)
         {
             // Write size before every event
             int collisionEventSize = LowLevel.CollisionEvent.CalculateSize(BaseJacobian.NumContacts);
@@ -274,7 +268,7 @@ namespace Unity.Physics
         // Solve the Jacobian
         public void Solve(
             ref JacobianHeader jacHeader, ref MotionVelocity velocityA, ref MotionVelocity velocityB, Solver.StepInput stepInput,
-            ref BlockStream.Writer triggerEventsWriter)
+            ref NativeStream.Writer triggerEventsWriter)
         {
             // Export trigger events only in last iteration
             if (!stepInput.IsLastIteration)

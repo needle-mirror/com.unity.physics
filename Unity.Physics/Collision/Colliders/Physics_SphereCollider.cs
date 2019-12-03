@@ -196,14 +196,5 @@ namespace Unity.Physics
         }
 
         #endregion
-
-        #region Obsolete
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("This signature has been deprecated. Please use a signature that does not pass nullable arguments instead. (RemovedAfter 2019-11-15)")]
-        public static BlobAssetReference<Collider> Create(float3 center, float radius, CollisionFilter? filter = null, Material? material = null) =>
-            Create(new SphereGeometry { Center = center, Radius = radius }, filter ?? CollisionFilter.Default, material ?? Material.Default);
-
-        #endregion
     }
 }

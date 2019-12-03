@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityComponent = UnityEngine.Component;
@@ -148,6 +150,10 @@ namespace Unity.Physics.Authoring
         [SerializeField]
         [Tooltip("If no custom mesh is specified, then one will be generated using this body's rendered meshes.")]
         UnityMesh m_CustomMesh;
+
+        public bool ForceUnique { get => m_ForceUnique; set => m_ForceUnique = value; }
+        [SerializeField]
+        bool m_ForceUnique;
 
         public PhysicsMaterialTemplate MaterialTemplate { get => m_Material.Template; set => m_Material.Template = value; }
         PhysicsMaterialTemplate IInheritPhysicsMaterialProperties.Template
@@ -347,12 +353,23 @@ namespace Unity.Physics.Authoring
             (s_ReusableBakeMesh = new UnityMesh { hideFlags = HideFlags.HideAndDontSave });
         static UnityMesh s_ReusableBakeMesh;
 
-        public void GetConvexHullProperties(NativeList<float3> pointCloud) => GetConvexHullProperties(pointCloud, true);
+        public void GetConvexHullProperties(NativeList<float3> pointCloud) =>
+            GetConvexHullProperties(pointCloud, true, default, default, default);
 
-        unsafe void GetConvexHullProperties(NativeList<float3> pointCloud, bool validate)
+        internal unsafe void GetConvexHullProperties(
+            NativeList<float3> pointCloud, bool validate,
+            NativeList<HashableShapeInputs> inputs, NativeList<int> allSkinIndices, NativeList<float> allBlendShapeWeights
+        )
         {
             pointCloud.Clear();
-            var triangles = new NativeList<int>((pointCloud.Capacity - 2) * 3, Allocator.Temp);
+            if (inputs.IsCreated)
+                inputs.Clear();
+            if (allSkinIndices.IsCreated)
+                allSkinIndices.Clear();
+            if (allBlendShapeWeights.IsCreated)
+                allBlendShapeWeights.Clear();
+
+            var triangles = new NativeList<int3>(pointCloud.Capacity - 2, Allocator.Temp);
 
             if (m_CustomMesh != null)
             {
@@ -360,7 +377,7 @@ namespace Unity.Physics.Authoring
                     return;
 
                 AppendMeshPropertiesToNativeBuffers(
-                    transform.localToWorldMatrix, m_CustomMesh, pointCloud, triangles, validate
+                    transform.localToWorldMatrix, m_CustomMesh, pointCloud, triangles, validate, inputs
                 );
             }
             else
@@ -368,19 +385,25 @@ namespace Unity.Physics.Authoring
                 foreach (var meshFilter in GetAllMeshFiltersInHierarchyBelongingToShape(this, validate))
                 {
                     AppendMeshPropertiesToNativeBuffers(
-                        meshFilter.transform.localToWorldMatrix, meshFilter.sharedMesh, pointCloud, triangles, validate
+                        meshFilter.transform.localToWorldMatrix, meshFilter.sharedMesh, pointCloud, triangles, validate, inputs
                     );
                 }
 
                 using (var skinnedPoints = new NativeList<float3>(8192, Allocator.Temp))
+                using (var skinnedInputs = new NativeList<HashableShapeInputs>(8, Allocator.Temp))
                 {
-                    GetAllSkinnedPointsInHierarchyBelongingToShape(this, skinnedPoints, validate);
+                    GetAllSkinnedPointsInHierarchyBelongingToShape(
+                        this, skinnedPoints, validate, skinnedInputs, allSkinIndices, allBlendShapeWeights
+                    );
                     pointCloud.ResizeUninitialized(pointCloud.Length + skinnedPoints.Length);
                     UnsafeUtility.MemCpy(
                         pointCloud.GetUnsafePtr(),
                         skinnedPoints.GetUnsafePtr(),
                         skinnedPoints.Length * UnsafeUtility.SizeOf<float3>()
                     );
+                    pointCloud.AddRange(skinnedPoints);
+                    if (inputs.IsCreated)
+                        inputs.AddRange(skinnedInputs);
                 }
             }
 
@@ -446,10 +469,15 @@ namespace Unity.Physics.Authoring
         }
 
         internal static void GetAllSkinnedPointsInHierarchyBelongingToShape(
-            PhysicsShapeAuthoring shape, NativeList<float3> pointCloud, bool validate
+            PhysicsShapeAuthoring shape, NativeList<float3> pointCloud, bool validate,
+            NativeList<HashableShapeInputs> inputs, NativeList<int> allIncludedIndices, NativeList<float> allBlendShapeWeights
         )
         {
-            pointCloud.Clear();
+            if (pointCloud.IsCreated)
+                pointCloud.Clear();
+
+            if (inputs.IsCreated)
+                inputs.Clear();
 
             // get all the transforms that belong to this shape
             s_BonesInHierarchy.Clear();
@@ -486,6 +514,7 @@ namespace Unity.Physics.Authoring
                 var vertexIndex = 0;
                 var weightsOffset = 0;
                 var shapeFromSkin = math.mul(shape.transform.worldToLocalMatrix, skin.transform.localToWorldMatrix);
+                var includedIndices = new NativeList<int>(mesh.vertexCount, Allocator.Temp);
                 foreach (var weightCount in bonesPerVertex)
                 {
                     var totalWeight = 0f;
@@ -497,23 +526,42 @@ namespace Unity.Physics.Authoring
                     }
 
                     if (totalWeight > shape.m_MinimumSkinnedVertexWeight)
+                    {
                         pointCloud.Add(math.mul(shapeFromSkin, new float4(s_Vertices[vertexIndex], 1f)).xyz);
+                        includedIndices.Add(vertexIndex);
+                    }
 
                     weightsOffset += weightCount;
                     ++vertexIndex;
                 }
+
+                var blendShapeWeights = new NativeArray<float>(mesh.blendShapeCount, Allocator.Temp);
+                for (var i = 0; i < blendShapeWeights.Length; ++i)
+                    blendShapeWeights[i] = skin.GetBlendShapeWeight(i);
+
+                if (!inputs.IsCreated)
+                    continue;
+
+                var data = HashableShapeInputs.FromSkinnedMesh(
+                    mesh, shapeFromSkin, includedIndices, allIncludedIndices, blendShapeWeights, allBlendShapeWeights
+                );
+                inputs.Add(data);
             }
 
             s_BonesInHierarchy.Clear();
         }
 
-        public void GetMeshProperties(NativeList<float3> vertices, NativeList<int> triangles) =>
-            GetMeshProperties(vertices, triangles, true);
+        public void GetMeshProperties(NativeList<float3> vertices, NativeList<int3> triangles) =>
+            GetMeshProperties(vertices, triangles, true, default);
 
-        void GetMeshProperties(NativeList<float3> vertices, NativeList<int> triangles, bool validate)
+        internal void GetMeshProperties(
+            NativeList<float3> vertices, NativeList<int3> triangles, bool validate, NativeList<HashableShapeInputs> inputs
+        )
         {
             vertices.Clear();
             triangles.Clear();
+            if (inputs.IsCreated)
+                inputs.Clear();
 
             if (m_CustomMesh != null)
             {
@@ -521,21 +569,23 @@ namespace Unity.Physics.Authoring
                     return;
 
                 AppendMeshPropertiesToNativeBuffers(
-                    transform.localToWorldMatrix, m_CustomMesh, vertices, triangles, validate
+                    transform.localToWorldMatrix, m_CustomMesh, vertices, triangles, validate, inputs
                 );
-                return;
             }
-
-            foreach (var meshFilter in GetAllMeshFiltersInHierarchyBelongingToShape(this, validate))
+            else
             {
-                AppendMeshPropertiesToNativeBuffers(
-                    meshFilter.transform.localToWorldMatrix, meshFilter.sharedMesh, vertices, triangles, validate
-                );
+                foreach (var meshFilter in GetAllMeshFiltersInHierarchyBelongingToShape(this, validate))
+                {
+                    AppendMeshPropertiesToNativeBuffers(
+                        meshFilter.transform.localToWorldMatrix, meshFilter.sharedMesh, vertices, triangles, validate, inputs
+                    );
+                }
             }
         }
 
         void AppendMeshPropertiesToNativeBuffers(
-            float4x4 localToWorld, UnityMesh mesh, NativeList<float3> vertices, NativeList<int> indices, bool validate
+            float4x4 localToWorld, UnityMesh mesh, NativeList<float3> vertices, NativeList<int3> triangles, bool validate,
+            NativeList<HashableShapeInputs> inputs
         )
         {
             if (mesh == null || validate && !mesh.IsValidForConversion(gameObject))
@@ -554,12 +604,16 @@ namespace Unity.Physics.Authoring
             for (var subMesh = 0; subMesh < mesh.subMeshCount; ++subMesh)
             {
                 mesh.GetIndices(s_Indices, subMesh);
-                if (indices.Capacity < indices.Length + s_Indices.Count)
-                    indices.Capacity = indices.Length + s_Indices.Count;
-                foreach (var i in s_Indices)
-                    indices.Add(offset + i);
+                var numTriangles = s_Indices.Count / 3;
+                if (triangles.Capacity < triangles.Length + numTriangles)
+                    triangles.Capacity = triangles.Length + numTriangles;
+                for (var i = 0; i < numTriangles; i++)
+                    triangles.Add(new int3(offset + s_Indices[i * 3], offset + s_Indices[i * 3 + 1], offset + s_Indices[i * 3 + 2]));
             }
             s_Indices.Clear();
+
+            if (inputs.IsCreated)
+                inputs.Add(HashableShapeInputs.FromMesh(mesh, childToShape));
         }
 
         void UpdateCapsuleAxis()
@@ -805,11 +859,36 @@ namespace Unity.Physics.Authoring
         internal float4x4 GetLocalToShapeMatrix() =>
             math.mul(math.inverse(GetShapeToWorldMatrix()), transform.localToWorldMatrix);
 
-        internal void BakePoints(NativeArray<float3> points)
+        internal unsafe void BakePoints(NativeArray<float3> points)
         {
-            var localToShape = GetLocalToShapeMatrix();
-            for (int i = 0, count = points.Length; i < count; ++i)
-                points[i] = math.mul(localToShape, new float4(points[i], 1f)).xyz;
+            var localToShapeQuantized = GetLocalToShapeMatrix();
+            using (var aabb = new NativeArray<Aabb>(1, Allocator.TempJob))
+            {
+                new PhysicsShapeExtensions.GetAabbJob { Points = points, Aabb = aabb }.Run();
+                HashableShapeInputs.GetQuantizedTransformations(localToShapeQuantized, aabb[0], out localToShapeQuantized);
+            }
+            using (var bakedPoints = new NativeArray<float3>(points.Length, Allocator.TempJob, NativeArrayOptions.UninitializedMemory))
+            {
+                new BakePointsJob
+                {
+                    Points = points,
+                    LocalToShape = localToShapeQuantized,
+                    Output = bakedPoints
+                }.Schedule(points.Length, 16).Complete();
+
+                UnsafeUtility.MemCpy(points.GetUnsafePtr(), bakedPoints.GetUnsafePtr(), points.Length * UnsafeUtility.SizeOf<float3>());
+            }
+        }
+
+        [BurstCompile]
+        struct BakePointsJob : IJobParallelFor
+        {
+            [Collections.ReadOnly]
+            public NativeArray<float3> Points;
+            public float4x4 LocalToShape;
+            public NativeArray<float3> Output;
+
+            public void Execute(int index) => Output[index] = math.mul(LocalToShape, new float4(Points[index], 1f)).xyz;
         }
 
         public void FitToEnabledRenderMeshes(float minimumSkinnedVertexWeight = 0f)
@@ -822,7 +901,7 @@ namespace Unity.Physics.Authoring
                 // temporarily un-assign custom mesh and assume this shape is a convex hull
                 var customMesh = m_CustomMesh;
                 m_CustomMesh = null;
-                GetConvexHullProperties(points, Application.isPlaying);
+                GetConvexHullProperties(points, Application.isPlaying, default, default, default);
                 m_CustomMesh = customMesh;
                 if (points.Length == 0)
                     return;
@@ -888,7 +967,7 @@ namespace Unity.Physics.Authoring
         internal void InitializeConvexHullGenerationParameters()
         {
             var pointCloud = new NativeList<float3>(65535, Allocator.Temp);
-            GetConvexHullProperties(pointCloud, false);
+            GetConvexHullProperties(pointCloud, false, default, default, default);
             m_ConvexHullGenerationParameters.InitializeToRecommendedAuthoringValues(pointCloud);
         }
     }

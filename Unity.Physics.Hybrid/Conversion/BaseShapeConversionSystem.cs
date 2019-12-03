@@ -1,418 +1,294 @@
 using System;
-using System.Collections.Generic;
-using Unity.Burst;
 using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.Profiling;
+using Hash128 = Unity.Entities.Hash128;
 
 namespace Unity.Physics.Authoring
 {
-    struct ComparableEntity : IEquatable<ComparableEntity>, IComparable<ComparableEntity>
-    {
-        public Entity Entity;
-
-        public bool Equals(ComparableEntity other) => Entity.Equals(other.Entity);
-
-        public int CompareTo(ComparableEntity other) => Entity.Index - other.Entity.Index;
-    }
-
-    struct LeafShapeData
-    {
-        public Entity LeafEntity;
-        public CompoundCollider.ColliderBlobInstance ColliderBlobInstance;
-    }
-
     public abstract partial class BaseShapeConversionSystem<T> : GameObjectConversionSystem where T : Component
     {
         protected abstract bool ShouldConvertShape(T shape);
         protected abstract GameObject GetPrimaryBody(T shape);
-        protected abstract BlobAssetReference<Collider> ProduceColliderBlob(T shape);
 
-        void ConvertShape(T shape)
+        internal abstract ShapeComputationData GenerateComputationData(
+            T shape, ColliderInstance colliderInstance,
+            NativeList<float3> allConvexHullPoints, NativeList<float3> allMeshVertices, NativeList<int3> allMeshTriangles
+        );
+
+        void CreateNewBlobAssets(
+            NativeArray<ShapeComputationData> computeData,
+            NativeArray<int> toCompute,
+            int count,
+            NativeArray<BlobAssetReference<Collider>> blobAssets
+        )
+        {
+            var job = new CreateBlobAssetsJob
+            {
+                ComputeData = computeData,
+                ToComputeTable = toCompute,
+                BlobAssets = blobAssets
+            };
+            job.Schedule(count, 1).Complete();
+        }
+        
+        void GetInputDataFromAuthoringComponent(T shape)
         {
             if (!ShouldConvertShape(shape))
                 return;
 
             var body = GetPrimaryBody(shape);
-            var bodyEntity = GetPrimaryEntity(body);
 
-            BlobAssetReference<Collider> colliderBlob;
-            try
+            var instance = new ColliderInstance
             {
-                colliderBlob = ProduceColliderBlob(shape);
-            }
-            catch (Exception e)
-            {
-                var ex = new InvalidOperationException(
-                    $"'{shape.name}' produced an invalid collider during conversion process and has been skipped.", e
-                );
-                // TODO: use GameObjectConversionSystem.LogWarning() when entities version is upgraded
-                Debug.LogException(ex, shape);
-                return;
-            }
+                AuthoringComponentId = shape.GetInstanceID(),
+                BodyEntity = GetPrimaryEntity(body),
+                ShapeEntity = GetPrimaryEntity(shape),
+                BodyFromShape = ColliderInstance.GetCompoundFromChild(shape.transform, body.transform)
+            };
+
+            var data = GenerateComputationData(shape, instance, m_ConvexColliderPoints, m_MeshColliderVertices, m_MeshColliderTriangles);
+            data.Instance.ConvertedAuthoringComponentIndex = m_EndColliderConversionSystem.PushAuthoringComponent(shape);
+            data.Instance.ConvertedBodyTransformIndex = m_EndColliderConversionSystem.PushAuthoringComponent(body.transform);
+            m_ShapeComputationData.Add(data);
 
             if (body == shape.gameObject)
-                DstEntityManager.RemoveParentAndSetWorldTranslationAndRotation(bodyEntity, body.transform);
-
-            if (!colliderBlob.IsCreated)
-                return;
-
-            // store shape and transform relative to the body in case there are several that need to become a compound
-            // Note: Not including relative scale, since that is baked into the colliders
-            m_ExtraColliders.Add(
-                new ComparableEntity { Entity = bodyEntity },
-                new LeafShapeData
-                {
-                    LeafEntity = GetPrimaryEntity(shape),
-                    ColliderBlobInstance = new CompoundCollider.ColliderBlobInstance
-                    {
-                        CompoundFromChild = GetCompoundFromChild(shape),
-                        Collider = colliderBlob
-                    }
-                }
-            );
+                DstEntityManager.RemoveParentAndSetWorldTranslationAndRotation(instance.BodyEntity, body.transform);
         }
 
-        RigidTransform GetCompoundFromChild(T shape)
+        NativeHashMap<Entity, Entity> m_AllBodiesByLeaf;
+        NativeList<ShapeComputationData> m_ShapeComputationData;
+
+        BuildCompoundCollidersConversionSystem m_BuildCompoundsSystem;
+        BeginColliderConversionSystem m_BeginColliderConversionSystem;
+        EndColliderConversionSystem m_EndColliderConversionSystem;
+
+        internal BlobAssetComputationContext<int, Collider> BlobComputationContext =>
+            m_BeginColliderConversionSystem.BlobComputationContext;
+
+        EntityQuery m_ShapeQuery;
+
+        protected override void OnCreate()
         {
-            var body = GetPrimaryBody(shape);
-            var worldFromBody = new RigidTransform(body.transform.rotation, body.transform.position);
-            var worldFromShape = new RigidTransform(shape.transform.rotation, shape.transform.position);
-            return math.mul(math.inverse(worldFromBody), worldFromShape);
-        }
+            base.OnCreate();
 
-        NativeMultiHashMap<ComparableEntity, LeafShapeData> m_ExtraColliders;
+            m_ShapeQuery = EntityManager.CreateEntityQuery(ComponentType.ReadOnly<T>());
 
-        NativeList<ConvertConvexColliderInput> m_ConvexColliderJobs;
-        List<T> m_ConvexShapes = new List<T>(64);
-        NativeList<float3> m_ConvexColliderPoints;
+            m_BeginColliderConversionSystem = World.GetOrCreateSystem<BeginColliderConversionSystem>();
+            m_BuildCompoundsSystem = World.GetOrCreateSystem<BuildCompoundCollidersConversionSystem>();
+            m_EndColliderConversionSystem = World.GetOrCreateSystem<EndColliderConversionSystem>();
+            
+            // A map from leaf shape entities to their respective bodies
+            m_AllBodiesByLeaf = new NativeHashMap<Entity, Entity>(16, Allocator.Persistent);
 
-        internal void RegisterConvexColliderDeferred(
-            T shape,
-            NativeArray<float3> points,
-            ConvexHullGenerationParameters generationParameters,
-            CollisionFilter filter, Material material
-        )
-        {
-            m_ConvexShapes.Add(shape);
-            m_ConvexColliderJobs.Add(new ConvertConvexColliderInput
-            {
-                BodyEntity = GetPrimaryEntity(GetPrimaryBody(shape)),
-                LeafEntity = GetPrimaryEntity(shape),
-                CompoundFromChild = GetCompoundFromChild(shape),
-                GenerationParameters = generationParameters,
-                PointsStart = m_ConvexColliderPoints.Length,
-                PointCount = points.Length,
-                Filter = filter,
-                Material = material
-            });
-            m_ConvexColliderPoints.AddRange(points);
-        }
-
-        NativeList<ConvertMeshColliderInput> m_MeshColliderJobs;
-        List<T> m_MeshShapes = new List<T>(64);
-        NativeList<float3> m_MeshColliderVertices;
-        NativeList<int> m_MeshColliderIndices;
-
-        internal void RegisterMeshColliderDeferred(
-            T shape, NativeArray<float3> vertices, NativeArray<int> indices, CollisionFilter filter, Material material
-        )
-        {
-            if (indices.Length == 0)
-            {
-                throw new InvalidOperationException(
-                    $"No triangles associated with {shape.name}. Ensure mesh import settings enables Read/Write"
-                );
-            }
-
-            m_MeshColliderJobs.Add(new ConvertMeshColliderInput
-            {
-                BodyEntity = GetPrimaryEntity(GetPrimaryBody(shape)),
-                LeafEntity = GetPrimaryEntity(shape),
-                VerticesStart = m_MeshColliderVertices.Length,
-                VertexCount = vertices.Length,
-                IndicesStart = m_MeshColliderIndices.Length,
-                IndexCount = indices.Length,
-                CompoundFromChild = GetCompoundFromChild(shape),
-                Filter = filter,
-                Material = material
-            });
-            m_MeshShapes.Add(shape);
-            m_MeshColliderVertices.AddRange(vertices);
-            m_MeshColliderIndices.AddRange(indices);
-        }
-
-        static void AppendLeafShapeDataToShapeMap(
-            NativeArray<KeyValuePair<Entity, LeafShapeData>> leafShapeDataPerBody,
-            NativeMultiHashMap<ComparableEntity, LeafShapeData> shapesPerBody,
-            IReadOnlyList<T> sourceShapes
-        )
-        {
-            for (var i = 0; i < leafShapeDataPerBody.Length; ++i)
-            {
-                var leaf = leafShapeDataPerBody[i].Value;
-                if (leaf.ColliderBlobInstance.Collider.IsCreated)
-                    shapesPerBody.Add(new ComparableEntity { Entity = leafShapeDataPerBody[i].Key }, leaf);
-                else
-                {
-                    var ex = new InvalidOperationException(
-                        $"'{sourceShapes[i].name}' produced an invalid convex collider during conversion process and has been skipped."
-                    );
-
-                    // TODO: use GameObjectConversionSystem.LogWarning() when entities version is upgraded
-                    Debug.LogException(ex, sourceShapes[i]);
-                }
-            }
-        }
-
-        protected override void OnUpdate()
-        {
-            var shapeQuery = EntityManager.CreateEntityQuery(ComponentType.ReadOnly<T>());
-            var shapeCount = shapeQuery.CalculateEntityCount();
-
-            // A map from entities to arrays of colliders
-            m_ExtraColliders = new NativeMultiHashMap<ComparableEntity, LeafShapeData>(shapeCount, Allocator.Temp);
+            // A list of inputs gathered from authoring components
+            const int defaultShapeCount = 128;
+            m_ShapeComputationData = new NativeList<ShapeComputationData>(defaultShapeCount, Allocator.Persistent);
 
             // Lists to store input data for deferred convex and mesh jobs
             const int defaultPointsPerShape = 1024;
 
-            m_ConvexColliderJobs = new NativeList<ConvertConvexColliderInput>(shapeCount, Allocator.TempJob);
-            m_ConvexColliderPoints = new NativeList<float3>(shapeCount * defaultPointsPerShape, Allocator.TempJob);
+            m_ConvexColliderJobs = new NativeHashMap<Hash128, ConvexInput>(defaultShapeCount, Allocator.Persistent);
+            m_ConvexColliderPoints = new NativeList<float3>(defaultShapeCount * defaultPointsPerShape, Allocator.Persistent);
 
-            m_MeshColliderJobs = new NativeList<ConvertMeshColliderInput>(shapeCount, Allocator.TempJob);
-            m_MeshColliderVertices = new NativeList<float3>(shapeCount * defaultPointsPerShape, Allocator.TempJob);
-            m_MeshColliderIndices = new NativeList<int>(shapeCount * defaultPointsPerShape / 2, Allocator.TempJob);
+            m_MeshColliderJobs = new NativeHashMap<Hash128, MeshInput>(defaultShapeCount, Allocator.Persistent);
+            m_MeshColliderVertices = new NativeList<float3>(defaultShapeCount * defaultPointsPerShape, Allocator.Persistent);
+            m_MeshColliderTriangles = new NativeList<int3>(defaultShapeCount * defaultPointsPerShape / 2 / 3, Allocator.Persistent);
+        }
 
-            // First pass.
-            // Convert all shape authoring components into colliders, and collect them for each primary body
-            Entities.ForEach<T>(ConvertShape);
+        protected override void OnDestroy()
+        {
+            base.OnDestroy();
 
-            // Second pass.
-            // Produce all convex and mesh collider blobs in parallel
-            const int arrayLength = 5;
-            var convexColliders =
-                new NativeArray<KeyValuePair<Entity, LeafShapeData>>(m_ConvexColliderJobs.Length, Allocator.TempJob);
-            var convexJob = new ProduceConvexCollidersJob
-            {
-                InputParameters = m_ConvexColliderJobs,
-                AllPoints = m_ConvexColliderPoints,
-                Output = convexColliders
-            }.Schedule(m_ConvexColliderJobs.Length, arrayLength);
+            m_AllBodiesByLeaf.Dispose();
 
-            var meshColliders =
-                new NativeArray<KeyValuePair<Entity, LeafShapeData>>(m_MeshColliderJobs.Length, Allocator.TempJob);
-            var meshJob = new ProduceMeshCollidersJob
-            {
-                InputParameters = m_MeshColliderJobs,
-                AllVertices = m_MeshColliderVertices,
-                AllIndices = m_MeshColliderIndices,
-                Output = meshColliders
-            }.Schedule(m_MeshColliderJobs.Length, arrayLength);
+            m_ShapeComputationData.Dispose();
 
-            JobHandle.CombineDependencies(convexJob, meshJob).Complete();
-
-            AppendLeafShapeDataToShapeMap(convexColliders, m_ExtraColliders, m_ConvexShapes);
-            convexColliders.Dispose();
-
-            AppendLeafShapeDataToShapeMap(meshColliders, m_ExtraColliders, m_MeshShapes);
-            meshColliders.Dispose();
-
-            // Final pass.
-            // Assign PhysicsCollider components to rigid bodies, merging multiples into compounds as needed
-            var keys = m_ExtraColliders.GetUniqueKeyArray(Allocator.Temp);
-            using (keys.Item1)
-            {
-                for (var k = 0; k < keys.Item2; ++k)
-                {
-                    ComparableEntity body = keys.Item1[k];
-                    var collider = DstEntityManager.HasComponent<PhysicsCollider>(body.Entity)
-                        ? DstEntityManager.GetComponentData<PhysicsCollider>(body.Entity)
-                        : new PhysicsCollider();
-                    var children = new NativeList<CompoundCollider.ColliderBlobInstance>(16, Allocator.Temp);
-
-                    // collect any existing valid shapes
-                    if (collider.IsValid)
-                    {
-                        ColliderType colliderType;
-                        unsafe { colliderType = collider.ColliderPtr->Type; }
-
-                        // if there is already a compound, add its leaves to the list of children
-                        if (colliderType == ColliderType.Compound)
-                        {
-                            unsafe
-                            {
-                                var existingChildren = ((CompoundCollider*)collider.ColliderPtr)->Children;
-                                for (int i = 0, count = existingChildren.Length; i < count; ++i)
-                                {
-                                    children.Add(new CompoundCollider.ColliderBlobInstance
-                                    {
-                                        Collider = BlobAssetReference<Collider>.Create(
-                                            existingChildren[i].Collider,
-                                            existingChildren[i].Collider->MemorySize
-                                        ),
-                                        CompoundFromChild = existingChildren[i].CompoundFromChild
-                                    });
-                                }
-                            }
-                        }
-                        // otherwise add the single collider to the list of children
-                        else
-                        {
-                            children.Add(
-                                new CompoundCollider.ColliderBlobInstance
-                                {
-                                    Collider = collider.Value,
-                                    CompoundFromChild = RigidTransform.identity
-                                }
-                            );
-                        }
-                    }
-
-                    // if collider is already valid, a shape already existed from another system
-                    var isSingleShapeOnPrimaryBody = !collider.IsValid;
-                    // collect all children found by this system
-                    if (m_ExtraColliders.TryGetFirstValue(body, out var child, out var iterator))
-                    {
-                        do
-                        {
-                            children.Add(child.ColliderBlobInstance);
-                            isSingleShapeOnPrimaryBody &= child.LeafEntity.Equals(body.Entity);
-                        } while (m_ExtraColliders.TryGetNextValue(out child, ref iterator));
-                    }
-
-                    // if there is a single shape on the primary body, use it as-is, otherwise create a compound
-                    // (assume a single leaf should still be a compound so that local offset values in authoring representation are retained)
-                    collider.Value = isSingleShapeOnPrimaryBody
-                        ? children[0].Collider
-                        : CompoundCollider.Create(children);
-
-                    children.Dispose();
-
-                    DstEntityManager.AddOrSetComponent(body.Entity, collider);
-                }
-            }
-
-            m_ConvexShapes.Clear();
             m_ConvexColliderJobs.Dispose();
             m_ConvexColliderPoints.Dispose();
 
-            m_MeshShapes.Clear();
             m_MeshColliderJobs.Dispose();
             m_MeshColliderVertices.Dispose();
-            m_MeshColliderIndices.Dispose();
+            m_MeshColliderTriangles.Dispose();
         }
-    }
 
-    struct ConvertConvexColliderInput
-    {
-        public Entity BodyEntity;
-        public Entity LeafEntity;
-        public RigidTransform CompoundFromChild;
-        public ConvexHullGenerationParameters GenerationParameters;
-        public int PointsStart;
-        public int PointCount;
-        public CollisionFilter Filter;
-        public Material Material;
-    }
-
-    [BurstCompile(CompileSynchronously = true)]
-    unsafe struct ProduceConvexCollidersJob : IJobParallelFor
-    {
-        [ReadOnly] public  NativeArray<ConvertConvexColliderInput> InputParameters;
-        [NativeDisableUnsafePtrRestriction]
-        [ReadOnly] public NativeArray<float3> AllPoints;
-        [NativeDisableParallelForRestriction]
-        public NativeArray<KeyValuePair<Entity, LeafShapeData>> Output;
-
-        public void Execute(int index)
+        protected override void OnUpdate()
         {
-            var inputParameters = InputParameters[index];
-            var points = new NativeArray<float3>(
-                inputParameters.PointCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory
-            );
-            UnsafeUtility.MemCpy(
-                points.GetUnsafePtr(),
-                (float3*)AllPoints.GetUnsafeReadOnlyPtr() + inputParameters.PointsStart,
-                UnsafeUtility.SizeOf<float3>() * inputParameters.PointCount
-            );
-            Output[index] = new KeyValuePair<Entity, LeafShapeData>(
-                inputParameters.BodyEntity,
-                new LeafShapeData
+            var shapeCount = m_ShapeQuery.CalculateEntityCount();
+            if (shapeCount == 0)
+                return;
+
+            // First pass
+            Profiler.BeginSample("Collect Inputs from Authoring Components");
+
+            Entities.ForEach<T>(GetInputDataFromAuthoringComponent);
+
+            Profiler.EndSample();
+
+            // Second pass
+            Profiler.BeginSample("Generate Hashes for Inputs");
+
+            var hashes = new NativeArray<Hash128>(shapeCount, Allocator.TempJob);
+            GenerateShapesHash(hashes);
+
+            Profiler.EndSample();
+
+            // Third pass
+            Profiler.BeginSample("Determine New Colliders to Create");
+
+            var shapeIndicesNeedingNewBlobs = new NativeArray<int>(shapeCount, Allocator.TempJob);
+            var numNewBlobAssets = 0;
+
+            // Parse all the entries, associate the computed hash with its GameObject, check if we need to compute the BlobAsset
+            for (var i = 0; i < shapeCount; i++)
+            {
+                var hash = hashes[i];
+                var shapeData = m_ShapeComputationData[i];
+                var instance = shapeData.Instance;
+                instance.Hash = hash;
+                shapeData.Instance = instance;
+                m_ShapeComputationData[i] = shapeData;
+                var convertedIndex = shapeData.Instance.ConvertedAuthoringComponentIndex;
+                var gameObject =
+                    m_EndColliderConversionSystem.GetConvertedAuthoringComponent(convertedIndex).gameObject;
+                BlobComputationContext.AssociateBlobAssetWithGameObject(hash, gameObject);
+
+                if (BlobComputationContext.NeedToComputeBlobAsset(hash))
                 {
-                    LeafEntity = inputParameters.LeafEntity,
-                    ColliderBlobInstance = new CompoundCollider.ColliderBlobInstance
+                    BlobComputationContext.AddBlobAssetToCompute(hash, 0);
+                    if (shapeData.ShapeType == ShapeType.ConvexHull)
                     {
-                        CompoundFromChild = inputParameters.CompoundFromChild,
-                        Collider = ConvexCollider.Create(
-                            points, inputParameters.GenerationParameters, inputParameters.Filter, inputParameters.Material
-                        )
+                        if (!m_ConvexColliderJobs.TryGetValue(hash, out _))
+                            m_ConvexColliderJobs.TryAdd(hash, shapeData.ConvexHullProperties);
+                    }
+                    else if (shapeData.ShapeType == ShapeType.Mesh)
+                    {
+                        if (!m_MeshColliderJobs.TryGetValue(hash, out _))
+                            m_MeshColliderJobs.TryAdd(hash, shapeData.MeshProperties);
+                    }
+                    else
+                        shapeIndicesNeedingNewBlobs[numNewBlobAssets++] = i;
+                }
+
+                m_BuildCompoundsSystem.SetLeafDirty(instance);
+
+                // Detect re-parenting of a shape (the shape has a different body than the current one, if any)
+                if (m_AllBodiesByLeaf.TryGetValue(instance.ShapeEntity, out var bodyEntity))
+                {
+                    if (!bodyEntity.Equals(instance.BodyEntity))
+                    {
+                        // Mark the former body dirty to trigger re-computation of its compound
+                        m_BuildCompoundsSystem.SetLeafDirty(
+                            new ColliderInstance
+                            {
+                                BodyEntity = bodyEntity,
+                                ShapeEntity = bodyEntity
+                            }
+                        );
+                        m_AllBodiesByLeaf[instance.ShapeEntity] = instance.BodyEntity;
                     }
                 }
-            );
-        }
-    }
-
-    struct ConvertMeshColliderInput
-    {
-        public Entity BodyEntity;
-        public Entity LeafEntity;
-        public RigidTransform CompoundFromChild;
-        public int VerticesStart;
-        public int VertexCount;
-        public int IndicesStart;
-        public int IndexCount;
-        public CollisionFilter Filter;
-        public Material Material;
-    }
-
-    [BurstCompile(CompileSynchronously = true)]
-    unsafe struct ProduceMeshCollidersJob : IJobParallelFor
-    {
-        [ReadOnly] public NativeArray<ConvertMeshColliderInput> InputParameters;
-        [NativeDisableUnsafePtrRestriction]
-        [ReadOnly] public NativeArray<float3> AllVertices;
-        [NativeDisableUnsafePtrRestriction]
-        [ReadOnly] public NativeArray<int> AllIndices;
-        [NativeDisableParallelForRestriction]
-        public NativeArray<KeyValuePair<Entity, LeafShapeData>> Output;
-
-        public void Execute(int index)
-        {
-            var inputParameters = InputParameters[index];
-            var vertices = new NativeArray<float3>(
-                inputParameters.VertexCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory
-            );
-            UnsafeUtility.MemCpy(
-                vertices.GetUnsafePtr(),
-                (float3*)AllVertices.GetUnsafeReadOnlyPtr() + inputParameters.VerticesStart,
-                UnsafeUtility.SizeOf<float3>() * inputParameters.VertexCount
-            );
-            var indices = new NativeArray<int>(
-                inputParameters.IndexCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory
-            );
-            UnsafeUtility.MemCpy(
-                indices.GetUnsafePtr(),
-                (int*)AllIndices.GetUnsafeReadOnlyPtr() + inputParameters.IndicesStart,
-                UnsafeUtility.SizeOf<int>() * inputParameters.IndexCount
-            );
-            Output[index] = new KeyValuePair<Entity, LeafShapeData>(
-                inputParameters.BodyEntity,
-                new LeafShapeData
+                else
                 {
-                    LeafEntity = inputParameters.LeafEntity,
-                    ColliderBlobInstance = new CompoundCollider.ColliderBlobInstance
-                    {
-                        CompoundFromChild = inputParameters.CompoundFromChild,
-                        Collider = MeshCollider.Create(
-                            vertices, indices, inputParameters.Filter, inputParameters.Material
-                        )
-                    }
+                    m_AllBodiesByLeaf.Add(instance.ShapeEntity, instance.BodyEntity);
                 }
+            }
+
+            Profiler.EndSample();
+
+            // Compute the BlobAssets
+            Profiler.BeginSample("Create New Colliders");
+
+            using (var blobAssets = new NativeArray<BlobAssetReference<Collider>>(shapeCount, Allocator.TempJob))
+            {
+                CreateNewBlobAssets(m_ShapeComputationData, shapeIndicesNeedingNewBlobs, numNewBlobAssets, blobAssets);
+
+                for (var i = 0; i < numNewBlobAssets; i++)
+                {
+                    var index = shapeIndicesNeedingNewBlobs[i];
+                    BlobComputationContext.AddComputedBlobAsset(hashes[index], blobAssets[i]);
+                }
+            }
+
+            shapeIndicesNeedingNewBlobs.Dispose();
+            hashes.Dispose();
+
+            Profiler.EndSample();
+
+            // Convert convex hulls and meshes
+            Profiler.BeginSample("Convert Hulls and Meshes");
+            
+            ConvertHullsAndMeshes();
+            
+            Profiler.EndSample();
+
+            m_AllBodiesByLeaf.Clear();
+
+            m_ShapeComputationData.Clear();
+
+            m_ConvexColliderJobs.Clear();
+            m_ConvexColliderPoints.Clear();
+
+            m_MeshColliderJobs.Clear();
+            m_MeshColliderVertices.Clear();
+            m_MeshColliderTriangles.Clear();
+        }
+
+        void GenerateShapesHash(NativeArray<Hash128> hashes)
+        {
+            var count = m_ShapeComputationData.Length;
+            var job = new GeneratePhysicsShapeHashesJob
+            {
+                ComputationData = m_ShapeComputationData,
+                Hashes = hashes
+            };
+
+            job.Schedule(count, 1).Complete();
+        }
+
+        void ConvertHullsAndMeshes()
+        {
+            var convexJob = ProduceConvexColliders(
+                m_ConvexColliderJobs, m_ConvexColliderPoints, out var convexColliders
             );
+            convexJob = new DisposeContainerJob<Hash128>
+            {
+                Container = m_ConvexColliderJobs.GetKeyArray(Allocator.TempJob)
+            }.Schedule(convexJob);
+
+            var meshJob = ProduceMeshColliders(
+                m_MeshColliderJobs, m_MeshColliderVertices, m_MeshColliderTriangles, out var meshColliders
+            );
+            meshJob = new DisposeContainerJob<Hash128>
+            {
+                Container = m_MeshColliderJobs.GetKeyArray(Allocator.TempJob)
+            }.Schedule(meshJob);
+
+            JobHandle.CombineDependencies(convexJob, meshJob).Complete();
+
+            if (convexColliders.Length > 0)
+            {
+                using (var kvp = convexColliders.GetKeyValueArrays(Allocator.Temp))
+                {
+                    for (int i = 0; i < kvp.Keys.Length; i++)
+                        BlobComputationContext.AddComputedBlobAsset(kvp.Keys[i], kvp.Values[i]);
+                }
+            }
+
+            if (meshColliders.Length > 0)
+            {
+                using (var kvp = meshColliders.GetKeyValueArrays(Allocator.Temp))
+                {
+                    for (int i = 0; i < kvp.Keys.Length; i++)
+                        BlobComputationContext.AddComputedBlobAsset(kvp.Keys[i], kvp.Values[i]);
+                }
+            }
+
+            convexColliders.Dispose();
+            meshColliders.Dispose();
         }
     }
 }
-

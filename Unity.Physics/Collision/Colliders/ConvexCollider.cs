@@ -1,5 +1,4 @@
 using System;
-using System.ComponentModel;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -471,28 +470,6 @@ namespace Unity.Physics
             {
                 return DistanceQueries.ColliderCollider(input, (Collider*)target, ref collector);
             }
-        }
-
-        #endregion
-
-        #region Obsolete
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("This signature has been deprecated. Please use a signature that does not pass nullable arguments instead. (RemovedAfter 2019-10-30)")]
-        public static unsafe BlobAssetReference<Collider> Create(
-            NativeArray<float3> points, float convexRadius, float3? scale = null, CollisionFilter? filter = null, Material? material = null
-        )
-        {
-            var hullGenerationParameters = ConvexHullGenerationParameters.Default;
-            hullGenerationParameters.BevelRadius = convexRadius;
-            var s = scale ?? new float3(1f);
-            if (!s.Equals(new float3(1f)))
-            {
-                points = new NativeArray<float3>(points, Allocator.Temp);
-                for (var i = 0; i < points.Length; ++i)
-                    points[i] *= s;
-            }
-            return Create(points, hullGenerationParameters, filter ?? CollisionFilter.Default, material ?? Material.Default);
         }
 
         #endregion

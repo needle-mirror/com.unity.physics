@@ -280,7 +280,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
             int numBranchOverlapPairs = branchCount[0] * (branchCount[0] + 1) / 2;
             var nodePairIndices = new NativeList<int2>(Allocator.TempJob);
             nodePairIndices.ResizeUninitialized(numBranchOverlapPairs);
-            var collisionPairs = new BlockStream(numBranchOverlapPairs, 0xb08c3d78);
+            var collisionPairs = new NativeStream(numBranchOverlapPairs, Allocator.TempJob);
 
             handle = new Broadphase.DynamicVsDynamicBuildBranchNodePairsJob
             {
@@ -292,7 +292,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
             handle = new Broadphase.DynamicVsDynamicFindOverlappingPairsJob
             {
                 DynamicNodes = nodes,
-                PairWriter = collisionPairs,
+                PairWriter = collisionPairs.AsWriter(),
                 BodyFilters = filters,
                 NodePairIndices = nodePairIndices,
                 DynamicNodeFilters = nodefilters,
@@ -365,8 +365,8 @@ namespace Unity.Physics.Tests.Collision.Geometry
             bvhFiltered.Build(points, aabbs, out numNodesFilteredTree);
             bvhFiltered.BuildCombinedCollisionFilter(bodyFilters, 0, numNodesFilteredTree - 1);
 
-            var filteredCollisionPairs = new BlockStream(1, 0xec87b613);
-            BlockStream.Writer filteredPairWriter = filteredCollisionPairs;
+            var filteredCollisionPairs = new NativeStream(1, Allocator.TempJob);
+            NativeStream.Writer filteredPairWriter = filteredCollisionPairs.AsWriter();
             filteredPairWriter.BeginForEachIndex(0);
             CollisionFilter* bodyFiltersPtr = (CollisionFilter*)bodyFilters.GetUnsafePtr();
             var bufferedPairs = new Broadphase.BodyPairWriter(&filteredPairWriter, bodyFiltersPtr);
@@ -376,7 +376,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
             bufferedPairs.Close();
             filteredPairWriter.EndForEachIndex();
 
-            BlockStream.Reader filteredPairReader = filteredCollisionPairs;
+            NativeStream.Reader filteredPairReader = filteredCollisionPairs.AsReader();
             filteredPairReader.BeginForEachIndex(0);
 
             // Check that every pair in our filtered set also appears in the unfiltered set
@@ -466,7 +466,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
         [BurstCompile(CompileSynchronously=true)]
         struct TestTreeOverlapJob : IJob
         {
-            public BlockStream.Writer CollisionPairWriter;
+            public NativeStream.Writer CollisionPairWriter;
             public NativeArray<Node> Nodes;
             public NativeArray<CollisionFilter> Filter;
             public int NumObjects;
@@ -484,7 +484,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
                 CollisionPairWriter.BeginForEachIndex(0);
 
                 CollisionFilter* bodyFilters = (CollisionFilter*)Filter.GetUnsafePtr();
-                var pairBuffer = new Broadphase.BodyPairWriter((BlockStream.Writer*)UnsafeUtility.AddressOf(ref CollisionPairWriter), bodyFilters);
+                var pairBuffer = new Broadphase.BodyPairWriter((NativeStream.Writer*)UnsafeUtility.AddressOf(ref CollisionPairWriter), bodyFilters);
 
                 Node* nodesPtr = (Node*)Nodes.GetUnsafePtr();
                 BoundingVolumeHierarchy.TreeOverlap(ref pairBuffer, nodesPtr, nodesPtr);
@@ -506,18 +506,18 @@ namespace Unity.Physics.Tests.Collision.Geometry
         {
             // Execute dummy job just to get Burst compilation out of the way.
             {
-                var dummyBlockStream = new BlockStream(1, 0, Allocator.TempJob);
+                var dummyStream = new NativeStream(1, Allocator.TempJob);
                 var dummyNodes = new NativeArray<Node>(0, Allocator.TempJob);
                 var dummyFilters = new NativeArray<CollisionFilter>(0, Allocator.TempJob);
                 new TestTreeOverlapJob
                 {
-                    CollisionPairWriter = dummyBlockStream,
+                    CollisionPairWriter = dummyStream.AsWriter(),
                     Nodes = dummyNodes,
                     Filter = dummyFilters,
                     NumObjects = 0,
                     DummyRun = true
                 }.Run();
-                dummyBlockStream.Dispose();
+                dummyStream.Dispose();
                 dummyNodes.Dispose();
                 dummyFilters.Dispose();
             }
@@ -542,14 +542,14 @@ namespace Unity.Physics.Tests.Collision.Geometry
             bvh.Build(points, aabbs, out int numNodesOut);
             bvh.CheckIntegrity();
 
-            var collisionPairs = new BlockStream(1, 0xd586fc6e);
+            var collisionPairs = new NativeStream(1, Allocator.TempJob);
 
             var job = new TestTreeOverlapJob
             {
                 Nodes = nodes,
                 Filter = filters,
                 NumObjects = elementCount,
-                CollisionPairWriter = collisionPairs,
+                CollisionPairWriter = collisionPairs.AsWriter(),
                 DummyRun = false
             };
 

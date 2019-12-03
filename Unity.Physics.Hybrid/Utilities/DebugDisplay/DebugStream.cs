@@ -10,7 +10,7 @@ using UnityEngine;
 [UpdateBefore(typeof(BuildPhysicsWorld))]
 public class DebugStream : ComponentSystem
 {
-    List<BlockStream> m_DebugStreams = new List<BlockStream>();
+    readonly List<NativeStream> m_DebugStreams = new List<NativeStream>();
     DrawComponent m_DrawComponent;
     EndFramePhysicsSystem m_EndFramePhysicsSystem;
 
@@ -84,21 +84,20 @@ public class DebugStream : ComponentSystem
             Writer.Write(Type.Text);
             Writer.Write(new Text { X = x, Color = color, Length = text.Length });
 
-            foreach(char c in text)
+            foreach (char c in text)
             {
                 Writer.Write(c);
             }
         }
 
-        internal BlockStream.Writer Writer;
+        internal NativeStream.Writer Writer;
     }
 
     public Context GetContext(int foreachCount)
     {
-        var stream = new BlockStream(foreachCount, 0xcc1922b8);
-
+        var stream = new NativeStream(foreachCount, Allocator.TempJob);
         m_DebugStreams.Add(stream);
-        return new Context { Writer = stream };
+        return new Context { Writer = stream.AsWriter() };
     }
 
     public enum Type
@@ -317,7 +316,7 @@ public class DebugStream : ComponentSystem
         public Color Color;
         public int Length;
 
-        public void Draw(ref BlockStream.Reader reader)
+        public void Draw(ref NativeStream.Reader reader)
         {
             // Read string data.
             char[] stringBuf = new char[Length];
@@ -338,7 +337,7 @@ public class DebugStream : ComponentSystem
     {
         for (int i = 0; i < m_DebugStreams.Count; i++)
         {
-            BlockStream.Reader reader = m_DebugStreams[i];
+            NativeStream.Reader reader = m_DebugStreams[i].AsReader();
             for (int j = 0; j != reader.ForEachCount; j++)
             {
                 reader.BeginForEachIndex(j);

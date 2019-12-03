@@ -853,7 +853,8 @@ namespace Unity.Physics.Tests.Utils
         {
             int numTriangles = rnd.NextInt(1, 250);
             var vertices = new NativeArray<float3>(numTriangles * 3, Allocator.Temp);
-            var indices = new NativeArray<int>(numTriangles * 3, Allocator.Temp);
+            var triangles = new NativeArray<int3>(numTriangles, Allocator.Temp);
+
             int nextIndex = 0;
 
             while (numTriangles > 0)
@@ -968,15 +969,15 @@ namespace Unity.Physics.Tests.Utils
                 numTriangles -= featureTriangles;
             }
 
-            for (int i = 0; i < indices.Length; i++)
+            for (int i = 0; i < triangles.Length; i++)
             {
-                indices[i] = i;
+                triangles[i] = new int3(3 * i, 3 * i + 1, 3 * i + 2);
             }
-            var ret = MeshCollider.Create(vertices, indices);
+
+            var ret = MeshCollider.Create(vertices, triangles);
             
             vertices.Dispose();
-            indices.Dispose();
-            
+            triangles.Dispose();
             return ret;
         }
 
