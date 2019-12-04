@@ -192,6 +192,7 @@ namespace Unity.Physics.Authoring
 
     [UpdateAfter(typeof(BeginColliderConversionSystem))]
     [UpdateBefore(typeof(BuildCompoundCollidersConversionSystem))]
+    [ConverterVersion("adamm", 1)]
     public sealed class LegacyMeshColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacyMesh>
     {
         List<Vector3> m_Vertices = new List<Vector3>(65535 / 2);

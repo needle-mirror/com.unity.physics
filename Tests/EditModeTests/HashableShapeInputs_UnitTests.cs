@@ -10,6 +10,9 @@ namespace Unity.Physics.Tests.Authoring
 {
     class HashableShapeInputs_UnitTests
     {
+        [OneTimeSetUp]
+        public void OneTimeSetUp() => SpookyHashBuilder.Initialize();
+
         static UnityMesh MeshA => Resources.GetBuiltinResource<UnityMesh>("New-Plane.fbx");
         static UnityMesh MeshB => Resources.GetBuiltinResource<UnityMesh>("New-Cylinder.fbx");
 
@@ -24,17 +27,20 @@ namespace Unity.Physics.Tests.Authoring
             float[] blendShapeWeights = default
         )
         {
-            var allIncludedIndices = new NativeList<int>(0, Allocator.Temp);
-            var allBlendShapeWeights = new NativeList<float>(0, Allocator.Temp);
+            // BUG: use TempJob to avoid InvalidOperationException triggered by NativeList.AddRange() inside SpookyHashBuilder
+            using (var allIncludedIndices = new NativeList<int>(0, Allocator.TempJob))
+            using (var allBlendShapeWeights = new NativeList<float>(0, Allocator.TempJob))
+            using (var indices = new NativeArray<int>(includedIndices ?? Array.Empty<int>(), Allocator.TempJob))
+            using (var blendWeights = new NativeArray<float>( blendShapeWeights ?? Array.Empty<float>(), Allocator.TempJob))
             return HashableShapeInputs.GetHash128(
                 uniqueIdentifier, convexHullGenerationParameters, material, filter, shapeFromBody,
                 new NativeArray<HashableShapeInputs>(1, Allocator.Temp)
                 {
                     [0] = HashableShapeInputs.FromSkinnedMesh(
                         mesh, leafToBody,
-                        new NativeArray<int>(includedIndices ?? Array.Empty<int>(), Allocator.Temp),
+                        indices,
                         allIncludedIndices,
-                        new NativeArray<float>(blendShapeWeights ?? Array.Empty<float>(), Allocator.Temp),
+                        blendWeights,
                         allBlendShapeWeights
                     )
                 }, allIncludedIndices, allBlendShapeWeights
@@ -198,57 +204,75 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void GetHash128_WhenMultipleInputs_WithDifferentIncludedIndices_NotEqual()
         {
-            var allIndices = new NativeList<int>(0, Allocator.Temp);
-            var allWeights = new NativeList<float>(0, Allocator.Temp);
-            var inputs = new NativeList<HashableShapeInputs>(2, Allocator.Temp)
+            // BUG: use TempJob to avoid InvalidOperationException triggered by NativeList.AddRange() inside SpookyHashBuilder
+            using (var allIndices = new NativeList<int>(0, Allocator.TempJob))
+            using (var allWeights = new NativeList<float>(0, Allocator.TempJob))
             {
-                InputsWithIndicesAndBlendShapeWeights(new[] { 0 }, Array.Empty<float>(), allIndices, allWeights),
-                InputsWithIndicesAndBlendShapeWeights(new[] { 0, 0 }, Array.Empty<float>(), allIndices, allWeights)
-            };
-            var a = HashableShapeInputs.GetHash128(
-                default, default, default, default, float4x4.identity, inputs, allIndices, allWeights
-            );
+                Entities.Hash128 a, b;
 
-            allIndices.Clear();
-            allWeights.Clear();
-            inputs = new NativeList<HashableShapeInputs>(2, Allocator.Temp)
-            {
-                InputsWithIndicesAndBlendShapeWeights(new[] { 0, 0 }, Array.Empty<float>(), allIndices, allWeights),
-                InputsWithIndicesAndBlendShapeWeights(new[] { 0 }, Array.Empty<float>(), allIndices, allWeights)
-            };
-            var b = HashableShapeInputs.GetHash128(
-                default, default, default, default, float4x4.identity, inputs, allIndices, allWeights
-            );
+                using (var inputs = new NativeList<HashableShapeInputs>(2, Allocator.TempJob)
+                {
+                    InputsWithIndicesAndBlendShapeWeights(new[] { 0 }, Array.Empty<float>(), allIndices, allWeights),
+                    InputsWithIndicesAndBlendShapeWeights(new[] { 0, 0 }, Array.Empty<float>(), allIndices, allWeights)
+                })
+                {
+                    a = HashableShapeInputs.GetHash128(
+                        default, default, default, default, float4x4.identity, inputs, allIndices, allWeights
+                    );
+                }
 
-            Assert.That(a, Is.Not.EqualTo(b));
+                allIndices.Clear();
+                allWeights.Clear();
+                using (var inputs = new NativeList<HashableShapeInputs>(2, Allocator.TempJob)
+                {
+                    InputsWithIndicesAndBlendShapeWeights(new[] { 0, 0 }, Array.Empty<float>(), allIndices, allWeights),
+                    InputsWithIndicesAndBlendShapeWeights(new[] { 0 }, Array.Empty<float>(), allIndices, allWeights)
+                })
+                {
+                    b = HashableShapeInputs.GetHash128(
+                        default, default, default, default, float4x4.identity, inputs, allIndices, allWeights
+                    );
+                }
+
+                Assert.That(a, Is.Not.EqualTo(b));
+            }
         }
 
         [Test]
         public void GetHash128_WhenMultipleInputs_WithDifferentBlendShapeWeights_NotEqual()
         {
-            var allIndices = new NativeList<int>(0, Allocator.Temp);
-            var allWeights = new NativeList<float>(0, Allocator.Temp);
-            var inputs = new NativeList<HashableShapeInputs>(2, Allocator.Temp)
+            // BUG: use TempJob to avoid InvalidOperationException triggered by NativeList.AddRange() inside SpookyHashBuilder
+            using (var allIndices = new NativeList<int>(0, Allocator.TempJob))
+            using (var allWeights = new NativeList<float>(0, Allocator.TempJob))
             {
-                InputsWithIndicesAndBlendShapeWeights(Array.Empty<int>(), new[] { 0f }, allIndices, allWeights),
-                InputsWithIndicesAndBlendShapeWeights(Array.Empty<int>(), new[] { 0f, 0f }, allIndices, allWeights)
-            };
-            var a = HashableShapeInputs.GetHash128(
-                default, default, default, default, float4x4.identity, inputs, allIndices, allWeights
-            );
+                Entities.Hash128 a, b;
 
-            allIndices.Clear();
-            allWeights.Clear();
-            inputs = new NativeList<HashableShapeInputs>(2, Allocator.Temp)
-            {
-                InputsWithIndicesAndBlendShapeWeights(Array.Empty<int>(), new[] { 0f, 0f }, allIndices, allWeights),
-                InputsWithIndicesAndBlendShapeWeights(Array.Empty<int>(), new[] { 0f }, allIndices, allWeights)
-            };
-            var b = HashableShapeInputs.GetHash128(
-                default, default, default, default, float4x4.identity, inputs, allIndices, allWeights
-            );
+                using (var inputs = new NativeList<HashableShapeInputs>(2, Allocator.TempJob)
+                {
+                    InputsWithIndicesAndBlendShapeWeights(Array.Empty<int>(), new[] { 0f }, allIndices, allWeights),
+                    InputsWithIndicesAndBlendShapeWeights(Array.Empty<int>(), new[] { 0f, 0f }, allIndices, allWeights)
+                })
+                {
+                    a = HashableShapeInputs.GetHash128(
+                        default, default, default, default, float4x4.identity, inputs, allIndices, allWeights
+                    );
+                }
 
-            Assert.That(a, Is.Not.EqualTo(b));
+                allIndices.Clear();
+                allWeights.Clear();
+                using (var inputs = new NativeList<HashableShapeInputs>(2, Allocator.TempJob)
+                {
+                    InputsWithIndicesAndBlendShapeWeights(Array.Empty<int>(), new[] { 0f, 0f }, allIndices, allWeights),
+                    InputsWithIndicesAndBlendShapeWeights(Array.Empty<int>(), new[] { 0f }, allIndices, allWeights)
+                })
+                {
+                    b = HashableShapeInputs.GetHash128(
+                        default, default, default, default, float4x4.identity, inputs, allIndices, allWeights
+                    );
+                }
+
+                Assert.That(a, Is.Not.EqualTo(b));
+            }
         }
 
         static readonly TestCaseData[] k_EqualsWithinToleranceTestCases =

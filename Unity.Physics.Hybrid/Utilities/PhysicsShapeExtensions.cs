@@ -733,7 +733,7 @@ namespace Unity.Physics.Authoring
                         GenerationParameters = generationParameters,
                         Material = shape.GetMaterial(),
                         CollisionFilter = shape.GetFilter(),
-                        ShapeFromBody = math.inverse(shape.GetLocalToShapeMatrix()),
+                        BakeFromShape = shape.GetLocalToShapeMatrix(),
                         Inputs = inputs,
                         AllSkinIndices = allSkinIndices,
                         AllBlendShapeWeights = allBlendShapeWeights
@@ -744,7 +744,7 @@ namespace Unity.Physics.Authoring
             }
         }
 
-        [BurstCompile(CompileSynchronously = true)]
+//        [BurstCompile] // TODO: re-enable when SpookyHashBuilder is Burstable
         struct GetShapeInputsHashJob : IJob
         {
             public NativeArray<Hash128> Result;
@@ -753,7 +753,7 @@ namespace Unity.Physics.Authoring
             public ConvexHullGenerationParameters GenerationParameters;
             public Material Material;
             public CollisionFilter CollisionFilter;
-            public float4x4 ShapeFromBody;
+            public float4x4 BakeFromShape;
 
             [ReadOnly] public NativeArray<HashableShapeInputs> Inputs;
             [ReadOnly] public NativeArray<int> AllSkinIndices;
@@ -762,7 +762,7 @@ namespace Unity.Physics.Authoring
             public void Execute()
             {
                 Result[0] = HashableShapeInputs.GetHash128(
-                    ForceUniqueIdentifier, GenerationParameters, Material, CollisionFilter, ShapeFromBody,
+                    ForceUniqueIdentifier, GenerationParameters, Material, CollisionFilter, BakeFromShape,
                     Inputs, AllSkinIndices, AllBlendShapeWeights
                 );
             }
@@ -802,7 +802,7 @@ namespace Unity.Physics.Authoring
                         ForceUniqueIdentifier = (uint)(shape.ForceUnique ? shape.GetInstanceID() : 0),
                         Material = shape.GetMaterial(),
                         CollisionFilter = shape.GetFilter(),
-                        ShapeFromBody = math.inverse(shape.GetLocalToShapeMatrix()),
+                        BakeFromShape = shape.GetLocalToShapeMatrix(),
                         Inputs = inputs,
                         AllSkinIndices = allSkinIndices,
                         AllBlendShapeWeights = allBlendShapeWeights

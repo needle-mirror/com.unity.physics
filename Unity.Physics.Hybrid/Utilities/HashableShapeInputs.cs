@@ -174,7 +174,7 @@ namespace Unity.Physics.Authoring
             ConvexHullGenerationParameters hullGenerationParameters,
             Material material,
             CollisionFilter filter,
-            float4x4 shapeFromBody,
+            float4x4 bakeFromShape,
             NativeArray<HashableShapeInputs> inputs,
             NativeArray<int> allIncludedIndices,
             NativeArray<float> allBlendShapeWeights,
@@ -183,7 +183,7 @@ namespace Unity.Physics.Authoring
         {
             var numInputs = inputs.IsCreated ? inputs.Length : 0;
 
-            // quantize body-level transforms
+            // quantize shape-level transforms
             var bounds = new Aabb { Min = float.MaxValue, Max = float.MinValue };
             for (int i = 0; i < numInputs; i++)
             {
@@ -191,25 +191,21 @@ namespace Unity.Physics.Authoring
                 bounds.Include(math.mul(d.BodyFromShape, new float4(d.Bounds.Min, 1f)).xyz);
                 bounds.Include(math.mul(d.BodyFromShape, new float4(d.Bounds.Max, 1f)).xyz);
             }
-            GetQuantizedTransformations(shapeFromBody, bounds, out var bakeMatrix, linearPrecision);
+            GetQuantizedTransformations(bakeFromShape, bounds, out var bakeMatrix, linearPrecision);
 
-            // shapeFromBody only contains scale/shear information, so only the inner 3x3 needs to contribute to the hash
+            // bakeFromShape only contains scale/shear information, so only the inner 3x3 needs to contribute to the hash
             var scaleShear = new float3x3(bakeMatrix.c0.xyz, bakeMatrix.c1.xyz, bakeMatrix.c2.xyz);
 
-            var hash = new Hash128();
-            Hash128Ext.Append(ref hash, uniqueIdentifier);
-            Hash128Ext.Append(ref hash, ref scaleShear);
-            Hash128Ext.Append(ref hash, ref hullGenerationParameters);
-            Hash128Ext.Append(ref hash, ref material);
-            Hash128Ext.Append(ref hash, ref filter);
-            if (inputs.IsCreated)
-                Hash128Ext.Append(ref hash, inputs);
-            if (allIncludedIndices.IsCreated)
-                Hash128Ext.Append(ref hash, allIncludedIndices);
-            if (allBlendShapeWeights.IsCreated)
-                Hash128Ext.Append(ref hash, allBlendShapeWeights);
-
-            return hash;
+            var builder = new SpookyHashBuilder(Allocator.Temp);
+            builder.Append(ref uniqueIdentifier);
+            builder.Append(ref hullGenerationParameters);
+            builder.Append(ref material);
+            builder.Append(ref filter);
+            builder.Append(ref scaleShear);
+            builder.Append(inputs);
+            builder.Append(allIncludedIndices);
+            builder.Append(allBlendShapeWeights);
+            return builder.Finish();
         }
     }
 }

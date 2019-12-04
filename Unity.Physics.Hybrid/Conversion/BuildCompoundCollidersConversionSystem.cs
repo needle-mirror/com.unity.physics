@@ -3,6 +3,7 @@ using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
+using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Profiling;
 using Hash128 = Unity.Entities.Hash128;
@@ -156,19 +157,24 @@ namespace Unity.Physics.Authoring
                         {
                             // otherwise it is a compound
                             var childHashes = new NativeArray<Hash128>(colliders.Length, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                            var childOffsets = new NativeArray<RigidTransform>(colliders.Length, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                             var childBlobs = new NativeArray<CompoundCollider.ColliderBlobInstance>(colliders.Length, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                             for (var i = 0; i < children.Length; ++i)
                             {
                                 childHashes[i] = colliders[i].Hash;
+                                childOffsets[i] = colliders[i].Child.CompoundFromChild;
                                 childBlobs[i] = colliders[i].Child;
                             }
 
+                            Profiler.BeginSample("Generate Hash for Compound");
                             var compoundHash = new NativeArray<Hash128>(1, Allocator.TempJob);
                             new HashChildrenJob
                             {
                                 ChildHashes = childHashes,
+                                ChildOffsets = childOffsets,
                                 Output = compoundHash
                             }.Run();
+                            Profiler.EndSample();
 
                             var gameObject = m_EndColliderConversionSystem.GetConvertedAuthoringComponent(shape.ConvertedBodyTransformIndex).gameObject;
                             BlobComputationContext.AssociateBlobAssetWithGameObject(compoundHash[0], gameObject);
@@ -208,19 +214,22 @@ namespace Unity.Physics.Authoring
             Profiler.EndSample();
         }
 
-        [BurstCompile(CompileSynchronously = true)]
+//        [BurstCompile] // TODO: re-enable when SpookyHashBuilder is Burstable
         struct HashChildrenJob : IJob
         {
             [DeallocateOnJobCompletion]
             [ReadOnly] public NativeArray<Hash128> ChildHashes;
+            [DeallocateOnJobCompletion]
+            [ReadOnly] public NativeArray<RigidTransform> ChildOffsets;
 
             public NativeArray<Hash128> Output;
 
             public void Execute()
             {
-                var hash = new Hash128();
-                Hash128Ext.Append(ref hash, ChildHashes);
-                Output[0] = hash;
+                var builder = new SpookyHashBuilder(Allocator.Temp);
+                builder.Append(ChildHashes);
+                builder.Append(ChildOffsets);
+                Output[0] = builder.Finish();
             }
         }
 

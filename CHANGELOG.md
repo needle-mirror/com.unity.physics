@@ -1,3 +1,10 @@
+## [0.2.5-preview.1] - 2019-12-05
+
+### Fixes
+
+* Fixed a bug that could cause compound colliders to not update with Live Link when moving around a mesh collider in the compound's hierarchy.
+* Fixed a performance regression that occurred in certain situations when using Live Link
+
 ## [0.2.5-preview] - 2019-12-04
 
 ### Upgrade guide
