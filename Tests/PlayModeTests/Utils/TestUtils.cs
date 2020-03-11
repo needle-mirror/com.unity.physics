@@ -56,11 +56,35 @@ namespace Unity.Physics.Tests
 
     class Is : NUnit.Framework.Is
     {
+        public static Float3PrettyCloseConstraint PrettyCloseTo(float3 actual) =>
+            new Float3PrettyCloseConstraint(actual);
+
         public static MatrixPrettyCloseConstraint PrettyCloseTo(float4x4 actual) =>
             new MatrixPrettyCloseConstraint(actual);
 
         public static QuaternionOrientationEquivalentConstraint OrientedEquivalentTo(quaternion actual) =>
             new QuaternionOrientationEquivalentConstraint(actual);
+    }
+
+    class Float3PrettyCloseConstraint : NUnit.Framework.Constraints.Constraint
+    {
+        public const float DefaultTolerance = 0.0001f;
+
+        readonly float3 m_Expected;
+        float m_ToleranceSq = DefaultTolerance * DefaultTolerance;
+
+        public Float3PrettyCloseConstraint(float3 expected) : base((object)expected) => m_Expected = expected;
+
+        public override string Description => $"value to be within {math.sqrt(m_ToleranceSq)} of {m_Expected}";
+
+        public override ConstraintResult ApplyTo(object actual) =>
+            new ConstraintResult(this, actual, math.lengthsq((float3)actual - m_Expected) < m_ToleranceSq);
+
+        public Float3PrettyCloseConstraint Within(float tolerance)
+        {
+            m_ToleranceSq = tolerance * tolerance;
+            return this;
+        }
     }
 
     class MatrixPrettyCloseConstraint : NUnit.Framework.Constraints.Constraint
@@ -70,10 +94,7 @@ namespace Unity.Physics.Tests
         readonly float4x4 m_Expected;
         float m_ToleranceSq = DefaultTolerance * DefaultTolerance;
 
-        public MatrixPrettyCloseConstraint(float4x4 expected) : base((object)expected)
-        {
-            m_Expected = expected;
-        }
+        public MatrixPrettyCloseConstraint(float4x4 expected) : base((object)expected) => m_Expected = expected;
 
         public override string Description => $"each column to be within {math.sqrt(m_ToleranceSq)} of {m_Expected}";
 
@@ -102,10 +123,7 @@ namespace Unity.Physics.Tests
         readonly quaternion m_Expected;
         float m_ToleranceSq = DefaultTolerance * DefaultTolerance;
 
-        public QuaternionOrientationEquivalentConstraint(quaternion expected)
-        {
-            m_Expected = expected;
-        }
+        public QuaternionOrientationEquivalentConstraint(quaternion expected) => m_Expected = expected;
 
         public override string Description => $"each axis to be within {math.sqrt(m_ToleranceSq)} of {new float3x3(m_Expected)}";
 
@@ -1144,7 +1162,7 @@ namespace Unity.Physics.Tests.Utils
             return GenerateRandomCompound(ref rnd); // 2.5% compound
         }
 
-        public static unsafe PhysicsWorld GenerateRandomWorld(ref Random rnd, int numBodies, float size)
+        public static unsafe PhysicsWorld GenerateRandomWorld(ref Random rnd, int numBodies, float size, int numThreadsHint, bool direct)
         {
             // Create the world
             PhysicsWorld world = new PhysicsWorld(numBodies, 0, 0);
@@ -1160,21 +1178,26 @@ namespace Unity.Physics.Tests.Utils
                         pos = rnd.NextFloat3(-size, size),
                         rot = (rnd.NextInt(10) > 0) ? rnd.NextQuaternionRotation() : quaternion.identity
                     },
-                    Collider = (Collider*)GenerateRandomCollider(ref rnd).GetUnsafePtr(),   // Not safe, could be garbage collected
+                    Collider = GenerateRandomCollider(ref rnd),   // Not safe, could be garbage collected
                     Entity = Entity.Null,
                     CustomTags = 0
                 };
             }
 
-            StaticLayerChangeInfo staticLayerChangeInfo = new StaticLayerChangeInfo();
-            staticLayerChangeInfo.Init(Allocator.TempJob);
-            staticLayerChangeInfo.NumStaticBodies = numBodies;
-            staticLayerChangeInfo.HaveStaticBodiesChanged = 1;
-
             // Build the broadphase
-            world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, timeStep: 1.0f, gravity: -9.81f * math.up(),
-                numThreadsHint: 1, ref staticLayerChangeInfo, inputDeps: new JobHandle()).Complete();
-            staticLayerChangeInfo.Deallocate();
+            if (direct)
+            {
+                world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionDatas, world.MotionVelocities,
+                    world.CollisionWorld.CollisionTolerance, 1.0f, -9.81f * math.up());
+            }
+            else
+            {
+                var buildStaticTree = new NativeArray<int>(1, Allocator.TempJob);
+                buildStaticTree[0] = 1;
+                world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, timeStep: 1.0f, gravity: -9.81f * math.up(),
+                    buildStaticTree, inputDeps: new JobHandle(), numThreadsHint).Complete();
+                buildStaticTree.Dispose();
+            }
 
             return world;
         }

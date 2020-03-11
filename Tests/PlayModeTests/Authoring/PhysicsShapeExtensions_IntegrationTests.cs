@@ -3,6 +3,10 @@ using NUnit.Framework;
 using Unity.Entities;
 using Unity.Physics.Authoring;
 using UnityEngine;
+#if LEGACY_PHYSICS
+using LegacyBox = UnityEngine.BoxCollider;
+using LegacyRigidBody = UnityEngine.Rigidbody;
+#endif
 
 namespace Unity.Physics.Tests.Authoring
 {
@@ -10,8 +14,20 @@ namespace Unity.Physics.Tests.Authoring
     {
         [Test]
         public void GetPrimaryBody_WhenHierarchyContainsMultipleBodies_ReturnsFirstParent(
-            [Values(typeof(Rigidbody), typeof(PhysicsBodyAuthoring))]Type rootBodyType,
-            [Values(typeof(Rigidbody), typeof(PhysicsBodyAuthoring))]Type parentBodyType
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyRigidBody),
+#endif
+                typeof(PhysicsBodyAuthoring)
+            )]
+            Type rootBodyType,
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyRigidBody),
+#endif
+                typeof(PhysicsBodyAuthoring)
+            )]
+            Type parentBodyType
         )
         {
             CreateHierarchy(new[] { rootBodyType }, new[] { parentBodyType }, Array.Empty<Type>());
@@ -23,8 +39,20 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public void GetPrimaryBody_WhenFirstParentPhysicsBodyIsDisabled_ReturnsFirstEnabledAncestor(
-            [Values(typeof(Rigidbody), typeof(PhysicsBodyAuthoring))]Type rootBodyType,
-            [Values(typeof(Rigidbody), typeof(PhysicsBodyAuthoring))]Type parentBodyType
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyRigidBody),
+#endif
+                typeof(PhysicsBodyAuthoring)
+            )]
+            Type rootBodyType,
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyRigidBody),
+#endif
+                typeof(PhysicsBodyAuthoring)
+            )]
+            Type parentBodyType
         )
         {
             CreateHierarchy(new[] { rootBodyType }, new[] { parentBodyType }, new[] { typeof(PhysicsBodyAuthoring) });
@@ -39,8 +67,20 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public void GetPrimaryBody_WhenHierarchyContainsBody_AndIsStaticOptimized_ReturnsBody(
-            [Values(typeof(Rigidbody), typeof(PhysicsBodyAuthoring))]Type parentBodyType,
-            [Values(typeof(UnityEngine.BoxCollider), typeof(PhysicsShapeAuthoring))]Type childShapeType
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyRigidBody),
+#endif
+                typeof(PhysicsBodyAuthoring)
+            )]
+            Type parentBodyType,
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyBox),
+#endif
+                typeof(PhysicsShapeAuthoring)
+            )]
+            Type childShapeType
         )
         {
             CreateHierarchy(new[] { typeof(StaticOptimizeEntity) }, new[] { parentBodyType }, new[] { childShapeType });
@@ -52,9 +92,27 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public void GetPrimaryBody_WhenHierarchyContainsNoBodies_ReturnsTopMostShape(
-            [Values(typeof(UnityEngine.BoxCollider), typeof(PhysicsShapeAuthoring))]Type rootShapeType,
-            [Values(typeof(UnityEngine.BoxCollider), typeof(PhysicsShapeAuthoring))]Type parentShapeType,
-            [Values(typeof(UnityEngine.BoxCollider), typeof(PhysicsShapeAuthoring))]Type childShapeType
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyBox),
+#endif
+                typeof(PhysicsShapeAuthoring)
+            )]
+            Type rootShapeType,
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyBox),
+#endif
+                typeof(PhysicsShapeAuthoring)
+            )]
+            Type parentShapeType,
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyBox),
+#endif
+                typeof(PhysicsShapeAuthoring)
+            )]
+            Type childShapeType
         )
         {
             CreateHierarchy(new[] { rootShapeType }, new[] { parentShapeType }, new[] { childShapeType });
@@ -66,7 +124,13 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public void GetPrimaryBody_WhenHierarchyContainsNoBodies_IsStaticOptimized_ReturnsStaticOptimizeEntity(
-            [Values(typeof(UnityEngine.BoxCollider), typeof(PhysicsShapeAuthoring))]Type childShapeType
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyBox),
+#endif
+                typeof(PhysicsShapeAuthoring)
+            )]
+            Type childShapeType
         )
         {
             CreateHierarchy(new[] { typeof(StaticOptimizeEntity) }, Array.Empty<Type>(), new[] { childShapeType });

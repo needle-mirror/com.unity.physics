@@ -19,7 +19,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         struct CreateFromBurstJob : IJob
         {
             public void Execute() =>
-                CapsuleCollider.Create(new CapsuleGeometry { Vertex0 = math.up(), Vertex1 = -math.up(), Radius = 0.5f }).Release();
+                CapsuleCollider.Create(new CapsuleGeometry { Vertex0 = math.up(), Vertex1 = -math.up(), Radius = 0.5f }).Dispose();
         }
 
         [Test]

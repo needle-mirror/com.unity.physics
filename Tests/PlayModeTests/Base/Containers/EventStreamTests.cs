@@ -1,5 +1,4 @@
-﻿using System;
-using NUnit.Framework;
+﻿using NUnit.Framework;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 
@@ -7,14 +6,14 @@ namespace Unity.Physics.Tests.Base.Containers
 {
     class EventStreamTests
     {
-        private unsafe void WriteEvent(LowLevel.CollisionEvent collisionEvent, ref NativeStream.Writer collisionEventWriter)
+        private unsafe void WriteEvent(CollisionEventData collisionEvent, ref NativeStream.Writer collisionEventWriter)
         {
             int numContactPoints = collisionEvent.NumNarrowPhaseContactPoints;
-            int size = UnsafeUtility.SizeOf<LowLevel.CollisionEvent>() + numContactPoints * UnsafeUtility.SizeOf<ContactPoint>();
+            int size = CollisionEventData.CalculateSize(numContactPoints);
 
             collisionEventWriter.Write(size);
             byte* eventPtr = collisionEventWriter.Allocate(size);
-            ref LowLevel.CollisionEvent eventRef = ref UnsafeUtilityEx.AsRef<LowLevel.CollisionEvent>(eventPtr);
+            ref CollisionEventData eventRef = ref UnsafeUtilityEx.AsRef<CollisionEventData>(eventPtr);
             eventRef = collisionEvent;
             for (int i = 0; i < numContactPoints; i++)
             {
@@ -34,63 +33,67 @@ namespace Unity.Physics.Tests.Base.Containers
             {
                 NativeStream.Writer collisionEventWriter = collisionEventStream.AsWriter();
 
-                var collisionEvent = new LowLevel.CollisionEvent();
+                var collisionEventData = new CollisionEventData();
 
                 collisionEventWriter.BeginForEachIndex(1);
                 {
-                    collisionEvent.NumNarrowPhaseContactPoints = 1;
-                    WriteEvent(collisionEvent, ref collisionEventWriter);
+                    collisionEventData.NumNarrowPhaseContactPoints = 1;
+                    WriteEvent(collisionEventData, ref collisionEventWriter);
                     writeCount++;
 
-                    collisionEvent.NumNarrowPhaseContactPoints = 4;
-                    WriteEvent(collisionEvent, ref collisionEventWriter);
+                    collisionEventData.NumNarrowPhaseContactPoints = 4;
+                    WriteEvent(collisionEventData, ref collisionEventWriter);
                     writeCount++;
                 }
                 collisionEventWriter.EndForEachIndex();
 
                 collisionEventWriter.BeginForEachIndex(3);
                 {
-                    collisionEvent.NumNarrowPhaseContactPoints = 3;
-                    WriteEvent(collisionEvent, ref collisionEventWriter);
+                    collisionEventData.NumNarrowPhaseContactPoints = 3;
+                    WriteEvent(collisionEventData, ref collisionEventWriter);
                     writeCount++;
                 }
                 collisionEventWriter.EndForEachIndex();
 
                 collisionEventWriter.BeginForEachIndex(5);
                 {
-                    collisionEvent.NumNarrowPhaseContactPoints = 4;
-                    WriteEvent(collisionEvent, ref collisionEventWriter);
+                    collisionEventData.NumNarrowPhaseContactPoints = 4;
+                    WriteEvent(collisionEventData, ref collisionEventWriter);
                     writeCount++;
 
-                    collisionEvent.NumNarrowPhaseContactPoints = 2;
-                    WriteEvent(collisionEvent, ref collisionEventWriter);
+                    collisionEventData.NumNarrowPhaseContactPoints = 2;
+                    WriteEvent(collisionEventData, ref collisionEventWriter);
                     writeCount++;
                 }
                 collisionEventWriter.EndForEachIndex();
 
                 collisionEventWriter.BeginForEachIndex(7);
                 {
-                    collisionEvent.NumNarrowPhaseContactPoints = 1;
-                    WriteEvent(collisionEvent, ref collisionEventWriter);
+                    collisionEventData.NumNarrowPhaseContactPoints = 1;
+                    WriteEvent(collisionEventData, ref collisionEventWriter);
                     writeCount++;
                 }
                 collisionEventWriter.EndForEachIndex();
 
                 collisionEventWriter.BeginForEachIndex(9);
                 {
-                    collisionEvent.NumNarrowPhaseContactPoints = 4;
-                    WriteEvent(collisionEvent, ref collisionEventWriter);
+                    collisionEventData.NumNarrowPhaseContactPoints = 4;
+                    WriteEvent(collisionEventData, ref collisionEventWriter);
                     writeCount++;
 
-                    collisionEvent.NumNarrowPhaseContactPoints = 1;
-                    WriteEvent(collisionEvent, ref collisionEventWriter);
+                    collisionEventData.NumNarrowPhaseContactPoints = 1;
+                    WriteEvent(collisionEventData, ref collisionEventWriter);
                     writeCount++;
                 }
                 collisionEventWriter.EndForEachIndex();
             }
 
+            PhysicsWorld dummyWorld = new PhysicsWorld(10, 10, 0);
+            float timeStep = 0.0f;
+            NativeArray<Velocity> inputVelocities = new NativeArray<Velocity>(dummyWorld.NumDynamicBodies, Allocator.Temp);
+
             // Iterate over written events and make sure they are all read
-            LowLevel.CollisionEvents collisionEvents = new LowLevel.CollisionEvents(collisionEventStream);
+            CollisionEvents collisionEvents = new CollisionEvents(collisionEventStream, dummyWorld.Bodies, inputVelocities, timeStep);
             int readCount = 0;
             foreach(var collisionEvent in collisionEvents)
             {
@@ -102,6 +105,7 @@ namespace Unity.Physics.Tests.Base.Containers
             // Cleanup
             var disposeJob = collisionEventStream.Dispose(default);
             disposeJob.Complete();
+            dummyWorld.Dispose();
         }
 
         [Test]
@@ -147,8 +151,10 @@ namespace Unity.Physics.Tests.Base.Containers
                 triggerEventWriter.EndForEachIndex();
             }
 
+            PhysicsWorld dummyWorld = new PhysicsWorld(10, 10, 0);
+
             // Iterate over written events and make sure they are all read
-            LowLevel.TriggerEvents triggerEvents = new LowLevel.TriggerEvents(triggerEventStream);
+            TriggerEvents triggerEvents = new TriggerEvents(triggerEventStream, dummyWorld.Bodies);
             int readCount = 0;
             foreach (var triggerEvent in triggerEvents)
             {
@@ -160,6 +166,7 @@ namespace Unity.Physics.Tests.Base.Containers
             // Cleanup
             var disposeJob = triggerEventStream.Dispose(default);
             disposeJob.Complete();
+            dummyWorld.Dispose();
         }
     }
 }

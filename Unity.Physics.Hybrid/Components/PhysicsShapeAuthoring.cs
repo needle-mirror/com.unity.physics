@@ -27,27 +27,6 @@ namespace Unity.Physics.Authoring
         Mesh       = 31
     }
 
-    [Serializable]
-    struct EulerAngles
-    {
-        public float3 Value;
-        [HideInInspector]
-        public math.RotationOrder RotationOrder;
-
-        public void SetValue(quaternion value)
-        {
-            if (RotationOrder != math.RotationOrder.ZXY)
-                throw new NotSupportedException();
-            // TODO: add generic Euler decomposition to math.quaternion
-            Value = ((Quaternion)value).eulerAngles;
-        }
-
-        public static implicit operator quaternion(EulerAngles euler) =>
-            quaternion.Euler(math.radians(euler.Value), euler.RotationOrder);
-
-        public static EulerAngles Default => new EulerAngles { RotationOrder = math.RotationOrder.ZXY };
-    }
-
     sealed class UnimplementedShapeException : NotImplementedException
     {
         public UnimplementedShapeException(ShapeType shapeType)
@@ -100,36 +79,6 @@ namespace Unity.Physics.Authoring
 
         [SerializeField]
         float m_SphereRadius = 0.5f;
-
-        float BevelRadius
-        {
-            get => m_ConvexHullGenerationParameters.BevelRadius;
-            set
-            {
-                var maxRadius = float.MaxValue;
-                switch (m_ShapeType)
-                {
-                    case ShapeType.Box:
-                        maxRadius = 0.5f * math.cmin(m_PrimitiveSize);
-                        break;
-                    case ShapeType.Cylinder:
-                        var cylinder = GetCylinderProperties();
-                        maxRadius = math.min(0.5f * cylinder.Height, cylinder.Radius);
-                        break;
-                    case ShapeType.ConvexHull:
-                        // TODO: any benefit in clamping this?
-                        break;
-                    case ShapeType.Capsule:
-                    case ShapeType.Mesh:
-                    case ShapeType.Plane:
-                    case ShapeType.Sphere:
-                        break;
-                    default:
-                        throw new UnimplementedShapeException(m_ShapeType);
-                }
-                m_ConvexHullGenerationParameters.BevelRadius = math.clamp(value, 0f, maxRadius);
-            }
-        }
 
         public ConvexHullGenerationParameters ConvexHullGenerationParameters => m_ConvexHullGenerationParameters;
 
@@ -232,7 +181,7 @@ namespace Unity.Physics.Authoring
                 Center = m_PrimitiveCenter,
                 Size = m_PrimitiveSize,
                 Orientation = m_PrimitiveOrientation,
-                BevelRadius = BevelRadius
+                BevelRadius = m_ConvexHullGenerationParameters.BevelRadius
             };
         }
 
@@ -253,24 +202,17 @@ namespace Unity.Physics.Authoring
             height = props.Height;
         }
 
-        public CapsuleGeometry GetCapsuleProperties(out quaternion orientation)
-        {
-            var result = GetCapsuleProperties(out EulerAngles euler);
-            orientation = euler;
-            return result;
-        }
-
-        internal CapsuleGeometry GetCapsuleProperties(out EulerAngles orientation)
+        public CapsuleGeometryAuthoring GetCapsuleProperties()
         {
             GetCylindricalProperties(
-                m_Capsule, out var center, out var height, out var radius, out orientation, m_ShapeType != ShapeType.Capsule
+                m_Capsule, out var center, out var height, out var radius, out var orientationEuler, m_ShapeType != ShapeType.Capsule
             );
-            var halfDistance = new float3 { z = 0.5f * height - radius };
-            return new CapsuleGeometry
+            return new CapsuleGeometryAuthoring
             {
-                Radius = radius,
-                Vertex0 = center + halfDistance,
-                Vertex1 = center - halfDistance
+                OrientationEuler = orientationEuler,
+                Center = center,
+                Height = height,
+                Radius = radius
             };
         }
 
@@ -287,7 +229,7 @@ namespace Unity.Physics.Authoring
                 Height = height,
                 Radius = radius,
                 Orientation = orientation,
-                BevelRadius = BevelRadius,
+                BevelRadius = m_ConvexHullGenerationParameters.BevelRadius,
                 SideCount = m_CylinderSideCount
             };
         }
@@ -340,11 +282,7 @@ namespace Unity.Physics.Authoring
         }
 
         static readonly HashSet<int> s_BoneIDs = new HashSet<int>();
-        static readonly List<Transform> s_Bones = new List<Transform>(8);
         static readonly HashSet<Transform> s_BonesInHierarchy = new HashSet<Transform>();
-        static readonly List<MeshFilter> s_MeshFilters = new List<MeshFilter>(8);
-        static readonly List<PhysicsShapeAuthoring> s_PhysicsShapes = new List<PhysicsShapeAuthoring>(8);
-        static readonly List<SkinnedMeshRenderer> s_SkinnedMeshRenderers = new List<SkinnedMeshRenderer>(8);
         static readonly List<Vector3> s_Vertices = new List<Vector3>(65535);
         static readonly List<int> s_Indices = new List<int>(65535);
 
@@ -361,7 +299,8 @@ namespace Unity.Physics.Authoring
             NativeList<HashableShapeInputs> inputs, NativeList<int> allSkinIndices, NativeList<float> allBlendShapeWeights
         )
         {
-            pointCloud.Clear();
+            if (pointCloud.IsCreated)
+                pointCloud.Clear();
             if (inputs.IsCreated)
                 inputs.Clear();
             if (allSkinIndices.IsCreated)
@@ -369,7 +308,9 @@ namespace Unity.Physics.Authoring
             if (allBlendShapeWeights.IsCreated)
                 allBlendShapeWeights.Clear();
 
-            var triangles = new NativeList<int3>(pointCloud.Capacity - 2, Allocator.Temp);
+            var triangles = pointCloud.IsCreated
+                ? new NativeList<int3>(pointCloud.Capacity - 2, Allocator.Temp)
+                : default;
 
             if (m_CustomMesh != null)
             {
@@ -382,11 +323,17 @@ namespace Unity.Physics.Authoring
             }
             else
             {
-                foreach (var meshFilter in GetAllMeshFiltersInHierarchyBelongingToShape(this, validate))
+                using (var scope = new GetActiveChildrenScope<MeshFilter>(this, transform))
                 {
-                    AppendMeshPropertiesToNativeBuffers(
-                        meshFilter.transform.localToWorldMatrix, meshFilter.sharedMesh, pointCloud, triangles, validate, inputs
-                    );
+                    foreach (var meshFilter in scope.Buffer)
+                    {
+                        if (scope.IsChildActiveAndBelongsToShape(meshFilter, validate))
+                        {
+                            AppendMeshPropertiesToNativeBuffers(
+                                meshFilter.transform.localToWorldMatrix, meshFilter.sharedMesh, pointCloud, triangles, validate, inputs
+                            );
+                        }
+                    }
                 }
 
                 using (var skinnedPoints = new NativeList<float3>(8192, Allocator.Temp))
@@ -395,77 +342,23 @@ namespace Unity.Physics.Authoring
                     GetAllSkinnedPointsInHierarchyBelongingToShape(
                         this, skinnedPoints, validate, skinnedInputs, allSkinIndices, allBlendShapeWeights
                     );
-                    pointCloud.ResizeUninitialized(pointCloud.Length + skinnedPoints.Length);
-                    UnsafeUtility.MemCpy(
-                        pointCloud.GetUnsafePtr(),
-                        skinnedPoints.GetUnsafePtr(),
-                        skinnedPoints.Length * UnsafeUtility.SizeOf<float3>()
-                    );
-                    pointCloud.AddRange(skinnedPoints);
+                    if (pointCloud.IsCreated)
+                    {
+                        pointCloud.ResizeUninitialized(pointCloud.Length + skinnedPoints.Length);
+                        UnsafeUtility.MemCpy(
+                            pointCloud.GetUnsafePtr(),
+                            skinnedPoints.GetUnsafePtr(),
+                            skinnedPoints.Length * UnsafeUtility.SizeOf<float3>()
+                        );
+                        pointCloud.AddRange(skinnedPoints);
+                    }
                     if (inputs.IsCreated)
                         inputs.AddRange(skinnedInputs);
                 }
             }
 
-            triangles.Dispose();
-        }
-
-        static IEnumerable<T> GetAllActiveComponentsInHierarchyBelongingToShape<T>(
-            Transform root, PhysicsShapeAuthoring shape, List<T> buffer
-        ) where T : UnityComponent
-        {
-            buffer.Clear();
-            root.GetComponentsInChildren(true, buffer);
-            var primaryBody = PhysicsShapeExtensions.GetPrimaryBody(root.gameObject);
-            var checkIfComponentBelongsToShape = root.transform.IsChildOf(shape.transform);
-            foreach (var component in buffer)
-            {
-                if (checkIfComponentBelongsToShape)
-                {
-                    if (PhysicsShapeExtensions.GetPrimaryBody(component.gameObject) != primaryBody)
-                        continue;
-
-                    s_PhysicsShapes.Clear();
-                    component.gameObject.GetComponentsInParent(true, s_PhysicsShapes);
-                    if (s_PhysicsShapes[0] != shape)
-                        continue;
-                }
-
-                // do not simply use GameObject.activeInHierarchy because it will be false when instantiating a prefab
-                var t = component.transform;
-                var activeInHierarchy = t.gameObject.activeSelf;
-                while (activeInHierarchy && t != root)
-                {
-                    t = t.parent;
-                    activeInHierarchy &= t.gameObject.activeSelf;
-                }
-                if (!activeInHierarchy)
-                    continue;
-
-                yield return component;
-            }
-            s_PhysicsShapes.Clear();
-        }
-
-        internal static IEnumerable<MeshFilter> GetAllMeshFiltersInHierarchyBelongingToShape(
-            PhysicsShapeAuthoring shape, bool filterOutInvalid
-        )
-        {
-            foreach (var meshFilter in GetAllActiveComponentsInHierarchyBelongingToShape(shape.transform, shape, s_MeshFilters))
-            {
-                if (meshFilter.sharedMesh == null)
-                    continue;
-
-                var renderer = meshFilter.GetComponent<MeshRenderer>();
-                if (renderer == null || !renderer.enabled)
-                    continue;
-
-                if (filterOutInvalid && !meshFilter.sharedMesh.IsValidForConversion(shape.gameObject))
-                    continue;
-
-                yield return meshFilter;
-            }
-            s_MeshFilters.Clear();
+            if (triangles.IsCreated)
+                triangles.Dispose();
         }
 
         internal static void GetAllSkinnedPointsInHierarchyBelongingToShape(
@@ -481,71 +374,88 @@ namespace Unity.Physics.Authoring
 
             // get all the transforms that belong to this shape
             s_BonesInHierarchy.Clear();
-            foreach (var bone in GetAllActiveComponentsInHierarchyBelongingToShape(shape.transform, shape, s_Bones))
-                s_BonesInHierarchy.Add(bone);
-            s_Bones.Clear();
+            using (var scope = new GetActiveChildrenScope<Transform>(shape, shape.transform))
+            {
+                foreach (var bone in scope.Buffer)
+                {
+                    if (scope.IsChildActiveAndBelongsToShape(bone))
+                        s_BonesInHierarchy.Add(bone);
+                }
+            }
 
             // find all skinned mesh renderers in which this shape's transform might be a bone
-            foreach (var skin in GetAllActiveComponentsInHierarchyBelongingToShape(shape.transform.root, shape, s_SkinnedMeshRenderers))
+            using (var scope = new GetActiveChildrenScope<SkinnedMeshRenderer>(shape, shape.transform.root))
             {
-                var mesh = skin.sharedMesh;
-                if (!skin.enabled || mesh == null || validate && !mesh.IsValidForConversion(shape.gameObject))
-                    continue;
-
-                // get indices of this shape's transform hierarchy in skinned mesh's bone array
-                s_BoneIDs.Clear();
-                var bones = skin.bones;
-                for (int i = 0, count = bones.Length; i < count; ++i)
+                foreach (var skin in scope.Buffer)
                 {
-                    if (s_BonesInHierarchy.Contains(bones[i]))
-                        s_BoneIDs.Add(i);
-                }
+                    var mesh = skin.sharedMesh;
+                    if (
+                        !skin.enabled
+                        || mesh == null
+                        || validate && !mesh.IsValidForConversion(shape.gameObject)
+                        || !scope.IsChildActiveAndBelongsToShape(skin)
+                    )
+                        continue;
 
-                if (s_BoneIDs.Count == 0)
-                    continue;
-
-                // sample the vertices
-                skin.BakeMesh(ReusableBakeMesh);
-                ReusableBakeMesh.GetVertices(s_Vertices);
-
-                // add all vertices weighted to at least one bone in this shape's transform hierarchy
-                var bonesPerVertex = mesh.GetBonesPerVertex(); // Allocator.None
-                var weights = mesh.GetAllBoneWeights();        // Allocator.None
-                var vertexIndex = 0;
-                var weightsOffset = 0;
-                var shapeFromSkin = math.mul(shape.transform.worldToLocalMatrix, skin.transform.localToWorldMatrix);
-                var includedIndices = new NativeList<int>(mesh.vertexCount, Allocator.Temp);
-                foreach (var weightCount in bonesPerVertex)
-                {
-                    var totalWeight = 0f;
-                    for (var i = 0; i < weightCount; ++i)
+                    // get indices of this shape's transform hierarchy in skinned mesh's bone array
+                    s_BoneIDs.Clear();
+                    var bones = skin.bones;
+                    for (int i = 0, count = bones.Length; i < count; ++i)
                     {
-                        var weight = weights[weightsOffset + i];
-                        if (s_BoneIDs.Contains(weight.boneIndex))
-                            totalWeight += weight.weight;
+                        if (s_BonesInHierarchy.Contains(bones[i]))
+                            s_BoneIDs.Add(i);
                     }
 
-                    if (totalWeight > shape.m_MinimumSkinnedVertexWeight)
+                    if (s_BoneIDs.Count == 0)
+                        continue;
+
+                    // sample the vertices
+                    if (pointCloud.IsCreated)
                     {
-                        pointCloud.Add(math.mul(shapeFromSkin, new float4(s_Vertices[vertexIndex], 1f)).xyz);
-                        includedIndices.Add(vertexIndex);
+                        skin.BakeMesh(ReusableBakeMesh);
+                        ReusableBakeMesh.GetVertices(s_Vertices);
                     }
 
-                    weightsOffset += weightCount;
-                    ++vertexIndex;
+                    // add all vertices weighted to at least one bone in this shape's transform hierarchy
+                    var bonesPerVertex = mesh.GetBonesPerVertex(); // Allocator.None
+                    var weights = mesh.GetAllBoneWeights(); // Allocator.None
+                    var vertexIndex = 0;
+                    var weightsOffset = 0;
+                    var shapeFromSkin = math.mul(shape.transform.worldToLocalMatrix, skin.transform.localToWorldMatrix);
+                    var includedIndices = new NativeList<int>(mesh.vertexCount, Allocator.Temp);
+                    foreach (var weightCount in bonesPerVertex)
+                    {
+                        var totalWeight = 0f;
+                        for (var i = 0; i < weightCount; ++i)
+                        {
+                            var weight = weights[weightsOffset + i];
+                            if (s_BoneIDs.Contains(weight.boneIndex))
+                                totalWeight += weight.weight;
+                        }
+
+                        if (totalWeight > shape.m_MinimumSkinnedVertexWeight)
+                        {
+                            if (pointCloud.IsCreated)
+                                pointCloud.Add(math.mul(shapeFromSkin, new float4(s_Vertices[vertexIndex], 1f)).xyz);
+                            includedIndices.Add(vertexIndex);
+                        }
+
+                        weightsOffset += weightCount;
+                        ++vertexIndex;
+                    }
+
+                    if (!inputs.IsCreated || !allIncludedIndices.IsCreated || !allBlendShapeWeights.IsCreated)
+                        continue;
+
+                    var blendShapeWeights = new NativeArray<float>(mesh.blendShapeCount, Allocator.Temp);
+                    for (var i = 0; i < blendShapeWeights.Length; ++i)
+                        blendShapeWeights[i] = skin.GetBlendShapeWeight(i);
+
+                    var data = HashableShapeInputs.FromSkinnedMesh(
+                        mesh, shapeFromSkin, includedIndices, allIncludedIndices, blendShapeWeights, allBlendShapeWeights
+                    );
+                    inputs.Add(data);
                 }
-
-                var blendShapeWeights = new NativeArray<float>(mesh.blendShapeCount, Allocator.Temp);
-                for (var i = 0; i < blendShapeWeights.Length; ++i)
-                    blendShapeWeights[i] = skin.GetBlendShapeWeight(i);
-
-                if (!inputs.IsCreated)
-                    continue;
-
-                var data = HashableShapeInputs.FromSkinnedMesh(
-                    mesh, shapeFromSkin, includedIndices, allIncludedIndices, blendShapeWeights, allBlendShapeWeights
-                );
-                inputs.Add(data);
             }
 
             s_BonesInHierarchy.Clear();
@@ -558,8 +468,10 @@ namespace Unity.Physics.Authoring
             NativeList<float3> vertices, NativeList<int3> triangles, bool validate, NativeList<HashableShapeInputs> inputs
         )
         {
-            vertices.Clear();
-            triangles.Clear();
+            if (vertices.IsCreated)
+                vertices.Clear();
+            if (triangles.IsCreated)
+                triangles.Clear();
             if (inputs.IsCreated)
                 inputs.Clear();
 
@@ -574,11 +486,17 @@ namespace Unity.Physics.Authoring
             }
             else
             {
-                foreach (var meshFilter in GetAllMeshFiltersInHierarchyBelongingToShape(this, validate))
+                using (var scope = new GetActiveChildrenScope<MeshFilter>(this, transform))
                 {
-                    AppendMeshPropertiesToNativeBuffers(
-                        meshFilter.transform.localToWorldMatrix, meshFilter.sharedMesh, vertices, triangles, validate, inputs
-                    );
+                    foreach (var meshFilter in scope.Buffer)
+                    {
+                        if (scope.IsChildActiveAndBelongsToShape(meshFilter, validate))
+                        {
+                            AppendMeshPropertiesToNativeBuffers(
+                                meshFilter.transform.localToWorldMatrix, meshFilter.sharedMesh, vertices, triangles, validate, inputs
+                            );
+                        }
+                    }
                 }
             }
         }
@@ -591,26 +509,33 @@ namespace Unity.Physics.Authoring
             if (mesh == null || validate && !mesh.IsValidForConversion(gameObject))
                 return;
 
-            var offset = vertices.Length;
-
-            mesh.GetVertices(s_Vertices);
-            if (vertices.Capacity < vertices.Length + s_Vertices.Count)
-                vertices.Capacity = vertices.Length + s_Vertices.Count;
             var childToShape = math.mul(transform.worldToLocalMatrix, localToWorld);
-            foreach (var v in s_Vertices)
-                vertices.Add(math.mul(childToShape, new float4(v, 1f)).xyz);
-            s_Vertices.Clear();
 
-            for (var subMesh = 0; subMesh < mesh.subMeshCount; ++subMesh)
+            var offset = 0;
+            if (vertices.IsCreated)
             {
-                mesh.GetIndices(s_Indices, subMesh);
-                var numTriangles = s_Indices.Count / 3;
-                if (triangles.Capacity < triangles.Length + numTriangles)
-                    triangles.Capacity = triangles.Length + numTriangles;
-                for (var i = 0; i < numTriangles; i++)
-                    triangles.Add(new int3(offset + s_Indices[i * 3], offset + s_Indices[i * 3 + 1], offset + s_Indices[i * 3 + 2]));
+                offset = vertices.Length;
+                mesh.GetVertices(s_Vertices);
+                if (vertices.Capacity < vertices.Length + s_Vertices.Count)
+                    vertices.Capacity = vertices.Length + s_Vertices.Count;
+                foreach (var v in s_Vertices)
+                    vertices.Add(math.mul(childToShape, new float4(v, 1f)).xyz);
+                s_Vertices.Clear();
             }
-            s_Indices.Clear();
+
+            if (triangles.IsCreated)
+            {
+                for (var subMesh = 0; subMesh < mesh.subMeshCount; ++subMesh)
+                {
+                    mesh.GetIndices(s_Indices, subMesh);
+                    var numTriangles = s_Indices.Count / 3;
+                    if (triangles.Capacity < triangles.Length + numTriangles)
+                        triangles.Capacity = triangles.Length + numTriangles;
+                    for (var i = 0; i < numTriangles; i++)
+                        triangles.Add(new int3(offset + s_Indices[i * 3], offset + s_Indices[i * 3 + 1], offset + s_Indices[i * 3 + 2]));
+                }
+                s_Indices.Clear();
+            }
 
             if (inputs.IsCreated)
                 inputs.Add(HashableShapeInputs.FromMesh(mesh, childToShape));
@@ -638,13 +563,19 @@ namespace Unity.Physics.Authoring
 
         void SyncCapsuleProperties()
         {
-            UpdateCapsuleAxis();
+            if (m_ShapeType == ShapeType.Box || m_ShapeType == ShapeType.Plane)
+                UpdateCapsuleAxis();
+            else
+                m_Capsule.Axis = 2;
             Sync(ref m_Capsule);
         }
 
         void SyncCylinderProperties()
         {
-            UpdateCylinderAxis();
+            if (m_ShapeType == ShapeType.Box || m_ShapeType == ShapeType.Plane)
+                UpdateCylinderAxis();
+            else
+                m_Cylinder.Axis = 2;
             Sync(ref m_Cylinder);
         }
 
@@ -658,7 +589,6 @@ namespace Unity.Physics.Authoring
             var euler = m_PrimitiveOrientation;
             euler.SetValue(geometry.Orientation);
             SetBox(geometry, euler);
-            BevelRadius = geometry.BevelRadius;
         }
 
         internal void SetBox(BoxGeometry geometry, EulerAngles orientation)
@@ -667,35 +597,21 @@ namespace Unity.Physics.Authoring
             m_PrimitiveCenter = geometry.Center;
             m_PrimitiveSize = math.max(geometry.Size, new float3());
             m_PrimitiveOrientation = orientation;
-            BevelRadius = BevelRadius;
+            m_ConvexHullGenerationParameters.BevelRadius = geometry.BevelRadius;
 
             SyncCapsuleProperties();
             SyncCylinderProperties();
             SyncSphereProperties();
         }
 
-        public void SetCapsule(CapsuleGeometry geometry, quaternion orientation)
-        {
-            var euler = m_PrimitiveOrientation;
-            euler.SetValue(
-                math.mul(
-                    orientation,
-                    quaternion.LookRotationSafe(geometry.Vertex1 - geometry.Vertex0, math.up())
-                )
-            );
-            var center = math.lerp(geometry.Vertex0, geometry.Vertex1, 0.5f);
-            var height = math.length(geometry.Vertex0 - geometry.Vertex1) + 2f * geometry.Radius;
-            SetCapsule(geometry, euler);
-        }
-
-        internal void SetCapsule(CapsuleGeometry geometry, EulerAngles orientation)
+        public void SetCapsule(CapsuleGeometryAuthoring geometry)
         {
             m_ShapeType = ShapeType.Capsule;
-            m_PrimitiveCenter = geometry.GetCenter();
-            m_PrimitiveOrientation = orientation;
+            m_PrimitiveCenter = geometry.Center;
+            m_PrimitiveOrientation.SetValue(geometry.Orientation);
 
             var radius = math.max(0f, geometry.Radius);
-            var height = math.max(geometry.GetHeight(), radius * 2f);
+            var height = math.max(0f, geometry.Height);
             m_PrimitiveSize = new float3(radius * 2f, radius * 2f, height);
 
             SyncCapsuleProperties();
@@ -720,7 +636,7 @@ namespace Unity.Physics.Authoring
             geometry.Height = math.max(0f, geometry.Height);
             m_PrimitiveSize = new float3(geometry.Radius * 2f, geometry.Radius * 2f, geometry.Height);
 
-            BevelRadius = BevelRadius;
+            m_ConvexHullGenerationParameters.BevelRadius = geometry.BevelRadius;
 
             SyncCapsuleProperties();
             SyncCylinderProperties();
@@ -732,6 +648,11 @@ namespace Unity.Physics.Authoring
             var euler = m_PrimitiveOrientation;
             euler.SetValue(orientation);
             SetSphere(geometry, euler);
+        }
+
+        internal void SetSphere(SphereGeometry geometry)
+        {
+            SetSphere(geometry, m_PrimitiveOrientation);
         }
 
         internal void SetSphere(SphereGeometry geometry, EulerAngles orientation)
@@ -801,7 +722,7 @@ namespace Unity.Physics.Authoring
         {
             // migrate existing serialized data from old m_ConvexRadius field
             if (m_ConvexRadius_Deprecated >= 0f)
-                BevelRadius = m_ConvexRadius_Deprecated;
+                m_ConvexHullGenerationParameters.BevelRadius = m_ConvexRadius_Deprecated;
             m_ConvexRadius_Deprecated = -1f;
         }
 
@@ -822,7 +743,7 @@ namespace Unity.Physics.Authoring
                     SetBox(GetBoxProperties(out var orientation), orientation);
                     break;
                 case ShapeType.Capsule:
-                    SetCapsule(GetCapsuleProperties(out orientation), orientation);
+                    SetCapsule(GetCapsuleProperties());
                     break;
                 case ShapeType.Cylinder:
                     SetCylinder(GetCylinderProperties(out orientation), orientation);
@@ -846,14 +767,13 @@ namespace Unity.Physics.Authoring
             m_CylinderSideCount =
                 math.clamp(m_CylinderSideCount, CylinderGeometry.MinSideCount, CylinderGeometry.MaxSideCount);
             m_ConvexHullGenerationParameters.OnValidate();
-            BevelRadius = BevelRadius;
             m_ConvexRadius_Deprecated = -1f; // prevent user from setting a value for deprecated field
             PhysicsMaterialProperties.OnValidate(ref m_Material, true);
         }
 
         // matrix to transform point from shape space into world space
         internal float4x4 GetShapeToWorldMatrix() =>
-            float4x4.TRS(transform.position, transform.rotation, 1f);
+             new float4x4(Math.DecomposeRigidBodyTransform(transform.localToWorldMatrix));
 
         // matrix to transform point from object's local transform matrix into shape space
         internal float4x4 GetLocalToShapeMatrix() =>
@@ -915,16 +835,15 @@ namespace Unity.Physics.Authoring
                 SetBox(
                     new BoxGeometry { Center = bounds.center, Size = bounds.size, Orientation = orientation }
                 );
-                BevelRadius = math.min(math.cmin(bounds.size) * 0.1f, ConvexHullGenerationParameters.Default.BevelRadius);
             }
 
             switch (shapeType)
             {
                 case ShapeType.Capsule:
-                    SetCapsule(GetCapsuleProperties(out EulerAngles orientation), orientation);
+                    SetCapsule(GetCapsuleProperties());
                     break;
                 case ShapeType.Cylinder:
-                    SetCylinder(GetCylinderProperties(out orientation), orientation);
+                    SetCylinder(GetCylinderProperties(out var orientation), orientation);
                     break;
                 case ShapeType.Sphere:
                     SetSphere(GetSphereProperties(out orientation), orientation);

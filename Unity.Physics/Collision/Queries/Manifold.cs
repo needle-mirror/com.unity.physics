@@ -1,4 +1,5 @@
 using System;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -41,11 +42,11 @@ namespace Unity.Physics
         }
 
         // Write a set of contact manifolds for a pair of bodies to the given stream.
-        public static unsafe void BodyBody(RigidBody rigidBodyA, RigidBody rigidBodyB, MotionVelocity motionVelocityA, MotionVelocity motionVelocityB,
+        public static unsafe void BodyBody(in RigidBody rigidBodyA, in RigidBody rigidBodyB, in MotionVelocity motionVelocityA, in MotionVelocity motionVelocityB,
             float collisionTolerance, float timeStep, BodyIndexPair pair, ref NativeStream.Writer contactWriter)
         {
-            Collider* colliderA = rigidBodyA.Collider;
-            Collider* colliderB = rigidBodyB.Collider;
+            var colliderA = (Collider*)rigidBodyA.Collider.GetUnsafePtr();
+            var colliderB = (Collider*)rigidBodyB.Collider.GetUnsafePtr();
 
             if (colliderA == null || colliderB == null || !CollisionFilter.IsCollisionEnabled(colliderA->Filter, colliderB->Filter))
             {
@@ -68,9 +69,7 @@ namespace Unity.Physics
             {
                 BodyIndices = pair,
                 BodyCustomTags = new CustomTagsPair { CustomTagsA = rigidBodyA.CustomTags, CustomTagsB = rigidBodyB.CustomTags },
-                BodiesHaveInfiniteMass =
-                    !math.any(motionVelocityA.InverseInertiaAndMass) &&
-                    !math.any(motionVelocityB.InverseInertiaAndMass),
+                BodiesHaveInfiniteMass = motionVelocityA.HasInfiniteInertiaAndMass && motionVelocityB.HasInfiniteInertiaAndMass,
                 ContactWriter = (NativeStream.Writer*)UnsafeUtility.AddressOf(ref contactWriter)
             };
 
@@ -199,7 +198,7 @@ namespace Unity.Physics
 
         private static unsafe void ConvexConvex(
             Context context, ColliderKeyPair colliderKeys,
-            Collider* convexColliderA, Collider* convexColliderB, MTransform worldFromA, MTransform worldFromB,
+            Collider* convexColliderA, Collider* convexColliderB, [NoAlias] in MTransform worldFromA, [NoAlias] in MTransform worldFromB,
             float maxDistance, bool flipped)
         {
             Material materialA = ((ConvexColliderHeader*)convexColliderA)->Material;
@@ -365,7 +364,7 @@ namespace Unity.Physics
 
         private static unsafe void ConvexComposite(
             Context context, ColliderKey convexKeyA,
-            Collider* convexColliderA, Collider* compositeColliderB, MTransform worldFromA, MTransform worldFromB,
+            [NoAlias] Collider* convexColliderA, [NoAlias] Collider* compositeColliderB, [NoAlias] in MTransform worldFromA, [NoAlias] in MTransform worldFromB,
             MotionExpansion expansion, bool flipped)
         {
             // Calculate swept AABB of A in B
@@ -386,7 +385,7 @@ namespace Unity.Physics
 
         private static unsafe void CompositeConvex(
             Context context,
-            Collider* compositeColliderA, Collider* convexColliderB, MTransform worldFromA, MTransform worldFromB,
+            [NoAlias] Collider* compositeColliderA, [NoAlias] Collider* convexColliderB, [NoAlias] in MTransform worldFromA, [NoAlias] in MTransform worldFromB,
             MotionExpansion expansion, bool flipped)
         {
             // Flip the relevant inputs and call convex-vs-composite
@@ -429,7 +428,7 @@ namespace Unity.Physics
                 throw new NotSupportedException();
             }
 
-            public void AddColliderKeys(ColliderKey* keys, int count)
+            public void AddColliderKeys([NoAlias] ColliderKey* keys, int count)
             {
                 var colliderKeys = new ColliderKeyPair { ColliderKeyA = m_ConvexColliderKey, ColliderKeyB = m_ConvexColliderKey };
                 CollisionFilter filter = m_ConvexColliderA->Filter;
@@ -610,7 +609,7 @@ namespace Unity.Physics
         }
 
         private static unsafe void ConvexTerrain(
-            Context context, ColliderKeyPair colliderKeys, Collider* convexColliderA, Collider* terrainColliderB, MTransform worldFromA, MTransform worldFromB,
+            Context context, ColliderKeyPair colliderKeys, [NoAlias] Collider* convexColliderA, [NoAlias] Collider* terrainColliderB, [NoAlias] in MTransform worldFromA, [NoAlias] in MTransform worldFromB,
             float maxDistance, bool flipped)
         {
             ref var terrain = ref ((TerrainCollider*)terrainColliderB)->Terrain;
@@ -770,19 +769,5 @@ namespace Unity.Physics
                 m_KeyPath.PopChildKey(numCompositeKeyBits);
             }
         }
-
-        #region Obsolete
-        [Obsolete("BodyBody(ref PhysicsWorld, BodyIndexPair, float, ref NativeStream.Writer) has been deprecated. Use BodyBody() that takes a pair of bodies and motion velocities instead. (RemovedAfter 2019-12-10)")]
-        public static void BodyBody(ref PhysicsWorld world, BodyIndexPair pair, float timeStep, ref NativeStream.Writer contactWriter)
-        {
-            RigidBody rigidBodyA = world.Bodies[pair.BodyAIndex];
-            RigidBody rigidBodyB = world.Bodies[pair.BodyBIndex];
-
-            MotionVelocity motionVelocityA = pair.BodyAIndex < world.MotionVelocities.Length ? world.MotionVelocities[pair.BodyAIndex] : MotionVelocity.Zero;
-            MotionVelocity motionVelocityB = pair.BodyBIndex < world.MotionVelocities.Length ? world.MotionVelocities[pair.BodyBIndex] : MotionVelocity.Zero;
-
-            BodyBody(rigidBodyA, rigidBodyB, motionVelocityA, motionVelocityB, world.CollisionWorld.CollisionTolerance, timeStep, pair, ref contactWriter);
-        }
-        #endregion
     }
 }

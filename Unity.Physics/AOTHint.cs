@@ -4,7 +4,7 @@ namespace Unity.Physics
 {
     class PreserveAttribute : Attribute { }
 
-    [Obsolete("Do not access this type. It is only included to hint AOT compilation", true)]
+    [Obsolete("Do not access this type. It is only included to hint AOT compilation. (DoNotRemove)", true)]
     static unsafe class AOTHint
     {
         [Preserve]

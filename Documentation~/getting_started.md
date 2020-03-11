@@ -117,6 +117,10 @@ The current set of data components for a rigid body is as follows:
 |`PhysicsGravityFactor` | The scalar for how much gravity should affect a dynamic body. Assumed to be 1 if not present.
 |`PhysicsCustomData`    | Custom flags applied to the body. They can be used for certain collision event applications. Assumed to be zero if not present. |
 
-For all bodies the `Unity.Transforms` `Translation` and `Rotation` component data are required. This represents the transform of the body.
+All physics bodies require components from `Unity.Transforms` in order to represent their position and orientation in world space. Physics ignores any scale of rigid bodies. Any scale applied to converted GameObjects is baked into a `CompositeScale` component (to preserve the scale of the render mesh at bake time) and the `PhysicsCollider` component (to approximate the scale of the physics geometry at bake time).
+
+Dynamic bodies (i.e., those with `PhysicsVelocity`) require `Translation` and `Rotation` components. Their values are presumed to be in world space. As such, dynamic bodies are unparented during entity conversion.
+
+Static bodies (i.e., those with `PhysicsCollider` but without `PhysicsVelocity`) require at least one of either `Translation`, `Rotation`, and/or `LocalToWorld`. For static bodies without a `Parent`, physics can read their `Translation` and `Rotation` values directly, as they are presumed to be in world space. World space transformations are decomposed from `LocalToWorld` if the body has a `Parent`, using whatever the current value is (which may be based on the results of the transform systems at the end of the previous frame). For best performance and up-to-date results, it is recommended that static bodies do not have a `Parent`.
 
 The [Interacting with bodies](interacting_with_bodies.md) section provides more info on how to interact with Physics Bodies and their data.

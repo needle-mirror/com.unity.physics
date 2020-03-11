@@ -88,7 +88,7 @@ namespace Unity.Physics
         public interface ITreeOverlapCollector
         {
             void AddPairs(int l, int4 r, int countR);
-            void AddPairs(int4 l, int4 r, int count);
+            void AddPairs(int4 l, int4 r, int count, bool swapped = false);
             void FlushIfNeeded();
         }
 
@@ -214,6 +214,7 @@ namespace Unity.Physics
             int4* compressedData,
             ref int* stackA, ref int* stackB, ref T pairWriter) where T : struct, ITreeOverlapCollector
         {
+            bool swapped = false;
             if (nodeA->IsInternal && nodeB->IsLeaf)
             {
                 Node* tmp = nodeA;
@@ -221,6 +222,8 @@ namespace Unity.Physics
                 nodeB = tmp;
 
                 treeB = treeA;
+
+                swapped = true;
             }
 
             bool4* overlapMask = stackalloc bool4[4];
@@ -277,7 +280,7 @@ namespace Unity.Physics
                             {
                                 if (internalNode->IsLeaf)
                                 {
-                                    pairWriter.AddPairs(leafA, internalCompressedData, internalCount);
+                                    pairWriter.AddPairs(leafA, internalCompressedData, internalCount, swapped);
                                     pairWriter.FlushIfNeeded();
                                 }
                                 else

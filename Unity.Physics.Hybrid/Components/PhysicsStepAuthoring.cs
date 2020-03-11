@@ -39,9 +39,9 @@ namespace Unity.Physics.Authoring
         void OnValidate()
         {
             SolverIterationCount = math.max(1, SolverIterationCount);
-            ThreadCountHint = math.max(1, ThreadCountHint);
 
             if (!enabled) return;
+            if (gameObject.scene.isSubScene) return;
             if (m_ConvertedEntity == Entity.Null) return;
 
             // This requires Entity Conversion mode to be 'Convert And Inject Game Object'

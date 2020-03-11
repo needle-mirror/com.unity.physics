@@ -1,9 +1,11 @@
-﻿using Unity.Mathematics;
+﻿using Unity.Burst;
+using Unity.Mathematics;
 using static Unity.Physics.Math;
 
 namespace Unity.Physics
 {
     // Solve data for a constraint that limits two degrees of angular freedom
+    [NoAlias]
     struct AngularLimit2DJacobian
     {
         // Free axes in motion space
@@ -80,9 +82,9 @@ namespace Unity.Physics
             float2 effectiveMass; // First column of the 2x2 matrix, we don't need the second column because the second component of error is zero
             {
                 // Calculate the inverse effective mass matrix, then invert it
-                float invEffMassDiag0 = math.csum(jacA0 * jacA0 * velocityA.InverseInertiaAndMass.xyz + jacB0 * jacB0 * velocityB.InverseInertiaAndMass.xyz);
-                float invEffMassDiag1 = math.csum(jacA1 * jacA1 * velocityA.InverseInertiaAndMass.xyz + jacB1 * jacB1 * velocityB.InverseInertiaAndMass.xyz);
-                float invEffMassOffDiag = math.csum(jacA0 * jacA1 * velocityA.InverseInertiaAndMass.xyz + jacB0 * jacB1 * velocityB.InverseInertiaAndMass.xyz);
+                float invEffMassDiag0 = math.csum(jacA0 * jacA0 * velocityA.InverseInertia + jacB0 * jacB0 * velocityB.InverseInertia);
+                float invEffMassDiag1 = math.csum(jacA1 * jacA1 * velocityA.InverseInertia + jacB1 * jacB1 * velocityB.InverseInertia);
+                float invEffMassOffDiag = math.csum(jacA0 * jacA1 * velocityA.InverseInertia + jacB0 * jacB1 * velocityB.InverseInertia);
                 float det = invEffMassDiag0 * invEffMassDiag1 - invEffMassOffDiag * invEffMassOffDiag;
                 float invDet = math.select(jacLengthSq / det, 0.0f, det == 0.0f); // scale by jacLengthSq because the jacs were not normalized
                 effectiveMass = invDet * new float2(invEffMassDiag1, -invEffMassOffDiag);

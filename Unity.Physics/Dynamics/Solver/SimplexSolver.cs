@@ -1,4 +1,5 @@
 ﻿using System;
+using System.ComponentModel;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine.Assertions;
@@ -26,18 +27,18 @@ namespace Unity.Physics
     {
         const float k_Epsilon = 0.0001f;
 
-        [Obsolete("SimplexSolver.Solve() taking the NativeArray<SurfaceConstraintInfo> has been deprecated. Use the new SimplexSolver.Solve() method that takes NativeList<SurfaceConstraintInfo> instead. (RemovedAfter 2020-01-23)")]
-        public static unsafe void Solve(PhysicsWorld world, float deltaTime, float minDeltaTime, float3 up, int numConstraints,
-            ref NativeArray<SurfaceConstraintInfo> constraints, ref float3 position, ref float3 velocity, out float integratedTime, bool useConstraintVelocities = true)
-        {
-            float maxVelocity = float.MaxValue;
-            NativeList<SurfaceConstraintInfo> constraintsList = new NativeList<SurfaceConstraintInfo>(numConstraints, Allocator.Temp);
-            constraintsList.AddRange(constraints);
-            Solve(world, deltaTime, minDeltaTime, up, maxVelocity, constraintsList, ref position, ref velocity, out integratedTime, useConstraintVelocities);
-        }
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("This signature has been deprecated. Please use the signature that does not pass PhysicsWorld. (RemovedAfter 2020-04-24)")]
+        public static void Solve(
+            PhysicsWorld world, float deltaTime, float minDeltaTime, float3 up, float maxVelocity,
+            NativeList<SurfaceConstraintInfo> constraints, ref float3 position, ref float3 velocity, out float integratedTime, bool useConstraintVelocities = true
+        ) =>
+            Solve(deltaTime, minDeltaTime, up, maxVelocity, constraints, ref position, ref velocity, out integratedTime, useConstraintVelocities);
 
-        public static unsafe void Solve(PhysicsWorld world, float deltaTime, float minDeltaTime, float3 up, float maxVelocity,
-            NativeList<SurfaceConstraintInfo> constraints, ref float3 position, ref float3 velocity, out float integratedTime, bool useConstraintVelocities = true)
+        public static unsafe void Solve(
+            float deltaTime, float minDeltaTime, float3 up, float maxVelocity,
+            NativeList<SurfaceConstraintInfo> constraints, ref float3 position, ref float3 velocity, out float integratedTime, bool useConstraintVelocities = true
+        )
         {
             // List of planes to solve against (up to 4)
             SurfaceConstraintInfo* supportPlanes = stackalloc SurfaceConstraintInfo[4];
@@ -77,8 +78,7 @@ namespace Unity.Physics
                     }
                 }
 
-                // Integrate if at least 100 microseconds to hit
-                if (minCollisionTime > 1e-4f)
+                // Integrate
                 {
                     currentTime += minCollisionTime;
                     remainingTime -= minCollisionTime;

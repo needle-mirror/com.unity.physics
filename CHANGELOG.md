@@ -1,9 +1,188 @@
+## [0.3.0-preview.1] - 2020-03-12
+
+### Upgrade guide
+
+* In order to lead to more predictable behavior and allow for repositioning instantiated prefabs, static bodies are no longer un-parented during conversion. For best performance and guaranteed up-to-date values, it is still recommended that static bodies either be root-level entities, or that static shapes be set up as compounds. Dynamic and kinematic bodies are still un-parented. If your game code assumes static bodies are converted into world space, you may need to decompose `LocalToWorld` using `Math.DecomposeRigidBodyTransform()` rather than reading directly from `Translation` and `Rotation`.
+
+### Changes
+
+* Dependencies
+    * Updated Entities from `0.3.0-preview.4` to `0.6.0-preview.24`
+    * Added Burst `1.3.0-preview.3`
+    * Added Collections `0.5.2-preview.8`
+    * Added Jobs `0.2.5-preview.20`
+    * Added Mathematics `1.1.0`
+
+* Run-Time API
+    * Added the following new types:
+        * `CollisionEvents` (allows iterating through events directly using a `foreach` loop, rather than only via `ICollisionEventsJob`)
+        * `DispatchPairSequencer`
+        * `IBodyPairsJobBase`
+        * `ICollisionEventsJobBase`
+        * `IContactsJobBase`
+        * `IJacobiansJobBase`
+        * `ITriggerEventsJobBase`
+        * `Integrator`
+        * `JointFrame`
+        * `Math.FloatRange`
+        * `NarrowPhase`
+        * `SimulationContext`
+        * `SimulationJobHandles`
+        * `Solver`
+        * `TriggerEvents` (allows iterating through events directly using a `foreach` loop, rather than only via `ITriggerEventsJob`)
+        * `Velocity`
+    * Added the following members:
+        * `CollisionWorld.DynamicBodies`
+        * `CollisionWorld.NumDynamicBodies`
+        * `CollisionWorld.NumStaticBodies`
+        * `CollisionWorld.StaticBodies`
+        * `CollisionWorld.BuildBroadphase()`
+        * `CollisionWorld.FindOverlaps()`
+        * `CollisionWorld.Reset()`
+        * `CollisionWorld.ScheduleBuildBroadphaseJobs()`
+        * `CollisionWorld.ScheduleFindOverlapsJobs()`
+        * `CollisionWorld.ScheduleUpdateDynamicTree()`
+        * `CollisionWorld.UpdateDynamicTree()`
+        * `DynamicsWorld.Reset()`
+        * `Math.DecomposeRigidBodyOrientation()`
+        * `Math.DecomposeRigidBodyTransform()`
+        * `MassFactors.InverseInertiaFactorA`
+        * `MassFactors.InverseInertiaFactorB`
+        * `MassFactors.InverseMassFactorA`
+        * `MassFactors.InverseMassFactorB`
+        * `MotionVelocity.InverseInertia`
+        * `MotionVelocity.InverseMass`
+        * `Simulation.CollisionEvents`
+        * `Simulation.TriggerEvents`
+        * `Simulation.StepImmediate()`
+    * Changed the following members/types:
+        * `CollisionWorld` constructor now requires specifying the number of dynamic and static bodies separately
+        * `CollisionWorld.NumBodies` is now read-only
+        * `DynamicsWorld.NumJoints` is now read-only
+        * `DynamicsWorld.NumMotions` is now read-only
+        * `ISimulation.ScheduleStepJobs()` now requires callbacks and thread count hint
+        * `ITreeOverlapCollector.AddPairs()` now has optional bool parameter to swap the bodies
+        * `Joint.JointData` is now `BlobAssetReference<Joint>` instead of `Joint*`
+        * `RigidBody.Collider` is now `BlobAssetReference<Collider>` instead of `Collider*`
+        * The following types no longer implement `ICloneable`. Their `Clone()` methods now return instances of their respective types rather than `object`:
+            * `CollisionWorld`
+            * `DynamicsWorld`
+            * `PhysicsWorld`
+        * The following types now implement `IEquatable<T>`:
+            * `Constraint`
+    * Deprecated the following members:
+        * `CollisionFilter.IsValid` (use its opposite, `CollisionFilter.IsEmpty` instead)
+        * `CollisionWorld.ScheduleUpdateDynamicLayer()` (use `ScheduleUpdateDynamicTree()` instead)
+        * `Constraint.StiffSpring()` (use `Constraint.LimitedDistance()` instead)
+        * `Constraint` factory signatures passing `float` values for ranges (use new signatures taking `FloatRange` instead):
+            * `Cone()`
+            * `Cylindrical()`
+            * `Planar()`
+            * `Twist()`
+        * `JointData.Create()` signature passing `MTransform` and `Constraint[]` (use new signature that takes `JointFrame` and `NativeArray<Constraint>` instead)
+        * `JointData.CreateStiffSpring()` (use `JointData.CreateLimitedDistance()` instead)
+        * `JointData` factory signatures passing `float3` and `quaternion` pairs for joint frames (use new signatures taking `JointFrame` instead):
+            * `CreateFixed()`
+            * `CreateHinge()`
+            * `CreateLimitedHinge()`
+            * `CreatePrismatic()`
+            * `CreateRagdoll()`
+        * `MassFactors.InvInertiaAndMassFactorA` (use `InverseInertiaFactorA` and/or `InverseMassFactorA` instead)
+        * `MassFactors.InvInertiaAndMassFactorB` (use `InverseInertiaFactorB` and/or `InverseMassFactorB` instead)
+        * `MotionVelocity.InverseInertiaAndMass` (use `InverseInertia` and/or `InverseMass` instead)
+        * `RigidBody.HasCollider` (use `Collider.IsCreated` instead)
+        * `SimplexSolver.Solve()` signature passing `PhysicsWorld` (use new signature that does not require one, as it is not used)
+        * `SimulationStepInput.ThreadCountHint` (supply desired value directly to `ScheduleStepJobs()`)
+    * Removed the following expired members:
+        * `Broadphase.ScheduleBuildJobs()` signature that does not specify gravity
+        * `CollisionWorld.ScheduleUpdateDynamicLayer()` signature that does not specify gravity
+        * `JointData.NumConstraints`
+        * `MeshCollider.Create()` signatures taking `NativeArray<int>`
+        * `PhysicsWorld.CollisionTolerance`
+        * `SimplexSolver.Solve()` signature taking `NativeArray<SurfaceConstraintInfo>`
+        * `SimulationStepInput.Callbacks` (removed without expiration; pass callbacks to `ScheduleStepJobs()`)
+
+* Authoring/Conversion API
+    * Added the following new types:
+        * `LegacyJointConversionSystem`
+        * `CapsuleGeometryAuthoring`
+    * Added the following members:
+        * `PhysicsShapeAuthoring.GetCapsuleProperties()` signature returning `CapsuleGeometryAuthoring`
+        * `PhysicsShapeAuthoring.SetCapsule()` signature passing `CapsuleGeometryAuthoring`
+    * Deprecated the following members:
+        * `PhysicsShapeAuthoring.GetCapsuleProperties()` signature returning `CapsuleGeometry`
+        * `PhysicsShapeAuthoring.SetCapsule()` signature passing `CapsuleGeometry`
+    * Removed the following expired members/types:
+        * `BaseShapeConversionSystem<T>.ProduceColliderBlob()`
+        * `DisplayCollisionEventsSystem.DisplayCollisionEventsJob`
+        * `DisplayCollisionEventsSystem.FinishDisplayCollisionEventsJob`
+        * `DisplayCollisionEventsSystem.ScheduleCollisionEventsJob()`
+        * `DisplayContactsSystem.DisplayContactsJob`
+        * `DisplayContactsSystem.FinishDisplayContactsJob`
+        * `DisplayContactsSystem.ScheduleContactsJob()`
+        * `DisplayTriggerEventsSystem.DisplayTriggerEventsJob`
+        * `DisplayTriggerEventsSystem.FinishDisplayTriggerEventsJob`
+        * `DisplayTriggerEventsSystem.ScheduleTriggerEventsJob()`
+        * `PhysicsShapeAuthoring.GetMeshProperties()` using `NativeList<int>`. Use the signature taking `NativeList<int3>` instead
+
+* Run-Time Behavior
+    * The data protocol for static rigid bodies has changed so that at least one of `Translation`, `Rotation`, or `LocalToWorld` is required.
+        * If a static body as a `Parent`, then its transform is always decomposed from its `LocalToWorld` component (which may be the result of last frame's transformations if you have not manually updated it).
+        * If there is no `Parent`, then the body is assumed to be in world space and its `Translation` and `Rotation` are read directly as before, if they exist; otherwise corresponding values are decomposed from `LocalToWorld` if it exists.
+        * In any case where a value must be decomposed from `LocalToWorld` but none exists, then a corresponding identity value is used (`float3.zero` for `Translation` and `quaternion.identity` for `Rotation`).
+    * The following `CollisionWorld` queries no longer assert if the supplied collision filter is empty:
+        * `CalculateDistance()`
+        * `CastCollider()`
+        * `CastRay()`
+        * `OverlapAabb()`
+    * `Simulation.ScheduleStepJobs()` can now schedule different types of simulation:
+        * Providing a valid `threadCountHint` (>0) as the last parameter will schedule a multi-threaded simulation
+        * Not providing a `threadCount` or providing an invalid value (<=0) will result in a simulation with a very small number of jobs being spawned (one per step phase)
+        * Both simulation types offer the exact same customization options (callbacks) and outputs (events)
+    * `ISimulation.Step()` is intended to allow you to step a simulation immediately in the calling code instead of spawning jobs
+        * Unfortunately, `Unity.Physics.Simulation` is currently not Burst-compatible, and therefore can't be wrapped in a Burst compiled job
+        * `Simulation.StepImmediate()` should be wrapped in a single Burst compiled job for lightweight stepping logic; however, it doesn't support callbacks
+        * If callbacks are needed, one should implement the physics step using a set of function calls that represent different phases of the physics engine and add customization logic in between these calls; this should all be wrapped in a Burst compiled job; check `Simulation.StepImmediate()` for the full list of functions that need to be called
+    * Previously, if an Entity referenced by a `PhysicsJoint` component was deleted, `BuildPhysicsWorld.CreateJoints()` would assert after failing to find a valid rigid body index. Now, if no valid body is found, the `Joint.BodyIndexPair` is marked as invalid instead and the simulation will ignore them.
+    * Triggers no longer influence the center of mass or inertia of any compound colliders that they are part of.
+
+* Authoring/Conversion Behavior
+    * Implicitly static shapes (as well as explicitly static bodies) in a hierarchy are no longer un-parented during the conversion process. Dynamic and kinematic bodies still are.
+    * Bevel radius and convex hull simplification tolerance are no longer modified by an object's scale when it is converted.
+    * Improved performance of converting mesh colliders and convex hulls, particularly when they appear as multiple child instances in a compound collider.
+    * Improved visualization of primitive shapes in the SceneView.
+    * `PhysicsShapeAuthoring` components are now editable from within the SceneView.
+    * `PhysicsShapeAuthoring` primitives are now oriented more correctly when non uniformly scaled.
+
+### Fixes
+
+* Fixed regression where displaying a mesh or convex hull preview on a shape authoring component immediately after a domain reload would trigger an assert.
+* Fixed possible bug where classic `MeshCollider` components might convert to the incorrect shape.
+* Frame Selected (F key in scene view) now properly focuses on the collision shape bounds.
+* `ConvexCollider.Create()` had been allocating too much memory for `FaceVerticesIndex` array.
+* `MotionVelocity.CalculateExpansion()` formula changed to reduce expansion of AABB due to rotation.
+* `ForceUnique` checkbox in the Inspector is no longer disabled for primitive `PhysicsShape` types.
+* Fixed a bug in scheduling resulting in race conditions during the solving phase.
+* `PhysicsStepAuthoring` and `PhysicsDebugDisplayAuthoring` no longer throw exceptions when embedded in a sub-scene.
+
+### Known Issues
+
+* Due to a bug in the `TRSToLocalToParent` system, static bodies in a hierarchy will always cause the broad phase to be rebuilt. This will be fixed in the next version of entities after 0.6.0.
+* Not all properties on classic joint components are converted yet:
+    * Converted properties include connected bodies, axes, collisions, anchors, and linear/angular limits.
+    * Motors, spring forces, mass scale, break limits, and projection settings are currently ignored.
+    * Swapping bodies on `ConfigurableJoint` is not yet supported.
+    * `ConfigurableJoint` setups with at least one free axis of angular motion are only stable if both other axes are locked (hinge), or both other axes are free (ball-and-socket).
+    * Because solver behavior differs, some configurations also currently have a different feel from their classic counterparts.
+* Modifying classic joints with Live Link enabled will currently leak memory.
+* SceneView editing of `PhysicsShapeAuthoring` components currently only affects their size, but not their center offset.
+
 ## [0.2.5-preview.1] - 2019-12-05
 
 ### Fixes
 
 * Fixed a bug that could cause compound colliders to not update with Live Link when moving around a mesh collider in the compound's hierarchy.
-* Fixed a performance regression that occurred in certain situations when using Live Link
+* Fixed possible incorrect instancing of colliders with different inputs
 
 ## [0.2.5-preview] - 2019-12-04
 

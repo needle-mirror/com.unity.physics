@@ -123,7 +123,7 @@ namespace Unity.Physics
             totalSize = Math.NextMultipleOf16(totalSize);  // planes currently must be aligned for Havok
             totalSize += tempHull.Planes.Length * sizeof(Plane);
             totalSize += tempHull.Faces.Length * sizeof(ConvexHull.Face);
-            totalSize += tempHull.FaceVertexIndices.Length * sizeof(short);
+            totalSize += tempHull.FaceVertexIndices.Length * sizeof(byte);
             totalSize += tempHull.VertexEdges.Length * sizeof(ConvexHull.Edge);
             totalSize += tempHull.FaceLinks.Length * sizeof(ConvexHull.Edge);
             ConvexCollider* collider = (ConvexCollider*)UnsafeUtility.Malloc(totalSize, 16, Allocator.Temp);

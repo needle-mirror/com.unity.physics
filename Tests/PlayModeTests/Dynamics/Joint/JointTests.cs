@@ -4,6 +4,9 @@ using Unity.Mathematics;
 using Unity.Collections;
 using Unity.Entities;
 using Random = Unity.Mathematics.Random;
+using Unity.Burst;
+using Unity.Jobs;
+using static Unity.Physics.Math;
 
 namespace Unity.Physics.Tests.Joints
 {
@@ -20,13 +23,13 @@ namespace Unity.Physics.Tests.Joints
 
         void applyGravity(ref MotionVelocity velocity, ref MotionData motion, float3 gravity, float timestep)
         {
-            if (velocity.InverseInertiaAndMass.w > 0.0f)
+            if (velocity.InverseMass > 0.0f)
             {
                 velocity.LinearVelocity += gravity * timestep;
             }
         }
 
-        void integrate(ref MotionVelocity velocity, ref MotionData motion, float timestep)
+        static void integrate(ref MotionVelocity velocity, ref MotionData motion, float timestep)
         {
             motion.WorldFromMotion.pos += velocity.LinearVelocity * timestep;
             Integrator.IntegrateOrientation(ref motion.WorldFromMotion.rot, velocity.AngularVelocity, timestep);
@@ -36,14 +39,14 @@ namespace Unity.Physics.Tests.Joints
         // Random test data generation
         //
 
-        float3 generateRandomCardinalAxis(ref Random rnd)
+        static float3 generateRandomCardinalAxis(ref Random rnd)
         {
             float3 axis = float3.zero;
             axis[rnd.NextInt(3)] = rnd.NextBool() ? 1 : -1;
             return axis;
         }
 
-        RigidTransform generateRandomTransform(ref Random rnd)
+        static RigidTransform generateRandomTransform(ref Random rnd)
         {
             // Random rotation: 1 in 4 are identity, 3 in 16 are 90 or 180 degrees about i j or k, the rest are uniform random
             quaternion rot = quaternion.identity;
@@ -89,11 +92,42 @@ namespace Unity.Physics.Tests.Joints
                     break;
             }
 
+            float3 nextLinVel;
+            if (rnd.NextBool())
+            {
+                nextLinVel = float3.zero;
+            }
+            else
+            {
+                nextLinVel = rnd.NextFloat3(-50.0f, 50.0f);
+            }
+            float3 nextAngVel;
+            if (rnd.NextBool())
+            {
+                nextAngVel = float3.zero;
+            }
+            else
+            {
+                nextAngVel = rnd.NextFloat3(-50.0f, 50.0f);
+            }
+            float3 nextInertia;
+            float nextMass;
+            if (allowInfiniteMass && rnd.NextBool())
+            {
+                nextInertia = float3.zero;
+                nextMass = 0.0f;
+            }
+            else
+            {
+                nextMass = rnd.NextFloat(1e-3f, 100.0f);
+                nextInertia = 1.0f / inertia;
+            }
             velocity = new MotionVelocity
             {
-                LinearVelocity = rnd.NextBool() ? float3.zero : rnd.NextFloat3(-50.0f, 50.0f),
-                AngularVelocity = rnd.NextBool() ? float3.zero : rnd.NextFloat3(-50.0f, 50.0f),
-                InverseInertiaAndMass = (allowInfiniteMass && rnd.NextBool()) ? float4.zero : new float4(1.0f / inertia, rnd.NextFloat(1e-3f, 100.0f))
+                LinearVelocity = nextLinVel,
+                AngularVelocity = nextAngVel,
+                InverseInertia = nextInertia,
+                InverseMass = nextMass
             };
         }
 
@@ -121,7 +155,7 @@ namespace Unity.Physics.Tests.Joints
 
         delegate BlobAssetReference<JointData> GenerateJoint(ref Random rnd);
 
-        unsafe void SolveSingleJoint(JointData* jointData, int numIterations, float timestep,
+        unsafe static void SolveSingleJoint(JointData* jointData, int numIterations, float timestep,
             ref MotionVelocity velocityA, ref MotionVelocity velocityB, ref MotionData motionA, ref MotionData motionB, out NativeStream jacobiansOut)
         {
             var stepInput = new Solver.StepInput
@@ -186,7 +220,7 @@ namespace Unity.Physics.Tests.Joints
                 MotionVelocity velocityA, velocityB;
                 MotionData motionA, motionB;
                 generateRandomMotion(ref rnd, out velocityA, out motionA, true);
-                generateRandomMotion(ref rnd, out velocityB, out motionB, math.all(velocityA.InverseInertiaAndMass != 0.0f));
+                generateRandomMotion(ref rnd, out velocityB, out motionB, !velocityA.HasInfiniteInertiaAndMass);
                 
                 // Simulate the joint
                 {
@@ -247,19 +281,19 @@ namespace Unity.Physics.Tests.Joints
         // Tests
         //
 
-        void generateRandomPivots(ref Random rnd, out float3 pivotA, out float3 pivotB)
+        static void generateRandomPivots(ref Random rnd, out float3 pivotA, out float3 pivotB)
         {
             pivotA = rnd.NextBool() ? float3.zero : rnd.NextFloat3(-1.0f, 1.0f);
             pivotB = rnd.NextBool() ? float3.zero : rnd.NextFloat3(-1.0f, 1.0f);
         }
 
-        void generateRandomAxes(ref Random rnd, out float3 axisA, out float3 axisB)
+        static void generateRandomAxes(ref Random rnd, out float3 axisA, out float3 axisB)
         {
             axisA = rnd.NextInt(4) == 0 ? generateRandomCardinalAxis(ref rnd) : rnd.NextFloat3Direction();
             axisB = rnd.NextInt(4) == 0 ? generateRandomCardinalAxis(ref rnd) : rnd.NextFloat3Direction();
         }
 
-        void generateRandomLimits(ref Random rnd, float minClosed, float maxClosed, out float min, out float max)
+        static void generateRandomLimits(ref Random rnd, float minClosed, float maxClosed, out float min, out float max)
         {
             min = rnd.NextBool() ? float.MinValue : rnd.NextFloat(minClosed, maxClosed);
             max = rnd.NextBool() ? rnd.NextBool() ? float.MaxValue : min : rnd.NextFloat(min, maxClosed);
@@ -274,7 +308,7 @@ namespace Unity.Physics.Tests.Joints
                 return JointData.CreateBallAndSocket(pivotA, pivotB);
             });
         }
-
+        
         [Test]
         public unsafe void StiffSpringTest()
         {
@@ -282,33 +316,37 @@ namespace Unity.Physics.Tests.Joints
             {
                 generateRandomPivots(ref rnd, out float3 pivotA, out float3 pivotB);
                 generateRandomLimits(ref rnd, 0.0f, 0.5f, out float minDistance, out float maxDistance);
-                return JointData.CreateStiffSpring(pivotA, pivotB, minDistance, maxDistance);
+                return JointData.CreateLimitedDistance(pivotA, pivotB, new FloatRange(minDistance, maxDistance));
             });
         }
-
+        
         [Test]
         public unsafe void PrismaticTest()
         {
             RunJointTest("PrismaticTest", (ref Random rnd) =>
             {
-                generateRandomPivots(ref rnd, out float3 pivotA, out float3 pivotB);
-                generateRandomAxes(ref rnd, out float3 axisA, out float3 axisB);
-                Math.CalculatePerpendicularNormalized(axisA, out float3 perpendicularA, out float3 unusedA);
-                Math.CalculatePerpendicularNormalized(axisB, out float3 perpendicularB, out float3 unusedB);
-                float minDistance = rnd.NextFloat(-0.5f, 0.5f);
-                float maxDistance = rnd.NextBool() ? minDistance : rnd.NextFloat(minDistance, 0.5f); // note, can't use open limits because the accuracy can get too low as the pivots separate
-                return JointData.CreatePrismatic(pivotA, pivotB, axisA, axisB, perpendicularA, perpendicularB, minDistance, maxDistance, 0.0f, 0.0f);
+                var jointFrameA = new JointFrame();
+                var jointFrameB = new JointFrame();
+                generateRandomPivots(ref rnd, out jointFrameA.Position, out jointFrameB.Position);
+                generateRandomAxes(ref rnd, out jointFrameA.Axis, out jointFrameB.Axis);
+                Math.CalculatePerpendicularNormalized(jointFrameA.Axis, out jointFrameA.PerpendicularAxis, out _);
+                Math.CalculatePerpendicularNormalized(jointFrameB.Axis, out jointFrameB.PerpendicularAxis, out _);
+                var distance = new FloatRange { Min = rnd.NextFloat(-0.5f, 0.5f) };
+                distance.Max = rnd.NextBool() ? distance.Min : rnd.NextFloat(distance.Min, 0.5f); // note, can't use open limitsbecause the accuracy can get too low as the pivots separate
+                return JointData.CreatePrismatic(jointFrameA, jointFrameB, distance, default);
             });
         }
-
+        
         [Test]
         public unsafe void HingeTest()
         {
             RunJointTest("HingeTest", (ref Random rnd) =>
             {
-                generateRandomPivots(ref rnd, out float3 pivotA, out float3 pivotB);
-                generateRandomAxes(ref rnd, out float3 axisA, out float3 axisB);
-                return JointData.CreateHinge(pivotA, pivotB, axisA, axisB);
+                var jointFrameA = new JointFrame();
+                var jointFrameB = new JointFrame();
+                generateRandomPivots(ref rnd, out jointFrameA.Position, out jointFrameB.Position);
+                generateRandomAxes(ref rnd, out jointFrameA.Axis, out jointFrameB.Axis);
+                return JointData.CreateHinge(jointFrameA, jointFrameB);
             });
         }
 
@@ -317,29 +355,34 @@ namespace Unity.Physics.Tests.Joints
         {
             RunJointTest("LimitedHingeTest", (ref Random rnd) =>
             {
-                generateRandomPivots(ref rnd, out float3 pivotA, out float3 pivotB);
-                generateRandomAxes(ref rnd, out float3 axisA, out float3 axisB);
-                Math.CalculatePerpendicularNormalized(axisA, out float3 perpendicularA, out float3 unusedA);
-                Math.CalculatePerpendicularNormalized(axisB, out float3 perpendicularB, out float3 unusedB);
-                generateRandomLimits(ref rnd, -(float)math.PI, (float)math.PI, out float minAngle, out float maxAngle);
-                return JointData.CreateLimitedHinge(pivotA, pivotB, axisA, axisB, perpendicularA, perpendicularB, minAngle, maxAngle);
+                var jointFrameA = new JointFrame();
+                var jointFrameB = new JointFrame();
+                generateRandomPivots(ref rnd, out jointFrameA.Position, out jointFrameB.Position);
+                generateRandomAxes(ref rnd, out jointFrameA.Axis, out jointFrameB.Axis);
+                Math.CalculatePerpendicularNormalized(jointFrameA.Axis, out jointFrameA.PerpendicularAxis, out _);
+                Math.CalculatePerpendicularNormalized(jointFrameB.Axis, out jointFrameB.PerpendicularAxis, out _);
+                FloatRange limits;
+                generateRandomLimits(ref rnd, -(float)math.PI, (float)math.PI, out limits.Min, out limits.Max);
+                return JointData.CreateLimitedHinge(jointFrameA, jointFrameB, limits);
             });
         }
 
         // TODO - test CreateRagdoll(), if it stays.  Doesn't fit nicely because it produces two JointDatas.
-
+        
         [Test]
         public unsafe void FixedTest()
         {
             RunJointTest("FixedTest", (ref Random rnd) =>
             {
-                generateRandomPivots(ref rnd, out float3 pivotA, out float3 pivotB);
-                quaternion orientationA = generateRandomTransform(ref rnd).rot;
-                quaternion orientationB = generateRandomTransform(ref rnd).rot;
-                return JointData.CreateFixed(pivotA, pivotB, orientationA, orientationB);
+                var jointFrameA = new RigidTransform();
+                var jointFrameB = new RigidTransform();
+                generateRandomPivots(ref rnd, out jointFrameA.pos, out jointFrameB.pos);
+                jointFrameA.rot = generateRandomTransform(ref rnd).rot;
+                jointFrameB.rot = generateRandomTransform(ref rnd).rot;
+                return JointData.CreateFixed(jointFrameA, jointFrameB);
             });
         }
-
+        
         [Test]
         public unsafe void TwistTest()
         {
@@ -357,14 +400,16 @@ namespace Unity.Physics.Tests.Joints
                     {
                         LinearVelocity = float3.zero,
                         AngularVelocity = (j + j - 1) * axis,
-                        InverseInertiaAndMass = new float4(1)
+                        InverseInertia = new float3(1),
+                        InverseMass = 1
                     };
 
                     MotionVelocity velocityB = new MotionVelocity
                     {
                         LinearVelocity = float3.zero,
                         AngularVelocity = float3.zero,
-                        InverseInertiaAndMass = float4.zero
+                        InverseInertia = float3.zero,
+                        InverseMass = 0.0f
                     };
 
                     MotionData motionA = new MotionData
@@ -378,11 +423,15 @@ namespace Unity.Physics.Tests.Joints
                     const float angle = 0.5f;
                     float minLimit = (j - 1) * angle;
                     float maxLimit = j * angle;
+
                     BlobAssetReference<JointData> jointData = JointData.Create(
-                        Math.MTransform.Identity, Math.MTransform.Identity, new Constraint[]
+                        RigidTransform.identity,
+                        RigidTransform.identity,
+                        new NativeArray<Constraint>(1, Allocator.Temp)
                         {
-                            Constraint.Twist(i, minLimit, maxLimit)
-                        });
+                            [0]  = Constraint.Twist(i, new FloatRange(minLimit, maxLimit))
+                        }
+                    );
                     SolveSingleJoint((JointData*)jointData.GetUnsafePtr(), 4, 1.0f, ref velocityA, ref velocityB, ref motionA, ref motionB, out NativeStream jacobians);
 
                     quaternion expectedOrientation = quaternion.AxisAngle(axis, minLimit + maxLimit);
@@ -391,5 +440,29 @@ namespace Unity.Physics.Tests.Joints
                 }
             }
         }
+        
+        [BurstCompile(CompileSynchronously = true)]
+        struct CreateJointDataFromBurstJob : IJob
+        {
+            public void Execute()
+            {
+                Random rnd = new Random();
+                rnd.InitState(10);
+                generateRandomPivots(ref rnd, out float3 pivotA, out float3 pivotB);
+                
+                JointData.Create(
+                    new RigidTransform(generateRandomTransform(ref rnd).rot, pivotA),
+                    new RigidTransform(generateRandomTransform(ref rnd).rot, pivotB),
+                    new NativeArray<Constraint>(2, Allocator.Temp)
+                    {
+                        [0] = Constraint.BallAndSocket(),
+                        [1] = Constraint.FixedAngle()
+                    }           
+                );
+            }
+        }
+
+        [Test]
+        public void JointData_Create_WhenCalledFromBurstJob_DoesNotThrow() => new CreateJointDataFromBurstJob().Run();
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -183,7 +184,7 @@ namespace Unity.Physics
             return true;
         }
 
-        internal bool GetFirstPolygon(out uint meshKey, ref PolygonCollider polygon)
+        internal bool GetFirstPolygon([NoAlias] out uint meshKey, [NoAlias] ref PolygonCollider polygon)
         {
             if (Sections.Length == 0 || Sections[0].PrimitiveFlags.Length == 0)
             {
@@ -220,7 +221,7 @@ namespace Unity.Physics
             return true;
         }
 
-        internal bool GetNextPolygon(uint previousMeshKey, out uint meshKey, ref PolygonCollider polygon)
+        internal bool GetNextPolygon(uint previousMeshKey, [NoAlias] out uint meshKey, [NoAlias] ref PolygonCollider polygon)
         {
             int primitiveKey = (int)previousMeshKey >> 1;
             int polygonIndex = (int)previousMeshKey & 1;

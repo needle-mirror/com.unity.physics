@@ -7,16 +7,20 @@ using Unity.Mathematics;
 using UnityEngine.Assertions;
 using Unity.Collections.LowLevel.Unsafe;
 using static Unity.Physics.Math;
+using Unity.Burst;
 
 namespace Unity.Physics
 {
     /// <summary>
     /// Convex hull builder.
     /// </summary>
+    [NoAlias]
     unsafe struct ConvexHullBuilder
     {
         // Mesh representation of the hull
+        [NoAlias]
         private ElementPoolBase m_Vertices;
+        [NoAlias]
         private ElementPoolBase m_Triangles;
 
         public unsafe ElementPool<Vertex> Vertices

@@ -27,7 +27,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
                 var random = new Random(1234);
                 for (var i = 0; i < points.Length; ++i)
                     points[i] = random.NextFloat3(new float3(-1f), new float3(1f));
-                ConvexCollider.Create(points, ConvexHullGenerationParameters.Default).Release();
+                ConvexCollider.Create(points, ConvexHullGenerationParameters.Default).Dispose();
             }
         }
 

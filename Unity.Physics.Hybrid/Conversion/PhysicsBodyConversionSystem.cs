@@ -14,7 +14,7 @@ namespace Unity.Physics.Authoring
                 {
                     var entity = GetPrimaryEntity(staticOptimized.gameObject);
                     if (DstEntityManager.HasComponent<PhysicsCollider>(entity))
-                        DstEntityManager.RemoveParentAndSetWorldTranslationAndRotation(entity, staticOptimized.transform);
+                        DstEntityManager.PostProcessTransformComponents(entity, staticOptimized.transform, BodyMotionType.Static);
                 }
             );
             Entities.ForEach(
@@ -22,7 +22,7 @@ namespace Unity.Physics.Authoring
                 {
                     var entity = GetPrimaryEntity(body.gameObject);
 
-                    DstEntityManager.RemoveParentAndSetWorldTranslationAndRotation(entity, body.transform);
+                    DstEntityManager.PostProcessTransformComponents(entity, body.transform, body.MotionType);
 
                     var customTags = body.CustomTags;
                     if (!customTags.Equals(CustomPhysicsBodyTags.Nothing))

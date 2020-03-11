@@ -177,7 +177,7 @@ namespace Unity.Physics.Authoring
                             Profiler.EndSample();
 
                             var gameObject = m_EndColliderConversionSystem.GetConvertedAuthoringComponent(shape.ConvertedBodyTransformIndex).gameObject;
-                            BlobComputationContext.AssociateBlobAssetWithGameObject(compoundHash[0], gameObject);
+                            BlobComputationContext.AssociateBlobAssetWithUnityObject(compoundHash[0], gameObject);
 
                             if (!BlobComputationContext.NeedToComputeBlobAsset(compoundHash[0]))
                                 BlobComputationContext.GetBlobAsset(compoundHash[0], out collider.Value);

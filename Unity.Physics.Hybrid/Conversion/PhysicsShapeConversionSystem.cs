@@ -8,7 +8,7 @@ namespace Unity.Physics.Authoring
 {
     [UpdateAfter(typeof(BeginColliderConversionSystem))]
     [UpdateBefore(typeof(BuildCompoundCollidersConversionSystem))]
-    [ConverterVersion("adamm", 1)]
+    [ConverterVersion("adamm", 2)]
     public sealed class PhysicsShapeConversionSystem : BaseShapeConversionSystem<PhysicsShapeAuthoring>
     {
         static Material ProduceMaterial(PhysicsShapeAuthoring shape) => shape.GetMaterial();
@@ -46,8 +46,9 @@ namespace Unity.Physics.Authoring
                 }
                 case ShapeType.Capsule:
                 {
-                    res.CapsuleProperties = shape.GetCapsuleProperties(out orientation)
-                        .BakeToBodySpace(localToWorld, shapeToWorld, out _, out _, ref orientation);
+                    res.CapsuleProperties = shape.GetCapsuleProperties()
+                        .BakeToBodySpace(localToWorld, shapeToWorld)
+                        .ToRuntime();
                     break;
                 }
                 case ShapeType.Sphere:
@@ -73,54 +74,82 @@ namespace Unity.Physics.Authoring
                 }
                 case ShapeType.ConvexHull:
                 {
-                    using (var pointCloud = new NativeList<float3>(65535, Allocator.Temp))
+                    res.ConvexHullProperties.Filter = res.CollisionFilter;
+                    res.ConvexHullProperties.Material = res.Material;
+                    res.ConvexHullProperties.GenerationParameters = shape.ConvexHullGenerationParameters.ToRunTime();
+
+                    res.Instance.Hash = shape.GetBakedConvexInputs();
+
+                    if (BlobComputationContext.NeedToComputeBlobAsset(res.Instance.Hash))
                     {
-                        shape.GetBakedConvexProperties(pointCloud, out var hullGenerationParameters, out res.Instance.Hash);
-                        if (pointCloud.Length == 0)
+                        if (TryGetRegisteredConvexInputs(res.Instance.Hash, out var convexInputs))
                         {
-                            throw new InvalidOperationException(
-                                $"No vertices associated with {shape.name}. Add a {typeof(MeshFilter)} component or assign a readable {nameof(PhysicsShapeAuthoring.CustomMesh)}."
-                            );
+                            res.ConvexHullProperties.PointCount = convexInputs.PointCount;
+                            res.ConvexHullProperties.PointsStart = convexInputs.PointsStart;
                         }
-                        res.ConvexHullProperties = new ConvexInput
+                        else
                         {
-                            GenerationParameters = hullGenerationParameters.ToRunTime(),
-                            PointCount = pointCloud.Length,
-                            PointsStart = allConvexHullPoints.Length,
-                            Filter = res.CollisionFilter,
-                            Material =  res.Material
-                        };
-                        allConvexHullPoints.AddRange(pointCloud);
+                            using (var pointCloud = new NativeList<float3>(65535, Allocator.Temp))
+                            {
+                                shape.GetBakedConvexProperties(pointCloud);
+                                if (pointCloud.Length == 0)
+                                {
+                                    throw new InvalidOperationException(
+                                        $"No vertices associated with {shape.name}. Add a {typeof(MeshFilter)} component or assign a readable {nameof(PhysicsShapeAuthoring.CustomMesh)}."
+                                    );
+                                }
+
+                                res.ConvexHullProperties.PointCount = pointCloud.Length;
+                                res.ConvexHullProperties.PointsStart = allConvexHullPoints.Length;
+                                allConvexHullPoints.AddRange(pointCloud);
+                            }
+                        }
                     }
+
                     break;
                 }
                 case ShapeType.Mesh:
                 {
-                    const int defaultVertexCount = 2048;
-                    using (var vertices = new NativeList<float3>(defaultVertexCount, Allocator.Temp))
-                    using (var triangles = new NativeList<int3>(defaultVertexCount - 2, Allocator.Temp))
+                    res.MeshProperties.Filter = res.CollisionFilter;
+                    res.MeshProperties.Material = res.Material;
+
+                    res.Instance.Hash = shape.GetBakedMeshInputs();
+
+                    if (BlobComputationContext.NeedToComputeBlobAsset(res.Instance.Hash))
                     {
-                        shape.GetBakedMeshProperties(vertices, triangles, out res.Instance.Hash);
-                        if (vertices.Length == 0 || triangles.Length == 0)
+                        if (TryGetRegisteredMeshInputs(res.Instance.Hash, out var meshInputs))
                         {
-                            throw new InvalidOperationException(
-                                $"Invalid mesh data associated with {shape.name}. " +
-                                $"Add a {typeof(MeshFilter)} component or assign a {nameof(PhysicsShapeAuthoring.CustomMesh)}. " +
-                                "Ensure that you have enabled Read/Write on the mesh's import settings."
-                            );
+                            res.MeshProperties.VerticesStart = meshInputs.VerticesStart;
+                            res.MeshProperties.VertexCount = meshInputs.VertexCount;
+                            res.MeshProperties.TrianglesStart = meshInputs.TrianglesStart;
+                            res.MeshProperties.TriangleCount = meshInputs.TriangleCount;
                         }
-                        res.MeshProperties = new MeshInput
+                        else
                         {
-                            VerticesStart = allMeshVertices.Length,
-                            VertexCount = vertices.Length,
-                            TrianglesStart = allMeshTriangles.Length,
-                            TriangleCount = triangles.Length,
-                            Filter = res.CollisionFilter,
-                            Material =  res.Material
-                        };
-                        allMeshVertices.AddRange(vertices);
-                        allMeshTriangles.AddRange(triangles);
+                            const int defaultVertexCount = 2048;
+                            using (var vertices = new NativeList<float3>(defaultVertexCount, Allocator.Temp))
+                            using (var triangles = new NativeList<int3>(defaultVertexCount - 2, Allocator.Temp))
+                            {
+                                shape.GetBakedMeshProperties(vertices, triangles);
+                                if (vertices.Length == 0 || triangles.Length == 0)
+                                {
+                                    throw new InvalidOperationException(
+                                        $"Invalid mesh data associated with {shape.name}. " +
+                                        $"Add a {typeof(MeshFilter)} component or assign a {nameof(PhysicsShapeAuthoring.CustomMesh)}. " +
+                                        "Ensure that you have enabled Read/Write on the mesh's import settings."
+                                    );
+                                }
+
+                                res.MeshProperties.VerticesStart = allMeshVertices.Length;
+                                res.MeshProperties.VertexCount = vertices.Length;
+                                res.MeshProperties.TrianglesStart = allMeshTriangles.Length;
+                                res.MeshProperties.TriangleCount = triangles.Length;
+                                allMeshVertices.AddRange(vertices);
+                                allMeshTriangles.AddRange(triangles);
+                            }
+                        }
                     }
+
                     break;
                 }
             }

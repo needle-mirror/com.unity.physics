@@ -218,8 +218,8 @@ namespace Unity.Physics
             {
                 var transform = new RigidTransform(m_Orientation, m_Center);
 
-                // TODO: clamp to avoid extents <= 0
-                float3 he = m_Size * 0.5f - ConvexHull.ConvexRadius; // half extents
+                // Clamp to avoid extents < 0
+                float3 he = math.max(0, m_Size * 0.5f - ConvexHull.ConvexRadius); // half extents
 
                 float3* vertices = (float3*)(&collider->m_Vertices[0]);
                 vertices[0] = math.transform(transform, new float3(he.x, he.y, he.z));

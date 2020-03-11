@@ -55,9 +55,23 @@ namespace Unity.Physics.Authoring
             data.Instance.ConvertedBodyTransformIndex = m_EndColliderConversionSystem.PushAuthoringComponent(body.transform);
             m_ShapeComputationData.Add(data);
 
+            if (BlobComputationContext.NeedToComputeBlobAsset(data.Instance.Hash))
+            {
+                if (data.ShapeType == ShapeType.ConvexHull)
+                    m_ConvexColliderJobs.TryAdd(data.Instance.Hash, data.ConvexHullProperties);
+                else if (data.ShapeType == ShapeType.Mesh)
+                    m_MeshColliderJobs.TryAdd(data.Instance.Hash, data.MeshProperties);
+            }
+
             if (body == shape.gameObject)
-                DstEntityManager.RemoveParentAndSetWorldTranslationAndRotation(instance.BodyEntity, body.transform);
+                DstEntityManager.PostProcessTransformComponents(instance.BodyEntity, body.transform, BodyMotionType.Static);
         }
+
+        internal bool TryGetRegisteredConvexInputs(Hash128 hash, out ConvexInput inputData) =>
+            m_ConvexColliderJobs.TryGetValue(hash, out inputData);
+
+        internal bool TryGetRegisteredMeshInputs(Hash128 hash, out MeshInput inputData) =>
+            m_MeshColliderJobs.TryGetValue(hash, out inputData);
 
         NativeHashMap<Entity, Entity> m_AllBodiesByLeaf;
         NativeList<ShapeComputationData> m_ShapeComputationData;
@@ -124,7 +138,14 @@ namespace Unity.Physics.Authoring
             // First pass
             Profiler.BeginSample("Collect Inputs from Authoring Components");
 
-            Entities.ForEach<T>(GetInputDataFromAuthoringComponent);
+            using (var shapeEntities = m_ShapeQuery.ToEntityArray(Allocator.TempJob))
+            {
+                foreach (var shapeEntity in shapeEntities)
+                {
+                    var shape = EntityManager.GetComponentObject<T>(shapeEntity);
+                    GetInputDataFromAuthoringComponent(shape);
+                }
+            }
 
             Profiler.EndSample();
 
@@ -154,23 +175,21 @@ namespace Unity.Physics.Authoring
                 var convertedIndex = shapeData.Instance.ConvertedAuthoringComponentIndex;
                 var gameObject =
                     m_EndColliderConversionSystem.GetConvertedAuthoringComponent(convertedIndex).gameObject;
-                BlobComputationContext.AssociateBlobAssetWithGameObject(hash, gameObject);
+                BlobComputationContext.AssociateBlobAssetWithUnityObject(hash, gameObject);
 
                 if (BlobComputationContext.NeedToComputeBlobAsset(hash))
                 {
                     BlobComputationContext.AddBlobAssetToCompute(hash, 0);
-                    if (shapeData.ShapeType == ShapeType.ConvexHull)
+                    switch (shapeData.ShapeType)
                     {
-                        if (!m_ConvexColliderJobs.TryGetValue(hash, out _))
-                            m_ConvexColliderJobs.TryAdd(hash, shapeData.ConvexHullProperties);
+                        case ShapeType.ConvexHull:
+                        case ShapeType.Mesh:
+                            // jobs already registered when input data were collected
+                            break;
+                        default:
+                            shapeIndicesNeedingNewBlobs[numNewBlobAssets++] = i;
+                            break;
                     }
-                    else if (shapeData.ShapeType == ShapeType.Mesh)
-                    {
-                        if (!m_MeshColliderJobs.TryGetValue(hash, out _))
-                            m_MeshColliderJobs.TryAdd(hash, shapeData.MeshProperties);
-                    }
-                    else
-                        shapeIndicesNeedingNewBlobs[numNewBlobAssets++] = i;
                 }
 
                 m_BuildCompoundsSystem.SetLeafDirty(instance);

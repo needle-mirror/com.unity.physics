@@ -1,5 +1,7 @@
 using NUnit.Framework;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
+using Unity.Entities;
 using Unity.Mathematics;
 
 namespace Unity.Physics.Tests.Dynamics.CollisionEvents
@@ -16,18 +18,43 @@ namespace Unity.Physics.Tests.Dynamics.CollisionEvents
         public void CalculateDetailsTest()
         {
             // Simple collision event with straight normal and 3 contact points
-            LowLevel.CollisionEvent lowLevelEvent = new LowLevel.CollisionEvent();
-            lowLevelEvent.BodyIndices.BodyAIndex = 0;
-            lowLevelEvent.BodyIndices.BodyBIndex = 1;
-            lowLevelEvent.ColliderKeys.ColliderKeyA = ColliderKey.Empty;
-            lowLevelEvent.ColliderKeys.ColliderKeyB = ColliderKey.Empty;
-            lowLevelEvent.Normal = new float3(0.0f, -1.00000f, 0.0f);
-            lowLevelEvent.NumNarrowPhaseContactPoints = 3;
-            lowLevelEvent.SolverImpulse = 1.0f;
+            CollisionEventDataRef collisionEventData;
+            unsafe
+            {
+                int length = CollisionEventData.CalculateSize(3);
+                collisionEventData = new CollisionEventDataRef((CollisionEventData*)(UnsafeUtility.Malloc(length, 1, Allocator.Temp)));
+            }
+            collisionEventData.Value.BodyIndices.BodyAIndex = 0;
+            collisionEventData.Value.BodyIndices.BodyBIndex = 1;
+            collisionEventData.Value.ColliderKeys.ColliderKeyA = ColliderKey.Empty;
+            collisionEventData.Value.ColliderKeys.ColliderKeyB = ColliderKey.Empty;
+            collisionEventData.Value.Normal = new float3(0.0f, -1.00000f, 0.0f);
+            collisionEventData.Value.NumNarrowPhaseContactPoints = 3;
+            collisionEventData.Value.SolverImpulse = 1.0f;
+
+            // Initialize 3 contact points
+            collisionEventData.Value.AccessContactPoint(0) =
+                new ContactPoint
+                {
+                    Distance = 0.177905f,
+                    Position = new float3(-22.744950f, 2.585318f, -50.108990f)
+                };
+            collisionEventData.Value.AccessContactPoint(1) =
+                new ContactPoint
+                {
+                    Distance = 0.276652f,
+                    Position = new float3(-20.731140f, 2.486506f, -50.322240f)
+                };
+            collisionEventData.Value.AccessContactPoint(2) =
+                new ContactPoint
+                {
+                    Distance = 0.278534f,
+                    Position = new float3(-20.766140f, 2.484623f, -50.652630f)
+                };
 
             // Wrapping collision event
             CollisionEvent collisionEvent = new CollisionEvent();
-            collisionEvent.EventData = lowLevelEvent;
+            collisionEvent.EventData = collisionEventData;
             collisionEvent.TimeStep = 1.0f / 60.0f;
 
             // Input velocity is obviously separating, but high angular velocity still caused an event
@@ -40,26 +67,6 @@ namespace Unity.Physics.Tests.Dynamics.CollisionEvents
             {
                 Angular = new float3(0.00000f, 0.00000f, 0.00000f),
                 Linear = new float3(0.00000f, 0.00000f, 0.00000f)
-            };
-
-            // Initialize 3 contact points
-            collisionEvent.NarrowPhaseContactPoints = new NativeArray<ContactPoint>(3, Allocator.Temp)
-            {
-                [0] = new ContactPoint
-                {
-                    Distance = 0.177905f,
-                    Position = new float3(-22.744950f, 2.585318f, -50.108990f)
-                },
-                [1] = new ContactPoint
-                {
-                    Distance = 0.276652f,
-                    Position = new float3(-20.731140f, 2.486506f, -50.322240f)
-                },
-                [2] = new ContactPoint
-                {
-                    Distance = 0.278534f,
-                    Position = new float3(-20.766140f, 2.484623f, -50.652630f)
-                }
             };
 
             // Allocate a simple world of 1 dynamic and 1 static body
@@ -78,7 +85,8 @@ namespace Unity.Physics.Tests.Dynamics.CollisionEvents
             {
                 LinearVelocity = new float3(-3.81221f, -1.37538f, -15.41893f),
                 AngularVelocity = new float3(-7.30913f, -4.78899f, 1.14168f),
-                InverseInertiaAndMass = new float4(0.00045f, 0.00045f, 0.00045f, 0.00018f),
+                InverseInertia = new float3(0.00045f, 0.00045f, 0.00045f),
+                InverseMass = 0.00018f,
                 AngularExpansionFactor = 2.05061f
             };
 

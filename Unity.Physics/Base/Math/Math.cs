@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Unity.Mathematics;
 using UnityEngine.Assertions;
@@ -22,6 +22,10 @@ namespace Unity.Physics
             // Smallest float such that 1.0 + eps != 1.0
             // Different from float.Epsilon which is the smallest value greater than zero.
             public const float Eps = 1.192092896e-07F;
+
+            // These constants are identical to the ones in the Unity Mathf library, to ensure identical behaviour
+            internal const float UnityEpsilonNormalSqrt = 1e-15F;
+            internal const float UnityEpsilon = 0.00001F;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -36,24 +40,24 @@ namespace Unity.Physics
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ulong NextMultipleOf(ulong input, ulong alignment) => (input + (alignment - 1)) & (~(alignment - 1));
-		
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int IndexOfMinComponent(float2 v) => v.x < v.y ? 0 : 1;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int IndexOfMinComponent(float3 v) => v.x < v.y ? (v.x < v.z ? 0 : 2) : (v.y < v.z ? 1 : 2);
+        public static int IndexOfMinComponent(float3 v) => v.x < v.y ? ((v.x < v.z) ? 0 : 2) : ((v.y < v.z) ? 1 : 2);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int IndexOfMinComponent(float4 v) { int xyz = IndexOfMinComponent(v.xyz); return v[xyz] < v.w ? xyz : 3; }
+        public static int IndexOfMinComponent(float4 v) => math.cmax(math.select(new int4(0, 1, 2, 3), new int4(-1), math.cmin(v) < v));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int IndexOfMaxComponent(float2 v) => IndexOfMinComponent(-v);
+        public static int IndexOfMaxComponent(float2 v) => v.x > v.y ? 0 : 1;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int IndexOfMaxComponent(float3 v) => IndexOfMinComponent(-v);
+        public static int IndexOfMaxComponent(float3 v) => v.x > v.y ? ((v.x > v.z) ? 0 : 2) : ((v.y > v.z) ? 1 : 2);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int IndexOfMaxComponent(float4 v) => IndexOfMinComponent(-v);
+        public static int IndexOfMaxComponent(float4 v) => math.cmax(math.select(new int4(0, 1, 2, 3), new int4(-1), math.cmax(v) > v));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float HorizontalMul(float3 v) => v.x * v.y * v.z;
@@ -71,7 +75,7 @@ namespace Unity.Physics
         public static float Det(float3 a, float3 b, float3 c) => math.dot(math.cross(a, b), c); // TODO: use math.determinant()?
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static float RSqrtSafe(float v) => math.select(math.rsqrt(v), 0.0f, math.abs(v) < 1e-10);
+        public static float RSqrtSafe(float v) => math.select(math.rsqrt(v), 0.0f, math.abs(v) < 1e-10f);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float NormalizeWithLength(float3 v, out float3 n)
@@ -224,5 +228,62 @@ namespace Unity.Physics
             float3 axis = math.select(cross * inverses.z, safeAxis, squares.z < 1e-10f);
             return new quaternion(new float4(axis * sinCosHalfAngle.x, sinCosHalfAngle.y));
         }
+
+        // Returns the angle in degrees between /from/ and /to/. This is always the smallest
+        internal static float Angle(float3 from, float3 to)
+        {
+            // sqrt(a) * sqrt(b) = sqrt(a * b) -- valid for real numbers
+            var denominator = math.sqrt(math.lengthsq(from) * math.lengthsq(to));
+            if (denominator < Constants.UnityEpsilonNormalSqrt)
+                return 0F;
+
+            var dot = math.clamp(math.dot(from, to) / denominator, -1F, 1F);
+            return math.degrees(math.acos(dot));
+        }
+
+        // The smaller of the two possible angles between the two vectors is returned, therefore the result will never be greater than 180 degrees or smaller than -180 degrees.
+        // If you imagine the from and to vectors as lines on a piece of paper, both originating from the same point, then the /axis/ vector would point up out of the paper.
+        // The measured angle between the two vectors would be positive in a clockwise direction and negative in an anti-clockwise direction.
+        internal static float SignedAngle(float3 from, float3 to, float3 axis)
+        {
+            var unsignedAngle = Angle(from, to);
+            var sign = math.sign(math.dot(math.cross(from, to), axis));
+            return unsignedAngle * sign;
+        }
+
+        // Projects a vector onto a plane defined by a normal orthogonal to the plane.
+        internal static float3 ProjectOnPlane(float3 vector, float3 planeNormal)
+        {
+            var sqrMag = math.dot(planeNormal, planeNormal);
+            if (sqrMag < Constants.UnityEpsilon)
+                return vector;
+
+            var dot = math.dot(vector, planeNormal);
+            return vector - planeNormal * (dot / sqrMag);
+        }
+
+        /// <summary>
+        /// Physics internally represents all rigid bodies in world space.
+        /// If a static body is in a hierarchy, its local-to-world matrix must be decomposed when building the physics world.
+        /// This method returns a world-space RigidTransform that would be decomposed for such a rigid body.
+        /// </summary>
+        /// <returns>A world-space RigidTransform as used by physics.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static RigidTransform DecomposeRigidBodyTransform(in float4x4 localToWorld) =>
+            new RigidTransform(DecomposeRigidBodyOrientation(localToWorld), localToWorld.c3.xyz);
+
+        /// <summary>
+        /// Physics internally represents all rigid bodies in world space.
+        /// If a static body is in a hierarchy, its local-to-world matrix must be decomposed when building the physics world.
+        /// This method returns a world-space orientation that would be decomposed for such a rigid body.
+        /// </summary>
+        /// <returns>A world-space orientation as used by physics.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static quaternion DecomposeRigidBodyOrientation(in float4x4 localToWorld) =>
+            quaternion.LookRotationSafe(localToWorld.c2.xyz, localToWorld.c1.xyz);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static float3 DecomposeScale(this float4x4 matrix) =>
+            new float3(math.length(matrix.c0.xyz), math.length(matrix.c1.xyz), math.length(matrix.c2.xyz));
     }
 }

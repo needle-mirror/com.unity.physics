@@ -1,4 +1,6 @@
 ﻿using System;
+using System.ComponentModel;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -31,14 +33,41 @@ namespace Unity.Physics
 
     public struct MassFactors
     {
-        // TODO: mark these internal, add separate properties for InvInertiaFactor and InvMassFactor instead?
-        public float4 InvInertiaAndMassFactorA;
-        public float4 InvInertiaAndMassFactorB;
+        public float3 InverseInertiaFactorA;
+        public float InverseMassFactorA;
+        public float3 InverseInertiaFactorB;
+        public float InverseMassFactorB;
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("InvInertiaAndMassFactorA has been deprecated. Use the individual InverseInertiaFactorA and InverseMassFactorA members instead. (RemovedAfter 2020-05-15)")]
+        public float4 InvInertiaAndMassFactorA
+        {
+            get => new float4(InverseInertiaFactorA, InverseMassFactorA);
+            set
+            {
+                InverseInertiaFactorA = value.xyz;
+                InverseMassFactorA = value.w;
+            }
+        }
+
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("InvInertiaAndMassFactorB has been deprecated. Use the individual InverseInertiaFactorB and InverseMassFactorB members instead. (RemovedAfter 2020-05-15)")]
+        public float4 InvInertiaAndMassFactorB
+        {
+            get => new float4(InverseInertiaFactorB, InverseMassFactorB);
+            set
+            {
+                InverseInertiaFactorB = value.xyz;
+                InverseMassFactorB = value.w;
+            }
+        }
 
         public static MassFactors Default => new MassFactors
         {
-            InvInertiaAndMassFactorA = new float4(1.0f),
-            InvInertiaAndMassFactorB = new float4(1.0f)
+            InverseInertiaFactorA = new float3(1.0f),
+            InverseMassFactorA = 1.0f,
+            InverseInertiaFactorB = new float3(1.0f),
+            InverseMassFactorB = 1.0f
         };
     }
 
@@ -57,6 +86,7 @@ namespace Unity.Physics
     }
 
     // A Jacobian representing a set of contact points that apply impulses
+    [NoAlias]
     struct ContactJacobian
     {
         public BaseContactJacobian BaseJacobian;
@@ -76,7 +106,7 @@ namespace Unity.Physics
             ref JacobianHeader jacHeader, ref MotionVelocity velocityA, ref MotionVelocity velocityB,
             Solver.StepInput stepInput, ref NativeStream.Writer collisionEventsWriter)
         {
-            bool bothBodiesWithInfInertiaAndMass = math.all(velocityA.InverseInertiaAndMass == float4.zero) && math.all(velocityB.InverseInertiaAndMass == float4.zero);
+            bool bothBodiesWithInfInertiaAndMass = velocityA.HasInfiniteInertiaAndMass && velocityB.HasInfiniteInertiaAndMass;
             if (bothBodiesWithInfInertiaAndMass)
             {
                 SolveInfMassPair(ref jacHeader, velocityA, velocityB, stepInput, ref collisionEventsWriter);
@@ -98,8 +128,10 @@ namespace Unity.Physics
             if (jacHeader.HasMassFactors)
             {
                 MassFactors jacMod = jacHeader.AccessMassFactors();
-                tempVelocityA.InverseInertiaAndMass *= jacMod.InvInertiaAndMassFactorA;
-                tempVelocityB.InverseInertiaAndMass *= jacMod.InvInertiaAndMassFactorB;
+                tempVelocityA.InverseInertia *= jacMod.InverseInertiaFactorA;
+                tempVelocityA.InverseMass *= jacMod.InverseMassFactorA;
+                tempVelocityB.InverseInertia *= jacMod.InverseInertiaFactorB;
+                tempVelocityB.InverseMass *= jacMod.InverseMassFactorB;
             }
 
             // Solve normal impulses
@@ -235,18 +267,18 @@ namespace Unity.Physics
             velocityB.ApplyAngularImpulse(impulse * jacAngular.AngularB);
         }
 
-        private unsafe void ExportCollisionEvent(float totalAccumulatedImpulse, ref JacobianHeader jacHeader,
-            ref NativeStream.Writer collisionEventsWriter)
+        private unsafe void ExportCollisionEvent(float totalAccumulatedImpulse, [NoAlias] ref JacobianHeader jacHeader,
+            [NoAlias] ref NativeStream.Writer collisionEventsWriter)
         {
             // Write size before every event
-            int collisionEventSize = LowLevel.CollisionEvent.CalculateSize(BaseJacobian.NumContacts);
+            int collisionEventSize = CollisionEventData.CalculateSize(BaseJacobian.NumContacts);
             collisionEventsWriter.Write(collisionEventSize);
 
             // Allocate all necessary data for this event
             byte* eventPtr = collisionEventsWriter.Allocate(collisionEventSize);
 
             // Fill up event data
-            ref LowLevel.CollisionEvent collisionEvent = ref UnsafeUtilityEx.AsRef<LowLevel.CollisionEvent>(eventPtr);
+            ref CollisionEventData collisionEvent = ref UnsafeUtilityEx.AsRef<CollisionEventData>(eventPtr);
             collisionEvent.BodyIndices = jacHeader.BodyPair;
             collisionEvent.ColliderKeys = jacHeader.AccessColliderKeys();
             collisionEvent.Normal = BaseJacobian.Normal;
@@ -260,6 +292,7 @@ namespace Unity.Physics
     }
 
     // A Jacobian representing a set of contact points that export trigger events
+    [NoAlias]
     struct TriggerJacobian
     {
         public BaseContactJacobian BaseJacobian;
@@ -286,7 +319,7 @@ namespace Unity.Physics
                 if (jacAngular.VelToReachCp > 0 || dv > 0)
                 {
                     // Export trigger event only if impulse would be applied, or objects are penetrating
-                    triggerEventsWriter.Write(new LowLevel.TriggerEvent
+                    triggerEventsWriter.Write(new TriggerEventData
                     {
                         BodyIndices = jacHeader.BodyPair,
                         ColliderKeys = ColliderKeys,

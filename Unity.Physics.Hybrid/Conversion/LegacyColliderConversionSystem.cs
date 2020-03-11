@@ -1,3 +1,4 @@
+#if LEGACY_PHYSICS
 using System;
 using System.Collections.Generic;
 using Unity.Collections;
@@ -108,18 +109,21 @@ namespace Unity.Physics.Authoring
             var res = base.GenerateComputationData(shape, colliderInstance, allConvexHullPoints, allMeshVertices, allMeshTriangles);
             res.ShapeType = ShapeType.Box;
 
-            var worldCenter = math.mul(shape.transform.localToWorldMatrix, new float4(shape.center, 1f));
-            var shapeFromWorld = math.inverse(
-                new float4x4(new RigidTransform(shape.transform.rotation, shape.transform.position))
-            );
+            var shapeLocalToWorld = shape.transform.localToWorldMatrix;
+            var worldCenter = math.mul(shapeLocalToWorld, new float4(shape.center, 1f));
+            var transformRotation  = shape.transform.rotation;
+            var rigidBodyTransform = Math.DecomposeRigidBodyTransform(shapeLocalToWorld);
+            var shapeFromWorld = math.inverse(new float4x4(rigidBodyTransform));
+
+            var orientationFixup = math.inverse(math.mul(math.inverse(transformRotation), rigidBodyTransform.rot));
 
             var geometry = new BoxGeometry
             {
                 Center = math.mul(shapeFromWorld, worldCenter).xyz,
-                Orientation = quaternion.identity
+                Orientation = orientationFixup
             };
 
-            var linearScale = (float3)shape.transform.lossyScale;
+            var linearScale = float4x4.TRS(float3.zero, math.inverse(orientationFixup), shape.transform.lossyScale).DecomposeScale();
             geometry.Size = math.abs(shape.size * linearScale);
 
             geometry.BevelRadius = math.min(ConvexHullGenerationParameters.Default.BevelRadius, math.cmin(geometry.Size) * 0.5f);
@@ -143,19 +147,22 @@ namespace Unity.Physics.Authoring
 
             res.ShapeType = ShapeType.Capsule;
 
-            var linearScale = (float3)shape.transform.lossyScale;
+            var shapeLocalToWorld   = (float4x4)shape.transform.localToWorldMatrix;
+            var transformRotation   = shape.transform.rotation;
+            var rigidBodyTransform  = Math.DecomposeRigidBodyTransform(shapeLocalToWorld);
+            var orientationFixup    = math.inverse(math.mul(math.inverse(transformRotation), rigidBodyTransform.rot));
+            var linearScale         = float4x4.TRS(float3.zero, math.inverse(orientationFixup), shape.transform.lossyScale).DecomposeScale();
 
             // radius is max of the two non-height axes
             var radius = shape.radius * math.cmax(new float3(math.abs(linearScale)) { [shape.direction] = 0f });
 
             var ax = new float3 { [shape.direction] = 1f };
             var vertex = ax * (0.5f * shape.height);
-            var rt = new RigidTransform(shape.transform.rotation, shape.transform.position);
-            var worldCenter = math.mul(shape.transform.localToWorldMatrix, new float4(shape.center, 0f));
-            var offset = math.mul(math.inverse(new float4x4(rt)), worldCenter).xyz - shape.center * math.abs(linearScale);
+            var worldCenter = math.mul(shapeLocalToWorld, new float4(shape.center, 0f));
+            var offset = math.mul(math.inverse(new float4x4(rigidBodyTransform)), worldCenter).xyz - shape.center * math.abs(linearScale);
 
-            var v0 = offset + ((float3)shape.center + vertex) * math.abs(linearScale) - ax * radius;
-            var v1 = offset + ((float3)shape.center - vertex) * math.abs(linearScale) + ax * radius;
+            var v0 = math.mul(orientationFixup, offset + ((float3)shape.center + vertex) * math.abs(linearScale) - ax * radius);
+            var v1 = math.mul(orientationFixup, offset + ((float3)shape.center - vertex) * math.abs(linearScale) + ax * radius);
 
             res.CapsuleProperties = new CapsuleGeometry { Vertex0 = v0, Vertex1 = v1, Radius = radius };
             
@@ -175,13 +182,16 @@ namespace Unity.Physics.Authoring
             var res = base.GenerateComputationData(shape, colliderInstance, allConvexHullPoints, allMeshVertices, allMeshTriangles);
             res.ShapeType = ShapeType.Sphere;
 
-            var worldCenter = math.mul(shape.transform.localToWorldMatrix, new float4(shape.center, 1f));
-            var shapeFromWorld = math.inverse(
-                new float4x4(new RigidTransform(shape.transform.rotation, shape.transform.position))
-            );
+            var shapeLocalToWorld = shape.transform.localToWorldMatrix;
+            var worldCenter = math.mul(shapeLocalToWorld, new float4(shape.center, 1f));
+            var transformRotation  = shape.transform.rotation;
+            var rigidBodyTransform  = Math.DecomposeRigidBodyTransform(shapeLocalToWorld);
+            var orientationFixup    = math.inverse(math.mul(math.inverse(transformRotation), rigidBodyTransform.rot));
+
+            var shapeFromWorld = math.inverse(new float4x4(rigidBodyTransform));
             var center = math.mul(shapeFromWorld, worldCenter).xyz;
 
-            var linearScale = (float3)shape.transform.lossyScale;
+            var linearScale = float4x4.TRS(float3.zero, math.inverse(orientationFixup), shape.transform.lossyScale).DecomposeScale();
             var radius = shape.radius * math.cmax(math.abs(linearScale));
 
             res.SphereProperties = new SphereGeometry { Center = center, Radius = radius };
@@ -192,7 +202,7 @@ namespace Unity.Physics.Authoring
 
     [UpdateAfter(typeof(BeginColliderConversionSystem))]
     [UpdateBefore(typeof(BuildCompoundCollidersConversionSystem))]
-    [ConverterVersion("adamm", 1)]
+    [ConverterVersion("adamm", 2)]
     public sealed class LegacyMeshColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacyMesh>
     {
         List<Vector3> m_Vertices = new List<Vector3>(65535 / 2);
@@ -218,55 +228,87 @@ namespace Unity.Physics.Authoring
 
             var res = base.GenerateComputationData(shape, colliderInstance, allConvexHullPoints, allMeshVertices, allMeshTriangles);
 
-            shape.sharedMesh.GetVertices(m_Vertices);
-            var shapeFromWorld = math.inverse(
-                new float4x4(new RigidTransform(shape.transform.rotation, shape.transform.position))
-            );
-            var pointCloud = new NativeList<float3>(shape.sharedMesh.vertexCount, Allocator.Temp);
-            for (int i = 0, count = m_Vertices.Count; i < count; ++i)
-            {
-                var worldPt = math.mul(shape.transform.localToWorldMatrix, new float4(m_Vertices[i], 1f));
-                pointCloud.Add(math.mul(shapeFromWorld, worldPt).xyz);
-            }
             if (shape.convex)
             {
                 res.ShapeType = ShapeType.ConvexHull;
-                res.ConvexHullProperties = new ConvexInput
-                {
-                    GenerationParameters = ConvexHullGenerationParameters.Default,
-                    PointsStart = allConvexHullPoints.Length,
-                    PointCount = pointCloud.Length,
-                    Filter = res.CollisionFilter,
-                    Material =  res.Material
-                };
-                allConvexHullPoints.AddRange(pointCloud);
+                res.ConvexHullProperties.Material = res.Material;
+                res.ConvexHullProperties.Filter = res.CollisionFilter;
+                res.ConvexHullProperties.GenerationParameters = ConvexHullGenerationParameters.Default;
             }
             else
             {
-                var indices = new NativeArray<int>(shape.sharedMesh.triangles, Allocator.Temp);
-                var triangles = indices.Reinterpret<int3>(UnsafeUtility.SizeOf<int>());
-                if (pointCloud.Length == 0 || triangles.Length == 0)
-                {
-                    throw new InvalidOperationException(
-                        $"Invalid mesh data associated with {shape.name}. " +
-                        "Ensure that you have enabled Read/Write on the mesh's import settings."
-                    );
-                }
                 res.ShapeType = ShapeType.Mesh;
-                res.MeshProperties = new MeshInput
+                res.MeshProperties.Material = res.Material;
+                res.MeshProperties.Filter = res.CollisionFilter;
+                res.ConvexHullProperties.GenerationParameters = default;
+            }
+
+            var transform = shape.transform;
+            var rigidBodyTransform = Math.DecomposeRigidBodyTransform(transform.localToWorldMatrix);
+            var bakeFromShape = math.mul(math.inverse(new float4x4(rigidBodyTransform)), transform.localToWorldMatrix);
+
+            res.Instance.Hash = HashableShapeInputs.GetHash128(
+                0u,
+                res.ConvexHullProperties.GenerationParameters,
+                res.Material,
+                res.CollisionFilter,
+                bakeFromShape,
+                new NativeArray<HashableShapeInputs>(1, Allocator.Temp) { [0] = HashableShapeInputs.FromMesh(shape.sharedMesh, float4x4.identity) },
+                default,
+                default
+            );
+
+            if (BlobComputationContext.NeedToComputeBlobAsset(res.Instance.Hash))
+            {
+                if (shape.convex && TryGetRegisteredConvexInputs(res.Instance.Hash, out var convexInputs))
                 {
-                    VerticesStart = allMeshVertices.Length,
-                    VertexCount = pointCloud.Length,
-                    TrianglesStart = allMeshTriangles.Length,
-                    TriangleCount = triangles.Length,
-                    Filter = res.CollisionFilter,
-                    Material =  res.Material
-                };
-                allMeshVertices.AddRange(pointCloud);
-                allMeshTriangles.AddRange(triangles);
+                    res.ConvexHullProperties.PointsStart = convexInputs.PointsStart;
+                    res.ConvexHullProperties.PointCount = convexInputs.PointCount;
+                }
+                else if (!shape.convex && TryGetRegisteredMeshInputs(res.Instance.Hash, out var meshInputs))
+                {
+                    res.MeshProperties.VerticesStart = meshInputs.VerticesStart;
+                    res.MeshProperties.VertexCount = meshInputs.VertexCount;
+                    res.MeshProperties.TrianglesStart = meshInputs.TrianglesStart;
+                    res.MeshProperties.TriangleCount = meshInputs.TriangleCount;
+                }
+                else
+                {
+                    shape.sharedMesh.GetVertices(m_Vertices);
+                    var pointCloud = new NativeArray<float3>(shape.sharedMesh.vertexCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+                    for (int i = 0, count = m_Vertices.Count; i < count; ++i)
+                        pointCloud[i] = math.mul(bakeFromShape, new float4(m_Vertices[i], 1f)).xyz;
+
+                    if (shape.convex)
+                    {
+                        res.ConvexHullProperties.PointsStart = allConvexHullPoints.Length;
+                        res.ConvexHullProperties.PointCount = pointCloud.Length;
+                        allConvexHullPoints.AddRange(pointCloud);
+                    }
+                    else
+                    {
+                        var indices = new NativeArray<int>(shape.sharedMesh.triangles, Allocator.Temp);
+                        var triangles = indices.Reinterpret<int3>(UnsafeUtility.SizeOf<int>());
+                        if (pointCloud.Length == 0 || triangles.Length == 0)
+                        {
+                            throw new InvalidOperationException(
+                                $"Invalid mesh data associated with {shape.name}. " +
+                                "Ensure that you have enabled Read/Write on the mesh's import settings."
+                            );
+                        }
+
+                        res.MeshProperties.VerticesStart = allMeshVertices.Length;
+                        res.MeshProperties.VertexCount = pointCloud.Length;
+                        res.MeshProperties.TrianglesStart = allMeshTriangles.Length;
+                        res.MeshProperties.TriangleCount = triangles.Length;
+                        allMeshVertices.AddRange(pointCloud);
+                        allMeshTriangles.AddRange(triangles);
+                    }
+                }
             }
 
             return res;
         }
     }
 }
+#endif

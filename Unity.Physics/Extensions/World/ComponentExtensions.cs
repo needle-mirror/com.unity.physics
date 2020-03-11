@@ -4,7 +4,7 @@ using Unity.Transforms;
 namespace Unity.Physics.Extensions
 {
     // Utility functions acting on physics components
-    public static partial class ComponentExtensions
+    public static class ComponentExtensions
     {
         // Get the center of mass in world space
         public static float3 GetCenterOfMass(PhysicsMass massData, Translation posData, Rotation rotData)

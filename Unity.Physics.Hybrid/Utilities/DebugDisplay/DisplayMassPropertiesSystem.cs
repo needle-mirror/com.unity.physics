@@ -64,9 +64,9 @@ namespace Unity.Physics.Authoring
                     float3 com = MotionDatas[m].WorldFromMotion.pos;
                     quaternion o = MotionDatas[m].WorldFromMotion.rot;
 
-                    float3 invInertiaLocal = MotionVelocities[m].InverseInertiaAndMass.xyz;
+                    float3 invInertiaLocal = MotionVelocities[m].InverseInertia;
                     float3 il = new float3(1.0f / invInertiaLocal.x, 1.0f / invInertiaLocal.y, 1.0f / invInertiaLocal.z);
-                    float invMass = MotionVelocities[m].InverseInertiaAndMass.w;
+                    float invMass = MotionVelocities[m].InverseMass;
 
                     // Reverse the inertia tensor computation to build a box which has the inerta tensor 'il'
                     // The diagonal inertia of a box with dimensions h,w,d and mass m is:

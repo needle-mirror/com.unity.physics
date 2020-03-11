@@ -24,7 +24,8 @@ namespace Unity.Physics.Tests.Dynamics.Motion
             var motionVelocity = new MotionVelocity()
             {
                 LinearVelocity = new float3(3.0f, 4.0f, 5.0f),
-                InverseInertiaAndMass = new float4(0.0f, 0.0f, 0.0f, 2.0f)
+                InverseInertia = float3.zero,
+                InverseMass = 2.0f
             };
             motionVelocity.ApplyLinearImpulse(new float3(1.0f, 2.0f, 3.0f));
 
@@ -37,7 +38,8 @@ namespace Unity.Physics.Tests.Dynamics.Motion
             var motionVelocity = new MotionVelocity()
             {
                 AngularVelocity = new float3(3.0f, 4.0f, 5.0f),
-                InverseInertiaAndMass = new float4(2.0f, 3.0f, 4.0f, 2.0f)
+                InverseInertia = new float3(2.0f, 3.0f, 4.0f),
+                InverseMass = 2.0f
             };
             motionVelocity.ApplyAngularImpulse(new float3(1.0f, 2.0f, 3.0f));
 
@@ -51,7 +53,8 @@ namespace Unity.Physics.Tests.Dynamics.Motion
             {
                 LinearVelocity = new float3(2.0f, 1.0f, 5.0f),
                 AngularVelocity = new float3(3.0f, 4.0f, 5.0f),
-                InverseInertiaAndMass = new float4(2.0f, 3.0f, 4.0f, 2.0f),
+                InverseInertia = new float3(2.0f, 3.0f, 4.0f),
+                InverseMass = 2.0f,
                 AngularExpansionFactor = 1.2f
             };
             var motionExpansion = motionVelocity.CalculateExpansion(1.0f / 60.0f);

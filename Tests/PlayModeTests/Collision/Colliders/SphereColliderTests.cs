@@ -20,7 +20,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         [BurstCompile(CompileSynchronously = true)]
         struct CreateFromBurstJob : IJob
         {
-            public void Execute() => SphereCollider.Create(new SphereGeometry { Radius = 1f }).Release();
+            public void Execute() => SphereCollider.Create(new SphereGeometry { Radius = 1f }).Dispose();
         }
 
         [Test]

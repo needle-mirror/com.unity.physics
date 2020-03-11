@@ -94,19 +94,17 @@ namespace Unity.Physics.Systems
             {
                 World = m_BuildPhysicsWorldSystem.PhysicsWorld,
                 TimeStep = timeStep,
-                ThreadCountHint = stepComponent.ThreadCountHint,
                 Gravity = stepComponent.Gravity,
                 SynchronizeCollisionWorld = false,
-                NumSolverIterations = stepComponent.SolverIterationCount,
-                Callbacks = m_Callbacks
-            }, handle);
+                NumSolverIterations = stepComponent.SolverIterationCount
+            }, m_Callbacks, handle, stepComponent.ThreadCountHint);
 
             // Clear the callbacks. User must enqueue them again before the next step.
             m_Callbacks.Clear();
 
             // Return the final simulation handle
             // (Not FinalJobHandle since other systems shouldn't need to depend on the dispose jobs) 
-            return JobHandle.CombineDependencies(Simulation.FinalSimulationJobHandle, handle);
+            return JobHandle.CombineDependencies(FinalSimulationJobHandle, handle);
         }
 
         // A simulation which does nothing
@@ -116,9 +114,12 @@ namespace Unity.Physics.Systems
 
             public void Dispose() { }
             public void Step(SimulationStepInput input) { }
-            public void ScheduleStepJobs(SimulationStepInput input, JobHandle inputDeps) { }
+            public SimulationJobHandles ScheduleStepJobs(SimulationStepInput input, SimulationCallbacks callbacks, JobHandle inputDeps, int threadCountHint = 0) =>
+                new SimulationJobHandles(inputDeps);
             public JobHandle FinalSimulationJobHandle => new JobHandle();
             public JobHandle FinalJobHandle => new JobHandle();
+            [Obsolete("ScheduleStepJobs() has been deprecated. Use the new ScheduleStepJobs method that takes callbacks and threadCountHint as input and returns SimulationStepHandles. (RemovedAfter 2020-05-01)")]
+            public void ScheduleStepJobs(SimulationStepInput input, JobHandle inputDeps) { }
         }
     }
 }

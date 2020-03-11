@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using NUnit.Framework;
 using Unity.Collections;
@@ -7,6 +7,10 @@ using Unity.Mathematics;
 using Unity.Physics.Authoring;
 using Unity.Transforms;
 using UnityEngine;
+#if LEGACY_PHYSICS
+using LegacyBox = UnityEngine.BoxCollider;
+using LegacyRigidBody = UnityEngine.Rigidbody;
+#endif
 
 namespace Unity.Physics.Tests.Authoring
 {
@@ -99,26 +103,82 @@ namespace Unity.Physics.Tests.Authoring
             }
         }
 
-        [Test]
-        public void ConversionSystems_WhenChildGOHasPhysicsComponents_EntityIsNewRoot(
-            [Values(typeof(PhysicsBodyAuthoring), typeof(Rigidbody), null)]
-            Type bodyType,
-            [Values(typeof(PhysicsShapeAuthoring), typeof(BoxCollider))]
-            Type colliderType,
-            [Values(typeof(StaticOptimizeEntity), null)]
-            Type otherType
+        static readonly TestCaseData[] k_ExplicitPhysicsBodyHierarchyTestCases =
+        {
+            new TestCaseData(
+                BodyMotionType.Static,
+                new EntityQueryDesc { All = new ComponentType[] { typeof(PhysicsCollider), typeof(Parent) } }
+            ).SetName("Static has parent"),
+            new TestCaseData(
+                BodyMotionType.Dynamic,
+                new EntityQueryDesc { All = new ComponentType[] { typeof(PhysicsCollider) }, None = new ComponentType[] { typeof(Parent), typeof(PreviousParent), typeof(LocalToParent) } }
+            ).SetName("Dynamic is unparented"),
+            new TestCaseData(
+                BodyMotionType.Kinematic,
+                new EntityQueryDesc { All = new ComponentType[] { typeof(PhysicsCollider) }, None = new ComponentType[] { typeof(Parent), typeof(PreviousParent), typeof(LocalToParent) } }
+            ).SetName("Kinematic is unparented"),
+        };
+
+        [TestCaseSource(nameof(k_ExplicitPhysicsBodyHierarchyTestCases))]
+        public void ConversionSystems_WhenChildGOHasExplicitPhysicsBody_EntityIsInExpectedHierarchyLocation(
+            BodyMotionType motionType, EntityQueryDesc expectedQuery
         )
         {
             CreateHierarchy(
                 Array.Empty<Type>(),
                 Array.Empty<Type>(),
-                new[] { bodyType, colliderType, otherType }.Where(t => t != null).ToArray()
+                new[] { typeof(PhysicsBodyAuthoring), typeof(PhysicsShapeAuthoring) }
+            );
+            Child.GetComponent<PhysicsBodyAuthoring>().MotionType = motionType;
+
+            ConvertHierarchyAndUpdateTransformSystemsVerifyEntityExists(Root, expectedQuery);
+        }
+
+#if LEGACY_PHYSICS
+        static readonly TestCaseData[] k_ExplicitLegacyRigidBodyHierarchyTestCases =
+        {
+            // no means to produce hierarchy of explicit static bodies with legacy
+            k_ExplicitPhysicsBodyHierarchyTestCases[1],
+            k_ExplicitPhysicsBodyHierarchyTestCases[2]
+        };
+
+        [TestCaseSource(nameof(k_ExplicitLegacyRigidBodyHierarchyTestCases))]
+        public void ConversionSystems_WhenChildGOHasExplicitLegacyRigidBody_EntityIsInExpectedHierarchyLocation(
+            BodyMotionType motionType, EntityQueryDesc expectedQuery
+        )
+        {
+            CreateHierarchy(
+                Array.Empty<Type>(),
+                Array.Empty<Type>(),
+                new[] { typeof(LegacyRigidBody), typeof(LegacyBox) }
+            );
+            Child.GetComponent<LegacyRigidBody>().isKinematic = motionType != BodyMotionType.Dynamic;
+            Child.gameObject.isStatic = motionType == BodyMotionType.Static;
+
+            ConvertHierarchyAndUpdateTransformSystemsVerifyEntityExists(Root, expectedQuery);
+        }
+#endif
+
+        [Test]
+        public void ConversionSystems_WhenChildGOHasImplicitStaticBody_EntityIsInHierarchy(
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyBox),
+#endif
+                typeof(PhysicsShapeAuthoring)
+            )]
+            Type colliderType
+        )
+        {
+            CreateHierarchy(
+                Array.Empty<Type>(),
+                Array.Empty<Type>(),
+                new[] { colliderType }
             );
 
             var query = new EntityQueryDesc
             {
-                All = new ComponentType[] { typeof(PhysicsCollider) },
-                None = new ComponentType[] { typeof(Parent), typeof(PreviousParent) }
+                All = new ComponentType[] { typeof(PhysicsCollider), typeof(Parent) }
             };
             ConvertHierarchyAndUpdateTransformSystemsVerifyEntityExists(Root, query);
         }
@@ -138,8 +198,20 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public void ConversionSystems_WhenGOHasPhysicsComponents_EntityHasSameLocalToWorldAsGO(
-            [Values(typeof(PhysicsBodyAuthoring), typeof(Rigidbody), null)] Type bodyType,
-            [Values(typeof(PhysicsShapeAuthoring), typeof(BoxCollider))] Type colliderType,
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyRigidBody),
+#endif
+                typeof(PhysicsBodyAuthoring), null
+            )]
+            Type bodyType,
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyBox),
+#endif
+                typeof(PhysicsShapeAuthoring)
+            )]
+            Type colliderType,
             [Values(typeof(StaticOptimizeEntity), null)] Type otherType
         )
         {
@@ -156,10 +228,91 @@ namespace Unity.Physics.Tests.Authoring
         }
 
         [Test]
-        public void ConversionSystems_WhenGOHasPhysicsComponents_EntityHasRotationInWorldSpace(
-            [Values(typeof(PhysicsBodyAuthoring), typeof(Rigidbody), null)]
+        public void ConversionSystems_WhenGOIsImplicitStaticBody_EntityHasSameLocalToWorldAsGO(
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyBox),
+#endif
+                typeof(PhysicsShapeAuthoring)
+            )]
+            Type colliderType
+        )
+        {
+            CreateHierarchy(
+                Array.Empty<Type>(),
+                Array.Empty<Type>(),
+                new[] { colliderType }
+            );
+            TransformHierarchyNodes();
+
+            var localToWorld = ConvertHierarchyAndUpdateTransformSystems<LocalToWorld>(Root);
+
+            Assert.That(localToWorld.Value, Is.PrettyCloseTo(Child.transform.localToWorldMatrix));
+        }
+
+        [Test]
+        public void ConversionSystems_WhenGOHasNonStaticBody_EntityHasRotationInWorldSpace(
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyRigidBody),
+#endif
+                typeof(PhysicsBodyAuthoring)
+            )]
             Type bodyType,
-            [Values(typeof(PhysicsShapeAuthoring), typeof(BoxCollider))]
+            [Values(BodyMotionType.Dynamic, BodyMotionType.Kinematic)]
+            BodyMotionType motionType,
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyBox),
+#endif
+                typeof(PhysicsShapeAuthoring)
+            )]
+            Type colliderType
+        )
+        {
+            CreateHierarchy(
+                Array.Empty<Type>(),
+                Array.Empty<Type>(),
+                new[] { bodyType, colliderType }.Where(t => t != null).ToArray()
+            );
+            TransformHierarchyNodes();
+            SetBodyMotionType(Child.GetComponent(bodyType), motionType);
+
+            var rotation = ConvertHierarchyAndUpdateTransformSystems<Rotation>(Root);
+
+            var expectedRotation = Math.DecomposeRigidBodyOrientation(Child.transform.localToWorldMatrix);
+            Assert.That(rotation.Value, Is.EqualTo(expectedRotation));
+        }
+
+        static void SetBodyMotionType(Component component, BodyMotionType motionType)
+        {
+#if LEGACY_PHYSICS
+            var rigidBody = component as LegacyRigidBody;
+            if (rigidBody != null)
+            {
+                rigidBody.isKinematic = motionType == BodyMotionType.Kinematic;
+                return;
+            }
+#endif
+            var physicsBody = component as PhysicsBodyAuthoring;
+            physicsBody.MotionType = motionType;
+        }
+
+        [Test]
+        public void ConversionSystems_WhenGOHasPhysicsComponents_EntityHasTranslationInWorldSpace(
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyRigidBody),
+#endif
+                typeof(PhysicsBodyAuthoring)
+            )]
+            Type bodyType,
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyBox),
+#endif
+                typeof(PhysicsShapeAuthoring)
+            )]
             Type colliderType,
             [Values(typeof(StaticOptimizeEntity), null)]
             Type otherType
@@ -172,28 +325,9 @@ namespace Unity.Physics.Tests.Authoring
             );
             TransformHierarchyNodes();
 
-            var rotation = ConvertHierarchyAndUpdateTransformSystems<Rotation>(Root);
-
-            Assert.That(rotation.Value, Is.EqualTo((quaternion)Child.transform.rotation));
-        }
-
-        [Test]
-        public void ConversionSystems_WhenGOHasPhysicsComponents_EntityHasTranslationInWorldSpace(
-            [Values(typeof(PhysicsBodyAuthoring), typeof(Rigidbody), null)] Type bodyType,
-            [Values(typeof(PhysicsShapeAuthoring), typeof(BoxCollider))] Type colliderType,
-            [Values(typeof(StaticOptimizeEntity), null)] Type otherType
-        )
-        {
-            CreateHierarchy(
-                Array.Empty<Type>(),
-                Array.Empty<Type>(),
-                new[] { bodyType, colliderType, otherType }.Where(t => t != null).ToArray()
-            );
-            TransformHierarchyNodes();
-
             var translation = ConvertHierarchyAndUpdateTransformSystems<Translation>(Root);
 
-            Assert.That(translation.Value, Is.EqualTo((float3)Child.transform.position));
+            Assert.That(translation.Value, Is.PrettyCloseTo(Child.transform.position));
         }
     }
 }

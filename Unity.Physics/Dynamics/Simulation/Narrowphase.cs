@@ -1,59 +1,100 @@
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
-using Unity.Mathematics;
-
 
 namespace Unity.Physics
 {
-    // Body pair processor / dispatcher
-    static class NarrowPhase // TODO: rename
+    // Processes body pairs and creates contacts from them
+    public static class NarrowPhase
     {
-        internal static JobHandle ScheduleProcessBodyPairsJobs(ref PhysicsWorld world, float timeStep, int numIterations, ref Simulation.Context context, JobHandle inputDeps)
+        // Iterates the provided dispatch pairs and creates contacts and based on them.
+        public static void CreateContacts(ref PhysicsWorld world, NativeArray<DispatchPairSequencer.DispatchPair> dispatchPairs, float timeStep,
+            ref NativeStream.Writer contactsWriter)
         {
-            var numWorkItems = context.SolverSchedulerInfo.NumWorkItems;
-            var contactsHandle = NativeStream.ScheduleConstruct(out context.Contacts, numWorkItems, inputDeps, Allocator.TempJob);
-            var jointJacobiansHandle = NativeStream.ScheduleConstruct(out context.JointJacobians, numWorkItems, inputDeps, Allocator.TempJob);
-            var jacobiansHandle = NativeStream.ScheduleConstruct(out context.Jacobians, numWorkItems, inputDeps, Allocator.TempJob);
+            contactsWriter.BeginForEachIndex(0);
 
-            var processHandle = new ProcessBodyPairsJob
-            {
-                World = world,
-                TimeStep = timeStep,
-                NumIterations = numIterations,
-                PhasedDispatchPairs = context.PhasedDispatchPairs.AsDeferredJobArray(),
-                SolverSchedulerInfo = context.SolverSchedulerInfo,
-                ContactWriter = context.Contacts.AsWriter(),
-                JointJacobianWriter = context.JointJacobians.AsWriter(),
-            }.ScheduleUnsafeIndex0(numWorkItems, 1, JobHandle.CombineDependencies(contactsHandle, jointJacobiansHandle, jacobiansHandle));
+            CreateContactsJob.ExecuteImpl(ref world, timeStep, dispatchPairs, 0, dispatchPairs.Length, ref contactsWriter);
 
-            
-            context.DisposeProcessBodyPairs = NativeListUtilityTemp.DisposeHotFix(ref context.PhasedDispatchPairs, processHandle);
-
-            return processHandle;
+            contactsWriter.EndForEachIndex();
         }
-        
-        [BurstCompile]
-        struct ProcessBodyPairsJob : IJobParallelForDefer
+
+        // Schedules a set of jobs to iterate the provided dispatch pairs and create contacts based on them.
+        internal static SimulationJobHandles ScheduleCreateContactsJobs(ref PhysicsWorld world, float timeStep,
+            ref NativeStream contacts, ref NativeStream jacobians, ref NativeList<DispatchPairSequencer.DispatchPair> dispatchPairs,
+            JobHandle inputDeps, ref DispatchPairSequencer.SolverSchedulerInfo solverSchedulerInfo, int threadCountHint = 0)
         {
-            [ReadOnly] public PhysicsWorld World;
+            SimulationJobHandles returnHandles = default;
+
+            if (threadCountHint <= 0)
+            {
+                contacts = new NativeStream(1, Allocator.TempJob);
+                jacobians = new NativeStream(1, Allocator.TempJob);
+                returnHandles.FinalExecutionHandle = new CreateContactsJob
+                {
+                    World = world,
+                    TimeStep = timeStep,
+                    DispatchPairs = dispatchPairs.AsDeferredJobArray(),
+                    SolverSchedulerInfo = solverSchedulerInfo,
+                    ContactsWriter = contacts.AsWriter()
+                }.Schedule(inputDeps);
+            }
+            else
+            {
+                var numWorkItems = solverSchedulerInfo.NumWorkItems;
+                var contactsHandle = NativeStream.ScheduleConstruct(out contacts, numWorkItems, inputDeps, Allocator.TempJob);
+                var jacobiansHandle = NativeStream.ScheduleConstruct(out jacobians, numWorkItems, inputDeps, Allocator.TempJob);
+
+                var processHandle = new CreateContactsJob
+                {
+                    World = world,
+                    TimeStep = timeStep,
+                    DispatchPairs = dispatchPairs.AsDeferredJobArray(),
+                    SolverSchedulerInfo = solverSchedulerInfo,
+                    ContactsWriter = contacts.AsWriter()
+                }.ScheduleUnsafeIndex0(numWorkItems, 1, JobHandle.CombineDependencies(contactsHandle, jacobiansHandle));
+
+
+                returnHandles.FinalExecutionHandle = processHandle;
+            }
+
+            return returnHandles;
+        }
+
+        [BurstCompile]
+        [NoAlias]
+        struct CreateContactsJob : IJobParallelForDefer, IJob
+        {
+            [NoAlias, ReadOnly] public PhysicsWorld World;
             [ReadOnly] public float TimeStep;
-            [ReadOnly] public int NumIterations;
-            [ReadOnly] public NativeArray<Scheduler.DispatchPair> PhasedDispatchPairs;
-            [ReadOnly] public Scheduler.SolverSchedulerInfo SolverSchedulerInfo;
-            public NativeStream.Writer ContactWriter;
-            public NativeStream.Writer JointJacobianWriter;
+            [ReadOnly] public NativeArray<DispatchPairSequencer.DispatchPair> DispatchPairs;
+            [NoAlias] public NativeStream.Writer ContactsWriter;
+
+            // IJobParallelForDefer specific
+            [NoAlias, ReadOnly] public DispatchPairSequencer.SolverSchedulerInfo SolverSchedulerInfo;
 
             public unsafe void Execute(int workItemIndex)
             {
                 int dispatchPairReadOffset = SolverSchedulerInfo.GetWorkItemReadOffset(workItemIndex, out int numPairsToRead);
 
-                ContactWriter.BeginForEachIndex(workItemIndex);
-                JointJacobianWriter.BeginForEachIndex(workItemIndex);
+                ContactsWriter.BeginForEachIndex(workItemIndex);
 
+                ExecuteImpl(ref World, TimeStep, DispatchPairs, dispatchPairReadOffset, numPairsToRead, ref ContactsWriter);
+
+                ContactsWriter.EndForEachIndex();
+            }
+
+            public void Execute()
+            {
+                CreateContacts(ref World, DispatchPairs, TimeStep, ref ContactsWriter);
+            }
+
+            internal static unsafe void ExecuteImpl(ref PhysicsWorld world, float timeStep,
+                NativeArray<DispatchPairSequencer.DispatchPair> dispatchPairs,
+                int dispatchPairReadOffset, int numPairsToRead, ref NativeStream.Writer contactWriter)
+            {
                 for (int i = 0; i < numPairsToRead; i++)
                 {
-                    Scheduler.DispatchPair dispatchPair = PhasedDispatchPairs[dispatchPairReadOffset + i];
+                    DispatchPairSequencer.DispatchPair dispatchPair = dispatchPairs[dispatchPairReadOffset + i];
 
                     // Invalid pairs can exist by being disabled by users
                     if (dispatchPair.IsValid)
@@ -67,57 +108,18 @@ namespace Unity.Physics
                                 BodyBIndex = dispatchPair.BodyBIndex
                             };
 
-                            RigidBody rigidBodyA = World.Bodies[pair.BodyAIndex];
-                            RigidBody rigidBodyB = World.Bodies[pair.BodyBIndex];
+                            RigidBody rigidBodyA = world.Bodies[pair.BodyAIndex];
+                            RigidBody rigidBodyB = world.Bodies[pair.BodyBIndex];
 
-                            MotionVelocity motionVelocityA = pair.BodyAIndex < World.MotionVelocities.Length ?
-                                World.MotionVelocities[pair.BodyAIndex] : MotionVelocity.Zero;
-                            MotionVelocity motionVelocityB = pair.BodyBIndex < World.MotionVelocities.Length ?
-                                World.MotionVelocities[pair.BodyBIndex] : MotionVelocity.Zero;
+                            MotionVelocity motionVelocityA = pair.BodyAIndex < world.MotionVelocities.Length ?
+                                world.MotionVelocities[pair.BodyAIndex] : MotionVelocity.Zero;
+                            MotionVelocity motionVelocityB = pair.BodyBIndex < world.MotionVelocities.Length ?
+                                world.MotionVelocities[pair.BodyBIndex] : MotionVelocity.Zero;
 
                             ManifoldQueries.BodyBody(rigidBodyA, rigidBodyB, motionVelocityA, motionVelocityB,
-                                World.CollisionWorld.CollisionTolerance, TimeStep, pair, ref ContactWriter);
-                        }
-                        else
-                        {
-                            Joint joint = World.Joints[dispatchPair.JointIndex];
-                            // Need to fetch the real body indices from the joint, as the scheduler may have reordered them
-                            int bodyAIndex = joint.BodyPair.BodyAIndex;
-                            int bodyBIndex = joint.BodyPair.BodyBIndex;
-
-                            GetMotion(ref World, bodyAIndex, out MotionVelocity velocityA, out MotionData motionA);
-                            GetMotion(ref World, bodyBIndex, out MotionVelocity velocityB, out MotionData motionB);
-
-                            Solver.BuildJointJacobian(joint.JointData, joint.BodyPair, velocityA, velocityB, motionA, motionB, TimeStep, NumIterations, ref JointJacobianWriter);
+                                world.CollisionWorld.CollisionTolerance, timeStep, pair, ref contactWriter);
                         }
                     }
-                }
-
-                JointJacobianWriter.EndForEachIndex();
-                ContactWriter.EndForEachIndex();
-            }
-
-            // Gets a body's motion, even if the body is static
-            // TODO - share code with Solver.GetMotions()?
-            private static void GetMotion(ref PhysicsWorld world, int bodyIndex, out MotionVelocity velocity, out MotionData motion)
-            {
-                if (bodyIndex >= world.MotionVelocities.Length)
-                {
-                    // Body is static
-                    RigidBody body = world.Bodies[bodyIndex];
-                    velocity = MotionVelocity.Zero;
-                    motion = new MotionData
-                    {
-                        WorldFromMotion = body.WorldFromBody,
-                        BodyFromMotion = RigidTransform.identity
-                        // remaining fields all zero
-                    };
-                }
-                else
-                {
-                    // Body is dynamic
-                    velocity = world.MotionVelocities[bodyIndex];
-                    motion = world.MotionDatas[bodyIndex];
                 }
             }
         }

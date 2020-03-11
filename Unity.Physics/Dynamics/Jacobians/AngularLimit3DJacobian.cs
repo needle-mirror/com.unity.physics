@@ -1,9 +1,11 @@
-﻿using Unity.Mathematics;
+﻿using Unity.Burst;
+using Unity.Mathematics;
 using static Unity.Physics.Math;
 
 namespace Unity.Physics
 {
     // Solve data for a constraint that limits three degrees of angular freedom
+    [NoAlias]
     struct AngularLimit3DJacobian
     {
         // Relative angle limits
@@ -74,13 +76,13 @@ namespace Unity.Physics
 
                 // Calculate the effective mass
                 float3 invEffectiveMassDiag = new float3(
-                    math.csum(jacA0 * jacA0 * velocityA.InverseInertiaAndMass.xyz + jacB0 * jacB0 * velocityB.InverseInertiaAndMass.xyz),
-                    math.csum(jacA1 * jacA1 * velocityA.InverseInertiaAndMass.xyz + jacB1 * jacB1 * velocityB.InverseInertiaAndMass.xyz),
-                    math.csum(jacA2 * jacA2 * velocityA.InverseInertiaAndMass.xyz + jacB2 * jacB2 * velocityB.InverseInertiaAndMass.xyz));
+                    math.csum(jacA0 * jacA0 * velocityA.InverseInertia + jacB0 * jacB0 * velocityB.InverseInertia),
+                    math.csum(jacA1 * jacA1 * velocityA.InverseInertia + jacB1 * jacB1 * velocityB.InverseInertia),
+                    math.csum(jacA2 * jacA2 * velocityA.InverseInertia + jacB2 * jacB2 * velocityB.InverseInertia));
                 float3 invEffectiveMassOffDiag = new float3(
-                    math.csum(jacA0 * jacA1 * velocityA.InverseInertiaAndMass.xyz + jacB0 * jacB1 * velocityB.InverseInertiaAndMass.xyz),
-                    math.csum(jacA0 * jacA2 * velocityA.InverseInertiaAndMass.xyz + jacB0 * jacB2 * velocityB.InverseInertiaAndMass.xyz),
-                    math.csum(jacA1 * jacA2 * velocityA.InverseInertiaAndMass.xyz + jacB1 * jacB2 * velocityB.InverseInertiaAndMass.xyz));
+                    math.csum(jacA0 * jacA1 * velocityA.InverseInertia + jacB0 * jacB1 * velocityB.InverseInertia),
+                    math.csum(jacA0 * jacA2 * velocityA.InverseInertia + jacB0 * jacB2 * velocityB.InverseInertia),
+                    math.csum(jacA1 * jacA2 * velocityA.InverseInertia + jacB1 * jacB2 * velocityB.InverseInertia));
                 JacobianUtilities.InvertSymmetricMatrix(invEffectiveMassDiag, invEffectiveMassOffDiag, out float3 effectiveMassDiag, out float3 effectiveMassOffDiag);
                 effectiveMass = JacobianUtilities.BuildSymmetricMatrix(effectiveMassDiag, effectiveMassOffDiag).c0;
             }

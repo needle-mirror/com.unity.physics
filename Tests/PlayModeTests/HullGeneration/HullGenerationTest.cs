@@ -609,7 +609,7 @@ class HullGenerationTest : MonoBehaviour
         // Build a shape from the un-simplified hull, if possible
         int originalNumVertices = builder.Vertices.PeakCount;
         int originalNumFaces = builder.NumFaces;
-        BlobAssetReference<Collider> originalColliderRef;
+        BlobAssetReference<Collider> originalColliderRef = default;
         if (builder.Vertices.PeakCount < ConvexCollider.k_MaxVertices)
         {
             originalColliderRef = ConvexCollider.Create(builder, 0.0f, CollisionFilter.Default, Material.Default);

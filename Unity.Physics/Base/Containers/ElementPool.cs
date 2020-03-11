@@ -1,4 +1,5 @@
 using System;
+using Unity.Burst;
 using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine.Assertions;
 
@@ -13,9 +14,11 @@ namespace Unity.Collections
 
     // Underlying implementation of ElementPool
     // This is split into a different structure so that it can be unmanaged (since templated structures are always managed)
+    [NoAlias]
     unsafe struct ElementPoolBase
     {
         [NativeDisableContainerSafetyRestriction]
+        [NoAlias]
         private void* m_Elements;    // storage for all elements (allocated and free)
         private readonly int m_capacity;      // number of elements
         private int m_FirstFreeIndex;         // the index of the first free element (or -1 if none free)

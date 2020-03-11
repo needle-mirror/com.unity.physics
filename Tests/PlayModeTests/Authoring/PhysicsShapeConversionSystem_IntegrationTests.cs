@@ -10,10 +10,14 @@ using UnityEngine;
 #if !UNITY_EDITOR
 using UnityEngine.TestTools;
 #endif
-using PxBox = UnityEngine.BoxCollider;
-using PxCapsule = UnityEngine.CapsuleCollider;
-using PxSphere = UnityEngine.SphereCollider;
-using PxMesh = UnityEngine.MeshCollider;
+#if LEGACY_PHYSICS
+using LegacyBox = UnityEngine.BoxCollider;
+using LegacyCapsule = UnityEngine.CapsuleCollider;
+using LegacyCollider = UnityEngine.Collider;
+using LegacyMesh = UnityEngine.MeshCollider;
+using LegacySphere = UnityEngine.SphereCollider;
+using LegacyRigidBody = UnityEngine.Rigidbody;
+#endif
 using UnityMesh = UnityEngine.Mesh;
 
 namespace Unity.Physics.Tests.Authoring
@@ -97,33 +101,6 @@ namespace Unity.Physics.Tests.Authoring
             );
         }
 
-        [Test]
-        public void PhysicsShapeConversionSystem_WhenBodyHasMultipleDifferentSiblingShapes_CreatesCompound_WithFlatHierarchy()
-        {
-            CreateHierarchy(
-                new[] { typeof(ConvertToEntity), typeof(PhysicsBodyAuthoring), typeof(PxBox), typeof(PxCapsule), typeof(PxSphere), typeof(PhysicsShapeAuthoring) },
-                new[] { typeof(ConvertToEntity) },
-                new[] { typeof(ConvertToEntity) }
-            );
-            Root.GetComponent<PhysicsShapeAuthoring>().SetBox(new BoxGeometry { Size = 1f });
-
-            TestConvertedData<PhysicsCollider>(
-                c =>
-                {
-                    Assert.That(c.Value.Value.Type, Is.EqualTo(ColliderType.Compound));
-                    unsafe
-                    {
-                        var compoundCollider = (CompoundCollider*)c.Value.GetUnsafePtr();
-
-                        var childTypes = Enumerable.Range(0, compoundCollider->NumChildren)
-                            .Select(i => compoundCollider->Children[i].Collider->Type)
-                            .ToArray();
-                        Assert.That(childTypes, Is.EquivalentTo(new[] { ColliderType.Box, ColliderType.Box, ColliderType.Capsule, ColliderType.Sphere }));
-                    }
-                }
-            );
-        }
-
         static readonly Regex k_NonReadableMeshPattern = new Regex(@"\b((un)?readable|Read\/Write|(non-)?accessible)\b");
 
         [Test]
@@ -145,32 +122,21 @@ namespace Unity.Physics.Tests.Authoring
         }
 
         [Test]
-        [Ignore("Behavior is inconsistent on some platforms.")]
-        public void LegacyMeshColliderConversionSystem_WhenMeshColliderHasNonReadableMesh_ThrowsException(
-            [Values]bool convex
-        )
-        {
-            CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { typeof(PxMesh) });
-#if !UNITY_EDITOR
-            // legacy components log error messages in the player for non-readable meshes once for each property access
-            LogAssert.Expect(LogType.Error, k_NonReadableMeshPattern);
-            LogAssert.Expect(LogType.Error, k_NonReadableMeshPattern);
-#endif
-            Child.GetComponent<PxMesh>().sharedMesh = NonReadableMesh;
-            Child.GetComponent<PxMesh>().convex = convex;
-
-            VerifyLogsException<InvalidOperationException>(k_NonReadableMeshPattern);
-        }
-
-        [Test]
         public void ConversionSystems_WhenGOHasShape_GOIsActive_AuthoringComponentEnabled_AuthoringDataConverted(
-            [Values(typeof(PhysicsShapeAuthoring), typeof(PxBox), typeof(PxCapsule), typeof(PxSphere), typeof(PxMesh))]
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyBox), typeof(LegacyCapsule), typeof(LegacySphere), typeof(LegacyMesh),
+#endif
+                typeof(PhysicsShapeAuthoring)
+            )]
             Type shapeType
         )
         {
             CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { shapeType });
-            if (Child.GetComponent(shapeType) is PxMesh meshCollider)
+#if LEGACY_PHYSICS
+            if (Child.GetComponent(shapeType) is LegacyMesh meshCollider)
                 meshCollider.sharedMesh = Resources.GetBuiltinResource<UnityEngine.Mesh>("New-Cylinder.fbx");
+#endif
 
             // conversion presumed to create valid PhysicsCollider under default conditions
             TestConvertedData<PhysicsCollider>(c => Assert.That(c.IsValid, Is.True));
@@ -178,17 +144,27 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public void ConversionSystems_WhenGOHasShape_AuthoringComponentDisabled_AuthoringDataNotConverted(
-            [Values(typeof(PhysicsShapeAuthoring), typeof(PxBox), typeof(PxCapsule), typeof(PxSphere), typeof(PxMesh))]
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyBox), typeof(LegacyCapsule), typeof(LegacySphere), typeof(LegacyMesh),
+#endif
+                typeof(PhysicsShapeAuthoring)
+            )]
             Type shapeType
         )
         {
             CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { shapeType });
-            if (Child.GetComponent(shapeType) is PxMesh meshCollider)
+#if LEGACY_PHYSICS
+            if (Child.GetComponent(shapeType) is LegacyMesh meshCollider)
                 meshCollider.sharedMesh = Resources.GetBuiltinResource<UnityEngine.Mesh>("New-Cylinder.fbx");
+#endif
             var c = Child.GetComponent(shapeType);
-            if (c is UnityEngine.Collider collider)
+#if LEGACY_PHYSICS
+            if (c is LegacyCollider collider)
                 collider.enabled = false;
-            else (c as PhysicsShapeAuthoring).enabled = false;
+            else
+#endif
+                (c as PhysicsShapeAuthoring).enabled = false;
 
             // conversion presumed to create valid PhysicsCollider under default conditions
             // covered by corresponding test ConversionSystems_WhenGOHasShape_GOIsActive_AuthoringComponentEnabled_AuthoringDataConverted
@@ -198,13 +174,20 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasShape_GOIsInactive_BodyIsNotConverted(
             [Values]Node inactiveNode,
-            [Values(typeof(PhysicsShapeAuthoring), typeof(PxBox), typeof(PxCapsule), typeof(PxSphere), typeof(PxMesh))]
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyBox), typeof(LegacyCapsule), typeof(LegacySphere), typeof(LegacyMesh),
+#endif
+                typeof(PhysicsShapeAuthoring)
+            )]
             Type shapeType
         )
         {
             CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { shapeType });
-            if (Child.GetComponent(shapeType) is PxMesh meshCollider)
+#if LEGACY_PHYSICS
+            if (Child.GetComponent(shapeType) is LegacyMesh meshCollider)
                 meshCollider.sharedMesh = Resources.GetBuiltinResource<UnityEngine.Mesh>("New-Cylinder.fbx");
+#endif
             GetNode(inactiveNode).SetActive(false);
             var numInactiveNodes = Root.GetComponentsInChildren<Transform>(true).Count(t => t.gameObject.activeSelf);
             Assume.That(numInactiveNodes, Is.EqualTo(2));
@@ -214,7 +197,7 @@ namespace Unity.Physics.Tests.Authoring
             VerifyNoDataProduced<PhysicsCollider>();
         }
 
-        void SetDefaultShape(PhysicsShapeAuthoring shape, ShapeType type)
+        static void SetDefaultShape(PhysicsShapeAuthoring shape, ShapeType type)
         {
             switch (type)
             {
@@ -222,7 +205,7 @@ namespace Unity.Physics.Tests.Authoring
                     shape.SetBox(default);
                     break;
                 case ShapeType.Capsule:
-                    shape.SetCapsule(default, quaternion.identity);
+                    shape.SetCapsule(new CapsuleGeometryAuthoring { OrientationEuler = EulerAngles.Default });
                     break;
                 case ShapeType.Sphere:
                     shape.SetSphere(default, quaternion.identity);
@@ -277,6 +260,52 @@ namespace Unity.Physics.Tests.Authoring
             }, 2);
         }
 
+#if LEGACY_PHYSICS
+        [Test]
+        public void PhysicsShapeConversionSystem_WhenBodyHasMultipleDifferentSiblingShapes_CreatesCompound_WithFlatHierarchy()
+        {
+            CreateHierarchy(
+                new[] { typeof(ConvertToEntity), typeof(PhysicsBodyAuthoring), typeof(LegacyBox), typeof(LegacyCapsule), typeof(LegacySphere), typeof(PhysicsShapeAuthoring) },
+                new[] { typeof(ConvertToEntity) },
+                new[] { typeof(ConvertToEntity) }
+            );
+            Root.GetComponent<PhysicsShapeAuthoring>().SetBox(new BoxGeometry { Size = 1f });
+
+            TestConvertedData<PhysicsCollider>(
+                c =>
+                {
+                    Assert.That(c.Value.Value.Type, Is.EqualTo(ColliderType.Compound));
+                    unsafe
+                    {
+                        var compoundCollider = (CompoundCollider*)c.Value.GetUnsafePtr();
+
+                        var childTypes = Enumerable.Range(0, compoundCollider->NumChildren)
+                            .Select(i => compoundCollider->Children[i].Collider->Type)
+                            .ToArray();
+                        Assert.That(childTypes, Is.EquivalentTo(new[] { ColliderType.Box, ColliderType.Box, ColliderType.Capsule, ColliderType.Sphere }));
+                    }
+                }
+            );
+        }
+
+        [Test]
+        [Ignore("Behavior is inconsistent on some platforms.")]
+        public void LegacyMeshColliderConversionSystem_WhenMeshColliderHasNonReadableMesh_ThrowsException(
+            [Values]bool convex
+        )
+        {
+            CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { typeof(LegacyMesh) });
+#if !UNITY_EDITOR
+            // legacy components log error messages in the player for non-readable meshes once for each property access
+            LogAssert.Expect(LogType.Error, k_NonReadableMeshPattern);
+            LogAssert.Expect(LogType.Error, k_NonReadableMeshPattern);
+#endif
+            Child.GetComponent<LegacyMesh>().sharedMesh = NonReadableMesh;
+            Child.GetComponent<LegacyMesh>().convex = convex;
+
+            VerifyLogsException<InvalidOperationException>(k_NonReadableMeshPattern);
+        }
+
         [Test]
         public unsafe void LegacyMeshColliderConversionSystem_WhenMultipleShapesShareInputs_CollidersShareTheSameData(
             [Values]bool convex
@@ -284,10 +313,10 @@ namespace Unity.Physics.Tests.Authoring
         {
             CreateHierarchy(
                 Array.Empty<Type>(),
-                new[] { typeof(MeshCollider), typeof(Rigidbody) },
-                new[] { typeof(MeshCollider), typeof(Rigidbody) }
+                new[] { typeof(LegacyMesh), typeof(LegacyRigidBody) },
+                new[] { typeof(LegacyMesh), typeof(LegacyRigidBody) }
             );
-            foreach (var shape in Root.GetComponentsInChildren<PxMesh>())
+            foreach (var shape in Root.GetComponentsInChildren<LegacyMesh>())
             {
                 shape.convex = convex;
                 shape.sharedMesh = ReadableMesh;
@@ -304,6 +333,7 @@ namespace Unity.Physics.Tests.Authoring
                 Assert.That(numUnique, Is.EqualTo(1), $"Expected colliders to reference the same data, but found {numUnique} different colliders.");
             }, 2);
         }
+#endif
 
         [Test]
         public unsafe void ConversionSystems_WhenMultipleShapesShareMeshes_WithDifferentOffsets_CollidersDoNotShareTheSameData(

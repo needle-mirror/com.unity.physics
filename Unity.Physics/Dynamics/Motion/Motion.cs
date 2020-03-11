@@ -1,4 +1,5 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System;
+using System.Runtime.CompilerServices;
 using Unity.Mathematics;
 
 namespace Unity.Physics
@@ -83,14 +84,29 @@ namespace Unity.Physics
     {
         public float3 LinearVelocity;   // world space
         public float3 AngularVelocity;  // motion space
-        public float4 InverseInertiaAndMass;
+        public float3 InverseInertia;
+        public float InverseMass;
         public float AngularExpansionFactor;
+
+        [Obsolete("InverseInertiaAndMass has been deprecated. Use the individual InverseInertia and InverseMass members instead. (RemovedAfter 2020-05-15)")]
+        public float4 InverseInertiaAndMass
+        {
+            get => new float4(InverseInertia, InverseMass);
+            set
+            {
+                InverseInertia = value.xyz;
+                InverseMass = value.w;
+            }
+        }
+
+        internal bool HasInfiniteInertiaAndMass => !math.any(InverseInertia) && InverseMass == 0.0f;
 
         public static readonly MotionVelocity Zero = new MotionVelocity
         {
             LinearVelocity = new float3(0),
             AngularVelocity = new float3(0),
-            InverseInertiaAndMass = new float4(0),
+            InverseInertia = new float3(0),
+            InverseMass = 0.0f,
             AngularExpansionFactor = 0.0f
         };
 
@@ -98,14 +114,14 @@ namespace Unity.Physics
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ApplyLinearImpulse(float3 impulse)
         {
-            LinearVelocity += impulse * InverseInertiaAndMass.w;
+            LinearVelocity += impulse * InverseMass;
         }
 
         // Apply an angular impulse (in motion space)
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ApplyAngularImpulse(float3 impulse)
         {
-            AngularVelocity += impulse * InverseInertiaAndMass.xyz;
+            AngularVelocity += impulse * InverseInertia;
         }
 
         // Calculate the distances by which to expand collision tolerances based on the speed of the object.
@@ -113,7 +129,8 @@ namespace Unity.Physics
         internal MotionExpansion CalculateExpansion(float timeStep) => new MotionExpansion
         {
             Linear = LinearVelocity * timeStep,
-            Uniform = math.min(math.length(AngularVelocity) * timeStep, (float)math.PI / 2.0f) * AngularExpansionFactor
+            // math.length(AngularVelocity) * timeStep is conservative approximation of sin((math.length(AngularVelocity) * timeStep)
+            Uniform = math.min(math.length(AngularVelocity) * timeStep * AngularExpansionFactor, AngularExpansionFactor)
         };
     }
 
@@ -142,7 +159,7 @@ namespace Unity.Physics
     }
 
     // A linear and angular velocity
-    internal struct Velocity
+    public struct Velocity
     {
         public float3 Linear;   // world space
         public float3 Angular;  // motion space

@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -135,7 +136,7 @@ namespace Unity.Physics
             return GetChild(ref key, out leaf); // all children of TerrainCollider are leaves
         }
 
-        public void GetLeaves<T>(ref T collector) where T : struct, ILeafColliderCollector
+        public void GetLeaves<T>([NoAlias] ref T collector) where T : struct, ILeafColliderCollector
         {
             for (int x = 0; x < Terrain.Size.x - 1; x++)
             {

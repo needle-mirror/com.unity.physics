@@ -20,7 +20,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         struct CreateQuadFromBurstJob : IJob
         {
             public void Execute() =>
-                PolygonCollider.CreateQuad(new float3(-1f, 1f, 0f), new float3(1f, 1f, 0f), new float3(1f, -1f, 0f), new float3(-1f, -1f, 0f)).Release();
+                PolygonCollider.CreateQuad(new float3(-1f, 1f, 0f), new float3(1f, 1f, 0f), new float3(1f, -1f, 0f), new float3(-1f, -1f, 0f)).Dispose();
         }
 
         [Test]
@@ -30,7 +30,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         struct CreateTriangleFromBurstJob : IJob
         {
             public void Execute() =>
-                PolygonCollider.CreateTriangle(new float3(-1f, 1f, 0f), new float3(1f, 1f, 0f), new float3(1f, -1f, 0f)).Release();
+                PolygonCollider.CreateTriangle(new float3(-1f, 1f, 0f), new float3(1f, 1f, 0f), new float3(1f, -1f, 0f)).Dispose();
         }
 
         [Test]

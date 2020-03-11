@@ -1,4 +1,6 @@
-﻿using Unity.Mathematics;
+﻿using System.Runtime.CompilerServices;
+using Unity.Burst;
+using Unity.Mathematics;
 using UnityEngine.Assertions;
 using static Unity.Physics.Math;
 
@@ -40,9 +42,7 @@ namespace Unity.Physics
 
                     fixed (float* positions = m_ContactPositions)
                     {
-                        contact.Position.x = positions[offset];
-                        contact.Position.y = positions[offset + 1];
-                        contact.Position.z = positions[offset + 2];
+                        contact.Position = *(float3*)(positions + offset);
                     }
 
                     fixed (float* distances = m_Distances)
@@ -59,9 +59,7 @@ namespace Unity.Physics
                     int offset = contactIndex * 3;
                     fixed (float* positions = m_ContactPositions)
                     {
-                        positions[offset] = value.Position.x;
-                        positions[offset + 1] = value.Position.y;
-                        positions[offset + 2] = value.Position.z;
+                        *(float3*)(positions + offset) = value.Position;
                     }
 
                     fixed (float* distances = m_Distances)
@@ -88,8 +86,8 @@ namespace Unity.Physics
         // Create a contact point for a pair of spheres in world space.
         public static unsafe void SphereSphere(
             SphereCollider* sphereA, SphereCollider* sphereB,
-            MTransform worldFromA, MTransform aFromB, float maxDistance,
-            out Manifold manifold)
+            [NoAlias] in MTransform worldFromA, [NoAlias] in MTransform aFromB, float maxDistance,
+            [NoAlias] out Manifold manifold)
         {
             DistanceQueries.Result convexDistance = DistanceQueries.SphereSphere(sphereA, sphereB, aFromB);
             if (convexDistance.Distance < maxDistance)
@@ -104,9 +102,9 @@ namespace Unity.Physics
 
         // Create a contact point for a box and a sphere in world space.
         public static unsafe void BoxSphere(
-            BoxCollider* boxA, SphereCollider* sphereB,
-            MTransform worldFromA, MTransform aFromB, float maxDistance,
-            out Manifold manifold)
+            [NoAlias] BoxCollider* boxA, [NoAlias] SphereCollider* sphereB,
+            [NoAlias] in MTransform worldFromA, [NoAlias] in MTransform aFromB, float maxDistance,
+            [NoAlias] out Manifold manifold)
         {
             DistanceQueries.Result convexDistance = DistanceQueries.BoxSphere(boxA, sphereB, aFromB);
             if (convexDistance.Distance < maxDistance)
@@ -122,8 +120,8 @@ namespace Unity.Physics
         // Create contact points for a pair of boxes in world space.
         public static unsafe void BoxBox(
             BoxCollider* boxA, BoxCollider* boxB,
-            MTransform worldFromA, MTransform aFromB, float maxDistance,
-            out Manifold manifold)
+            [NoAlias] in MTransform worldFromA, [NoAlias] in MTransform aFromB, float maxDistance,
+            [NoAlias] out Manifold manifold)
         {
             manifold = new Manifold();
 
@@ -235,9 +233,9 @@ namespace Unity.Physics
 
         // Create a single point manifold between a capsule and a sphere in world space.
         public static unsafe void CapsuleSphere(
-            CapsuleCollider* capsuleA, SphereCollider* sphereB,
-            MTransform worldFromA, MTransform aFromB, float maxDistance,
-            out Manifold manifold)
+            [NoAlias] CapsuleCollider* capsuleA, [NoAlias] SphereCollider* sphereB,
+            [NoAlias] in MTransform worldFromA, [NoAlias] in MTransform aFromB, float maxDistance,
+            [NoAlias] out Manifold manifold)
         {
             DistanceQueries.Result convexDistance = DistanceQueries.CapsuleSphere(
                 capsuleA->Vertex0, capsuleA->Vertex1, capsuleA->Radius, sphereB->Center, sphereB->Radius, aFromB);
@@ -254,7 +252,7 @@ namespace Unity.Physics
         // Create a contact point for a pair of capsules in world space.
         public static unsafe void CapsuleCapsule(
             CapsuleCollider* capsuleA, CapsuleCollider* capsuleB,
-            MTransform worldFromA, MTransform aFromB, float maxDistance,
+            [NoAlias] MTransform worldFromA, [NoAlias] MTransform aFromB, float maxDistance,
             out Manifold manifold)
         {
             // TODO: Should produce a multi-point manifold
@@ -271,9 +269,9 @@ namespace Unity.Physics
 
         // Create contact points for a box and triangle in world space.
         public static unsafe void BoxTriangle(
-            BoxCollider* boxA, PolygonCollider* triangleB,
-            MTransform worldFromA, MTransform aFromB, float maxDistance,
-            out Manifold manifold)
+            [NoAlias] BoxCollider* boxA, [NoAlias] PolygonCollider* triangleB,
+            [NoAlias] in MTransform worldFromA, [NoAlias] in MTransform aFromB, float maxDistance,
+            [NoAlias] out Manifold manifold)
         {
             Assert.IsTrue(triangleB->Vertices.Length == 3);
 
@@ -382,9 +380,9 @@ namespace Unity.Physics
 
         // Create a single point manifold between a triangle and sphere in world space.
         public static unsafe void TriangleSphere(
-            PolygonCollider* triangleA, SphereCollider* sphereB,
-            MTransform worldFromA, MTransform aFromB, float maxDistance,
-            out Manifold manifold)
+            [NoAlias] PolygonCollider* triangleA, [NoAlias] SphereCollider* sphereB,
+            [NoAlias] in MTransform worldFromA, [NoAlias] in MTransform aFromB, float maxDistance,
+            [NoAlias] out Manifold manifold)
         {
             Assert.IsTrue(triangleA->Vertices.Length == 3);
 
@@ -403,9 +401,9 @@ namespace Unity.Physics
 
         // Create contact points for a capsule and triangle in world space.
         public static unsafe void CapsuleTriangle(
-            CapsuleCollider* capsuleA, PolygonCollider* triangleB,
-            MTransform worldFromA, MTransform aFromB, float maxDistance,
-            out Manifold manifold)
+            [NoAlias] CapsuleCollider* capsuleA, [NoAlias] PolygonCollider* triangleB,
+            [NoAlias] in MTransform worldFromA, [NoAlias] in MTransform aFromB, float maxDistance,
+            [NoAlias] out Manifold manifold)
         {
             Assert.IsTrue(triangleB->Vertices.Length == 3);
 
@@ -439,8 +437,8 @@ namespace Unity.Physics
         // Create contact points for a pair of generic convex hulls in world space.
         public static unsafe void ConvexConvex(
             ref ConvexHull hullA, ref ConvexHull hullB,
-            MTransform worldFromA, MTransform aFromB, float maxDistance,
-            out Manifold manifold)
+            [NoAlias] in MTransform worldFromA, [NoAlias] in MTransform aFromB, float maxDistance,
+            [NoAlias] out Manifold manifold)
         {
             // Get closest points on the hulls
             ConvexConvexDistanceQueries.Result result = ConvexConvexDistanceQueries.ConvexConvex(
@@ -567,8 +565,9 @@ namespace Unity.Physics
             return math.select(b, a, a.w > b.w);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void CalcTrianglePlanes(float3 v0, float3 v1, float3 v2, float3 normalDirection,
-            out FourTransposedPoints verts, out FourTransposedPoints edges, out FourTransposedPoints perps)
+            [NoAlias] out FourTransposedPoints verts, [NoAlias] out FourTransposedPoints edges, [NoAlias] out FourTransposedPoints perps)
         {
             verts = new FourTransposedPoints(v0, v1, v2, v0);
             edges = verts.V1230 - verts;
@@ -662,8 +661,8 @@ namespace Unity.Physics
         // 2) the closest features on the shapes are vertices, so that the intersection of the projection of the faces to the plane perpendicular to the normal contains only one point
         // In those cases, FaceFace() returns false and the caller should generate a contact from the closest points on the shapes.
         private static unsafe bool FaceFace(
-            ref ConvexHull convexA, ref ConvexHull convexB, int faceIndexA, int faceIndexB, MTransform worldFromA, MTransform aFromB,
-            float3 normal, float distance, ref Manifold manifold)
+            ref ConvexHull convexA, ref ConvexHull convexB, int faceIndexA, int faceIndexB, [NoAlias] in MTransform worldFromA, [NoAlias] in MTransform aFromB,
+            float3 normal, float distance, [NoAlias] ref Manifold manifold)
         {
             // Get the plane of each face
             Plane planeA = convexA.Planes[faceIndexA];
@@ -775,8 +774,8 @@ namespace Unity.Physics
         // Tries to generate a manifold between a face and an edge.  It can fail for the same reasons as FaceFace().
         // In those cases, FaceEdge() returns false and the caller should generate a contact from the closest points on the shapes.
         private static unsafe bool FaceEdge(
-            ref ConvexHull faceConvexA, ref ConvexHull edgeConvexB, int faceIndexA, MTransform worldFromA, MTransform aFromB,
-            float3 normal, float distance, ref Manifold manifold)
+            ref ConvexHull faceConvexA, ref ConvexHull edgeConvexB, int faceIndexA, [NoAlias] in MTransform worldFromA, [NoAlias] in MTransform aFromB,
+            float3 normal, float distance, [NoAlias] ref Manifold manifold)
         {
             // Check if the face is nearly perpendicular to the normal
             const float cosMaxAngle = 0.05f;
@@ -825,7 +824,7 @@ namespace Unity.Physics
 
         // Adds a contact to the manifold from an edge and fraction
         private static bool AddEdgeContact(float3 vertex0, float3 edge, float distance0, float deltaDistance, float fraction, float3 normalInA, float radiusB, float sumRadii,
-            MTransform worldFromA, float distanceThreshold, ref Manifold manifold)
+            [NoAlias] in MTransform worldFromA, float distanceThreshold, [NoAlias] ref Manifold manifold)
         {
             if (manifold.NumContacts < Manifold.k_MaxNumContacts)
             {

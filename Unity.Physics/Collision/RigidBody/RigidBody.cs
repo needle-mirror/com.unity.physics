@@ -1,5 +1,5 @@
 ﻿using System;
-using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -7,10 +7,10 @@ using Unity.Mathematics;
 namespace Unity.Physics
 {
     // An instance of a collider in a physics world.
-    public unsafe struct RigidBody : ICollidable
+    public struct RigidBody : ICollidable
     {
         // The rigid body's collider (allowed to be null)
-        public Collider* Collider;    // Todo: use BlobAssetReference<Collider>?
+        public BlobAssetReference<Collider> Collider;
 
         // The rigid body's transform in world space
         public RigidTransform WorldFromBody;
@@ -25,30 +25,27 @@ namespace Unity.Physics
         public static readonly RigidBody Zero = new RigidBody
         {
             WorldFromBody = RigidTransform.identity,
-            Collider = null,
+            Collider = default,
             Entity = Entity.Null,
             CustomTags = 0
         };
-
-        /// Return true if the body has a collider set
-        public bool HasCollider => Collider != null;
 
         #region ICollidable implementation
 
         public Aabb CalculateAabb()
         {
-            if (Collider != null)
+            if (Collider.IsCreated)
             {
-                return Collider->CalculateAabb(WorldFromBody);
+                return Collider.Value.CalculateAabb(WorldFromBody);
             }
             return new Aabb { Min = WorldFromBody.pos, Max = WorldFromBody.pos };
         }
 
         public Aabb CalculateAabb(RigidTransform transform)
         {
-            if (Collider != null)
+            if (Collider.IsCreated)
             {
-                return Collider->CalculateAabb(math.mul(transform, WorldFromBody));
+                return Collider.Value.CalculateAabb(math.mul(transform, WorldFromBody));
             }
             return new Aabb { Min = WorldFromBody.pos, Max = WorldFromBody.pos };
         }
@@ -58,7 +55,7 @@ namespace Unity.Physics
         public bool CastRay(RaycastInput input, ref NativeList<RaycastHit> allHits) => QueryWrappers.RayCast(ref this, input, ref allHits);
         public bool CastRay<T>(RaycastInput input, ref T collector) where T : struct, ICollector<RaycastHit>
         {
-            return Collider != null && Collider->CastRay(input, ref collector);
+            return Collider.IsCreated && Collider.Value.CastRay(input, ref collector);
         }
 
         public bool CastCollider(ColliderCastInput input) => QueryWrappers.ColliderCast(ref this, input);
@@ -66,7 +63,7 @@ namespace Unity.Physics
         public bool CastCollider(ColliderCastInput input, ref NativeList<ColliderCastHit> allHits) => QueryWrappers.ColliderCast(ref this, input, ref allHits);
         public bool CastCollider<T>(ColliderCastInput input, ref T collector) where T : struct, ICollector<ColliderCastHit>
         {
-            return Collider != null && Collider->CastCollider(input, ref collector);
+            return Collider.IsCreated && Collider.Value.CastCollider(input, ref collector);
         }
 
         public bool CalculateDistance(PointDistanceInput input) => QueryWrappers.CalculateDistance(ref this, input);
@@ -74,7 +71,7 @@ namespace Unity.Physics
         public bool CalculateDistance(PointDistanceInput input, ref NativeList<DistanceHit> allHits) => QueryWrappers.CalculateDistance(ref this, input, ref allHits);
         public bool CalculateDistance<T>(PointDistanceInput input, ref T collector) where T : struct, ICollector<DistanceHit>
         {
-            return Collider != null && Collider->CalculateDistance(input, ref collector);
+            return Collider.IsCreated && Collider.Value.CalculateDistance(input, ref collector);
         }
 
         public bool CalculateDistance(ColliderDistanceInput input) => QueryWrappers.CalculateDistance(ref this, input);
@@ -82,9 +79,14 @@ namespace Unity.Physics
         public bool CalculateDistance(ColliderDistanceInput input, ref NativeList<DistanceHit> allHits) => QueryWrappers.CalculateDistance(ref this, input, ref allHits);
         public bool CalculateDistance<T>(ColliderDistanceInput input, ref T collector) where T : struct, ICollector<DistanceHit>
         {
-            return Collider != null && Collider->CalculateDistance(input, ref collector);
+            return Collider.IsCreated && Collider.Value.CalculateDistance(input, ref collector);
         }
 
+        #endregion
+
+        #region Obsolete
+        [Obsolete("HasCollider has been deprecated. Use Collider.IsCreated instead. (RemovedAfter 2020-03-18)")]
+        public bool HasCollider => Collider.IsCreated;
         #endregion
     }
 

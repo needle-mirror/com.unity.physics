@@ -525,11 +525,11 @@ namespace Unity.Physics.Authoring
 
             public void DrawConnectivity(RigidBody body, bool drawVertices = false)
             {
-                if (body.Collider->Type == ColliderType.Convex)
-                    DrawColliderEdges((ConvexCollider*)body.Collider, body.WorldFromBody, drawVertices);
+                if (body.Collider.Value.Type == ColliderType.Convex)
+                    DrawColliderEdges((ConvexCollider*)body.Collider.GetUnsafePtr(), body.WorldFromBody, drawVertices);
             }
 
-            public void DrawMeshEdges(RigidBody body) => DrawColliderEdges((MeshCollider*)body.Collider, body.WorldFromBody);
+            public void DrawMeshEdges(RigidBody body) => DrawColliderEdges((MeshCollider*)body.Collider.GetUnsafePtr(), body.WorldFromBody);
 
             public void OnDrawGizmos()
             {
@@ -541,7 +541,7 @@ namespace Unity.Physics.Authoring
                 for (int b = 0; b < Bodies.Length; b++)
                 {
                     var body = Bodies[b];
-                    if (body.Collider == null)
+                    if (!body.Collider.IsCreated)
                     {
                         continue;
                     }
@@ -579,7 +579,7 @@ namespace Unity.Physics.Authoring
 
                             if (EnableEdges != 0)
                             {
-                                DrawColliderEdges(body.Collider, body.WorldFromBody);
+                                DrawColliderEdges((Collider*)body.Collider.GetUnsafePtr(), body.WorldFromBody);
                             }
                         }
                     }

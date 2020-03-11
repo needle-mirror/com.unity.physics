@@ -1,45 +1,50 @@
 using System;
-using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Jobs.LowLevel.Unsafe;
 
 namespace Unity.Physics
 {
-    // An event raised when a pair of bodies involving a trigger material have overlapped during solving.
-    public struct TriggerEvent
-    {
-        internal LowLevel.TriggerEvent EventData;
-        public EntityPair Entities { get; internal set; }
-
-        public BodyIndexPair BodyIndices => EventData.BodyIndices;
-        public ColliderKeyPair ColliderKeys => EventData.ColliderKeys;
-    }
-
-    // Interface for jobs that iterate through the list of trigger events produced by the solver.
+    // INTERNAL UnityPhysics interface for jobs that iterate through the list of trigger events produced by the solver.
+    // Important: Only use inside UnityPhysics code! Jobs in other projects should implement ITriggerEventsJob.
     [JobProducerType(typeof(ITriggerEventJobExtensions.TriggerEventJobProcess<>))]
-    public interface ITriggerEventsJob
+    public interface ITriggerEventsJobBase
     {
         void Execute(TriggerEvent triggerEvent);
     }
 
+#if !HAVOK_PHYSICS_EXISTS
+
+    // Interface for jobs that iterate through the list of trigger events produced by the solver.
+    public interface ITriggerEventsJob : ITriggerEventsJobBase
+    {
+    }
+
+#endif
+
     public static class ITriggerEventJobExtensions
     {
 #if !HAVOK_PHYSICS_EXISTS
-        // Default ITriggerEventsJob.Schedule() implementation.
+        // Default Schedule() implementation for ITriggerEventsJob.
         public static unsafe JobHandle Schedule<T>(this T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)
-            where T : struct, ITriggerEventsJob
+            where T : struct, ITriggerEventsJobBase
         {
-            return ScheduleImpl(jobData, simulation, ref world, inputDeps);
+            // Should work only for UnityPhysics
+            if (simulation.Type != SimulationType.UnityPhysics)
+            {
+                return inputDeps;
+            }
+
+            return ScheduleUnityPhysicsTriggerEventsJob(jobData, simulation, ref world, inputDeps);
         }
 #else
-        // In this case ITriggerEventsJob.Schedule() is provided by the Havok.Physics assembly.
+        // In this case Schedule() implementation for ITriggerEventsJob is provided by the Havok.Physics assembly.
         // This is a stub to catch when that assembly is missing.
         //<todo.eoin.modifier Put in a link to documentation for this:
-        [Obsolete("This error occurs when HAVOK_PHYSICS_EXISTS is defined but Havok.Physics is missing from your package's asmdef references", true)]
+        [Obsolete("This error occurs when HAVOK_PHYSICS_EXISTS is defined but Havok.Physics is missing from your package's asmdef references. (DoNotRemove)", true)]
         public static unsafe JobHandle Schedule<T>(this T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps,
             HAVOK_PHYSICS_MISSING_FROM_ASMDEF _causeCompileError = HAVOK_PHYSICS_MISSING_FROM_ASMDEF.HAVOK_PHYSICS_MISSING_FROM_ASMDEF)
-            where T : struct, ITriggerEventsJob
+            where T : struct, ITriggerEventsJobBase
         {
             return new JobHandle();
         }
@@ -50,36 +55,35 @@ namespace Unity.Physics
         }
 #endif
 
-        internal static unsafe JobHandle ScheduleImpl<T>(this T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)
-            where T : struct, ITriggerEventsJob
+        // Schedules a trigger events job only for UnityPhysics simulation
+        internal static unsafe JobHandle ScheduleUnityPhysicsTriggerEventsJob<T>(T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)
+            where T : struct, ITriggerEventsJobBase
         {
-            if (simulation.Type == SimulationType.UnityPhysics)
+            if (simulation.Type != SimulationType.UnityPhysics)
             {
-                var data = new TriggerEventJobData<T>
-                {
-                    UserJobData = jobData,
-                    EventReader = ((Simulation)simulation).TriggerEvents,
-                    Bodies = world.Bodies
-                };
-
-                // Ensure the input dependencies include the end-of-simulation job, so events will have been generated
-                inputDeps = JobHandle.CombineDependencies(inputDeps, simulation.FinalSimulationJobHandle);
-
-                var parameters = new JobsUtility.JobScheduleParameters(UnsafeUtility.AddressOf(ref data), TriggerEventJobProcess<T>.Initialize(), inputDeps, ScheduleMode.Batched);
-                return JobsUtility.Schedule(ref parameters);
+                throw new ArgumentException($"Simulation type {simulation.Type} is not supported! Should be called only for SimulationType.UnityPhysics.");
             }
-            return inputDeps;
+
+            var data = new TriggerEventJobData<T>
+            {
+                UserJobData = jobData,
+                EventReader = ((Simulation)simulation).TriggerEvents
+            };
+
+            // Ensure the input dependencies include the end-of-simulation job, so events will have been generated
+            inputDeps = JobHandle.CombineDependencies(inputDeps, simulation.FinalSimulationJobHandle);
+
+            var parameters = new JobsUtility.JobScheduleParameters(UnsafeUtility.AddressOf(ref data), TriggerEventJobProcess<T>.Initialize(), inputDeps, ScheduleMode.Batched);
+            return JobsUtility.Schedule(ref parameters);
         }
 
         internal unsafe struct TriggerEventJobData<T> where T : struct
         {
             public T UserJobData;
-            [NativeDisableContainerSafetyRestriction] public LowLevel.TriggerEvents EventReader;
-            // Disable aliasing restriction in case T has a NativeSlice of PhysicsWorld.Bodies
-            [ReadOnly, NativeDisableContainerSafetyRestriction] public NativeSlice<RigidBody> Bodies;
+            [NativeDisableContainerSafetyRestriction] public TriggerEvents EventReader;
         }
 
-        internal struct TriggerEventJobProcess<T> where T : struct, ITriggerEventsJob
+        internal struct TriggerEventJobProcess<T> where T : struct, ITriggerEventsJobBase
         {
             static IntPtr jobReflectionData;
 
@@ -99,17 +103,9 @@ namespace Unity.Physics
             public unsafe static void Execute(ref TriggerEventJobData<T> jobData, IntPtr additionalData,
                 IntPtr bufferRangePatchData, ref JobRanges ranges, int jobIndex)
             {
-                foreach (LowLevel.TriggerEvent eventData in jobData.EventReader)
+                foreach (TriggerEvent triggerEvent in jobData.EventReader)
                 {
-                    jobData.UserJobData.Execute(new TriggerEvent
-                    {
-                        EventData = eventData,
-                        Entities = new EntityPair
-                        {
-                            EntityA = jobData.Bodies[eventData.BodyIndices.BodyAIndex].Entity,
-                            EntityB = jobData.Bodies[eventData.BodyIndices.BodyBIndex].Entity
-                        }
-                    });
+                    jobData.UserJobData.Execute(triggerEvent);
                 }
             }
         }

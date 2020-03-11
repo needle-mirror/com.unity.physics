@@ -1,9 +1,11 @@
-﻿using Unity.Mathematics;
+﻿using Unity.Burst;
+using Unity.Mathematics;
 using static Unity.Physics.Math;
 
 namespace Unity.Physics
 {
     // Solve data for a constraint that limits one degree of angular freedom
+    [NoAlias]
     struct AngularLimit1DJacobian
     {
         // Limited axis in motion A space
@@ -65,8 +67,8 @@ namespace Unity.Physics
             float3 axisInMotionB = math.mul(futureMotionBFromA, -AxisInMotionA);
             float effectiveMass;
             {
-                float invEffectiveMass = math.csum(AxisInMotionA * AxisInMotionA * velocityA.InverseInertiaAndMass.xyz +
-                    axisInMotionB * axisInMotionB * velocityB.InverseInertiaAndMass.xyz);
+                float invEffectiveMass = math.csum(AxisInMotionA * AxisInMotionA * velocityA.InverseInertia +
+                    axisInMotionB * axisInMotionB * velocityB.InverseInertia);
                 effectiveMass = math.select(1.0f / invEffectiveMass, 0.0f, invEffectiveMass == 0.0f);
             }
 

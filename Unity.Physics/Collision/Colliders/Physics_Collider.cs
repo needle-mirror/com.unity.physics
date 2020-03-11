@@ -1,4 +1,5 @@
 using System;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Mathematics;
 using static Unity.Physics.Math;
@@ -230,7 +231,7 @@ namespace Unity.Physics
             }
         }
 
-        public unsafe void GetLeaves<T>(ref T collector) where T : struct, ILeafColliderCollector
+        public unsafe void GetLeaves<T>([NoAlias] ref T collector) where T : struct, ILeafColliderCollector
         {
             fixed (Collider* collider = &this)
             {

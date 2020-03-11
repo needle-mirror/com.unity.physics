@@ -37,7 +37,9 @@ namespace Unity.Physics.Authoring
                 for (int iJoint = 0; iJoint < Joints.Length; iJoint++)
                 {
                     Joint joint = Joints[iJoint];
-                    JointData* jointData = joint.JointData;
+                    JointData* jointData = (JointData*)joint.JointData.GetUnsafePtr();
+
+                    if (!joint.BodyPair.IsValid) continue;
 
                     RigidBody bodyA = Bodies[joint.BodyPair.BodyAIndex];
                     RigidBody bodyB = Bodies[joint.BodyPair.BodyBIndex];

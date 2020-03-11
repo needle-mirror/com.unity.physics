@@ -19,8 +19,8 @@ namespace Unity.Physics.Authoring
 
         public static RigidTransform GetCompoundFromChild(Transform shape, Transform body)
         {
-            var worldFromBody = new RigidTransform(body.rotation, body.position);
-            var worldFromShape = new RigidTransform(shape.rotation, shape.position);
+            var worldFromBody = Math.DecomposeRigidBodyTransform(body.transform.localToWorldMatrix);
+            var worldFromShape = Math.DecomposeRigidBodyTransform(shape.transform.localToWorldMatrix);
             return math.mul(math.inverse(worldFromBody), worldFromShape);
         }
 

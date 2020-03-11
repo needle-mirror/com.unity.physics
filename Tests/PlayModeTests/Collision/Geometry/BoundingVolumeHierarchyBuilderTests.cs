@@ -160,7 +160,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
             var branchNodeOffset = new NativeArray<int>(Constants.MaxNumTreeBranches, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
             var branchCount = new NativeArray<int>(1, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
 
-            var shouldDoWork = new NativeArray<int>(1, Allocator.TempJob);
+            var shouldDoWork = new NativeArray<int>(1, Allocator.Persistent);
             shouldDoWork[0] = 1;
             int oldBranchCount = branchCount[0];
 
@@ -214,40 +214,36 @@ namespace Unity.Physics.Tests.Collision.Geometry
         {
             const int threadCount = 8;
             elementCount *= 2;
-            int numNodes = elementCount + Constants.MaxNumTreeBranches;
+
+            var tree = new Broadphase.Tree(elementCount);
 
             var points = new NativeArray<PointAndIndex>(elementCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
             var aabbs = new NativeArray<Aabb>(elementCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-            var filters = new NativeArray<CollisionFilter>(elementCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-            var nodefilters = new NativeArray<CollisionFilter>(numNodes, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
             var branchCount = new NativeArray<int>(1, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
 
-            InitInputWithCopyArrays(points, aabbs, filters);
+            InitInputWithCopyArrays(points, aabbs, tree.BodyFilters);
 
             // Override filter data with default filters.
-            for (int i = 0; i < filters.Length; i++)
+            for (int i = 0; i < tree.BodyFilters.Length; i++)
             {
-                filters[i] = CollisionFilter.Default;
+                tree.BodyFilters[i] = CollisionFilter.Default;
             }
 
-            for (int i = 0; i < nodefilters.Length; i++)
+            for (int i = 0; i < tree.NodeFilters.Length; i++)
             {
-                nodefilters[i] = CollisionFilter.Default;
+                tree.NodeFilters[i] = CollisionFilter.Default;
             }
 
-            var nodes = new NativeArray<Node>(numNodes, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-
-            var ranges = new NativeArray<Range>(Constants.MaxNumTreeBranches, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
             var branchNodeOffset = new NativeArray<int>(Constants.MaxNumTreeBranches, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-            var shouldDoWork = new NativeArray<int>(1, Allocator.TempJob);
+            var shouldDoWork = new NativeArray<int>(1, Allocator.Persistent);
             shouldDoWork[0] = 1;
             int oldBranchCount = branchCount[0];
 
             JobHandle handle = new BuildFirstNLevelsJob
             {
                 Points = points,
-                Nodes = (Node*)nodes.GetUnsafePtr(),
-                Ranges = ranges,
+                Nodes = (Node*)tree.Nodes.GetUnsafePtr(),
+                Ranges = tree.Ranges,
                 BranchNodeOffsets = branchNodeOffset,
                 BranchCount = branchCount,
                 ThreadCount = threadCount,
@@ -258,9 +254,9 @@ namespace Unity.Physics.Tests.Collision.Geometry
             {
                 Points = points,
                 Aabbs = aabbs,
-                BodyFilters = filters,
-                Nodes = (Node*)nodes.GetUnsafePtr(),
-                Ranges = ranges,
+                BodyFilters = tree.BodyFilters,
+                Nodes = (Node*)tree.Nodes.GetUnsafePtr(),
+                Ranges = tree.Ranges,
                 BranchNodeOffsets = branchNodeOffset,
                 BranchCount = branchCount
             }.ScheduleUnsafeIndex0(branchCount, 1, handle);
@@ -268,10 +264,10 @@ namespace Unity.Physics.Tests.Collision.Geometry
             new FinalizeTreeJob
             {
                 Aabbs = aabbs,
-                LeafFilters = filters,
-                Nodes = (Node*)nodes.GetUnsafePtr(),
+                LeafFilters = tree.BodyFilters,
+                Nodes = (Node*)tree.Nodes.GetUnsafePtr(),
                 BranchNodeOffsets = branchNodeOffset,
-                NumNodes = numNodes,
+                NumNodes = tree.Nodes.Length,
                 BranchCount = branchCount,
                 ShouldDoWork = shouldDoWork,
                 OldBranchCount = oldBranchCount
@@ -284,37 +280,29 @@ namespace Unity.Physics.Tests.Collision.Geometry
 
             handle = new Broadphase.DynamicVsDynamicBuildBranchNodePairsJob
             {
-                Ranges = ranges,
+                Ranges = tree.Ranges,
                 NumBranches = branchCount,
                 NodePairIndices = nodePairIndices
             }.Schedule();
 
             handle = new Broadphase.DynamicVsDynamicFindOverlappingPairsJob
             {
-                DynamicNodes = nodes,
-                PairWriter = collisionPairs.AsWriter(),
-                BodyFilters = filters,
+                DynamicTree = tree,
                 NodePairIndices = nodePairIndices,
-                DynamicNodeFilters = nodefilters,
+                PairWriter = collisionPairs.AsWriter()
             }.Schedule(nodePairIndices, numBranchOverlapPairs, handle);
 
             handle.Complete();
-
 
             int numPairs = collisionPairs.ComputeItemCount();
 
             Assert.AreEqual(elementCount / 2, numPairs);
             //Debug.Log($"Num colliding pairs: {numPairs}");
 
-            var bvh = new BoundingVolumeHierarchy(nodes);
-            bvh.CheckIntegrity();
-
+            tree.BoundingVolumeHierarchy.CheckIntegrity();
 
             nodePairIndices.Dispose();
-            filters.Dispose();
-            nodefilters.Dispose();
-            nodes.Dispose();
-            ranges.Dispose();
+            tree.Dispose();
             collisionPairs.Dispose();
             branchCount.Dispose();
             shouldDoWork.Dispose();
@@ -324,7 +312,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
         struct EverythingWriter : BoundingVolumeHierarchy.ITreeOverlapCollector
         {
             public void AddPairs(int l, int4 r, int countR) { AddPairs(new int4(l, l, l, l), r, countR); }
-            public void AddPairs(int4 pairLeft, int4 r, int count)
+            public void AddPairs(int4 pairLeft, int4 r, int count, bool swapped = false)
             {
                 for (int i = 0; i < count; i++)
                 {
@@ -369,7 +357,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
             NativeStream.Writer filteredPairWriter = filteredCollisionPairs.AsWriter();
             filteredPairWriter.BeginForEachIndex(0);
             CollisionFilter* bodyFiltersPtr = (CollisionFilter*)bodyFilters.GetUnsafePtr();
-            var bufferedPairs = new Broadphase.BodyPairWriter(&filteredPairWriter, bodyFiltersPtr);
+            var bufferedPairs = new Broadphase.BodyPairWriter(&filteredPairWriter, bodyFiltersPtr, bodyFiltersPtr, 0, 0);
 
             CollisionFilter* nodeFiltersPtr = (CollisionFilter*)nodeFilters.GetUnsafePtr();
             BoundingVolumeHierarchy.TreeOverlap(ref bufferedPairs, nodesPtr, nodesPtr, nodeFiltersPtr, nodeFiltersPtr);
@@ -415,7 +403,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
                 }
             }
 
-            public void AddPairs(int4 pairLeft, int4 r, int count)
+            public void AddPairs(int4 pairLeft, int4 r, int count, bool swapped = false)
             {
                 for (int i = 0; i < count; i++)
                 {
@@ -484,7 +472,8 @@ namespace Unity.Physics.Tests.Collision.Geometry
                 CollisionPairWriter.BeginForEachIndex(0);
 
                 CollisionFilter* bodyFilters = (CollisionFilter*)Filter.GetUnsafePtr();
-                var pairBuffer = new Broadphase.BodyPairWriter((NativeStream.Writer*)UnsafeUtility.AddressOf(ref CollisionPairWriter), bodyFilters);
+                var pairBuffer = new Broadphase.BodyPairWriter((NativeStream.Writer*)UnsafeUtility.AddressOf(ref CollisionPairWriter),
+                    bodyFilters, bodyFilters, 0, 0);
 
                 Node* nodesPtr = (Node*)Nodes.GetUnsafePtr();
                 BoundingVolumeHierarchy.TreeOverlap(ref pairBuffer, nodesPtr, nodesPtr);

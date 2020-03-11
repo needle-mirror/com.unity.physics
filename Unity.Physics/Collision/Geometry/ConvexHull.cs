@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
 
@@ -20,11 +21,11 @@ namespace Unity.Physics
             public bool Equals(Face other) => FirstIndex.Equals(other.FirstIndex) && NumVertices.Equals(other.NumVertices) && MinHalfAngleCompressed.Equals(other.MinHalfAngleCompressed);
         }
 
+        [StructLayout(LayoutKind.Sequential, Size = 4)] // extra 1 byte padding to match Havok
         public struct Edge : IEquatable<Edge>
         {
             public short FaceIndex;             // index into Faces array
             public byte EdgeIndex;              // edge index within the face
-            readonly byte m_Padding;            // TODO: can we use/remove this?
 
             public bool Equals(Edge other) => FaceIndex.Equals(other.FaceIndex) && EdgeIndex.Equals(other.EdgeIndex);
 
@@ -64,8 +65,7 @@ namespace Unity.Physics
         public int GetSupportingFace(float3 direction)
         {
             int bestIndex = 0;
-            Plane plane0 = Planes[0];
-            float bestDot = math.dot(direction, plane0.Normal);
+            float bestDot = math.dot(direction, Planes[0].Normal);
             for (int i = 1; i < NumFaces; i++)
             {
                 float dot = math.dot(direction, Planes[i].Normal);
@@ -117,6 +117,8 @@ namespace Unity.Physics
                     // Get the next edge
                     edge.EdgeIndex = (byte)((edge.EdgeIndex + 1) % face.NumVertices);
                 }
+                // If no suitable face is found then return the first face containing the supportingVertex
+                if (-1 == bestEdgeIndex) return firstFaceIndex;
             }
 
             // Choose the face containing the best edge that is most parallel to the support direction

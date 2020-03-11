@@ -12,17 +12,27 @@
         "Unity.Physics.Hybrid",
         "Unity.Physics.Editor",
         "Unity.Transforms",
-        "Unity.Jobs"
-    ],
-    "optionalUnityReferences": [
-        "TestAssemblies"
+        "Unity.Jobs",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": true,
-    "overrideReferences": false,
-    "precompiledReferences": [],
-    "autoReferenced": true,
-    "defineConstraints": [],
-    "versionDefines": []
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.modules.physics",
+            "expression": "",
+            "define": "LEGACY_PHYSICS"
+        }
+    ],
+    "noEngineReferences": false
 }

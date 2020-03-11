@@ -9,9 +9,9 @@ using static Unity.Physics.Math;
 
 namespace Unity.Physics
 {
-    static class Solver
+    public static class Solver
     {
-        public struct StepInput
+        internal struct StepInput
         {
             public bool IsLastIteration;
             public float InvNumSolverIterations;
@@ -19,62 +19,161 @@ namespace Unity.Physics
             public float InvTimestep;
         }
 
-        // Schedule the job to apply gravity to all dynamic bodies and copy input velocities
-        public static JobHandle ScheduleApplyGravityAndCopyInputVelocitiesJob(ref DynamicsWorld world, NativeSlice<Velocity> inputVelocities,
-            float3 gravityAcceleration, JobHandle inputDeps)
+        // Apply gravity to all dynamic bodies and copy input velocities
+        public static void ApplyGravityAndCopyInputVelocities(NativeSlice<MotionData> motionDatas, NativeSlice<MotionVelocity> motionVelocities,
+            NativeSlice<Velocity> inputVelocities, float3 gravityAcceleration)
         {
-            return new ApplyGravityAndCopyInputVelocitiesJob
+            for (int i = 0; i < motionDatas.Length; i++)
+            {
+                ApplyGravityAndCopyInputVelocitiesJob.ExecuteImpl(i, gravityAcceleration, motionDatas, motionVelocities, inputVelocities);
+            }
+        }
+
+        // Schedule the job to apply gravity to all dynamic bodies and copy input velocities
+        internal static JobHandle ScheduleApplyGravityAndCopyInputVelocitiesJob(ref DynamicsWorld world, NativeSlice<Velocity> inputVelocities,
+            float3 gravityAcceleration, JobHandle inputDeps, int threadCountHint = 0)
+        {
+            var job = new ApplyGravityAndCopyInputVelocitiesJob
             {
                 MotionDatas = world.MotionDatas,
                 MotionVelocities = world.MotionVelocities,
                 InputVelocities = inputVelocities,
                 GravityAcceleration = gravityAcceleration
-            }.Schedule(world.NumMotions, 64, inputDeps);
-        }
-
-        // Schedule some jobs to build Jacobians from the contacts stored in the simulation context
-        internal static JobHandle ScheduleBuildContactJacobiansJobs(ref DynamicsWorld world, float timeStep, float gravityAcceleration, ref Simulation.Context context, JobHandle inputDeps)
-        {
-            var buildJob = new BuildContactJacobiansJob
-            {
-                ContactReader = context.Contacts.AsReader(),
-                JointJacobianReader = context.JointJacobians.AsReader(),
-                JacobianWriter = context.Jacobians.AsWriter(),
-                TimeStep = timeStep,
-                InvTimeStep = timeStep > 0.0f ? 1.0f / timeStep : 0.0f,
-                GravityAcceleration = gravityAcceleration,
-                MotionDatas = world.MotionDatas,
-                MotionVelocities = world.MotionVelocities
             };
-
-
-            JobHandle handle = buildJob.ScheduleUnsafeIndex0(context.SolverSchedulerInfo.NumWorkItems, 1, inputDeps);
-
-            context.DisposeContacts = context.Contacts.Dispose(handle);
-
-            return handle;
+            if (threadCountHint <= 0)
+            {
+                return job.Schedule(inputDeps);
+            }
+            else
+            {
+                return job.Schedule(world.NumMotions, 64, inputDeps);
+            }
         }
 
-        // Schedule some jobs to solve the Jacobians stored in the simulation context
-        internal static unsafe JobHandle ScheduleSolveJacobiansJobs(ref DynamicsWorld dynamicsWorld, float timestep, int numIterations, ref Simulation.Context context, JobHandle inputDeps)
+        // Build Jacobians from the contacts and joints stored in the simulation context
+        public static void BuildJacobians(ref PhysicsWorld world,
+            float timeStep, float3 gravity, int numSolverIterations,
+            NativeArray<DispatchPairSequencer.DispatchPair> dispatchPairs,
+            ref NativeStream.Reader contactsReader, ref NativeStream.Writer jacobiansWriter)
         {
+            contactsReader.BeginForEachIndex(0);
+            jacobiansWriter.BeginForEachIndex(0);
+            float invTimeStep = timeStep > 0.0f ? 1.0f / timeStep : 0.0f;
+            float gravityAcceleration = math.length(gravity);
+            BuildJacobians(ref world, timeStep, invTimeStep, gravityAcceleration, numSolverIterations,
+                new NativeSlice<DispatchPairSequencer.DispatchPair>(dispatchPairs, 0, dispatchPairs.Length), ref contactsReader, ref jacobiansWriter);
+        }
+
+        // Schedule jobs to build Jacobians from the contacts stored in the simulation context
+        internal static SimulationJobHandles ScheduleBuildJacobiansJobs(ref PhysicsWorld world, float timeStep, float3 gravity,
+            int numSolverIterations, JobHandle inputDeps, ref NativeList<DispatchPairSequencer.DispatchPair> dispatchPairs,
+            ref DispatchPairSequencer.SolverSchedulerInfo solverSchedulerInfo,
+            ref NativeStream contacts, ref NativeStream jacobians, int threadCountHint = 0)
+        {
+            SimulationJobHandles returnHandles = default;
+
+            if (threadCountHint <= 0)
+            {
+                returnHandles.FinalExecutionHandle = new BuildJacobiansJob
+                {
+                    ContactsReader = contacts.AsReader(),
+                    JacobiansWriter = jacobians.AsWriter(),
+                    TimeStep = timeStep,
+                    Gravity = gravity,
+                    NumSolverIterations = numSolverIterations,
+                    World = world,
+                    DispatchPairs = dispatchPairs.AsDeferredJobArray(),
+                    SolverSchedulerInfo = solverSchedulerInfo
+                }.Schedule(inputDeps);
+            }
+            else
+            {
+                var buildJob = new BuildJacobiansJob
+                {
+                    ContactsReader = contacts.AsReader(),
+                    JacobiansWriter = jacobians.AsWriter(),
+                    TimeStep = timeStep,
+                    InvTimeStep = timeStep > 0.0f ? 1.0f / timeStep : 0.0f,
+                    GravityAcceleration = math.length(gravity),
+                    NumSolverIterations = numSolverIterations,
+                    World = world,
+                    DispatchPairs = dispatchPairs.AsDeferredJobArray(),
+                    SolverSchedulerInfo = solverSchedulerInfo
+                };
+
+                JobHandle handle = buildJob.ScheduleUnsafeIndex0(solverSchedulerInfo.NumWorkItems, 1, inputDeps);
+
+                returnHandles.FinalDisposeHandle = JobHandle.CombineDependencies(
+                    dispatchPairs.Dispose(handle),
+                    contacts.Dispose(handle));
+                returnHandles.FinalExecutionHandle = handle;
+            }
+
+            return returnHandles;
+        }
+
+        // Solve the Jacobians stored in the simulation context
+        public static void SolveJacobians(ref NativeStream.Reader jacobiansReader, NativeSlice<MotionVelocity> motionVelocities, float timeStep, int numIterations,
+            ref NativeStream.Writer collisionEventsWriter, ref NativeStream.Writer triggerEventsWriter)
+        {
+            float invNumIterations = math.rcp(numIterations);
+            float invTimeStep = timeStep > 0.0f ? 1.0f / timeStep : 0.0f;
+            for (int solverIterationId = 0; solverIterationId < numIterations; solverIterationId++)
+            {
+                var stepInput = new StepInput
+                {
+                    InvNumSolverIterations = invNumIterations,
+                    IsLastIteration = solverIterationId == numIterations - 1,
+                    Timestep = timeStep,
+                    InvTimestep = invTimeStep
+                };
+
+                Solve(motionVelocities, ref jacobiansReader, ref collisionEventsWriter, ref triggerEventsWriter, 0, stepInput);
+            }
+        }
+
+        // Schedule jobs to solve the Jacobians stored in the simulation context
+        internal static unsafe SimulationJobHandles ScheduleSolveJacobiansJobs(ref DynamicsWorld dynamicsWorld, float timestep, int numIterations,
+            ref NativeStream jacobians, ref NativeStream collisionEvents, ref NativeStream triggerEvents,
+            ref DispatchPairSequencer.SolverSchedulerInfo solverSchedulerInfo, JobHandle inputDeps, int threadCountHint = 0)
+        {
+            SimulationJobHandles returnHandles = default;
+
+            if (threadCountHint <= 0)
+            {
+                collisionEvents = new NativeStream(1, Allocator.Persistent);
+                triggerEvents = new NativeStream(1, Allocator.Persistent);
+                returnHandles.FinalExecutionHandle = new SolverJob
+                {
+                    CollisionEventsWriter = collisionEvents.AsWriter(),
+                    JacobiansReader = jacobians.AsReader(),
+                    NumIterations = numIterations,
+                    Timestep = timestep,
+                    TriggerEventsWriter = triggerEvents.AsWriter(),
+                    MotionVelocities = dynamicsWorld.MotionVelocities,
+                    Phases = solverSchedulerInfo.PhaseInfo
+                }.Schedule(inputDeps);
+
+                return returnHandles;
+            }
+
             JobHandle handle;
 
-            int numPhases = context.SolverSchedulerInfo.NumPhases;
+            int numPhases = solverSchedulerInfo.NumPhases;
 
             // Use persistent allocator to allow these to live until the start of next step
             {
-                NativeArray<int> workItemList = context.SolverSchedulerInfo.NumWorkItems;
+                NativeArray<int> workItemList = solverSchedulerInfo.NumWorkItems;
 
                 //TODO: Change this to Allocator.TempJob when https://github.com/Unity-Technologies/Unity.Physics/issues/7 is resolved
-                JobHandle collisionEventStreamHandle = NativeStream.ScheduleConstruct(out context.CollisionEventStream, workItemList, inputDeps, Allocator.Persistent);
-                JobHandle triggerEventStreamHandle = NativeStream.ScheduleConstruct(out context.TriggerEventStream, workItemList, inputDeps, Allocator.Persistent);
+                JobHandle collisionEventStreamHandle = NativeStream.ScheduleConstruct(out collisionEvents, workItemList, inputDeps, Allocator.Persistent);
+                JobHandle triggerEventStreamHandle = NativeStream.ScheduleConstruct(out triggerEvents, workItemList, inputDeps, Allocator.Persistent);
 
                 handle = JobHandle.CombineDependencies(collisionEventStreamHandle, triggerEventStreamHandle);
 
                 float invNumIterations = math.rcp(numIterations);
 
-                var phaseInfoPtrs = (Scheduler.SolverSchedulerInfo.SolvePhaseInfo*)NativeArrayUnsafeUtility.GetUnsafeBufferPointerWithoutChecks(context.SolverSchedulerInfo.PhaseInfo);
+                var phaseInfoPtrs = (DispatchPairSequencer.SolverSchedulerInfo.SolvePhaseInfo*)NativeArrayUnsafeUtility.GetUnsafeBufferPointerWithoutChecks(solverSchedulerInfo.PhaseInfo);
 
                 for (int solverIterationId = 0; solverIterationId < numIterations; solverIterationId++)
                 {
@@ -83,9 +182,9 @@ namespace Unity.Physics
                     {
                         var job = new SolverJob
                         {
-                            JacobianReader = context.Jacobians.AsReader(),
+                            JacobiansReader = jacobians.AsReader(),
                             PhaseIndex = phaseId,
-                            Phases = context.SolverSchedulerInfo.PhaseInfo,
+                            Phases = solverSchedulerInfo.PhaseInfo,
                             MotionVelocities = dynamicsWorld.MotionVelocities,
                             StepInput = new StepInput
                             {
@@ -99,8 +198,8 @@ namespace Unity.Physics
                         // Only initialize event writers for last solver iteration jobs
                         if (lastIteration)
                         {
-                            job.CollisionEventsWriter = context.CollisionEventStream.AsWriter();
-                            job.TriggerEventsWriter = context.TriggerEventStream.AsWriter();
+                            job.CollisionEventsWriter = collisionEvents.AsWriter();
+                            job.TriggerEventsWriter = triggerEvents.AsWriter();
                         }
 
                         // NOTE: The last phase must be executed on a single job since it  
@@ -115,17 +214,18 @@ namespace Unity.Physics
             }
 
             // Dispose processed data
-            context.DisposeJacobians = context.Jacobians.Dispose(handle);
-            context.DisposeJointJacobians = context.JointJacobians.Dispose(handle);
-            context.DisposeSolverSchedulerData = context.SolverSchedulerInfo.ScheduleDisposeJob(handle);
+            returnHandles.FinalDisposeHandle = JobHandle.CombineDependencies(
+                jacobians.Dispose(handle),
+                solverSchedulerInfo.ScheduleDisposeJob(handle));
+            returnHandles.FinalExecutionHandle = handle;
 
-            return handle;
+            return returnHandles;
         }
 
         #region Jobs
 
         [BurstCompile]
-        private struct ApplyGravityAndCopyInputVelocitiesJob : IJobParallelFor
+        private struct ApplyGravityAndCopyInputVelocitiesJob : IJobParallelFor, IJob
         {
             public NativeSlice<MotionData> MotionDatas;
             public NativeSlice<MotionVelocity> MotionVelocities;
@@ -134,17 +234,28 @@ namespace Unity.Physics
 
             public void Execute(int i)
             {
-                MotionData motionData = MotionDatas[i];
-                MotionVelocity motionVelocity = MotionVelocities[i];
+                ExecuteImpl(i, GravityAcceleration, MotionDatas, MotionVelocities, InputVelocities);
+            }
+
+            public void Execute()
+            {
+                ApplyGravityAndCopyInputVelocities(MotionDatas, MotionVelocities, InputVelocities, GravityAcceleration);
+            }
+
+            internal static void ExecuteImpl(int i, float3 gravityAcceleration,
+                NativeSlice<MotionData> motionDatas, NativeSlice<MotionVelocity> motionVelocities, NativeSlice<Velocity> inputVelocities)
+            {
+                MotionData motionData = motionDatas[i];
+                MotionVelocity motionVelocity = motionVelocities[i];
 
                 // Apply gravity
-                motionVelocity.LinearVelocity += GravityAcceleration * motionData.GravityFactor;
+                motionVelocity.LinearVelocity += gravityAcceleration * motionData.GravityFactor;
 
                 // Write back
-                MotionVelocities[i] = motionVelocity;
+                motionVelocities[i] = motionVelocity;
 
                 // Make a copy
-                InputVelocities[i] = new Velocity
+                inputVelocities[i] = new Velocity
                 {
                     Linear = motionVelocity.LinearVelocity,
                     Angular = motionVelocity.AngularVelocity
@@ -153,44 +264,71 @@ namespace Unity.Physics
         }
 
         [BurstCompile]
-        private struct BuildContactJacobiansJob : IJobParallelForDefer
+        private struct BuildJacobiansJob : IJobParallelForDefer, IJob
         {
-            [ReadOnly] public NativeSlice<MotionData> MotionDatas;
-            [ReadOnly] public NativeSlice<MotionVelocity> MotionVelocities;
+            [ReadOnly] public PhysicsWorld World;
 
-            public NativeStream.Reader ContactReader;
-            public NativeStream.Reader JointJacobianReader;
-            public NativeStream.Writer JacobianWriter;
+            public NativeStream.Reader ContactsReader;
+            public NativeStream.Writer JacobiansWriter;
             public float TimeStep;
+            [ReadOnly] public NativeArray<DispatchPairSequencer.DispatchPair> DispatchPairs;
+            [ReadOnly] public int NumSolverIterations;
+
+            // IJobParallelForDefer specific
             public float InvTimeStep;
             public float GravityAcceleration;
+            [ReadOnly] public DispatchPairSequencer.SolverSchedulerInfo SolverSchedulerInfo;
+
+            // IJob specific
+            public float3 Gravity;
 
             public void Execute(int workItemIndex)
             {
-                BuildContactJacobians(ref MotionDatas, ref MotionVelocities, ref ContactReader, ref JointJacobianReader, ref JacobianWriter,
-                    TimeStep, InvTimeStep, GravityAcceleration, workItemIndex);
+                int firstDispatchPairIndex = SolverSchedulerInfo.GetWorkItemReadOffset(workItemIndex, out int dispatchPairCount);
+
+                ContactsReader.BeginForEachIndex(workItemIndex);
+                JacobiansWriter.BeginForEachIndex(workItemIndex);
+                BuildJacobians(ref World, TimeStep, InvTimeStep, GravityAcceleration, NumSolverIterations,
+                    new NativeSlice<DispatchPairSequencer.DispatchPair>(DispatchPairs, firstDispatchPairIndex, dispatchPairCount),
+                    ref ContactsReader, ref JacobiansWriter);
+            }
+
+            public void Execute()
+            {
+                BuildJacobians(ref World, TimeStep, Gravity, NumSolverIterations,
+                    DispatchPairs, ref ContactsReader, ref JacobiansWriter);
             }
         }
 
         [BurstCompile]
-        private struct SolverJob : IJobParallelForDefer
+        [NoAlias]
+        private struct SolverJob : IJobParallelForDefer, IJob
         {
             [NativeDisableParallelForRestriction]
             public NativeSlice<MotionVelocity> MotionVelocities;
 
-            public NativeStream.Reader JacobianReader;
+            [NoAlias]
+            public NativeStream.Reader JacobiansReader;
 
             //@TODO: Unity should have a Allow null safety restriction
             [NativeDisableContainerSafetyRestriction]
+            [NoAlias]
             public NativeStream.Writer CollisionEventsWriter;
+
             //@TODO: Unity should have a Allow null safety restriction
             [NativeDisableContainerSafetyRestriction]
+            [NoAlias]
             public NativeStream.Writer TriggerEventsWriter;
 
+            // IJobParallelForDefer specific
             [ReadOnly]
-            public NativeArray<Scheduler.SolverSchedulerInfo.SolvePhaseInfo> Phases;
+            public NativeArray<DispatchPairSequencer.SolverSchedulerInfo.SolvePhaseInfo> Phases;
             public int PhaseIndex;
             public StepInput StepInput;
+
+            // IJob specific
+            public int NumIterations;
+            public float Timestep;
 
             public void Execute(int workItemIndex)
             {
@@ -199,7 +337,12 @@ namespace Unity.Physics
                 CollisionEventsWriter.PatchMinMaxRange(workItemIndex + workItemStartIndexOffset);
                 TriggerEventsWriter.PatchMinMaxRange(workItemIndex + workItemStartIndexOffset);
 
-                Solve(MotionVelocities, ref JacobianReader, ref CollisionEventsWriter, ref TriggerEventsWriter, workItemIndex + workItemStartIndexOffset, StepInput);
+                Solve(MotionVelocities, ref JacobiansReader, ref CollisionEventsWriter, ref TriggerEventsWriter, workItemIndex + workItemStartIndexOffset, StepInput);
+            }
+
+            public void Execute()
+            {
+                SolveJacobians(ref JacobiansReader, MotionVelocities, Timestep, NumIterations, ref CollisionEventsWriter, ref TriggerEventsWriter);
             }
         }
 
@@ -241,7 +384,7 @@ namespace Unity.Physics
             float3 pointOnA = contact.Position + normal * contact.Distance;
             float3 armA = pointOnA - worldFromA.Translation;
             float3 armB = pointOnB - worldFromB.Translation;
-            BuildJacobian(worldFromA, worldFromB, normal, armA, armB, velocityA.InverseInertiaAndMass.xyz, velocityB.InverseInertiaAndMass.xyz, sumInvMass,
+            BuildJacobian(worldFromA, worldFromB, normal, armA, armB, velocityA.InverseInertia, velocityB.InverseInertia, sumInvMass,
                 out jacAngular.Jac.AngularA, out jacAngular.Jac.AngularB, out float invEffectiveMass);
             jacAngular.Jac.EffectiveMass = 1.0f / invEffectiveMass;
             jacAngular.Jac.Impulse = 0.0f;
@@ -328,286 +471,301 @@ namespace Unity.Physics
             }
         }
 
-        private static unsafe void AppendJointJacobiansToContactStream(
-            int workItemIndex, ref NativeStream.Reader jointJacobianReader, ref NativeStream.Writer jacobianWriter)
+        // Gets a body's motion, even if the body is static
+        // TODO - share code with GetMotions()?
+        private static void GetMotion([NoAlias] ref PhysicsWorld world, int bodyIndex,
+            [NoAlias] out MotionVelocity velocity, [NoAlias] out MotionData motion)
         {
-            var jacIterator = new JacobianIterator(jointJacobianReader, workItemIndex);
-            while (jacIterator.HasJacobiansLeft())
+            if (bodyIndex >= world.MotionVelocities.Length)
             {
-                ref JacobianHeader jacHeader = ref jacIterator.ReadJacobianHeader(out int jacobianSize);
-                if ((jacHeader.Flags & JacobianFlags.Disabled) == 0)
+                // Body is static
+                velocity = MotionVelocity.Zero;
+                motion = new MotionData
                 {
-                    // Allocate enough memory and copy the data
-                    jacobianWriter.Write(jacobianSize);
-                    byte* jacobianPtr = jacobianWriter.Allocate(jacobianSize);
-#if DEVELOPMENT_BUILD
-                    if (((long)jacobianPtr & 0x3) != 0)
-                        throw new InvalidOperationException("Jacobians must be 4 byte aligned");
-#endif
-                    ref JacobianHeader copiedJacobianHeader = ref UnsafeUtilityEx.AsRef<JacobianHeader>(jacobianPtr);
-                    copiedJacobianHeader = jacHeader;
-
-                    switch (jacHeader.Type)
-                    {
-                        case JacobianType.LinearLimit:
-                            copiedJacobianHeader.AccessBaseJacobian<LinearLimitJacobian>() = jacHeader.AccessBaseJacobian<LinearLimitJacobian>();
-                            break;
-                        case JacobianType.AngularLimit1D:
-                            copiedJacobianHeader.AccessBaseJacobian<AngularLimit1DJacobian>() = jacHeader.AccessBaseJacobian<AngularLimit1DJacobian>();
-                            break;
-                        case JacobianType.AngularLimit2D:
-                            copiedJacobianHeader.AccessBaseJacobian<AngularLimit2DJacobian>() = jacHeader.AccessBaseJacobian<AngularLimit2DJacobian>();
-                            break;
-                        case JacobianType.AngularLimit3D:
-                            copiedJacobianHeader.AccessBaseJacobian<AngularLimit3DJacobian>() = jacHeader.AccessBaseJacobian<AngularLimit3DJacobian>();
-                            break;
-                        default:
-                            throw new NotImplementedException();
-                    }
-                }
+                    WorldFromMotion = world.Bodies[bodyIndex].WorldFromBody,
+                    BodyFromMotion = RigidTransform.identity
+                    // remaining fields all zero
+                };
+            }
+            else
+            {
+                // Body is dynamic
+                velocity = world.MotionVelocities[bodyIndex];
+                motion = world.MotionDatas[bodyIndex];
             }
         }
 
-        private static unsafe void BuildContactJacobians(
-            ref NativeSlice<MotionData> motionDatas,
-            ref NativeSlice<MotionVelocity> motionVelocities,
-            ref NativeStream.Reader contactReader,
-            ref NativeStream.Reader jointJacobianReader,
-            ref NativeStream.Writer jacobianWriter,
+        private static unsafe void BuildJacobians(
+            ref PhysicsWorld world,
             float timestep,
             float invTimestep,
             float gravityAcceleration,
-            int workItemIndex)
+            int numSolverIterations,
+            NativeSlice<DispatchPairSequencer.DispatchPair> dispatchPairs,
+            ref NativeStream.Reader contactReader,
+            ref NativeStream.Writer jacobianWriter)
         {
             // Contact resting velocity for restitution
             float negContactRestingVelocity = -gravityAcceleration * timestep;
 
-            contactReader.BeginForEachIndex(workItemIndex);
-            jacobianWriter.BeginForEachIndex(workItemIndex);
-            while (contactReader.RemainingItemCount > 0)
+            for (int i = 0; i < dispatchPairs.Length; i++)
             {
-                ref ContactHeader contactHeader = ref contactReader.Read<ContactHeader>();
-                GetMotions(contactHeader.BodyPair, ref motionDatas, ref motionVelocities, out MotionVelocity velocityA, out MotionVelocity velocityB, out MTransform worldFromA, out MTransform worldFromB);
-
-                float sumInvMass = velocityA.InverseInertiaAndMass.w + velocityB.InverseInertiaAndMass.w;
-                bool bodiesHaveInfiniteMass = !(math.any(velocityA.InverseInertiaAndMass) || math.any(velocityB.InverseInertiaAndMass));
-
-                // Skip contact between infinite mass bodies which don't want to raise events. These cannot have any effect during solving.
-                // These should not normally appear, because the collision detector doesn't generate such contacts.
-                if (bodiesHaveInfiniteMass)
+                var pair = dispatchPairs[i];
+                if (!pair.IsValid)
                 {
-                    if ((contactHeader.JacobianFlags & (JacobianFlags.IsTrigger | JacobianFlags.EnableCollisionEvents)) == 0)
-                    {
-                        for (int j = 0; j < contactHeader.NumContacts; j++)
-                        {
-                            contactReader.Read<ContactPoint>();
-                        }
-                        continue;
-                    }
+                    continue;
                 }
 
-                JacobianType jacType = ((int)(contactHeader.JacobianFlags) & (int)(JacobianFlags.IsTrigger)) != 0 ?
-                    JacobianType.Trigger : JacobianType.Contact;
+                var motionDatas = world.MotionDatas;
+                var motionVelocities = world.MotionVelocities;
 
-                // Write size before every jacobian
-                int jacobianSize = JacobianHeader.CalculateSize(jacType, contactHeader.JacobianFlags, contactHeader.NumContacts);
-                jacobianWriter.Write(jacobianSize);
+                if (pair.IsContact)
+                {
+                    while (contactReader.RemainingItemCount > 0)
+                    {
+                        // Check if this is the matching contact
+                        {
+                            var header = contactReader.Peek<ContactHeader>();
+                            if (pair.BodyAIndex != header.BodyPair.BodyAIndex ||
+                                pair.BodyBIndex != header.BodyPair.BodyBIndex)
+                            {
+                                break;
+                            }
+                        }
 
-                // Allocate all necessary data for this jacobian
-                byte* jacobianPtr = jacobianWriter.Allocate(jacobianSize);
+                        ref ContactHeader contactHeader = ref contactReader.Read<ContactHeader>();
+                        GetMotions(contactHeader.BodyPair, ref motionDatas, ref motionVelocities, out MotionVelocity velocityA, out MotionVelocity velocityB, out MTransform worldFromA, out MTransform worldFromB);
+
+                        float sumInvMass = velocityA.InverseMass + velocityB.InverseMass;
+                        bool bodiesHaveInfiniteMass = velocityA.HasInfiniteInertiaAndMass && velocityB.HasInfiniteInertiaAndMass;
+
+                        // Skip contact between infinite mass bodies which don't want to raise events. These cannot have any effect during solving.
+                        // These should not normally appear, because the collision detector doesn't generate such contacts.
+                        if (bodiesHaveInfiniteMass)
+                        {
+                            if ((contactHeader.JacobianFlags & (JacobianFlags.IsTrigger | JacobianFlags.EnableCollisionEvents)) == 0)
+                            {
+                                for (int j = 0; j < contactHeader.NumContacts; j++)
+                                {
+                                    contactReader.Read<ContactPoint>();
+                                }
+                                continue;
+                            }
+                        }
+
+                        JacobianType jacType = ((int)(contactHeader.JacobianFlags) & (int)(JacobianFlags.IsTrigger)) != 0 ?
+                            JacobianType.Trigger : JacobianType.Contact;
+
+                        // Write size before every jacobian and allocate all necessary data for this jacobian
+                        int jacobianSize = JacobianHeader.CalculateSize(jacType, contactHeader.JacobianFlags, contactHeader.NumContacts);
+                        jacobianWriter.Write(jacobianSize);
+                        byte* jacobianPtr = jacobianWriter.Allocate(jacobianSize);
+
 #if DEVELOPMENT_BUILD
                 if (((long)jacobianPtr & 0x3) != 0)
                     throw new InvalidOperationException("Jacobians must be 4 byte aligned");
 #endif
-                ref JacobianHeader jacobianHeader = ref UnsafeUtilityEx.AsRef<JacobianHeader>(jacobianPtr);
-                jacobianHeader.BodyPair = contactHeader.BodyPair;
-                jacobianHeader.Type = jacType;
-                jacobianHeader.Flags = contactHeader.JacobianFlags;
+                        ref JacobianHeader jacobianHeader = ref UnsafeUtilityEx.AsRef<JacobianHeader>(jacobianPtr);
+                        jacobianHeader.BodyPair = contactHeader.BodyPair;
+                        jacobianHeader.Type = jacType;
+                        jacobianHeader.Flags = contactHeader.JacobianFlags;
 
-                var baseJac = new BaseContactJacobian
-                {
-                    NumContacts = contactHeader.NumContacts,
-                    Normal = contactHeader.Normal
-                };
-
-                // Body A must be dynamic
-                Assert.IsTrue(contactHeader.BodyPair.BodyAIndex < motionVelocities.Length);
-                bool isDynamicStaticPair = contactHeader.BodyPair.BodyBIndex >= motionVelocities.Length;
-
-                // If contact distance is negative, use an artificially reduced penetration depth to prevent the dynamic-dynamic contacts from depenetrating too quickly
-                float maxDepenetrationVelocity = isDynamicStaticPair ? float.MaxValue : 3.0f; // meter/seconds time step independent
-
-                if (jacobianHeader.Type == JacobianType.Contact)
-                {
-                    ref ContactJacobian contactJacobian = ref jacobianHeader.AccessBaseJacobian<ContactJacobian>();
-                    contactJacobian.BaseJacobian = baseJac;
-                    contactJacobian.CoefficientOfFriction = contactHeader.CoefficientOfFriction;
-
-                    // Indicator whether restitution will be applied,
-                    // used to scale down friction on bounce.
-                    bool applyRestitution = false;
-
-                    // Initialize modifier data (in order from JacobianModifierFlags) before angular jacobians
-                    InitModifierData(ref jacobianHeader, contactHeader.ColliderKeys);
-
-                    // Build normal jacobians
-                    var centerA = new float3(0.0f);
-                    var centerB = new float3(0.0f);
-                    for (int j = 0; j < contactHeader.NumContacts; j++)
-                    {
-                        // Build the jacobian
-                        BuildContactJacobian(
-                            j, contactJacobian.BaseJacobian.Normal, worldFromA, worldFromB, invTimestep, velocityA, velocityB, sumInvMass, maxDepenetrationVelocity,
-                            ref jacobianHeader, ref centerA, ref centerB, ref contactReader);
-
-                        // Restitution (optional)
-                        if (contactHeader.CoefficientOfRestitution > 0.0f)
+                        var baseJac = new BaseContactJacobian
                         {
-                            ref ContactJacAngAndVelToReachCp jacAngular = ref jacobianHeader.AccessAngularJacobian(j);
-                            float relativeVelocity = BaseContactJacobian.GetJacVelocity(baseJac.Normal, jacAngular.Jac, velocityA, velocityB);
-                            float dv = jacAngular.VelToReachCp - relativeVelocity;
-                            if (dv > 0.0f && relativeVelocity < negContactRestingVelocity)
+                            NumContacts = contactHeader.NumContacts,
+                            Normal = contactHeader.Normal
+                        };
+
+                        // Body A must be dynamic
+                        Assert.IsTrue(contactHeader.BodyPair.BodyAIndex < motionVelocities.Length);
+                        bool isDynamicStaticPair = contactHeader.BodyPair.BodyBIndex >= motionVelocities.Length;
+
+                        // If contact distance is negative, use an artificially reduced penetration depth to prevent the dynamic-dynamic contacts from depenetrating too quickly
+                        float maxDepenetrationVelocity = isDynamicStaticPair ? float.MaxValue : 3.0f; // meter/seconds time step independent
+
+                        if (jacobianHeader.Type == JacobianType.Contact)
+                        {
+                            ref ContactJacobian contactJacobian = ref jacobianHeader.AccessBaseJacobian<ContactJacobian>();
+                            contactJacobian.BaseJacobian = baseJac;
+                            contactJacobian.CoefficientOfFriction = contactHeader.CoefficientOfFriction;
+
+                            // Indicator whether restitution will be applied,
+                            // used to scale down friction on bounce.
+                            bool applyRestitution = false;
+
+                            // Initialize modifier data (in order from JacobianModifierFlags) before angular jacobians
+                            InitModifierData(ref jacobianHeader, contactHeader.ColliderKeys);
+
+                            // Build normal jacobians
+                            var centerA = new float3(0.0f);
+                            var centerB = new float3(0.0f);
+                            for (int j = 0; j < contactHeader.NumContacts; j++)
                             {
-                                // Restitution impulse is applied as if contact point is on the contact plane.
-                                // However, it can (and will) be slightly away from contact plane at the moment restitution is applied.
-                                // So we have to apply vertical shot equation to make sure we don't gain energy:
-                                // effectiveRestitutionVelocity^2 = restitutionVelocity^2 - 2.0f * gravityAcceleration * distanceToGround
-                                // From this formula we calculate the effective restitution velocity, which is the velocity 
-                                // that the contact point needs to reach the same height from current position
-                                // as if it was shot with the restitutionVelocity from the contact plane.
-                                // ------------------------------------------------------------
-                                // This is still an approximation for 2 reasons:
-                                // - We are assuming the contact point will hit the contact plane with its current velocity,
-                                // while actually it would have a portion of gravity applied before the actual hit. However,
-                                // that velocity increase is quite small (less than gravity in one step), so it's safe
-                                // to use current velocity instead.
-                                // - gravityAcceleration is the actual value of gravity applied only when contact plane is
-                                // directly opposite to gravity direction. Otherwise, this value will only be smaller.
-                                // However, since this can only result in smaller bounce than the "correct" one, we can
-                                // safely go with the default gravity value in all cases.
-                                float restitutionVelocity = (relativeVelocity - negContactRestingVelocity) * contactHeader.CoefficientOfRestitution;
-                                float distanceToGround = math.max(-jacAngular.VelToReachCp * timestep, 0.0f);
-                                float effectiveRestitutionVelocity =
-                                    math.sqrt(math.max(restitutionVelocity * restitutionVelocity - 2.0f * gravityAcceleration * distanceToGround, 0.0f));
+                                // Build the jacobian
+                                BuildContactJacobian(
+                                    j, contactJacobian.BaseJacobian.Normal, worldFromA, worldFromB, invTimestep, velocityA, velocityB, sumInvMass, maxDepenetrationVelocity,
+                                    ref jacobianHeader, ref centerA, ref centerB, ref contactReader);
 
-                                jacAngular.VelToReachCp =
-                                    math.max(jacAngular.VelToReachCp - effectiveRestitutionVelocity, 0.0f) +
-                                    effectiveRestitutionVelocity;
+                                // Restitution (optional)
+                                if (contactHeader.CoefficientOfRestitution > 0.0f)
+                                {
+                                    ref ContactJacAngAndVelToReachCp jacAngular = ref jacobianHeader.AccessAngularJacobian(j);
+                                    float relativeVelocity = BaseContactJacobian.GetJacVelocity(baseJac.Normal, jacAngular.Jac, velocityA, velocityB);
+                                    float dv = jacAngular.VelToReachCp - relativeVelocity;
+                                    if (dv > 0.0f && relativeVelocity < negContactRestingVelocity)
+                                    {
+                                        // Restitution impulse is applied as if contact point is on the contact plane.
+                                        // However, it can (and will) be slightly away from contact plane at the moment restitution is applied.
+                                        // So we have to apply vertical shot equation to make sure we don't gain energy:
+                                        // effectiveRestitutionVelocity^2 = restitutionVelocity^2 - 2.0f * gravityAcceleration * distanceToGround
+                                        // From this formula we calculate the effective restitution velocity, which is the velocity 
+                                        // that the contact point needs to reach the same height from current position
+                                        // as if it was shot with the restitutionVelocity from the contact plane.
+                                        // ------------------------------------------------------------
+                                        // This is still an approximation for 2 reasons:
+                                        // - We are assuming the contact point will hit the contact plane with its current velocity,
+                                        // while actually it would have a portion of gravity applied before the actual hit. However,
+                                        // that velocity increase is quite small (less than gravity in one step), so it's safe
+                                        // to use current velocity instead.
+                                        // - gravityAcceleration is the actual value of gravity applied only when contact plane is
+                                        // directly opposite to gravity direction. Otherwise, this value will only be smaller.
+                                        // However, since this can only result in smaller bounce than the "correct" one, we can
+                                        // safely go with the default gravity value in all cases.
+                                        float restitutionVelocity = (relativeVelocity - negContactRestingVelocity) * contactHeader.CoefficientOfRestitution;
+                                        float distanceToGround = math.max(-jacAngular.VelToReachCp * timestep, 0.0f);
+                                        float effectiveRestitutionVelocity =
+                                            math.sqrt(math.max(restitutionVelocity * restitutionVelocity - 2.0f * gravityAcceleration * distanceToGround, 0.0f));
 
-                                // Remember that restitution should be applied
-                                applyRestitution = true;
+                                        jacAngular.VelToReachCp =
+                                            math.max(jacAngular.VelToReachCp - effectiveRestitutionVelocity, 0.0f) +
+                                            effectiveRestitutionVelocity;
+
+                                        // Remember that restitution should be applied
+                                        applyRestitution = true;
+                                    }
+                                }
+                            }
+
+                            // Build friction jacobians
+                            // (skip friction between two infinite-mass objects)
+                            if (!bodiesHaveInfiniteMass)
+                            {
+                                // Clear accumulated impulse
+                                contactJacobian.Friction0.Impulse = 0.0f;
+                                contactJacobian.Friction1.Impulse = 0.0f;
+                                contactJacobian.AngularFriction.Impulse = 0.0f;
+
+                                // Calculate average position
+                                float invNumContacts = math.rcp(contactJacobian.BaseJacobian.NumContacts);
+                                centerA *= invNumContacts;
+                                centerB *= invNumContacts;
+
+                                // Choose friction axes
+                                CalculatePerpendicularNormalized(contactJacobian.BaseJacobian.Normal, out float3 frictionDir0, out float3 frictionDir1);
+
+                                // Build linear jacobian
+                                float invEffectiveMass0, invEffectiveMass1;
+                                {
+                                    float3 armA = centerA;
+                                    float3 armB = centerB;
+                                    BuildJacobian(worldFromA, worldFromB, frictionDir0, armA, armB, velocityA.InverseInertia, velocityB.InverseInertia, sumInvMass,
+                                        out contactJacobian.Friction0.AngularA, out contactJacobian.Friction0.AngularB, out invEffectiveMass0);
+                                    BuildJacobian(worldFromA, worldFromB, frictionDir1, armA, armB, velocityA.InverseInertia, velocityB.InverseInertia, sumInvMass,
+                                        out contactJacobian.Friction1.AngularA, out contactJacobian.Friction1.AngularB, out invEffectiveMass1);
+                                }
+
+                                // Build angular jacobian
+                                float invEffectiveMassAngular;
+                                {
+                                    contactJacobian.AngularFriction.AngularA = math.mul(worldFromA.InverseRotation, contactJacobian.BaseJacobian.Normal);
+                                    contactJacobian.AngularFriction.AngularB = math.mul(worldFromB.InverseRotation, -contactJacobian.BaseJacobian.Normal);
+                                    float3 temp = contactJacobian.AngularFriction.AngularA * contactJacobian.AngularFriction.AngularA * velocityA.InverseInertia;
+                                    temp += contactJacobian.AngularFriction.AngularB * contactJacobian.AngularFriction.AngularB * velocityB.InverseInertia;
+                                    invEffectiveMassAngular = math.csum(temp);
+                                }
+
+                                // Build effective mass
+                                {
+                                    // Build the inverse effective mass matrix
+                                    var invEffectiveMassDiag = new float3(invEffectiveMass0, invEffectiveMass1, invEffectiveMassAngular);
+                                    var invEffectiveMassOffDiag = new float3( // (0, 1), (0, 2), (1, 2)
+                                        JacobianUtilities.CalculateInvEffectiveMassOffDiag(contactJacobian.Friction0.AngularA, contactJacobian.Friction1.AngularA, velocityA.InverseInertia,
+                                        contactJacobian.Friction0.AngularB, contactJacobian.Friction1.AngularB, velocityB.InverseInertia),
+                                        JacobianUtilities.CalculateInvEffectiveMassOffDiag(contactJacobian.Friction0.AngularA, contactJacobian.AngularFriction.AngularA, velocityA.InverseInertia,
+                                        contactJacobian.Friction0.AngularB, contactJacobian.AngularFriction.AngularB, velocityB.InverseInertia),
+                                        JacobianUtilities.CalculateInvEffectiveMassOffDiag(contactJacobian.Friction1.AngularA, contactJacobian.AngularFriction.AngularA, velocityA.InverseInertia,
+                                        contactJacobian.Friction1.AngularB, contactJacobian.AngularFriction.AngularB, velocityB.InverseInertia));
+
+                                    // Invert the matrix and store it to the jacobians
+                                    if (!JacobianUtilities.InvertSymmetricMatrix(invEffectiveMassDiag, invEffectiveMassOffDiag, out float3 effectiveMassDiag, out float3 effectiveMassOffDiag))
+                                    {
+                                        // invEffectiveMass can be singular if the bodies have infinite inertia about the normal.
+                                        // In that case angular friction does nothing so we can regularize the matrix, set col2 = row2 = (0, 0, 1)
+                                        invEffectiveMassOffDiag.y = 0.0f;
+                                        invEffectiveMassOffDiag.z = 0.0f;
+                                        invEffectiveMassDiag.z = 1.0f;
+                                        bool success = JacobianUtilities.InvertSymmetricMatrix(invEffectiveMassDiag, invEffectiveMassOffDiag, out effectiveMassDiag, out effectiveMassOffDiag);
+                                        Assert.IsTrue(success); // it should never fail, if it does then friction will be disabled
+                                    }
+                                    contactJacobian.Friction0.EffectiveMass = effectiveMassDiag.x;
+                                    contactJacobian.Friction1.EffectiveMass = effectiveMassDiag.y;
+                                    contactJacobian.AngularFriction.EffectiveMass = effectiveMassDiag.z;
+                                    contactJacobian.FrictionEffectiveMassOffDiag = effectiveMassOffDiag;
+                                }
+
+                                // Reduce friction to 1/4 of the impulse if there will be restitution
+                                if (applyRestitution)
+                                {
+                                    contactJacobian.Friction0.EffectiveMass *= 0.25f;
+                                    contactJacobian.Friction1.EffectiveMass *= 0.25f;
+                                    contactJacobian.AngularFriction.EffectiveMass *= 0.25f;
+                                    contactJacobian.FrictionEffectiveMassOffDiag *= 0.25f;
+                                }
                             }
                         }
-                    }
-
-                    // Build friction jacobians
-                    // (skip friction between two infinite-mass objects)
-                    if (!bodiesHaveInfiniteMass)
-                    {
-                        // Clear accumulated impulse
-                        contactJacobian.Friction0.Impulse = 0.0f;
-                        contactJacobian.Friction1.Impulse = 0.0f;
-                        contactJacobian.AngularFriction.Impulse = 0.0f;
-
-                        // Calculate average position
-                        float invNumContacts = math.rcp(contactJacobian.BaseJacobian.NumContacts);
-                        centerA *= invNumContacts;
-                        centerB *= invNumContacts;
-
-                        // Choose friction axes
-                        CalculatePerpendicularNormalized(contactJacobian.BaseJacobian.Normal, out float3 frictionDir0, out float3 frictionDir1);
-
-                        // Build linear jacobian
-                        float invEffectiveMass0, invEffectiveMass1;
+                        // Much less data needed for triggers
+                        else
                         {
-                            float3 armA = centerA;
-                            float3 armB = centerB;
-                            BuildJacobian(worldFromA, worldFromB, frictionDir0, armA, armB, velocityA.InverseInertiaAndMass.xyz, velocityB.InverseInertiaAndMass.xyz, sumInvMass,
-                                out contactJacobian.Friction0.AngularA, out contactJacobian.Friction0.AngularB, out invEffectiveMass0);
-                            BuildJacobian(worldFromA, worldFromB, frictionDir1, armA, armB, velocityA.InverseInertiaAndMass.xyz, velocityB.InverseInertiaAndMass.xyz, sumInvMass,
-                                out contactJacobian.Friction1.AngularA, out contactJacobian.Friction1.AngularB, out invEffectiveMass1);
-                        }
+                            ref TriggerJacobian triggerJacobian = ref jacobianHeader.AccessBaseJacobian<TriggerJacobian>();
 
-                        // Build angular jacobian
-                        float invEffectiveMassAngular;
-                        {
-                            contactJacobian.AngularFriction.AngularA = math.mul(worldFromA.InverseRotation, contactJacobian.BaseJacobian.Normal);
-                            contactJacobian.AngularFriction.AngularB = math.mul(worldFromB.InverseRotation, -contactJacobian.BaseJacobian.Normal);
-                            float3 temp = contactJacobian.AngularFriction.AngularA * contactJacobian.AngularFriction.AngularA * velocityA.InverseInertiaAndMass.xyz;
-                            temp += contactJacobian.AngularFriction.AngularB * contactJacobian.AngularFriction.AngularB * velocityB.InverseInertiaAndMass.xyz;
-                            invEffectiveMassAngular = math.csum(temp);
-                        }
+                            triggerJacobian.BaseJacobian = baseJac;
+                            triggerJacobian.ColliderKeys = contactHeader.ColliderKeys;
 
-                        // Build effective mass
-                        {
-                            // Build the inverse effective mass matrix
-                            var invEffectiveMassDiag = new float3(invEffectiveMass0, invEffectiveMass1, invEffectiveMassAngular);
-                            var invEffectiveMassOffDiag = new float3( // (0, 1), (0, 2), (1, 2)
-                                JacobianUtilities.CalculateInvEffectiveMassOffDiag(contactJacobian.Friction0.AngularA, contactJacobian.Friction1.AngularA, velocityA.InverseInertiaAndMass.xyz,
-                                contactJacobian.Friction0.AngularB, contactJacobian.Friction1.AngularB, velocityB.InverseInertiaAndMass.xyz),
-                                JacobianUtilities.CalculateInvEffectiveMassOffDiag(contactJacobian.Friction0.AngularA, contactJacobian.AngularFriction.AngularA, velocityA.InverseInertiaAndMass.xyz,
-                                contactJacobian.Friction0.AngularB, contactJacobian.AngularFriction.AngularB, velocityB.InverseInertiaAndMass.xyz),
-                                JacobianUtilities.CalculateInvEffectiveMassOffDiag(contactJacobian.Friction1.AngularA, contactJacobian.AngularFriction.AngularA, velocityA.InverseInertiaAndMass.xyz,
-                                contactJacobian.Friction1.AngularB, contactJacobian.AngularFriction.AngularB, velocityB.InverseInertiaAndMass.xyz));
-
-                            // Invert the matrix and store it to the jacobians
-                            if (!JacobianUtilities.InvertSymmetricMatrix(invEffectiveMassDiag, invEffectiveMassOffDiag, out float3 effectiveMassDiag, out float3 effectiveMassOffDiag))
+                            // Build normal jacobians
+                            var centerA = new float3(0.0f);
+                            var centerB = new float3(0.0f);
+                            for (int j = 0; j < contactHeader.NumContacts; j++)
                             {
-                                // invEffectiveMass can be singular if the bodies have infinite inertia about the normal.
-                                // In that case angular friction does nothing so we can regularize the matrix, set col2 = row2 = (0, 0, 1)
-                                invEffectiveMassOffDiag.y = 0.0f;
-                                invEffectiveMassOffDiag.z = 0.0f;
-                                invEffectiveMassDiag.z = 1.0f;
-                                bool success = JacobianUtilities.InvertSymmetricMatrix(invEffectiveMassDiag, invEffectiveMassOffDiag, out effectiveMassDiag, out effectiveMassOffDiag);
-                                Assert.IsTrue(success); // it should never fail, if it does then friction will be disabled
+                                // Build the jacobian
+                                BuildContactJacobian(
+                                    j, triggerJacobian.BaseJacobian.Normal, worldFromA, worldFromB, invTimestep, velocityA, velocityB, sumInvMass, maxDepenetrationVelocity,
+                                    ref jacobianHeader, ref centerA, ref centerB, ref contactReader);
                             }
-                            contactJacobian.Friction0.EffectiveMass = effectiveMassDiag.x;
-                            contactJacobian.Friction1.EffectiveMass = effectiveMassDiag.y;
-                            contactJacobian.AngularFriction.EffectiveMass = effectiveMassDiag.z;
-                            contactJacobian.FrictionEffectiveMassOffDiag = effectiveMassOffDiag;
-                        }
-
-                        // Reduce friction to 1/4 of the impulse if there will be restitution
-                        if (applyRestitution)
-                        {
-                            contactJacobian.Friction0.EffectiveMass *= 0.25f;
-                            contactJacobian.Friction1.EffectiveMass *= 0.25f;
-                            contactJacobian.AngularFriction.EffectiveMass *= 0.25f;
-                            contactJacobian.FrictionEffectiveMassOffDiag *= 0.25f;
                         }
                     }
                 }
-                // Much less data needed for triggers
                 else
                 {
-                    ref TriggerJacobian triggerJacobian = ref jacobianHeader.AccessBaseJacobian<TriggerJacobian>();
+                    Joint joint = world.Joints[pair.JointIndex];
+                    // Need to fetch the real body indices from the joint, as the scheduler may have reordered them
+                    int bodyAIndex = joint.BodyPair.BodyAIndex;
+                    int bodyBIndex = joint.BodyPair.BodyBIndex;
 
-                    triggerJacobian.BaseJacobian = baseJac;
-                    triggerJacobian.ColliderKeys = contactHeader.ColliderKeys;
+                    GetMotion(ref world, bodyAIndex, out MotionVelocity velocityA, out MotionData motionA);
+                    GetMotion(ref world, bodyBIndex, out MotionVelocity velocityB, out MotionData motionB);
 
-                    // Build normal jacobians
-                    var centerA = new float3(0.0f);
-                    var centerB = new float3(0.0f);
-                    for (int j = 0; j < contactHeader.NumContacts; j++)
-                    {
-                        // Build the jacobian
-                        BuildContactJacobian(
-                            j, triggerJacobian.BaseJacobian.Normal, worldFromA, worldFromB, invTimestep, velocityA, velocityB, sumInvMass, maxDepenetrationVelocity,
-                            ref jacobianHeader, ref centerA, ref centerB, ref contactReader);
-                    }
+                    BuildJointJacobian((JointData*)joint.JointData.GetUnsafePtr(), joint.BodyPair, velocityA, velocityB,
+                        motionA, motionB, timestep, numSolverIterations, ref jacobianWriter);
                 }
             }
-
-            // Copy joint jacobians into the main jacobian stream
-            AppendJointJacobiansToContactStream(workItemIndex, ref jointJacobianReader, ref jacobianWriter);
 
             contactReader.EndForEachIndex();
             jacobianWriter.EndForEachIndex();
         }
 
-        internal static unsafe void BuildJointJacobian(JointData* jointData, BodyIndexPair pair,
+        internal static unsafe void BuildJointJacobian([NoAlias] JointData* jointData, BodyIndexPair pair,
             MotionVelocity velocityA, MotionVelocity velocityB, MotionData motionA, MotionData motionB,
-            float timestep, int numIterations, ref NativeStream.Writer jacobianWriter)
+            float timestep, int numIterations, [NoAlias] ref NativeStream.Writer jacobianWriter)
         {
             var bodyAFromMotionA = new MTransform(motionA.BodyFromMotion);
             MTransform motionAFromJoint = Mul(Inverse(bodyAFromMotionA), jointData->AFromJoint);
@@ -699,9 +857,9 @@ namespace Unity.Physics
 
         private static void Solve(
             NativeSlice<MotionVelocity> motionVelocities,
-            ref NativeStream.Reader jacobianReader,
-            ref NativeStream.Writer collisionEventsWriter,
-            ref NativeStream.Writer triggerEventsWriter,
+            [NoAlias] ref NativeStream.Reader jacobianReader,
+            [NoAlias] ref NativeStream.Writer collisionEventsWriter,
+            [NoAlias] ref NativeStream.Writer triggerEventsWriter,
             int workItemIndex,
             StepInput stepInput)
         {
@@ -744,6 +902,6 @@ namespace Unity.Physics
             }
         }
 
-#endregion
+        #endregion
     }
 }

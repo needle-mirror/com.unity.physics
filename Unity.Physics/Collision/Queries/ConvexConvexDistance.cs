@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using Unity.Burst;
 using Unity.Mathematics;
 using static Unity.Physics.Math;
 
@@ -246,7 +247,7 @@ namespace Unity.Physics
         /// <returns></returns>
         public static unsafe Result ConvexConvex(
             float3* verticesA, int numVerticesA, float3* verticesB, int numVerticesB,
-            MTransform aFromB, PenetrationHandling penetrationHandling)
+            [NoAlias] in MTransform aFromB, PenetrationHandling penetrationHandling)
         {
             const float epsTerminationSq = 1e-8f; // Main loop quits when it cannot find a point that improves the simplex by at least this much
             const float epsPenetrationSq = 1e-9f; // Epsilon used to check for penetration.  Should be smaller than shape cast ConvexConvex keepDistance^2.
@@ -579,7 +580,7 @@ namespace Unity.Physics
 
         // Returns the supporting vertex of the CSO given a direction in 'A' space.
         private static unsafe SupportVertex GetSupportingVertex(
-            float3 direction, float3* verticesA, int numVerticesA, float3* verticesB, int numVerticesB, MTransform aFromB)
+            float3 direction, float3* verticesA, int numVerticesA, float3* verticesB, int numVerticesB, [NoAlias] in MTransform aFromB)
         {
             int ia = GetSupportingVertexIndex(direction, verticesA, numVerticesA);
             int ib = GetSupportingVertexIndex(math.mul(aFromB.InverseRotation, -direction), verticesB, numVerticesB);

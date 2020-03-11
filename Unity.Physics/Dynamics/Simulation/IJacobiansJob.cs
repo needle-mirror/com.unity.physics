@@ -7,14 +7,24 @@ using Unity.Mathematics;
 
 namespace Unity.Physics
 {
-    // Interface for jobs that iterate through the list of Jacobians before they are solved
+    // INTERNAL UnityPhysics interface for jobs that iterate through the list of Jacobians before they are solved
+    // Important: Only use inside UnityPhysics code! Jobs in other projects should implement IJacobiansJob.
     [JobProducerType(typeof(IJacobiansJobExtensions.JacobiansJobProcess<>))]
-    public interface IJacobiansJob
+    public interface IJacobiansJobBase
     {
         // Note, multiple Jacobians can share the same header.
         void Execute(ref ModifiableJacobianHeader header, ref ModifiableContactJacobian jacobian);
         void Execute(ref ModifiableJacobianHeader header, ref ModifiableTriggerJacobian jacobian);
     }
+
+#if !HAVOK_PHYSICS_EXISTS
+
+    // Interface for jobs that iterate through the list of Jacobians before they are solved
+    public interface IJacobiansJob : IJacobiansJobBase
+    {
+    }
+
+#endif
 
     public unsafe struct ModifiableJacobianHeader
     {
@@ -146,20 +156,26 @@ namespace Unity.Physics
     public static class IJacobiansJobExtensions
     {
 #if !HAVOK_PHYSICS_EXISTS
-        // Default IJacobiansJob.Schedule() implementation.
+        // Default Schedule() implementation for IJacobiansJob.
         public static unsafe JobHandle Schedule<T>(this T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)
-            where T : struct, IJacobiansJob
+            where T : struct, IJacobiansJobBase
         {
-            return ScheduleImpl(jobData, simulation, ref world, inputDeps);
+            // Should work only for UnityPhysics
+            if (simulation.Type != SimulationType.UnityPhysics)
+            {
+                return inputDeps;
+            }
+
+            return ScheduleUnityPhysicsJacobiansJob(jobData, simulation, ref world, inputDeps);
         }
 #else
-        // In this case IJacobiansJob.Schedule() is provided by the Havok.Physics assembly.
+        // In this case Schedule() implementation for IJacobiansJob is provided by the Havok.Physics assembly.
         // This is a stub to catch when that assembly is missing.
         //<todo.eoin.modifier Put in a link to documentation for this:
-        [Obsolete("This error occurs when HAVOK_PHYSICS_EXISTS is defined but Havok.Physics is missing from your package's asmdef references", true)]
+        [Obsolete("This error occurs when HAVOK_PHYSICS_EXISTS is defined but Havok.Physics is missing from your package's asmdef references. (DoNotRemove)", true)]
         public static unsafe JobHandle Schedule<T>(this T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps,
             HAVOK_PHYSICS_MISSING_FROM_ASMDEF _causeCompileError = HAVOK_PHYSICS_MISSING_FROM_ASMDEF.HAVOK_PHYSICS_MISSING_FROM_ASMDEF)
-            where T : struct, IJacobiansJob
+            where T : struct, IJacobiansJobBase
         {
             return new JobHandle();
         }
@@ -170,24 +186,25 @@ namespace Unity.Physics
         }
 #endif
 
-        internal static unsafe JobHandle ScheduleImpl<T>(this T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)
-            where T : struct, IJacobiansJob
+        internal static unsafe JobHandle ScheduleUnityPhysicsJacobiansJob<T>(T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)
+            where T : struct, IJacobiansJobBase
         {
-            if (simulation.Type == SimulationType.UnityPhysics)
+            if (simulation.Type != SimulationType.UnityPhysics)
             {
-                var data = new JacobiansJobData<T>
-                {
-                    UserJobData = jobData,
-                    StreamReader = ((Simulation)simulation).m_Context.Jacobians.AsReader(),
-                    NumWorkItems = ((Simulation)simulation).m_Context.SolverSchedulerInfo.NumWorkItems,
-                    Bodies = world.Bodies
-                };
-                var parameters = new JobsUtility.JobScheduleParameters(
-                    UnsafeUtility.AddressOf(ref data),
-                    JacobiansJobProcess<T>.Initialize(), inputDeps, ScheduleMode.Batched);
-                return JobsUtility.Schedule(ref parameters);
+                throw new ArgumentException($"Simulation type {simulation.Type} is not supported! Should be called only for SimulationType.UnityPhysics.");
             }
-            return inputDeps;
+
+            var data = new JacobiansJobData<T>
+            {
+                UserJobData = jobData,
+                StreamReader = ((Simulation)simulation).StepContext.Jacobians.AsReader(),
+                NumWorkItems = ((Simulation)simulation).StepContext.SolverSchedulerInfo.NumWorkItems,
+                Bodies = world.Bodies
+            };
+            var parameters = new JobsUtility.JobScheduleParameters(
+                UnsafeUtility.AddressOf(ref data),
+                JacobiansJobProcess<T>.Initialize(), inputDeps, ScheduleMode.Batched);
+            return JobsUtility.Schedule(ref parameters);
         }
 
         internal unsafe struct JacobiansJobData<T> where T : struct
@@ -234,7 +251,7 @@ namespace Unity.Physics
             }
         }
 
-        internal struct JacobiansJobProcess<T> where T : struct, IJacobiansJob
+        internal struct JacobiansJobProcess<T> where T : struct, IJacobiansJobBase
         {
             static IntPtr jobReflectionData;
 

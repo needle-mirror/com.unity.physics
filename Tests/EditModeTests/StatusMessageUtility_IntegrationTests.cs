@@ -2,12 +2,15 @@
 using NUnit.Framework;
 using Unity.Physics.Authoring;
 using Unity.Physics.Editor;
-using UnityEngine;
 using Unity.Physics.Tests.Authoring;
-using PxBox = UnityEngine.BoxCollider;
-using PxCapsule = UnityEngine.CapsuleCollider;
-using PxMesh = UnityEngine.MeshCollider;
-using PxSphere = UnityEngine.SphereCollider;
+using UnityEngine;
+#if LEGACY_PHYSICS
+using LegacyBox = UnityEngine.BoxCollider;
+using LegacyCapsule = UnityEngine.CapsuleCollider;
+using LegacyMesh = UnityEngine.MeshCollider;
+using LegacySphere = UnityEngine.SphereCollider;
+using LegacyRigidBody = UnityEngine.Rigidbody;
+#endif
 
 namespace Unity.Physics.Tests.Editor
 {
@@ -25,9 +28,19 @@ namespace Unity.Physics.Tests.Editor
 
         [Test]
         public void GetHierarchyStatusMessage_WhenChild_AndChildIsNotPrimaryBody_MessageNullOrEmpty(
-            [Values(typeof(PhysicsBodyAuthoring), typeof(PhysicsShapeAuthoring), typeof(PxBox), typeof(Rigidbody))]
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyRigidBody), typeof(LegacyBox),
+#endif
+                typeof(PhysicsBodyAuthoring), typeof(PhysicsShapeAuthoring)
+            )]
             Type parentComponentType,
-            [Values(typeof(PhysicsShapeAuthoring), typeof(PxBox), typeof(PxCapsule), typeof(PxMesh), typeof(PxSphere))]
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyBox), typeof(LegacyCapsule), typeof(LegacyMesh), typeof(LegacySphere),
+#endif
+                typeof(PhysicsShapeAuthoring)
+            )]
             Type childComponentType
         )
         {
@@ -41,7 +54,12 @@ namespace Unity.Physics.Tests.Editor
 
         [Test]
         public void GetHierarchyStatusMessage_WhenChild_AndChildIsPrimaryBody_MessageNotNullOrEmpty(
-            [Values(typeof(PhysicsBodyAuthoring), typeof(PhysicsShapeAuthoring), typeof(PxBox), typeof(PxCapsule), typeof(PxMesh), typeof(PxSphere), typeof(Rigidbody))]
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyRigidBody), typeof(LegacyBox), typeof(LegacyCapsule), typeof(LegacyMesh), typeof(LegacySphere),
+#endif
+                typeof(PhysicsBodyAuthoring), typeof(PhysicsShapeAuthoring)
+            )]
             Type childComponentType
         )
         {
@@ -55,9 +73,19 @@ namespace Unity.Physics.Tests.Editor
 
         [Test]
         public void GetHierarchyStatusMessage_WhenChild_AndChildHasBodyAndShape_QueryingBodyReturnsMessage(
-            [Values(typeof(PhysicsBodyAuthoring), typeof(Rigidbody))]
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyRigidBody),
+#endif
+                typeof(PhysicsBodyAuthoring)
+            )]
             Type bodyType,
-            [Values(typeof(PhysicsShapeAuthoring), typeof(PxBox), typeof(PxCapsule), typeof(PxMesh), typeof(PxSphere))]
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyBox), typeof(LegacyCapsule), typeof(LegacyMesh), typeof(LegacySphere),
+#endif
+                typeof(PhysicsShapeAuthoring)
+            )]
             Type shapeType
         )
         {
@@ -71,9 +99,19 @@ namespace Unity.Physics.Tests.Editor
 
         [Test]
         public void GetHierarchyStatusMessage_WhenChild_AndChildHasBodyAndShape_QueryingShapeReturnsNullOrEmpty(
-            [Values(typeof(PhysicsBodyAuthoring), typeof(Rigidbody))]
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyRigidBody),
+#endif
+                typeof(PhysicsBodyAuthoring)
+            )]
             Type bodyType,
-            [Values(typeof(PhysicsShapeAuthoring), typeof(PxBox), typeof(PxCapsule), typeof(PxMesh), typeof(PxSphere))]
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyBox), typeof(LegacyCapsule), typeof(LegacyMesh), typeof(LegacySphere),
+#endif
+                typeof(PhysicsShapeAuthoring)
+            )]
             Type shapeType
         )
         {

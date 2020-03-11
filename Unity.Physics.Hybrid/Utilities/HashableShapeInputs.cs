@@ -1,5 +1,7 @@
 using System;
+using Unity.Burst;
 using Unity.Collections;
+using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 using Hash128 = Unity.Entities.Hash128;
@@ -24,9 +26,14 @@ namespace Unity.Physics.Authoring
         public readonly int BlendShapeWeightsStartIndex;
         public readonly int BlendShapeWeightsCount;
 
-        public static HashableShapeInputs FromMesh(UnityEngine.Mesh mesh, float4x4 leafToBody) => mesh == null
-            ? new HashableShapeInputs(default, default, leafToBody)
-            : new HashableShapeInputs(mesh.GetInstanceID(), mesh.bounds, leafToBody);
+        public static HashableShapeInputs FromMesh(UnityEngine.Mesh mesh, float4x4 leafToBody)
+        {
+            using (var includedIndices = new NativeArray<int>(0, Allocator.TempJob))
+            using (var allIncludedIndices = new NativeList<int>(0, Allocator.TempJob))
+            using (var blendShapeWeights = new NativeArray<float>(0, Allocator.TempJob))
+            using (var allBlendShapeWeights = new NativeList<float>(0, Allocator.TempJob))
+                return FromSkinnedMesh(mesh, leafToBody, includedIndices, allIncludedIndices, blendShapeWeights, allBlendShapeWeights);
+        }
 
         public static HashableShapeInputs FromSkinnedMesh(
             UnityEngine.Mesh mesh, float4x4 leafToBody,
@@ -34,9 +41,81 @@ namespace Unity.Physics.Authoring
             NativeArray<float> blendShapeWeights, NativeList<float> allBlendShapeWeights
         )
         {
-            return mesh == null
-                ? new HashableShapeInputs(default, default, leafToBody)
-                : new HashableShapeInputs(mesh.GetInstanceID(), mesh.bounds, leafToBody, includedIndices, allIncludedIndices, blendShapeWeights, allBlendShapeWeights);
+            using (var result = new NativeArray<HashableShapeInputs>(1, Allocator.TempJob))
+            {
+                int meshKey = default;
+                Bounds bounds = default;
+                NativeArray<int> tmpIndices;
+                NativeList<int> tmpAllIndices;
+                NativeArray<float> tmpBlendWeights;
+                NativeList<float> tmpAllBlendWeights;
+                if (mesh == null)
+                {
+                    tmpIndices = new NativeArray<int>(0, Allocator.TempJob);
+                    tmpAllIndices = new NativeList<int>(0, Allocator.TempJob);
+                    tmpBlendWeights = new NativeArray<float>(0, Allocator.TempJob);
+                    tmpAllBlendWeights = new NativeList<float>(0, Allocator.TempJob);
+                }
+                else
+                {
+                    meshKey = mesh.GetInstanceID();
+                    bounds = mesh.bounds;
+                    tmpIndices = new NativeArray<int>(includedIndices, Allocator.TempJob);
+                    tmpAllIndices = new NativeList<int>(allIncludedIndices.Length, Allocator.TempJob);
+                    tmpAllIndices.AddRangeNoResize(allIncludedIndices);
+                    tmpBlendWeights = new NativeArray<float>(blendShapeWeights, Allocator.TempJob);
+                    tmpAllBlendWeights = new NativeList<float>(allBlendShapeWeights.Length, Allocator.TempJob);
+                    tmpAllBlendWeights.AddRangeNoResize(allBlendShapeWeights);
+                }
+                new HashableShapeInputsFromMeshJob
+                {
+                    Result = result,
+                    MeshKey = meshKey,
+                    Bounds = bounds,
+                    LeafToBody = leafToBody,
+                    IncludedIndices = tmpIndices,
+                    AllIncludedIndices = tmpAllIndices,
+                    BlendShapeWeights = tmpBlendWeights,
+                    AllBlendShapeWeights = tmpAllBlendWeights
+                }.Run();
+
+                if (includedIndices.Length > 0)
+                {
+                    allIncludedIndices.ResizeUninitialized(tmpAllIndices.Length);
+                    allIncludedIndices.AddRange(tmpAllIndices);
+                }
+
+                if (blendShapeWeights.Length > 0)
+                {
+                    allBlendShapeWeights.ResizeUninitialized(tmpAllBlendWeights.Length);
+                    allBlendShapeWeights.AddRange(tmpAllBlendWeights);
+                }
+
+                tmpIndices.Dispose();
+                tmpAllIndices.Dispose();
+                tmpBlendWeights.Dispose();
+                tmpAllBlendWeights.Dispose();
+
+                return result[0];
+            }
+        }
+
+        [BurstCompile]
+        struct HashableShapeInputsFromMeshJob : IJob
+        {
+            public NativeArray<HashableShapeInputs> Result;
+
+            public int MeshKey;
+            public Bounds Bounds;
+            public float4x4 LeafToBody;
+            [ReadOnly] public NativeArray<int> IncludedIndices;
+            public NativeList<int> AllIncludedIndices;
+            [ReadOnly] public NativeArray<float> BlendShapeWeights;
+            public NativeList<float> AllBlendShapeWeights;
+
+            public void Execute() => Result[0] = new HashableShapeInputs(
+                MeshKey, Bounds, LeafToBody, IncludedIndices, AllIncludedIndices, BlendShapeWeights, AllBlendShapeWeights
+            );
         }
 
         HashableShapeInputs(
@@ -110,14 +189,7 @@ namespace Unity.Physics.Authoring
             // round scale using precision inversely proportional to mesh size along largest axis
             // (i.e. amount to scale farthest point one unit of linear precision)
             var scalePrecision = linearPrecision / math.max(math.cmax(farthestPoint), math.FLT_MIN_NORMAL);
-            scale = RoundToNearest(
-                new float3(
-                    math.length(leafToBody.c0.xyz),
-                    math.length(leafToBody.c1.xyz),
-                    math.length(leafToBody.c2.xyz)
-                ),
-                scalePrecision
-            );
+            scale = RoundToNearest(leafToBody.DecomposeScale(), scalePrecision);
             if (math.determinant(leafToBody) < 0f)
                 scale.x *= -1f;
 

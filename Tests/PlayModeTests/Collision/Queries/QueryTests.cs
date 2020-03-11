@@ -248,7 +248,7 @@ namespace Unity.Physics.Tests.Collision.Queries
         static unsafe void GetHitLeaf(ref Physics.PhysicsWorld world, int rigidBodyIndex, ColliderKey colliderKey, MTransform queryFromWorld, out ChildCollider leaf, out MTransform queryFromTarget)
         {
             Physics.RigidBody body = world.Bodies[rigidBodyIndex];
-            Collider.GetLeafCollider(body.Collider, body.WorldFromBody, colliderKey, out leaf);
+            Collider.GetLeafCollider((Collider*)body.Collider.GetUnsafePtr(), body.WorldFromBody, colliderKey, out leaf);
             MTransform worldFromLeaf = new MTransform(leaf.TransformFromChild);
             queryFromTarget = Math.Mul(queryFromWorld, worldFromLeaf);
         }
@@ -380,7 +380,7 @@ namespace Unity.Physics.Tests.Collision.Queries
             ChildCollider leaf;
             {
                 Physics.RigidBody body = world.Bodies[hit.RigidBodyIndex];
-                Collider.GetLeafCollider(body.Collider, body.WorldFromBody, hit.ColliderKey, out leaf);
+                Collider.GetLeafCollider((Collider*)body.Collider.GetUnsafePtr(), body.WorldFromBody, hit.ColliderKey, out leaf);
             }
 
             // Check that the hit position matches the fraction
@@ -468,71 +468,80 @@ namespace Unity.Physics.Tests.Collision.Queries
             NativeList<ColliderCastHit> colliderCastHits = new NativeList<ColliderCastHit>(Allocator.Temp);
             NativeList<RaycastHit> raycastHits = new NativeList<RaycastHit>(Allocator.Temp);
 
-            for (int iWorld = 0; iWorld < numWorlds; iWorld++)
+            System.Collections.Generic.List<int> numThreadsHints = new System.Collections.Generic.List<int>(5);
+            numThreadsHints.Add(-1);
+            numThreadsHints.Add(0);
+            numThreadsHints.Add(1);
+            numThreadsHints.Add(4);
+            numThreadsHints.Add(8);
+            foreach (int numThreadsHint in numThreadsHints)
             {
-                // Save state to repro this query without doing everything that came before it
-                if (dbgWorld > 0)
+                for (int iWorld = 0; iWorld < numWorlds; iWorld++)
                 {
-                    rnd.state = dbgWorld;
+                    // Save state to repro this query without doing everything that came before it
+                    if (dbgWorld > 0)
+                    {
+                        rnd.state = dbgWorld;
+                    }
+                    uint worldState = rnd.state;
+                    Physics.PhysicsWorld world = TestUtils.GenerateRandomWorld(ref rnd, rnd.NextInt(1, 20), 10.0f, numThreadsHint, numThreadsHint == 0);
+
+                    for (int iTest = 0; iTest < (numTests / numWorlds); iTest++)
+                    {
+                        if (dbgTest > 0)
+                        {
+                            rnd.state = dbgTest;
+                        }
+                        uint testState = rnd.state;
+                        string failureMessage = iWorld + ", " + iTest + " (" + worldState.ToString() + ", " + testState.ToString() + ")";
+
+                        // Generate common random query inputs
+                        var collider = TestUtils.GenerateRandomConvex(ref rnd);
+                        RigidTransform transform = new RigidTransform
+                        {
+                            pos = rnd.NextFloat3(-10.0f, 10.0f),
+                            rot = (rnd.NextInt(10) > 0) ? rnd.NextQuaternionRotation() : quaternion.identity,
+                        };
+                        var startPos = transform.pos;
+                        var endPos = startPos + rnd.NextFloat3(-5.0f, 5.0f);
+
+                        // Distance test
+                        {
+                            ColliderDistanceInput input = new ColliderDistanceInput
+                            {
+                                Collider = (Collider*)collider.GetUnsafePtr(),
+                                Transform = transform,
+                                MaxDistance = (rnd.NextInt(4) > 0) ? rnd.NextFloat(5.0f) : 0.0f
+                            };
+                            WorldCalculateDistanceTest(ref world, input, ref distanceHits, "WorldQueryTest failed CalculateDistance " + failureMessage);
+                        }
+
+                        // Collider cast test
+                        {
+                            ColliderCastInput input = new ColliderCastInput
+                            {
+                                Collider = (Collider*)collider.GetUnsafePtr(),
+                                Start = startPos,
+                                End = endPos,
+                                Orientation = transform.rot,
+                            };
+                            WorldColliderCastTest(ref world, input, ref colliderCastHits, "WorldQueryTest failed ColliderCast " + failureMessage);
+                        }
+
+                        // Ray cast test
+                        {
+                            RaycastInput input = new RaycastInput
+                            {
+                                Start = startPos,
+                                End = endPos,
+                                Filter = CollisionFilter.Default
+                            };
+                            WorldRaycastTest(ref world, input, ref raycastHits, "WorldQueryTest failed Raycast " + failureMessage);
+                        }
+                    }
+
+                    world.Dispose(); // TODO leaking memory if the test fails
                 }
-                uint worldState = rnd.state;
-                Physics.PhysicsWorld world = TestUtils.GenerateRandomWorld(ref rnd, rnd.NextInt(1, 20), 10.0f);
-
-                for (int iTest = 0; iTest < (numTests / numWorlds); iTest++)
-                {
-                    if (dbgTest > 0)
-                    {
-                        rnd.state = dbgTest;
-                    }
-                    uint testState = rnd.state;
-                    string failureMessage = iWorld + ", " + iTest + " (" + worldState.ToString() + ", " + testState.ToString() + ")";
-
-                    // Generate common random query inputs
-                    var collider = TestUtils.GenerateRandomConvex(ref rnd);
-                    RigidTransform transform = new RigidTransform
-                    {
-                        pos = rnd.NextFloat3(-10.0f, 10.0f),
-                        rot = (rnd.NextInt(10) > 0) ? rnd.NextQuaternionRotation() : quaternion.identity,
-                    };
-                    var startPos = transform.pos;
-                    var endPos = startPos + rnd.NextFloat3(-5.0f, 5.0f);
-
-                    // Distance test
-                    {
-                        ColliderDistanceInput input = new ColliderDistanceInput
-                        {
-                            Collider = (Collider*)collider.GetUnsafePtr(),
-                            Transform = transform,
-                            MaxDistance = (rnd.NextInt(4) > 0) ? rnd.NextFloat(5.0f) : 0.0f
-                        };
-                        WorldCalculateDistanceTest(ref world, input, ref distanceHits, "WorldQueryTest failed CalculateDistance " + failureMessage);
-                    }
-
-                    // Collider cast test
-                    {
-                        ColliderCastInput input = new ColliderCastInput
-                        {
-                            Collider = (Collider*)collider.GetUnsafePtr(),
-                            Start = startPos,
-                            End = endPos,
-                            Orientation = transform.rot,
-                        };
-                        WorldColliderCastTest(ref world, input, ref colliderCastHits, "WorldQueryTest failed ColliderCast " + failureMessage);
-                    }
-
-                    // Ray cast test
-                    {
-                        RaycastInput input = new RaycastInput
-                        {
-                            Start = startPos,
-                            End = endPos,
-                            Filter = CollisionFilter.Default
-                        };
-                        WorldRaycastTest(ref world, input, ref raycastHits, "WorldQueryTest failed Raycast " + failureMessage);
-                    }
-                }
-
-                world.Dispose(); // TODO leaking memory if the test fails
             }
 
             distanceHits.Dispose(); // TODO leaking memory if the test fails
@@ -600,7 +609,7 @@ namespace Unity.Physics.Tests.Collision.Queries
                     rnd.state = dbgWorld;
                 }
                 uint worldState = rnd.state;
-                Physics.PhysicsWorld world = TestUtils.GenerateRandomWorld(ref rnd, rnd.NextInt(1, 20), 3.0f);
+                Physics.PhysicsWorld world = TestUtils.GenerateRandomWorld(ref rnd, rnd.NextInt(1, 20), 3.0f, 1, false);
 
                 // Manifold test
                 // TODO would be nice if we could change the world collision tolerance
@@ -610,7 +619,7 @@ namespace Unity.Physics.Tests.Collision.Queries
                     {
                         Physics.RigidBody bodyA = world.Bodies[iBodyA];
                         Physics.RigidBody bodyB = world.Bodies[iBodyB];
-                        if (bodyA.Collider->Type == ColliderType.Mesh && bodyB.Collider->Type == ColliderType.Mesh)
+                        if (bodyA.Collider.Value.Type == ColliderType.Mesh && bodyB.Collider.Value.Type == ColliderType.Mesh)
                         {
                             continue; // TODO - no mesh-mesh manifold support yet
                         }
@@ -647,8 +656,8 @@ namespace Unity.Physics.Tests.Collision.Queries
                             // Get the leaf shapes
                             ChildCollider leafA, leafB;
                             {
-                                Collider.GetLeafCollider(bodyA.Collider, bodyA.WorldFromBody, header.ColliderKeys.ColliderKeyA, out leafA);
-                                Collider.GetLeafCollider(bodyB.Collider, bodyB.WorldFromBody, header.ColliderKeys.ColliderKeyB, out leafB);
+                                Collider.GetLeafCollider((Collider*)bodyA.Collider.GetUnsafePtr(), bodyA.WorldFromBody, header.ColliderKeys.ColliderKeyA, out leafA);
+                                Collider.GetLeafCollider((Collider*)bodyB.Collider.GetUnsafePtr(), bodyB.WorldFromBody, header.ColliderKeys.ColliderKeyB, out leafB);
                             }
 
                             // Read each contact point

@@ -7,13 +7,23 @@ using Unity.Mathematics;
 
 namespace Unity.Physics
 {
-    // Interface for jobs that iterate through the list of contact manifolds produced by the narrow phase
+    // INTERNAL UnityPhysics interface for jobs that iterate through the list of contact manifolds produced by the narrow phase
+    // Important: Only use inside UnityPhysics code! Jobs in other projects should implement IContactsJob.
     [JobProducerType(typeof(IContactsJobExtensions.ContactsJobProcess<>))]
-    public interface IContactsJob
+    public interface IContactsJobBase
     {
         // Note, multiple contacts can share the same header, but will have a different ModifiableContactPoint.Index.
         void Execute(ref ModifiableContactHeader header, ref ModifiableContactPoint contact);
     }
+
+#if !HAVOK_PHYSICS_EXISTS
+
+    // Interface for jobs that iterate through the list of contact manifolds produced by the narrow phase
+    public interface IContactsJob : IContactsJobBase
+    {
+    }
+
+#endif
 
     public struct ModifiableContactHeader
     {
@@ -99,20 +109,26 @@ namespace Unity.Physics
     public static class IContactsJobExtensions
     {
 #if !HAVOK_PHYSICS_EXISTS
-        // Default IContactsJob.Schedule() implementation.
+        // Default Schedule() implementation for IContactsJob.
         public static unsafe JobHandle Schedule<T>(this T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)
-            where T : struct, IContactsJob
+            where T : struct, IContactsJobBase
         {
-            return ScheduleImpl(jobData, simulation, ref world, inputDeps);
+            // Should work only for UnityPhysics
+            if (simulation.Type != SimulationType.UnityPhysics)
+            {
+                return inputDeps;
+            }
+
+            return ScheduleUnityPhysicsContactsJob(jobData, simulation, ref world, inputDeps);
         }
 #else
-        // In this case IContactsJob.Schedule() is provided by the Havok.Physics assembly.
+        // In this case Schedule() implementation for IContactsJob is provided by the Havok.Physics assembly.
         // This is a stub to catch when that assembly is missing.
         //<todo.eoin.modifier Put in a link to documentation for this:
-        [Obsolete("This error occurs when HAVOK_PHYSICS_EXISTS is defined but Havok.Physics is missing from your package's asmdef references", true)]
+        [Obsolete("This error occurs when HAVOK_PHYSICS_EXISTS is defined but Havok.Physics is missing from your package's asmdef references. (DoNotRemove)", true)]
         public static unsafe JobHandle Schedule<T>(this T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps,
             HAVOK_PHYSICS_MISSING_FROM_ASMDEF _causeCompileError = HAVOK_PHYSICS_MISSING_FROM_ASMDEF.HAVOK_PHYSICS_MISSING_FROM_ASMDEF)
-            where T : struct, IContactsJob
+            where T : struct, IContactsJobBase
         {
             return new JobHandle();
         }
@@ -123,24 +139,25 @@ namespace Unity.Physics
         }
 #endif
 
-        internal static unsafe JobHandle ScheduleImpl<T>(this T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)
-            where T : struct, IContactsJob
+        internal static unsafe JobHandle ScheduleUnityPhysicsContactsJob<T>(this T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)
+            where T : struct, IContactsJobBase
         {
-            if (simulation.Type == SimulationType.UnityPhysics)
+            if (simulation.Type != SimulationType.UnityPhysics)
             {
-                var data = new ContactsJobData<T>
-                {
-                    UserJobData = jobData,
-                    ContactReader = ((Simulation)simulation).m_Context.Contacts.AsReader(),
-                    NumWorkItems = ((Simulation)simulation).m_Context.SolverSchedulerInfo.NumWorkItems,
-                    Bodies = world.Bodies
-                };
-                var parameters = new JobsUtility.JobScheduleParameters(
-                    UnsafeUtility.AddressOf(ref data),
-                    ContactsJobProcess<T>.Initialize(), inputDeps, ScheduleMode.Batched);
-                return JobsUtility.Schedule(ref parameters);
+                throw new ArgumentException($"Simulation type {simulation.Type} is not supported! Should be called only for SimulationType.UnityPhysics.");
             }
-            return inputDeps;
+
+            var data = new ContactsJobData<T>
+            {
+                UserJobData = jobData,
+                ContactReader = ((Simulation)simulation).StepContext.Contacts.AsReader(),
+                NumWorkItems = ((Simulation)simulation).StepContext.SolverSchedulerInfo.NumWorkItems,
+                Bodies = world.Bodies
+            };
+            var parameters = new JobsUtility.JobScheduleParameters(
+                UnsafeUtility.AddressOf(ref data),
+                ContactsJobProcess<T>.Initialize(), inputDeps, ScheduleMode.Batched);
+            return JobsUtility.Schedule(ref parameters);
         }
 
         internal unsafe struct ContactsJobData<T> where T : struct
@@ -153,7 +170,7 @@ namespace Unity.Physics
             [ReadOnly, NativeDisableContainerSafetyRestriction] public NativeSlice<RigidBody> Bodies;
         }
 
-        internal struct ContactsJobProcess<T> where T : struct, IContactsJob
+        internal struct ContactsJobProcess<T> where T : struct, IContactsJobBase
         {
             static IntPtr jobReflectionData;
 

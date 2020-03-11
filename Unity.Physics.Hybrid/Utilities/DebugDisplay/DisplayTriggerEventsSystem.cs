@@ -1,4 +1,5 @@
-using System;
+#if !HAVOK_PHYSICS_EXISTS
+
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -45,7 +46,11 @@ namespace Unity.Physics.Authoring
                     OutputStreamContext = sharedOutput
                 };
 
-                JobHandle handle = ScheduleTriggerEventsJob(job, m_StepPhysicsWorldSystem.Simulation, ref m_BuildPhysicsWorldSystem.PhysicsWorld, inputDeps);
+                JobHandle handle = new DisplayTriggerEventsJob
+                {
+                    World = m_BuildPhysicsWorldSystem.PhysicsWorld,
+                    OutputStreamContext = sharedOutput
+                }.Schedule(m_StepPhysicsWorldSystem.Simulation, ref m_BuildPhysicsWorldSystem.PhysicsWorld, inputDeps);
 
 #pragma warning disable 618
                 JobHandle finishHandle = new FinishDisplayTriggerEventsJob
@@ -60,15 +65,9 @@ namespace Unity.Physics.Authoring
             }
         }
 
-        protected virtual JobHandle ScheduleTriggerEventsJob(DisplayTriggerEventsJob job, ISimulation simulation, ref PhysicsWorld world, JobHandle inDeps)
-        {
-            // Explicitly call ScheduleImpl here, to avoid a dependency on Havok.Physics
-            return job.ScheduleImpl(simulation, ref world, inDeps);
-        }
-
         // Job which iterates over trigger events and writes display info to a DebugStream.
         [BurstCompile]
-        protected unsafe struct DisplayTriggerEventsJob : ITriggerEventsJob
+        private unsafe struct DisplayTriggerEventsJob : ITriggerEventsJobBase
         {
             [ReadOnly] public PhysicsWorld World;
             [NativeDisableUnsafePtrRestriction]
@@ -79,14 +78,14 @@ namespace Unity.Physics.Authoring
                 RigidBody bodyA = World.Bodies[triggerEvent.BodyIndices.BodyAIndex];
                 RigidBody bodyB = World.Bodies[triggerEvent.BodyIndices.BodyBIndex];
 
-                Aabb aabbA = bodyA.Collider->CalculateAabb(bodyA.WorldFromBody);
-                Aabb aabbB = bodyB.Collider->CalculateAabb(bodyB.WorldFromBody);
+                Aabb aabbA = bodyA.Collider.Value.CalculateAabb(bodyA.WorldFromBody);
+                Aabb aabbB = bodyB.Collider.Value.CalculateAabb(bodyB.WorldFromBody);
                 OutputStreamContext->Line(aabbA.Center, aabbB.Center, UnityEngine.Color.yellow);
             }
         }
 
         [BurstCompile]
-        protected unsafe struct FinishDisplayTriggerEventsJob : IJob
+        private unsafe struct FinishDisplayTriggerEventsJob : IJob
         {
             [NativeDisableUnsafePtrRestriction]
             internal DebugStream.Context* OutputStreamContext;
@@ -99,3 +98,5 @@ namespace Unity.Physics.Authoring
         }
     }
 }
+
+#endif

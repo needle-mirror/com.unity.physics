@@ -1,6 +1,8 @@
-﻿using System;
+﻿#if LEGACY_PHYSICS
+using System;
 using Unity.Entities;
 using UnityEngine;
+using LegacyRigidBody = UnityEngine.Rigidbody;
 
 namespace Unity.Physics.Authoring
 {
@@ -10,7 +12,7 @@ namespace Unity.Physics.Authoring
         protected override void OnUpdate()
         {
             Entities.ForEach(
-                (Rigidbody body) =>
+                (LegacyRigidBody body) =>
                 {
                     var entity = GetPrimaryEntity(body.gameObject);
 
@@ -18,7 +20,10 @@ namespace Unity.Physics.Authoring
                     if (DstEntityManager.HasComponent<PhysicsVelocity>(entity))
                         return;
 
-                    DstEntityManager.RemoveParentAndSetWorldTranslationAndRotation(entity, body.transform);
+                    DstEntityManager.PostProcessTransformComponents(
+                        entity, body.transform,
+                        body.isKinematic ? BodyMotionType.Kinematic : BodyMotionType.Dynamic
+                    );
 
                     if (body.gameObject.isStatic)
                         return;
@@ -54,3 +59,4 @@ namespace Unity.Physics.Authoring
         }
     }
 }
+#endif

@@ -78,10 +78,10 @@ namespace Unity.Physics.Tests.PerformanceTests
 
             InitPairs(1, maxBodyIndex, count, pairs);
 
-            var job = new Scheduler.RadixSortPerBodyAJob
+            var job = new DispatchPairSequencer.RadixSortPerBodyAJob
             {
-                InputArray = ReinterpretCast<ulong, Scheduler.DispatchPair>(pairs),
-                OutputArray = ReinterpretCast<ulong, Scheduler.DispatchPair>(sortedPairs),
+                InputArray = ReinterpretCast<ulong, DispatchPairSequencer.DispatchPair>(pairs),
+                OutputArray = ReinterpretCast<ulong, DispatchPairSequencer.DispatchPair>(sortedPairs),
                 DigitCount = tempCount,
                 MaxDigits = numDigits,
                 MaxIndex = maxBodyIndex
@@ -136,11 +136,11 @@ namespace Unity.Physics.Tests.PerformanceTests
 
             // Do a single pass of radix sort on bodyA only.
             var tempCount = new NativeArray<int>(maxBodyIndex + 1, Allocator.TempJob);
-            Scheduler.RadixSortPerBodyAJob.RadixSortPerBodyA((ulong*)pairs.GetUnsafePtr(), (ulong*)sortedPairs.GetUnsafePtr(), pairs.Length, tempCount, numDigits, maxBodyIndex, 16);
+            DispatchPairSequencer.RadixSortPerBodyAJob.RadixSortPerBodyA((ulong*)pairs.GetUnsafePtr(), (ulong*)sortedPairs.GetUnsafePtr(), pairs.Length, tempCount, numDigits, maxBodyIndex, 16);
 
-            var job = new Scheduler.SortSubArraysJob
+            var job = new DispatchPairSequencer.SortSubArraysJob
             {
-                InOutArray = ReinterpretCast<ulong, Scheduler.DispatchPair>(sortedPairs),
+                InOutArray = ReinterpretCast<ulong, DispatchPairSequencer.DispatchPair>(sortedPairs),
                 NextElementIndex = tempCount
             };
 

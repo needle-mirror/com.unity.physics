@@ -4,6 +4,9 @@ using Unity.Physics.Authoring;
 using UnityEditor;
 using UnityEngine;
 using UnityObject = UnityEngine.Object;
+#if LEGACY_PHYSICS
+using LegacyRigidBody = UnityEngine.Rigidbody;
+#endif
 
 namespace Unity.Physics.Editor
 {
@@ -30,8 +33,13 @@ namespace Unity.Physics.Editor
                 // only bodies (both explicit and implicit static bodies) will emit a message
                 if (
                     targetType == typeof(PhysicsBodyAuthoring)
-                    || targetType == typeof(Rigidbody)
-                    || c.GetComponent<PhysicsBodyAuthoring>() == null && c.GetComponent<Rigidbody>() == null
+#if LEGACY_PHYSICS
+                    || targetType == typeof(LegacyRigidBody)
+#endif
+                    || c.GetComponent<PhysicsBodyAuthoring>() == null
+#if LEGACY_PHYSICS
+                    && c.GetComponent<LegacyRigidBody>() == null
+#endif
                 )
                     ++numChildTargets;
             }

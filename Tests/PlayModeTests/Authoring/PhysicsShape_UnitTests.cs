@@ -1,4 +1,4 @@
-﻿using NUnit.Framework;
+using NUnit.Framework;
 using Unity.Mathematics;
 using Unity.Physics.Authoring;
 using UnityEngine;
@@ -41,9 +41,9 @@ namespace Unity.Physics.Tests.Authoring
             var size = new float3(sizeX, sizeY, sizeZ);
             m_Shape.SetBox(new BoxGeometry { Size = size, Orientation = quaternion.identity });
 
-            var capsule = m_Shape.GetCapsuleProperties(out quaternion _);
+            var capsule = m_Shape.GetCapsuleProperties();
 
-            var height = math.length(capsule.Vertex1 - capsule.Vertex0) + 2f * capsule.Radius;
+            var height = capsule.Height;
             Assert.That(height, Is.EqualTo(math.cmax(size)));
         }
 
@@ -57,7 +57,7 @@ namespace Unity.Physics.Tests.Authoring
             var size = new float3(sizeX, sizeY, sizeZ);
             m_Shape.SetBox(new BoxGeometry { Size = size, Orientation = quaternion.identity });
 
-            var capsule = m_Shape.GetCapsuleProperties(out quaternion _);
+            var capsule = m_Shape.GetCapsuleProperties();
 
             var cmaxI = size.GetMaxAxis();
             var expectedRadius = 0.5f * math.cmax(cmaxI == 0 ? size.yz : cmaxI == 1 ? size.xz : size.xy);
@@ -75,9 +75,9 @@ namespace Unity.Physics.Tests.Authoring
         {
             m_Shape.SetBox(new BoxGeometry { Size = boxSize, Orientation = quaternion.identity });
 
-            m_Shape.GetCapsuleProperties(out quaternion orientation);
+            var capsule = m_Shape.GetCapsuleProperties();
 
-            var lookVector = math.mul(orientation, new float3(0f, 0f, 1f));
+            var lookVector = math.mul(capsule.Orientation, new float3(0f, 0f, 1f));
             Assert.That(
                 math.dot(lookVector, expectedLookVector), Is.EqualTo(1f).Within(k_Tolerance),
                 $"Expected {expectedLookVector} but got {lookVector}"
@@ -93,11 +93,13 @@ namespace Unity.Physics.Tests.Authoring
                 Vertex1 = math.normalizesafe(new float3(1f, 1f, 0f))
             };
             var orientation = quaternion.AxisAngle(new float3 { z = 1f }, math.PI / 4f);
+            #pragma warning disable 618
             m_Shape.SetCapsule(capsule, orientation);
+            #pragma warning restore 618
 
-            m_Shape.GetCapsuleProperties(out orientation);
+            var capsuleAuthoring = m_Shape.GetCapsuleProperties();
 
-            var lookVector = math.mul(orientation, new float3(0f, 0f, 1f));
+            var lookVector = math.mul(capsuleAuthoring.Orientation, new float3(0f, 0f, 1f));
             var expectedLookVector = new float3 { y = 1f };
             Assert.That(
                 math.dot(lookVector, expectedLookVector), Is.EqualTo(1f).Within(k_Tolerance),
@@ -117,10 +119,9 @@ namespace Unity.Physics.Tests.Authoring
             var expectedCenter = new float3(4f, 5f, 6f);
             m_Shape.SetBox(new BoxGeometry { Size = size, Center = expectedCenter, Orientation = orientation });
 
-            var capsule = m_Shape.GetCapsuleProperties(out quaternion _);
+            var capsule = m_Shape.GetCapsuleProperties();
 
-            var midPoint = math.lerp(capsule.Vertex0, capsule.Vertex1, 0.5f);
-            Assert.That(midPoint, Is.EqualTo(expectedCenter));
+            Assert.That(capsule.Center, Is.EqualTo(expectedCenter));
         }
 
         [Test]
@@ -184,7 +185,7 @@ namespace Unity.Physics.Tests.Authoring
         {
             m_Shape.SetBox(new BoxGeometry { Size = boxSize, Orientation = quaternion.identity });
 
-            m_Shape.GetPlaneProperties(out var center, out var size, out quaternion orientation);
+            m_Shape.GetPlaneProperties(out _, out var size, out quaternion _);
 
             Assert.That(
                 new[] { size.x, size.y }, Is.EquivalentTo(new[] { boxSize[ax1], boxSize[ax2] }),
@@ -207,11 +208,20 @@ namespace Unity.Physics.Tests.Authoring
         {
             m_Shape.SetBox(new BoxGeometry { Size = boxSize, Orientation = quaternion.identity });
 
-            m_Shape.GetPlaneProperties(out var center, out var size, out quaternion orientation);
+            m_Shape.GetPlaneProperties(out _, out _, out quaternion orientation);
 
+            var expectedLook = math.mul(expected, new float3 { z = 1f });
+            var expectedUp = math.mul(expected, new float3 { y = 1f });
+            var actualLook = math.mul(orientation, new float3 { z = 1f });
+            var actualUp = math.mul(orientation, new float3 { y = 1f });
+            var dotProducts = math.abs(new float3(
+                math.dot(expectedLook, actualLook),
+                math.dot(expectedUp, actualUp),
+                0f
+            ));
             Assert.That(
-                math.abs(math.dot(orientation, expected)), Is.EqualTo(1f).Within(k_Tolerance),
-                $"Expected {expected} but got {orientation}"
+                dotProducts, Is.PrettyCloseTo(new float3(1f, 1f, 0f)),
+                $"Expected look axis to be parallel to {expectedLook} and up axis to be parallel to {expectedUp} but got {actualLook} and {actualUp}"
             );
         }
     }

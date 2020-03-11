@@ -23,7 +23,7 @@ namespace Unity.Physics.Extensions
             CollisionFilter filter = CollisionFilter.Default;
             if (!(0 <= rigidBodyIndex && rigidBodyIndex < world.NumBodies)) return filter;
 
-            unsafe { filter = world.Bodies[rigidBodyIndex].Collider->Filter; }
+            unsafe { filter = world.Bodies[rigidBodyIndex].Collider.Value.Filter; }
 
             return filter;
         }
@@ -34,7 +34,7 @@ namespace Unity.Physics.Extensions
 
             MotionVelocity mv = world.MotionVelocities[rigidBodyIndex];
 
-            return 0 == mv.InverseInertiaAndMass.w ? 0.0f : 1.0f / mv.InverseInertiaAndMass.w;
+            return 0 == mv.InverseMass ? 0.0f : 1.0f / mv.InverseMass;
         }
 
         // Get the effective mass of a Rigid Body in a given direction and from a particular point (in World Space)
@@ -50,7 +50,7 @@ namespace Unity.Physics.Extensions
             float3 impulseDir = math.normalizesafe(impulse);
 
             float3 jacobian = math.cross(pointDir, impulseDir);
-            float invEffMass = math.csum(math.dot(jacobian, jacobian) * mv.InverseInertiaAndMass.xyz);
+            float invEffMass = math.csum(math.dot(jacobian, jacobian) * mv.InverseInertia);
             effMass = math.select(1.0f / invEffMass, 0.0f, math.abs(invEffMass) < 1e-5);
 
             return effMass;

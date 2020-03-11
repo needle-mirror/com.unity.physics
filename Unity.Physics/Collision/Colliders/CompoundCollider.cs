@@ -1,4 +1,5 @@
 using System;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -176,6 +177,9 @@ namespace Unity.Physics
             for (int i = 0; i < NumChildren; ++i)
             {
                 ref Child child = ref children[i];
+                if (child.Collider->CollisionType == CollisionType.Convex && ((ConvexCollider*)child.Collider)->Material.IsTrigger)
+                    continue;
+
                 var mp = child.Collider->MassProperties;
 
                 // weight this contribution by its volume (=mass)
@@ -195,6 +199,9 @@ namespace Unity.Physics
                 for (int i = 0; i < NumChildren; ++i)
                 {
                     ref Child child = ref children[i];
+                    if (child.Collider->CollisionType == CollisionType.Convex && ((ConvexCollider*)child.Collider)->Material.IsTrigger)
+                        continue;
+
                     var mp = child.Collider->MassProperties;
 
                     // rotate inertia into compound space
@@ -339,7 +346,7 @@ namespace Unity.Physics
             }
         }
 
-        public unsafe void GetLeaves<T>(ref T collector) where T : struct, ILeafColliderCollector
+        public unsafe void GetLeaves<T>([NoAlias] ref T collector) where T : struct, ILeafColliderCollector
         {
             for (uint i = 0; i < NumChildren; i++)
             {

@@ -22,7 +22,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         struct CreateFromBurstJob : IJob
         {
             public void Execute() =>
-                BoxCollider.Create(new BoxGeometry { Orientation = quaternion.identity, Size = new float3(1f) }).Release();
+                BoxCollider.Create(new BoxGeometry { Orientation = quaternion.identity, Size = new float3(1f) }).Dispose();
         }
 
         [Test]

@@ -1,24 +1,26 @@
 using System;
 using System.ComponentModel;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Mathematics;
 
 namespace Unity.Physics
 {
     // A collection of rigid bodies and joints.
-    public struct PhysicsWorld : ICollidable, IDisposable, ICloneable
+    [NoAlias]
+    public struct PhysicsWorld : ICollidable, IDisposable
     {
-        public CollisionWorld CollisionWorld;   // stores rigid bodies and broadphase
-        public DynamicsWorld DynamicsWorld;     // stores motions and joints
+        [NoAlias] public CollisionWorld CollisionWorld;   // stores rigid bodies and broadphase
+        [NoAlias] public DynamicsWorld DynamicsWorld;     // stores motions and joints
 
         public int NumBodies => CollisionWorld.NumBodies;
-        public int NumDynamicBodies => DynamicsWorld.NumMotions;
-        public int NumStaticBodies => CollisionWorld.NumBodies - DynamicsWorld.NumMotions;
+        public int NumStaticBodies => CollisionWorld.NumStaticBodies;
+        public int NumDynamicBodies => CollisionWorld.NumDynamicBodies;
         public int NumJoints => DynamicsWorld.NumJoints;
 
         public NativeSlice<RigidBody> Bodies => CollisionWorld.Bodies;
-        public NativeSlice<RigidBody> StaticBodies => new NativeSlice<RigidBody>(CollisionWorld.Bodies, DynamicsWorld.NumMotions, CollisionWorld.NumBodies - DynamicsWorld.NumMotions);
-        public NativeSlice<RigidBody> DynamicBodies => new NativeSlice<RigidBody>(CollisionWorld.Bodies, 0, DynamicsWorld.NumMotions);
+        public NativeSlice<RigidBody> StaticBodies => CollisionWorld.StaticBodies;
+        public NativeSlice<RigidBody> DynamicBodies => CollisionWorld.DynamicBodies;
         public NativeSlice<MotionData> MotionDatas => DynamicsWorld.MotionDatas;
         public NativeSlice<MotionVelocity> MotionVelocities => DynamicsWorld.MotionVelocities;
         public NativeSlice<Joint> Joints => DynamicsWorld.Joints;
@@ -26,16 +28,15 @@ namespace Unity.Physics
         // Construct a world with the given number of uninitialized bodies and joints
         public PhysicsWorld(int numStaticBodies, int numDynamicBodies, int numJoints)
         {
-            CollisionWorld = new CollisionWorld(numDynamicBodies + numStaticBodies);
+            CollisionWorld = new CollisionWorld(numStaticBodies, numDynamicBodies);
             DynamicsWorld = new DynamicsWorld(numDynamicBodies, numJoints);
         }
 
         // Reset the number of bodies and joints in the world
         public void Reset(int numStaticBodies, int numDynamicBodies, int numJoints)
         {
-            CollisionWorld.NumBodies = numDynamicBodies + numStaticBodies;
-            DynamicsWorld.NumMotions = numDynamicBodies;
-            DynamicsWorld.NumJoints = numJoints;
+            CollisionWorld.Reset(numStaticBodies, numDynamicBodies);
+            DynamicsWorld.Reset(numDynamicBodies, numJoints);
         }
 
         // Free internal memory
@@ -46,7 +47,7 @@ namespace Unity.Physics
         }
 
         // Clone the world
-        public object Clone() => new PhysicsWorld
+        public PhysicsWorld Clone() => new PhysicsWorld
         {
             CollisionWorld = (CollisionWorld)CollisionWorld.Clone(),
             DynamicsWorld = (DynamicsWorld)DynamicsWorld.Clone()
@@ -100,12 +101,6 @@ namespace Unity.Physics
             return CollisionWorld.CalculateDistance(input, ref collector);
         }
 
-        #endregion
-
-        #region Obsolete
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("This property has been deprecated. Get it from CollisionWorld instead. (RemovedAfter 2019-12-09)")]
-        public float CollisionTolerance => CollisionWorld.CollisionTolerance;
         #endregion
     }
 }

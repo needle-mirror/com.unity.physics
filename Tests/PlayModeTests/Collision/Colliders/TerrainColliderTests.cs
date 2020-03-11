@@ -19,7 +19,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             public void Execute()
             {
                 var heights = new NativeArray<float>(16, Allocator.Temp);
-                TerrainCollider.Create(heights, new int2(4, 4), new float3(1f), CollisionMethod).Release();
+                TerrainCollider.Create(heights, new int2(4, 4), new float3(1f), CollisionMethod).Dispose();
             }
         }
 

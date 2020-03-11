@@ -12,6 +12,9 @@ using UnityEditor;
 using UnityEditor.IMGUI.Controls;
 using UnityEngine;
 using UnityMesh = UnityEngine.Mesh;
+#if LEGACY_PHYSICS
+using LegacyRigidBody = UnityEngine.Rigidbody;
+#endif
 
 namespace Unity.Physics.Editor
 {
@@ -159,10 +162,14 @@ namespace Unity.Physics.Editor
         {
             base.OnEnable();
 
+            SpookyHashBuilder.Initialize();
+
             m_NumImplicitStatic = targets.Cast<PhysicsShapeAuthoring>().Count(
                 shape => shape.GetPrimaryBody() == shape.gameObject
                     && shape.GetComponent<PhysicsBodyAuthoring>() == null
-                    && shape.GetComponent<Rigidbody>() == null
+#if LEGACY_PHYSICS
+                    && shape.GetComponent<LegacyRigidBody>() == null
+#endif
             );
 
             Undo.undoRedoPerformed += Repaint;
@@ -213,6 +220,8 @@ namespace Unity.Physics.Editor
 
             public Vector3[] Edges = Array.Empty<Vector3>();
 
+            public Aabb Bounds = new Aabb();
+
             bool m_Disposed;
             uint m_InputHash;
             ConvexHullGenerationParameters m_HashedConvexParameters;
@@ -234,7 +243,8 @@ namespace Unity.Physics.Editor
                 switch (shape.ShapeType)
                 {
                     case ShapeType.ConvexHull:
-                        shape.GetBakedConvexProperties(currentPoints, out currentConvexProperties, out _); // TODO: use HashableShapeInputs
+                        shape.GetBakedConvexProperties(currentPoints); // TODO: use HashableShapeInputs
+                        currentConvexProperties = shape.ConvexHullGenerationParameters;
 
                         return math.hash(
                             new uint3(
@@ -246,7 +256,7 @@ namespace Unity.Physics.Editor
 
                     case ShapeType.Mesh:
                         var triangles = new NativeList<int3>(1024, Allocator.Temp);
-                        shape.GetBakedMeshProperties(currentPoints, triangles, out _);  // TODO: use HashableShapeInputs
+                        shape.GetBakedMeshProperties(currentPoints, triangles);  // TODO: use HashableShapeInputs
 
                         return math.hash(
                             new uint3(
@@ -306,7 +316,7 @@ namespace Unity.Physics.Editor
             JobHandle ScheduleConvexHullPreview(PhysicsShapeAuthoring shape, NativeArray<BlobAssetReference<Collider>> output)
             {
                 var pointCloud = new NativeList<float3>(65535, Allocator.Temp);
-                shape.GetBakedConvexProperties(pointCloud, out var generationParameters, out _);
+                shape.GetBakedConvexProperties(pointCloud);
 
                 if (pointCloud.Length == 0)
                     return default;
@@ -318,10 +328,9 @@ namespace Unity.Physics.Editor
                 pointsArray.CopyFrom(pointCloud);
 
                 // TODO: if there is still an active job with the same input data hash, then just set it to be most recently scheduled job
-                var hullGenerationParameters = generationParameters;
                 return new CreateTempHullJob
                 {
-                    GenerationParameters = hullGenerationParameters.ToRunTime(),
+                    GenerationParameters = shape.ConvexHullGenerationParameters.ToRunTime(),
                     Points = pointsArray,
                     Output = output
                 }.Schedule();
@@ -331,7 +340,7 @@ namespace Unity.Physics.Editor
             {
                 var points = new NativeList<float3>(1024, Allocator.Temp);
                 var triangles = new NativeList<int3>(1024, Allocator.Temp);
-                shape.GetBakedMeshProperties(points, triangles, out _);
+                shape.GetBakedMeshProperties(points, triangles);
 
                 if (points.Length == 0 || triangles.Length == 0)
                     return default;
@@ -378,20 +387,25 @@ namespace Unity.Physics.Editor
                         if (!output[0].IsCreated)
                         {
                             Edges = Array.Empty<Vector3>();
+                            Bounds = new Aabb();
                         }
                         else
                         {
                             switch (((ConvexCollider*)output[0].GetUnsafePtr())->Type)
                             {
                                 case ColliderType.Convex:
+                                    var convex = (ConvexCollider*) output[0].GetUnsafePtr();
                                     DrawingUtility.GetConvexHullEdges(
-                                        ref ((ConvexCollider*)output[0].GetUnsafePtr())->ConvexHull, s_ReusableEdges
+                                        ref convex->ConvexHull, s_ReusableEdges
                                     );
+                                    Bounds = convex->CalculateAabb();
                                     break;
                                 case ColliderType.Mesh:
+                                    var mesh = (MeshCollider*) output[0].GetUnsafePtr();
                                     DrawingUtility.GetMeshEdges(
-                                        ref ((MeshCollider*)output[0].GetUnsafePtr())->Mesh, s_ReusableEdges
+                                        ref mesh->Mesh, s_ReusableEdges
                                     );
+                                    Bounds = mesh->CalculateAabb();
                                     break;
                             }
 
@@ -403,7 +417,7 @@ namespace Unity.Physics.Editor
 
                     if (output[0].IsCreated)
                     {
-                        output[0].Release();
+                        output[0].Dispose();
                         output.Dispose();
                     }
                 }
@@ -461,8 +475,14 @@ namespace Unity.Physics.Editor
 
                 // otherwise check all mesh filters in the hierarchy that might be included
                 var geometryState = GeometryState.Okay;
-                foreach (var meshFilter in PhysicsShapeAuthoring.GetAllMeshFiltersInHierarchyBelongingToShape(shape, false))
-                    geometryState |= GetGeometryState(meshFilter.sharedMesh, shape.gameObject);
+                using (var scope = new GetActiveChildrenScope<MeshFilter>(shape, shape.transform))
+                {
+                    foreach (var meshFilter in scope.Buffer)
+                    {
+                        if (scope.IsChildActiveAndBelongsToShape(meshFilter, filterOutInvalid: false))
+                            geometryState |= GetGeometryState(meshFilter.sharedMesh, shape.gameObject);
+                    }
+                }
 
                 if (shape.ShapeType == ShapeType.Mesh)
                 {
@@ -551,17 +571,7 @@ namespace Unity.Physics.Editor
                         throw new UnimplementedShapeException((ShapeType)m_ShapeType.intValue);
                 }
 
-                if (m_ShapeType.intValue == (int)ShapeType.ConvexHull || m_ShapeType.intValue == (int)ShapeType.Mesh)
-                    EditorGUILayout.PropertyField(m_ForceUnique, Styles.ForceUniqueLabel);
-                else
-                {
-                    EditorGUI.BeginDisabledGroup(true);
-                    var position = EditorGUILayout.GetControlRect(true, EditorGUIUtility.singleLineHeight);
-                    EditorGUI.BeginProperty(position, Styles.ForceUniqueLabel, m_ForceUnique);
-                    EditorGUI.Toggle(position, Styles.ForceUniqueLabel, true);
-                    EditorGUI.EndProperty();
-                    EditorGUI.EndDisabledGroup();
-                }
+                EditorGUILayout.PropertyField(m_ForceUnique, Styles.ForceUniqueLabel);
             }
 
             --EditorGUI.indentLevel;
@@ -623,31 +633,36 @@ namespace Unity.Physics.Editor
             m_ShapeSuggestions.Clear();
             foreach (PhysicsShapeAuthoring shape in targets)
             {
+                const float k_Epsilon = HashableShapeInputs.k_DefaultLinearPrecision;
                 switch (shape.ShapeType)
                 {
                     case ShapeType.Box:
                         var box = shape.GetBakedBoxProperties();
                         var max = math.cmax(box.Size);
                         var min = math.cmin(box.Size);
-                        if (min == 0f)
+                        if (min < k_Epsilon)
                             m_ShapeSuggestions.Add(Styles.BoxPlaneSuggestion);
-                        else if (box.BevelRadius == min * 0.5f)
+                        else if (math.abs(box.BevelRadius - min * 0.5f) < k_Epsilon)
                         {
-                            if (min == max)
+                            if (math.abs(max - min) < k_Epsilon)
                                 m_ShapeSuggestions.Add(Styles.BoxSphereSuggestion);
-                            else if (math.lengthsq(box.Size - new float3(min)) == math.pow(max - min, 2f))
+                            else if (math.abs(math.lengthsq(box.Size - new float3(min)) - math.pow(max - min, 2f)) < k_Epsilon)
                                 m_ShapeSuggestions.Add(Styles.BoxCapsuleSuggestion);
                         }
                         break;
                     case ShapeType.Capsule:
-                        var capsule = shape.GetBakedCapsuleProperties(out var c, out var h, out var o);
-                        if (h == 2f * capsule.Radius)
+                        var capsule = shape.GetBakedCapsuleProperties();
+                        if (math.abs(capsule.Height - 2f * capsule.Radius) < k_Epsilon)
                             m_ShapeSuggestions.Add(Styles.CapsuleSphereSuggestion);
                         break;
                     case ShapeType.Cylinder:
                         var cylinder = shape.GetBakedCylinderProperties();
-                        if (cylinder.BevelRadius == cylinder.Radius)
-                            m_ShapeSuggestions.Add(cylinder.Height == 2f * cylinder.Radius ? Styles.CylinderSphereSuggestion : Styles.CylinderCapsuleSuggestion);
+                        if (math.abs(cylinder.BevelRadius - cylinder.Radius) < k_Epsilon)
+                        {
+                            m_ShapeSuggestions.Add(math.abs(cylinder.Height - 2f * cylinder.Radius) < k_Epsilon
+                                ? Styles.CylinderSphereSuggestion
+                                : Styles.CylinderCapsuleSuggestion);
+                        }
                         break;
                 }
             }
@@ -710,7 +725,7 @@ namespace Unity.Physics.Editor
                         shape.SetBox(shape.GetBoxProperties(out var orientation), orientation);
                         break;
                     case ShapeType.Capsule:
-                        shape.SetCapsule(shape.GetCapsuleProperties(out orientation), orientation);
+                        shape.SetCapsule(shape.GetCapsuleProperties());
                         break;
                     case ShapeType.Sphere:
                         shape.SetSphere(shape.GetSphereProperties(out orientation), orientation);
@@ -890,7 +905,7 @@ namespace Unity.Physics.Editor
                 Undo.RecordObjects(targets, Styles.GenericUndoMessage);
                 foreach (PhysicsShapeAuthoring shape in targets)
                 {
-                    shape.SetCapsule(shape.GetCapsuleProperties(out EulerAngles orientation), orientation);
+                    shape.SetCapsule(shape.GetCapsuleProperties());
                     EditorUtility.SetDirty(shape);
                 }
             }
@@ -961,20 +976,13 @@ namespace Unity.Physics.Editor
                 EditorGUILayout.HelpBox(string.Join("\n\n", m_GeometryStatusMessages), m_GeometryStatus);
         }
 
-        // TODO: implement interactive tool modes
-        static readonly BeveledBoxBoundsHandle s_Box =
-            new BeveledBoxBoundsHandle { handleColor = Color.clear };
-        static readonly CapsuleBoundsHandle s_Capsule =
-            new CapsuleBoundsHandle { handleColor = Color.clear, heightAxis = CapsuleBoundsHandle.HeightAxis.Z };
-        static readonly BeveledCylinderBoundsHandle s_Cylinder =
-            new BeveledCylinderBoundsHandle { handleColor = Color.clear };
-        static readonly SphereBoundsHandle s_Sphere =
-            new SphereBoundsHandle { handleColor = Color.clear };
-        static readonly BoxBoundsHandle s_Plane = new BoxBoundsHandle
-        {
-            handleColor = Color.clear,
-            axes = PrimitiveBoundsHandle.Axes.X | PrimitiveBoundsHandle.Axes.Z
-        };
+        static readonly BeveledBoxBoundsHandle s_Box = new BeveledBoxBoundsHandle();
+        static readonly PhysicsCapsuleBoundsHandle s_Capsule =
+            new PhysicsCapsuleBoundsHandle { heightAxis = CapsuleBoundsHandle.HeightAxis.Z };
+        static readonly BeveledCylinderBoundsHandle s_Cylinder = new BeveledCylinderBoundsHandle();
+        static readonly PhysicsSphereBoundsHandle s_Sphere = new PhysicsSphereBoundsHandle();
+        static readonly BoxBoundsHandle s_Plane =
+            new BoxBoundsHandle { axes = PrimitiveBoundsHandle.Axes.X | PrimitiveBoundsHandle.Axes.Z };
 
         static readonly Color k_ShapeHandleColor = new Color32(145, 244, 139, 210);
         static readonly Color k_ShapeHandleColorDisabled = new Color32(84, 200, 77, 140);
@@ -986,15 +994,12 @@ namespace Unity.Physics.Editor
             {
                 case EventType.MouseDrag:
                     m_DraggingControlID = hotControl;
-                    return;
+                    break;
                 case EventType.MouseUp:
                     m_DraggingControlID = 0;
-                    return;
-                case EventType.Repaint:
                     break;
-                default:
-                    return;
             }
+
 
             var shape = target as PhysicsShapeAuthoring;
 
@@ -1006,51 +1011,91 @@ namespace Unity.Physics.Editor
                 {
                     case ShapeType.Box:
                         var boxGeometry = shape.GetBakedBoxProperties();
-                        s_Box.BevelRadius = boxGeometry.BevelRadius;
+                        s_Box.bevelRadius = boxGeometry.BevelRadius;
                         s_Box.center = float3.zero;
                         s_Box.size = boxGeometry.Size;
-                        using (new Handles.DrawingScope(math.mul(Handles.matrix, float4x4.TRS(boxGeometry.Center, boxGeometry.Orientation, 1f))))
-                            s_Box.DrawHandle();
+                        EditorGUI.BeginChangeCheck();
+                        {
+                            using (new Handles.DrawingScope(math.mul(Handles.matrix, float4x4.TRS(boxGeometry.Center, boxGeometry.Orientation, 1f))))
+                                s_Box.DrawHandle();
+                        }
+                        if (EditorGUI.EndChangeCheck())
+                        {
+                            Undo.RecordObject(shape, Styles.GenericUndoMessage);
+                            shape.SetBakedBoxSize(s_Box.size, s_Box.bevelRadius);
+                        }
                         break;
                     case ShapeType.Capsule:
                         s_Capsule.center = float3.zero;
-                        s_Capsule.height = s_Capsule.radius = 0f;
-                        var capsuleGeometry = shape.GetBakedCapsuleProperties(out var center, out var height, out var orientation);
-                        s_Capsule.height = height;
+                        var capsuleGeometry = shape.GetBakedCapsuleProperties();
+                        s_Capsule.height = capsuleGeometry.Height;
                         s_Capsule.radius = capsuleGeometry.Radius;
-                        using (new Handles.DrawingScope(math.mul(Handles.matrix, float4x4.TRS(center, orientation, 1f))))
-                            s_Capsule.DrawHandle();
+                        EditorGUI.BeginChangeCheck();
+                        {
+                            using (new Handles.DrawingScope(math.mul(Handles.matrix, float4x4.TRS(capsuleGeometry.Center, capsuleGeometry.Orientation, 1f))))
+                                s_Capsule.DrawHandle();
+                        }
+                        if (EditorGUI.EndChangeCheck())
+                        {
+                            Undo.RecordObject(shape, Styles.GenericUndoMessage);
+                            shape.SetBakedCapsuleSize(s_Capsule.height, s_Capsule.radius);
+                        }
                         break;
                     case ShapeType.Sphere:
-                        var sphereGeometry = shape.GetBakedSphereProperties(out orientation);
+                        var sphereGeometry = shape.GetBakedSphereProperties(out EulerAngles orientation);
                         s_Sphere.center = float3.zero;
                         s_Sphere.radius = sphereGeometry.Radius;
-                        using (new Handles.DrawingScope(math.mul(Handles.matrix, float4x4.TRS(sphereGeometry.Center, orientation, 1f))))
-                            s_Sphere.DrawHandle();
+                        EditorGUI.BeginChangeCheck();
+                        {
+                            using (new Handles.DrawingScope(math.mul(Handles.matrix, float4x4.TRS(sphereGeometry.Center, orientation, 1f))))
+                                s_Sphere.DrawHandle();
+                        }
+                        if (EditorGUI.EndChangeCheck())
+                        {
+                            Undo.RecordObject(shape, Styles.GenericUndoMessage);
+                            shape.SetBakedSphereRadius(s_Sphere.radius);
+                        }
                         break;
                     case ShapeType.Cylinder:
                         var cylinderGeometry = shape.GetBakedCylinderProperties();
                         s_Cylinder.center = float3.zero;
-                        s_Cylinder.Height = cylinderGeometry.Height;
-                        s_Cylinder.Radius = cylinderGeometry.Radius;
-                        s_Cylinder.SideCount = cylinderGeometry.SideCount;
-                        s_Cylinder.BevelRadius = cylinderGeometry.BevelRadius;
-                        using (new Handles.DrawingScope(math.mul(Handles.matrix, float4x4.TRS(cylinderGeometry.Center, cylinderGeometry.Orientation, 1f))))
-                            s_Cylinder.DrawHandle();
+                        s_Cylinder.height = cylinderGeometry.Height;
+                        s_Cylinder.radius = cylinderGeometry.Radius;
+                        s_Cylinder.sideCount = cylinderGeometry.SideCount;
+                        s_Cylinder.bevelRadius = cylinderGeometry.BevelRadius;
+                        EditorGUI.BeginChangeCheck();
+                        {
+                            using (new Handles.DrawingScope(math.mul(Handles.matrix, float4x4.TRS(cylinderGeometry.Center, cylinderGeometry.Orientation, 1f))))
+                                s_Cylinder.DrawHandle();
+                        }
+                        if (EditorGUI.EndChangeCheck())
+                        {
+                            Undo.RecordObject(shape, Styles.GenericUndoMessage);
+                            shape.SetBakedCylinderSize(s_Cylinder.height, s_Cylinder.radius, s_Cylinder.bevelRadius);
+                        }
                         break;
                     case ShapeType.Plane:
-                        shape.GetPlaneProperties(out center, out var size2, out orientation);
+                        shape.GetPlaneProperties(out var center, out var size2, out orientation);
                         s_Plane.center = float3.zero;
                         s_Plane.size = new float3(size2.x, 0f, size2.y);
-                        var m = math.mul(shape.transform.localToWorldMatrix, float4x4.TRS(center, orientation, 1f));
-                        using (new Handles.DrawingScope(m))
-                            s_Plane.DrawHandle();
-                        var right = math.mul(m, new float4 { x = 1f }).xyz;
-                        var forward = math.mul(m, new float4 { z = 1f }).xyz;
-                        var normal = math.cross(math.normalizesafe(forward), math.normalizesafe(right))
-                            * 0.5f * math.lerp(math.length(right) * size2.x, math.length(forward) * size2.y, 0.5f);
-                        using (new Handles.DrawingScope(float4x4.identity))
-                            Handles.DrawLine(m.c3.xyz, m.c3.xyz + normal);
+                        EditorGUI.BeginChangeCheck();
+                        {
+                            var m = math.mul(shape.transform.localToWorldMatrix, float4x4.TRS(center, orientation, 1f));
+                            using (new Handles.DrawingScope(m))
+                                s_Plane.DrawHandle();
+                            var right = math.mul(m, new float4 { x = 1f }).xyz;
+                            var forward = math.mul(m, new float4 { z = 1f }).xyz;
+                            var normal = math.cross(math.normalizesafe(forward), math.normalizesafe(right))
+                                * 0.5f * math.lerp(math.length(right) * size2.x, math.length(forward) * size2.y, 0.5f);
+
+                            using (new Handles.DrawingScope(float4x4.identity))
+                                Handles.DrawLine(m.c3.xyz, m.c3.xyz + normal);
+                        }
+                        if (EditorGUI.EndChangeCheck())
+                        {
+                            Undo.RecordObject(shape, Styles.GenericUndoMessage);
+                            shape.SetBakedPlaneSize(((float3)s_Plane.size).xz);
+                        }
                         break;
                     case ShapeType.ConvexHull:
                         if (Event.current.type != EventType.Repaint)
@@ -1071,6 +1116,78 @@ namespace Unity.Physics.Editor
                         throw new UnimplementedShapeException(shape.ShapeType);
                 }
             }
+        }
+        
+        // ReSharper disable once UnusedMember.Global - magic method called by unity inspector
+        public bool HasFrameBounds()
+        {
+            return true;
+        }
+        
+        static Bounds TransformBounds(Bounds localBounds, float4x4 matrix)
+        {
+            var center = new float4(localBounds.center, 1);
+            Bounds bounds = new Bounds(math.mul(matrix, center).xyz, Vector3.zero);
+            var extent = new float4(localBounds.extents, 0);
+            for (int i = 0; i < 8; ++i)
+            {
+                extent.x = (i & 1) == 0 ? -extent.x : extent.x;
+                extent.y = (i & 2) == 0 ? -extent.y : extent.y;
+                extent.z = (i & 4) == 0 ? -extent.z : extent.z;
+                var worldPoint = math.mul(matrix, center + extent).xyz;
+                bounds.Encapsulate(worldPoint);
+            }
+            return bounds;
+        }
+        
+
+        // ReSharper disable once UnusedMember.Global - magic method called by unity inspector
+        public Bounds OnGetFrameBounds()
+        {
+            var shape = target as PhysicsShapeAuthoring;
+
+            var shapeMatrix = shape.GetShapeToWorldMatrix();
+            Bounds bounds = new Bounds();
+            switch (shape.ShapeType)
+            {
+                case ShapeType.Box:
+                    var boxGeometry = shape.GetBakedBoxProperties();
+                    bounds = new Bounds(float3.zero, boxGeometry.Size);
+                    bounds = TransformBounds(bounds, float4x4.TRS(boxGeometry.Center, boxGeometry.Orientation, 1f));
+                    break;
+                case ShapeType.Capsule:
+                    var capsuleGeometry = shape.GetBakedCapsuleProperties();
+                    var cd = capsuleGeometry.Radius * 2;
+                    bounds = new Bounds(float3.zero, new float3(cd, cd, capsuleGeometry.Height));
+                    bounds = TransformBounds(bounds, float4x4.TRS(capsuleGeometry.Center, capsuleGeometry.Orientation, 1f));
+                    break;
+                case ShapeType.Sphere:
+                    var sphereGeometry = shape.GetBakedSphereProperties(out var orientation);
+                    var sd = sphereGeometry.Radius * 2;
+                    bounds = new Bounds(sphereGeometry.Center, new float3(sd,sd,sd));
+                    break;
+                case ShapeType.Cylinder:
+                    var cylinderGeometry = shape.GetBakedCylinderProperties();
+                    var cyld = cylinderGeometry.Radius * 2;
+                    bounds = new Bounds(float3.zero, new float3(cyld, cyld, cylinderGeometry.Height));
+                    bounds = TransformBounds(bounds, float4x4.TRS(cylinderGeometry.Center, cylinderGeometry.Orientation, 1f));
+                    break;
+                case ShapeType.Plane:
+                    shape.GetPlaneProperties(out var center, out var size2, out orientation);
+                    bounds = new Bounds(float3.zero, new float3(size2.x, 0, size2.y));
+                    bounds = TransformBounds(bounds, float4x4.TRS(center, orientation, 1f));
+                    break;
+                case ShapeType.ConvexHull:
+                case ShapeType.Mesh:
+                    var previewData = GetPreviewData(shape);
+                    if (previewData != null)
+                        bounds = new Bounds(previewData.Bounds.Center, previewData.Bounds.Extents);
+                    break;
+                default:
+                    throw new UnimplementedShapeException(shape.ShapeType);
+            }
+            
+            return TransformBounds(bounds, shapeMatrix);
         }
     }
 }

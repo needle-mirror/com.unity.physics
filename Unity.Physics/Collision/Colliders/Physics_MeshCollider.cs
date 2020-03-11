@@ -3,6 +3,7 @@ using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
 using Unity.Entities;
+using Unity.Burst;
 
 namespace Unity.Physics
 {
@@ -140,32 +141,6 @@ namespace Unity.Physics
 
         #endregion
 
-        #region Obsolete
-
-        [Obsolete("MeshCollider.Create() taking indices has been deprecated. Use the new Create() method that takes grouped triangle indices instead. (RemovedAfter 2020-01-24)")]
-        public static BlobAssetReference<Collider> Create(NativeArray<float3> vertices, NativeArray<int> indices)
-        {
-            NativeArray<int3> triangles = indices.Reinterpret<int, int3>();
-            return Create(vertices, triangles);
-
-        }
-
-        [Obsolete("MeshCollider.Create() taking indices has been deprecated. Use the new Create() method that takes grouped triangle indices instead. (RemovedAfter 2020-01-24)")]
-        public static BlobAssetReference<Collider> Create (NativeArray<float3> vertices, NativeArray<int> indices, CollisionFilter filter)
-        {
-            NativeArray<int3> triangles = indices.Reinterpret<int, int3>();
-            return Create(vertices, triangles, filter);
-        }
-
-        [Obsolete("MeshCollider.Create() taking indices has been deprecated. Use the new Create() method that takes grouped triangle indices instead. (RemovedAfter 2020-01-24)")]
-        public static unsafe BlobAssetReference<Collider> Create(NativeArray<float3> vertices, NativeArray<int> indices, CollisionFilter filter, Material material)
-        {
-            NativeArray<int3> triangles = indices.Reinterpret<int, int3>();
-            return Create(vertices, triangles, filter, material);
-        }
-
-        #endregion
-
         #region ICompositeCollider
 
         public ColliderType Type => m_Header.Type;
@@ -287,7 +262,7 @@ namespace Unity.Physics
             return GetChild(ref key, out leaf);
         }
 
-        public unsafe void GetLeaves<T>(ref T collector) where T : struct, ILeafColliderCollector
+        public unsafe void GetLeaves<T>([NoAlias] ref T collector) where T : struct, ILeafColliderCollector
         {
             var polygon = new PolygonCollider();
             polygon.InitEmpty();

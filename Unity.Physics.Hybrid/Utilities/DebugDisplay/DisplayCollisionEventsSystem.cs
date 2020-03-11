@@ -1,4 +1,5 @@
-﻿using System;
+﻿#if !HAVOK_PHYSICS_EXISTS
+
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -39,15 +40,15 @@ namespace Unity.Physics.Authoring
                 *sharedOutput = m_DebugStreamSystem.GetContext(1);
                 sharedOutput->Begin(0);
 
-                var job = new DisplayCollisionEventsJob
+                // This will call the extension method defined in Unity.Physics
+                JobHandle handle = new DisplayCollisionEventsJob
                 {
                     World = m_BuildPhysicsWorldSystem.PhysicsWorld,
                     OutputStreamContext = sharedOutput
-                };
-
-                JobHandle handle = ScheduleCollisionEventsJob(job, m_StepPhysicsWorldSystem.Simulation, ref m_BuildPhysicsWorldSystem.PhysicsWorld, inputDeps);
+                }.Schedule(m_StepPhysicsWorldSystem.Simulation, ref m_BuildPhysicsWorldSystem.PhysicsWorld, inputDeps);
 
 #pragma warning disable 618
+
                 JobHandle finishHandle = new FinishDisplayCollisionEventsJob
                 {
                     OutputStreamContext = sharedOutput
@@ -60,19 +61,13 @@ namespace Unity.Physics.Authoring
             }
         }
 
-        protected virtual JobHandle ScheduleCollisionEventsJob(DisplayCollisionEventsJob job, ISimulation simulation, ref PhysicsWorld world, JobHandle inDeps)
-        {
-            // Explicitly call ScheduleImpl here, to avoid a dependency on Havok.Physics
-            return job.ScheduleImpl(simulation, ref world, inDeps);
-        }
-
         // Job which iterates over collision events and writes display info to a DebugStream.
         [BurstCompile]
-        protected unsafe struct DisplayCollisionEventsJob : ICollisionEventsJob
+        private unsafe struct DisplayCollisionEventsJob : ICollisionEventsJobBase
         {
             [ReadOnly] public PhysicsWorld World;
             [NativeDisableUnsafePtrRestriction]
-            internal DebugStream.Context* OutputStreamContext;
+            public DebugStream.Context* OutputStreamContext;
 
             public unsafe void Execute(CollisionEvent collisionEvent)
             {
@@ -103,7 +98,7 @@ namespace Unity.Physics.Authoring
         }
 
         [BurstCompile]
-        protected unsafe struct FinishDisplayCollisionEventsJob : IJob
+        private unsafe struct FinishDisplayCollisionEventsJob : IJob
         {
             [NativeDisableUnsafePtrRestriction]
             internal DebugStream.Context* OutputStreamContext;
@@ -116,3 +111,5 @@ namespace Unity.Physics.Authoring
         }
     }
 }
+
+#endif

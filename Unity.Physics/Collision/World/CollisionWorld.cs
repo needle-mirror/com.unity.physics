@@ -9,39 +9,44 @@ namespace Unity.Physics
 {
     // A collection of rigid bodies wrapped by a bounding volume hierarchy.
     // This allows to do collision queries such as raycasting, overlap testing, etc.
-    public struct CollisionWorld : ICollidable, IDisposable, ICloneable
+    [NoAlias]
+    public struct CollisionWorld : ICollidable, IDisposable
     {
-        private NativeArray<RigidBody> m_Bodies;    // storage for the rigid bodies
-        private int m_NumBodies;                    // number of rigid bodies currently in use
+        [NoAlias] private NativeArray<RigidBody> m_Bodies;    // storage for all the rigid bodies
+        [NoAlias] internal Broadphase Broadphase;             // bounding volume hierarchies around subsets of the rigid bodies
 
-        internal Broadphase Broadphase;             // a bounding volume hierarchy around the rigid bodies
+        public int NumBodies => Broadphase.NumStaticBodies + Broadphase.NumDynamicBodies;
+        public int NumStaticBodies => Broadphase.NumStaticBodies;
+        public int NumDynamicBodies => Broadphase.NumDynamicBodies;
 
-        public NativeSlice<RigidBody> Bodies => new NativeSlice<RigidBody>(m_Bodies, 0, m_NumBodies);
-
-        public int NumBodies
-        {
-            get => m_NumBodies;
-            set
-            {
-                m_NumBodies = value;
-                if (m_Bodies.Length < m_NumBodies)
-                {
-                    m_Bodies.Dispose();
-                    m_Bodies = new NativeArray<RigidBody>(m_NumBodies, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
-                }
-            }
-        }
+        public NativeSlice<RigidBody> Bodies => new NativeSlice<RigidBody>(m_Bodies, 0, NumBodies);
+        public NativeSlice<RigidBody> StaticBodies => new NativeSlice<RigidBody>(m_Bodies, NumDynamicBodies, NumStaticBodies);
+        public NativeSlice<RigidBody> DynamicBodies => new NativeSlice<RigidBody>(m_Bodies, 0, NumDynamicBodies);
 
         // Contacts are always created between rigid bodies if they are closer than this distance threshold.
         public float CollisionTolerance => 0.1f; // todo - make this configurable?
 
         // Construct a collision world with the given number of uninitialized rigid bodies
-        public CollisionWorld(int numBodies)
+        public CollisionWorld(int numStaticBodies, int numDynamicBodies)
         {
-            m_Bodies = new NativeArray<RigidBody>(numBodies, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
-            m_NumBodies = numBodies;
-            Broadphase = new Broadphase();
-            Broadphase.Init();
+            m_Bodies = new NativeArray<RigidBody>(numStaticBodies + numDynamicBodies, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+            Broadphase = new Broadphase(numStaticBodies, numDynamicBodies);
+        }
+
+        public void Reset(int numStaticBodies, int numDynamicBodies)
+        {
+            SetCapacity(numStaticBodies + numDynamicBodies);
+            Broadphase.Reset(numStaticBodies, numDynamicBodies);
+        }
+
+        private void SetCapacity(int numBodies)
+        {
+            // Increase body storage if necessary
+            if (m_Bodies.Length < numBodies)
+            {
+                m_Bodies.Dispose();
+                m_Bodies = new NativeArray<RigidBody>(numBodies, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+            }
         }
 
         // Free internal memory
@@ -55,67 +60,122 @@ namespace Unity.Physics
         }
 
         // Clone the world (except the colliders)
-        public object Clone()
+        public CollisionWorld Clone()
         {
-            var clone = new CollisionWorld
+            return new CollisionWorld
             {
-                m_Bodies = new NativeArray<RigidBody>(m_Bodies.Length, Allocator.Persistent, NativeArrayOptions.UninitializedMemory),
-                m_NumBodies = m_NumBodies,
+                m_Bodies = new NativeArray<RigidBody>(m_Bodies, Allocator.Persistent),
                 Broadphase = (Broadphase)Broadphase.Clone()
             };
-            clone.m_Bodies.CopyFrom(m_Bodies);
-            return clone;
         }
 
-        #region Jobs
-
-        internal struct DiposeArrayJob : IJob
+        // Build the broadphase based on the given world.
+        public void BuildBroadphase(ref PhysicsWorld world, float timeStep, float3 gravity, bool buildStaticTree = true)
         {
-            [DeallocateOnJobCompletion] public NativeArray<int> Array;
-            public void Execute() { }
+            Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionDatas, world.MotionVelocities,
+                world.CollisionWorld.CollisionTolerance, timeStep, gravity, buildStaticTree);
         }
 
-        [Obsolete("CollisionWorld.ScheduleUpdateDynamicLayer() has been deprecated. Use the new implementation that takes gravity instead. (RemovedAfter 2019-12-06)", true)]
-        public JobHandle ScheduleUpdateDynamicLayer(ref PhysicsWorld world, float timeStep, int numThreadsHint, JobHandle inputDeps)
+        // Schedule a set of jobs to build the broadphase based on the given world.
+        public JobHandle ScheduleBuildBroadphaseJobs(ref PhysicsWorld world, float timeStep, float3 gravity, NativeArray<int> buildStaticTree, JobHandle inputDeps, int threadCountHint = 0)
         {
-            PhysicsStep stepComponent = PhysicsStep.Default;
-            return ScheduleUpdateDynamicLayer(ref world, timeStep, stepComponent.Gravity, numThreadsHint, inputDeps);
+            return Broadphase.ScheduleBuildJobs(ref world, timeStep, gravity, buildStaticTree, inputDeps, threadCountHint);
+        }
+
+        // Write all overlapping body pairs to the given streams,
+        // where at least one of the bodies is dynamic. The results are unsorted.
+        public void FindOverlaps(ref NativeStream.Writer dynamicVsDynamicPairsWriter, ref NativeStream.Writer staticVsDynamicPairsWriter)
+        {
+            Broadphase.FindOverlaps(ref dynamicVsDynamicPairsWriter, ref staticVsDynamicPairsWriter);
+        }
+
+        // Schedule a set of jobs which will write all overlapping body pairs to the given steam,
+        // where at least one of the bodies is dynamic. The results are unsorted.
+        public SimulationJobHandles ScheduleFindOverlapsJobs(out NativeStream dynamicVsDynamicPairsStream, out NativeStream staticVsDynamicPairsStream,
+            JobHandle inputDeps, int threadCountHint = 0)
+        {
+            return Broadphase.ScheduleFindOverlapsJobs(out dynamicVsDynamicPairsStream, out staticVsDynamicPairsStream, inputDeps, threadCountHint);
+        }
+
+        // Synchronize the collision world with the dynamics world.
+        public void UpdateDynamicTree(ref PhysicsWorld world, float timeStep, float3 gravity)
+        {
+            // Synchronize transforms
+            for (int i = 0; i < world.DynamicsWorld.NumMotions; i++)
+            {
+                UpdateRigidBodyTransformsJob.ExecuteImpl(i, world.MotionDatas, m_Bodies);
+            }
+
+            // Update broadphase
+            float aabbMargin = world.CollisionWorld.CollisionTolerance * 0.5f;
+            Broadphase.BuildDynamicTree(world.DynamicBodies, world.MotionDatas, world.MotionVelocities, gravity, timeStep, aabbMargin);
         }
 
         // Schedule a set of jobs to synchronize the collision world with the dynamics world.
-        public JobHandle ScheduleUpdateDynamicLayer(ref PhysicsWorld world, float timeStep, float3 gravity, int numThreadsHint, JobHandle inputDeps)
+        public JobHandle ScheduleUpdateDynamicTree(ref PhysicsWorld world, float timeStep, float3 gravity, JobHandle inputDeps, int threadCountHint = 0)
         {
-            JobHandle handle = new UpdateRigidBodyTransformsJob
+            if (threadCountHint <= 0)
             {
-                MotionDatas = world.MotionDatas,
-                MotionVelocities = world.MotionVelocities,
-                RigidBodies = m_Bodies
-            }.Schedule(world.MotionDatas.Length, 32, inputDeps);
+                return new UpdateDynamicLayerJob
+                {
+                    World = world,
+                    TimeStep = timeStep,
+                    Gravity = gravity
+                }.Schedule(inputDeps);
+            }
+            else
+            {
+                // Synchronize transforms
+                JobHandle handle = new UpdateRigidBodyTransformsJob
+                {
+                    MotionDatas = world.MotionDatas,
+                    RigidBodies = m_Bodies
+                }.Schedule(world.MotionDatas.Length, 32, inputDeps);
 
-            var staticLayerChangeInfo = new StaticLayerChangeInfo();
-            staticLayerChangeInfo.Init(Allocator.TempJob);
-
-            // TODO: Instead of a full build we could probably incrementally update the existing broadphase,
-            // since the number of bodies will be the same and their positions should be similar.
-            handle = Broadphase.ScheduleBuildJobs(ref world, timeStep, gravity, numThreadsHint, ref staticLayerChangeInfo, inputDeps: handle);
-
-            return JobHandle.CombineDependencies(
-                new DiposeArrayJob { Array = staticLayerChangeInfo.HaveStaticBodiesChangedArray }.Schedule(handle),
-                new DiposeArrayJob { Array = staticLayerChangeInfo.NumStaticBodiesArray }.Schedule(handle));
+                // Update broadphase
+                return Broadphase.ScheduleDynamicTreeBuildJobs(ref world, timeStep, gravity, threadCountHint, handle);
+            }
         }
+
+        [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+        [Obsolete("ScheduleUpdateDynamicLayer() has been deprecated. Use the new ScheduleUpdateDynamicTree() method. (RemovedAfter 2020-05-01)")]
+        public JobHandle ScheduleUpdateDynamicLayer(
+            ref PhysicsWorld world, float timeStep, float3 gravity, int numThreadsHint, JobHandle inputDeps)
+        {
+            return ScheduleUpdateDynamicTree(ref world, timeStep, gravity, inputDeps, numThreadsHint);
+        }
+
+        #region Jobs
 
         [BurstCompile]
         private struct UpdateRigidBodyTransformsJob : IJobParallelFor
         {
             [ReadOnly] public NativeSlice<MotionData> MotionDatas;
-            [ReadOnly] public NativeSlice<MotionVelocity> MotionVelocities;
             public NativeSlice<RigidBody> RigidBodies;
 
             public void Execute(int i)
             {
-                RigidBody rb = RigidBodies[i];
-                rb.WorldFromBody = math.mul(MotionDatas[i].WorldFromMotion, math.inverse(MotionDatas[i].BodyFromMotion));
-                RigidBodies[i] = rb;
+                ExecuteImpl(i, MotionDatas, RigidBodies);
+            }
+
+            internal static void ExecuteImpl(int i, NativeSlice<MotionData> motionDatas, NativeSlice<RigidBody> rigidBodies)
+            {
+                RigidBody rb = rigidBodies[i];
+                rb.WorldFromBody = math.mul(motionDatas[i].WorldFromMotion, math.inverse(motionDatas[i].BodyFromMotion));
+                rigidBodies[i] = rb;
+            }
+        }
+
+        [BurstCompile]
+        private struct UpdateDynamicLayerJob : IJob
+        {
+            public PhysicsWorld World;
+            public float TimeStep;
+            public float3 Gravity;
+
+            public void Execute()
+            {
+                World.CollisionWorld.UpdateDynamicTree(ref World, TimeStep, Gravity);
             }
         }
 

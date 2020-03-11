@@ -1,9 +1,11 @@
-﻿using Unity.Mathematics;
+﻿using Unity.Burst;
+using Unity.Mathematics;
 using static Unity.Physics.Math;
 
 namespace Unity.Physics
 {
     // Solve data for a constraint that limits the linear distance between a pair of pivots in 1, 2, or 3 degrees of freedom
+    [NoAlias]
     struct LinearLimitJacobian
     {
         // Pivot positions in motion space
@@ -125,14 +127,17 @@ namespace Unity.Physics
             {
                 // Calculate the inverse effective mass matrix
                 float3 invEffectiveMassDiag = new float3(
-                    JacobianUtilities.CalculateInvEffectiveMassDiag(angA0, velocityA.InverseInertiaAndMass, angB0, velocityB.InverseInertiaAndMass),
-                    JacobianUtilities.CalculateInvEffectiveMassDiag(angA1, velocityA.InverseInertiaAndMass, angB1, velocityB.InverseInertiaAndMass),
-                    JacobianUtilities.CalculateInvEffectiveMassDiag(angA2, velocityA.InverseInertiaAndMass, angB2, velocityB.InverseInertiaAndMass));
+                    JacobianUtilities.CalculateInvEffectiveMassDiag(angA0, velocityA.InverseInertia, velocityA.InverseMass,
+                        angB0, velocityB.InverseInertia, velocityB.InverseMass),
+                    JacobianUtilities.CalculateInvEffectiveMassDiag(angA1, velocityA.InverseInertia, velocityA.InverseMass,
+                        angB1, velocityB.InverseInertia, velocityB.InverseMass),
+                    JacobianUtilities.CalculateInvEffectiveMassDiag(angA2, velocityA.InverseInertia, velocityA.InverseMass,
+                        angB2, velocityB.InverseInertia, velocityB.InverseMass));
 
                 float3 invEffectiveMassOffDiag = new float3(
-                    JacobianUtilities.CalculateInvEffectiveMassOffDiag(angA0, angA1, velocityA.InverseInertiaAndMass.xyz, angB0, angB1, velocityB.InverseInertiaAndMass.xyz),
-                    JacobianUtilities.CalculateInvEffectiveMassOffDiag(angA0, angA2, velocityA.InverseInertiaAndMass.xyz, angB0, angB2, velocityB.InverseInertiaAndMass.xyz),
-                    JacobianUtilities.CalculateInvEffectiveMassOffDiag(angA1, angA2, velocityA.InverseInertiaAndMass.xyz, angB1, angB2, velocityB.InverseInertiaAndMass.xyz));
+                    JacobianUtilities.CalculateInvEffectiveMassOffDiag(angA0, angA1, velocityA.InverseInertia, angB0, angB1, velocityB.InverseInertia),
+                    JacobianUtilities.CalculateInvEffectiveMassOffDiag(angA0, angA2, velocityA.InverseInertia, angB0, angB2, velocityB.InverseInertia),
+                    JacobianUtilities.CalculateInvEffectiveMassOffDiag(angA1, angA2, velocityA.InverseInertia, angB1, angB2, velocityB.InverseInertia));
 
                 // Invert to get the effective mass matrix
                 JacobianUtilities.InvertSymmetricMatrix(invEffectiveMassDiag, invEffectiveMassOffDiag, out EffectiveMassDiag, out EffectiveMassOffDiag);

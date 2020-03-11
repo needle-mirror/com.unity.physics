@@ -118,72 +118,12 @@ Now that you know how to create bodies in the editor and how to alter their prop
 
 ## Starting from a Prefab
 
-If you have a Prefab setup with the body, then the `SpawnRandomPhysicsBodies` script used in some of the [Unity Physics Samples](https://github.com/Unity-Technologies/EntityComponentSystemSamples/blob/master/UnityPhysicsSamples/Documentation/samples.md) is a good place to start. Once you use `ConvertGameObjectHierarchy` on the prefab, you get an Entity that you can Instantiate as many times as you like, setting the `Translation` and `Rotation` on it.
+If you have a Prefab setup with the body, then the `SpawnRandomObjectsAuthoring` script used in some of the [Unity Physics Samples](https://github.com/Unity-Technologies/EntityComponentSystemSamples/blob/master/UnityPhysicsSamples/Documentation/samples.md) is a good place to start. By converting GameObjects with this component, you can instantiate several copies of a converted prefab and set the `Translation` and `Rotation` values for them.
 
 In theory this should be sufficient, but if you want it to be really fast you can also let Unity Physics know they all share the same Collider. The `PhysicsCollider`, especially in the case of Convex Hull or Mesh shape colliders, can be expensive to create when first seen, so if you know it is the same as another body and it can be shared, just set the `PhysicsCollider` to say so.
 
 1. Save your Sphere GameObject (previously created) as a Prefab: drag the GameObject from the Hierarchy into the project window.
-2. Add a GameObject with the following `SpawnRandomPhysicsBodies` script attached to it:
-
-    ```csharp
-    using System;
-    using Unity.Physics;
-    using Unity.Entities;
-    using Unity.Mathematics;
-    using Unity.Collections;
-    using UnityEngine;
-    using Unity.Transforms;
-    using Collider = Unity.Physics.Collider;
-    ```
-	
-    ```csharp
-    [Serializable]
-    public class SpawnRandomPhysicsBodies : MonoBehaviour
-    {
-        public GameObject prefab;
-        public float3 range;
-        public int count;
-    
-        void OnEnable()
-        {
-            if (this.enabled)
-            {
-                // Create entity prefab from the game object hierarchy once
-                Entity sourceEntity = GameObjectConversionUtility.ConvertGameObjectHierarchy(prefab, BasePhysicsDemo.DefaultWorld);
-                var entityManager = BasePhysicsDemo.DefaultWorld.EntityManager;
-    
-                var positions = new NativeArray<float3>(count, Allocator.Temp);
-                var rotations = new NativeArray<quaternion>(count, Allocator.Temp);
-                RandomPointsOnCircle(transform.position, range, ref positions, ref rotations);
-    
-                BlobAssetReference<Collider> sourceCollider = entityManager.GetComponentData<PhysicsCollider>(sourceEntity).Value;
-                for (int i = 0; i < count; i++)
-                {
-                    var instance = entityManager.Instantiate(sourceEntity);
-                    entityManager.SetComponentData(instance, new Translation { Value = positions[i] });
-                    entityManager.SetComponentData(instance, new Rotation { Value = rotations[i] });
-                    entityManager.SetComponentData(instance, new PhysicsCollider { Value = sourceCollider });
-                }
-    
-                positions.Dispose();
-                rotations.Dispose();
-            }
-        }
-    
-        public static void RandomPointsOnCircle(float3 center, float3 range, ref NativeArray<float3> positions, ref NativeArray<quaternion> rotations)
-        {
-            var count = positions.Length;
-            // Initialize the seed of the random number generator
-            Unity.Mathematics.Random random = new Unity.Mathematics.Random();
-            random.InitState(10);
-            for (int i = 0; i < count; i++)
-            {
-                positions[i] = center + random.NextFloat3(-range, range);
-                rotations[i] = random.NextQuaternionRotation();
-            }
-        }
-    }
-    ```
+2. Add a GameObject with the `SpawnRandomObjectsAuthoring` script attached to it.
 
 3. Set the **Count** to **1000**.
 4. Set the **Range** to **(2,2,2)**.
@@ -201,55 +141,44 @@ First, you need these namespaces for your script:
 
 ```csharp
 using Unity.Entities;
-using Unity.Transforms;
-using Unity.Physics;
 using Unity.Mathematics;
+using Unity.Physics;
 using Unity.Rendering;
+using Unity.Transforms;
 using Collider = Unity.Physics.Collider;
 ```
 
 Here's the method for creating bodies:
 
 ```csharp
-public unsafe Entity CreateBody(RenderMesh displayMesh, float3 position, quaternion orientation,
-        BlobAssetReference<Collider> collider,
-        float3 linearVelocity, float3 angularVelocity, float mass, bool isDynamic)
+public unsafe Entity CreateBody(
+    EntityManager entityManager,
+    RenderMesh displayMesh, float3 position, quaternion orientation, BlobAssetReference<Collider> collider,
+    float3 linearVelocity, float3 angularVelocity, float mass, bool isDynamic
+)
 {
-    EntityManager entityManager = EntityManager;
-    ComponentType[] componentTypes = new ComponentType[isDynamic ? 7 : 4];
+    ComponentType[] componentTypes = new ComponentType[isDynamic ? 9 : 6];
 
     componentTypes[0] = typeof(RenderMesh);
-    componentTypes[1] = typeof(Translation);
-    componentTypes[2] = typeof(Rotation);
-    componentTypes[3] = typeof(PhysicsCollider);
+    componentTypes[1] = typeof(RenderBounds);
+    componentTypes[2] = typeof(Translation);
+    componentTypes[3] = typeof(Rotation);
+    componentTypes[4] = typeof(LocalToWorld);
+    componentTypes[5] = typeof(PhysicsCollider);
     if (isDynamic)
     {
-        componentTypes[4] = typeof(PhysicsVelocity);
-        componentTypes[5] = typeof(PhysicsMass);
-        componentTypes[6] = typeof(PhysicsDamping);
+        componentTypes[6] = typeof(PhysicsVelocity);
+        componentTypes[7] = typeof(PhysicsMass);
+        componentTypes[8] = typeof(PhysicsDamping);
     }
     Entity entity = entityManager.CreateEntity(componentTypes);
 
     entityManager.SetSharedComponentData(entity, displayMesh);
+    entityManager.SetComponentData(entity, new RenderBounds { Value = displayMesh.mesh.bounds.ToAABB() });
 
-
-    // Check if the Entity has a Translation and Rotation components and execute the appropriate method
-    if (entityManager.HasComponent(entity, typeof(Translation)))
-       {
-           entityManager.SetComponentData(entity, new Translation { Value = position });=
-       }
-       else
-       {
-           entityManager.AddComponentData(entity, new Translation { Value = position });
-       }
-    if (entityManager.HasComponent(entity, typeof(Rotation)))
-       {
-           entityManager.SetComponentData(entity, new Rotation { Value = orientation });
-       }
-       else
-       {
-           entityManager.AddComponentData(entity, new Rotation { Value = orientation });
-       }
+    entityManager.SetComponentData(entity, new Translation { Value = position });
+    entityManager.SetComponentData(entity, new Rotation { Value = orientation });
+    
     entityManager.SetComponentData(entity, new PhysicsCollider { Value = collider });
 
     if (isDynamic)

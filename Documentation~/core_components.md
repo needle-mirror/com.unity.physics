@@ -9,7 +9,7 @@ This document describes each of these components, so you can write systems which
 
 # The *PhysicsCollider* component
 
-This is the most important component for the simulation of physics. By adding this component to an entity, you declare that this body will participate in the physics simulation and collision queries (though, you also need a Translation and Rotation component). This component decides what the collision geometry "looks" like to the physics simulation. It is analogous to a mesh in a rendering system.
+This is the most important component for the simulation of physics. By adding this component to an entity, you declare that this body will participate in the physics simulation and collision queries (though you also need transform components: `Translation` and `Rotation` for dynamic bodies, `Translation`, `Rotation`, and/or `LocalToWorld` for static bodies). This component decides what the collision geometry "looks" like to the physics simulation. It is analogous to a mesh in a rendering system.
 
 For performance reasons, you should try to avoid using a mesh during physics – use specialized primitive types when possible, which greatly simplifies the process of determining collisions between two Colliders. For example, if a collision geometry can be represented by a sphere, you can write collision tests which only need to consider the sphere center and radius; with a mesh wrapping the same sphere, you would need to consider every triangle in the mesh.
 

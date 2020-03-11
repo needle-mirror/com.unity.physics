@@ -60,6 +60,7 @@ namespace Unity.Physics.Authoring
         void OnValidate()
         {
             if (!enabled) return;
+            if (gameObject.scene.isSubScene) return;
             if (m_ConvertedEntity == Entity.Null) return;
 
             // This requires Entity Conversion mode to be 'Convert And Inject Game Object'

@@ -7,52 +7,6 @@ using Unity.Mathematics;
 using Unity.Transforms;
 using UnityEngine.Assertions;
 
-namespace Unity.Physics
-{
-    struct StaticLayerChangeInfo
-    {
-        public void Init(Allocator allocator = Allocator.Persistent)
-        {
-            NumStaticBodiesArray = new NativeArray<int>(1, allocator);
-            HaveStaticBodiesChangedArray = new NativeArray<int>(1, allocator);
-        }
-
-        public void Deallocate()
-        {
-            if (NumStaticBodiesArray.IsCreated)
-            {
-                NumStaticBodiesArray.Dispose();
-            }
-
-            if (HaveStaticBodiesChangedArray.IsCreated)
-            {
-                HaveStaticBodiesChangedArray.Dispose();
-            }
-        }
-
-        /// <summary>
-        /// Number of static bodies if HaveStaticBodiesChanged is true, zero otherwise.
-        /// </summary>
-        public int NumStaticBodies
-        {
-            get => NumStaticBodiesArray[0];
-            set => NumStaticBodiesArray[0] = value;
-        }
-
-        /// <summary>
-        /// "Boolean" value indicating if static layer has changed compared to previous frame.
-        /// </summary>
-        public int HaveStaticBodiesChanged
-        {
-            get => HaveStaticBodiesChangedArray[0];
-            set => HaveStaticBodiesChangedArray[0] = value;
-        }
-
-        public NativeArray<int> NumStaticBodiesArray;
-        public NativeArray<int> HaveStaticBodiesChangedArray;
-    }
-}
-
 namespace Unity.Physics.Systems
 {
     // A system which builds the physics world based on the entity world.
@@ -67,12 +21,6 @@ namespace Unity.Physics.Systems
         public EntityQuery DynamicEntityGroup { get; private set; }
         public EntityQuery StaticEntityGroup { get; private set; }
         public EntityQuery JointEntityGroup { get; private set; }
-
-        // Array of length 2
-        // First element is a number of static bodies in current frame if static broad-phase layer need to be updated, zero otherwise.
-        // Second element is "bool" flag indicating if static broad-phase layer needs to be updated.
-        //public NativeArray<int> StaticBodiesChangedInfo;
-        StaticLayerChangeInfo m_StaticLayerChangeInfo;
 
         EndFramePhysicsSystem m_EndFramePhysicsSystem;
 
@@ -94,14 +42,18 @@ namespace Unity.Physics.Systems
             {
                 All = new ComponentType[]
                 {
-                    typeof(PhysicsCollider),
+                    typeof(PhysicsCollider)
+                },
+                Any = new ComponentType[]
+                {
+                    typeof(LocalToWorld),
                     typeof(Translation),
                     typeof(Rotation)
                 },
                 None = new ComponentType[]
                 {
                     typeof(PhysicsVelocity)
-                },
+                }
             });
 
             JointEntityGroup = GetEntityQuery(new EntityQueryDesc
@@ -112,15 +64,11 @@ namespace Unity.Physics.Systems
                 }
             });
 
-            m_StaticLayerChangeInfo.Init();
-
             m_EndFramePhysicsSystem = World.GetOrCreateSystem<EndFramePhysicsSystem>();
         }
 
         protected override void OnDestroy()
         {
-            m_StaticLayerChangeInfo.Deallocate();
-
             PhysicsWorld.Dispose();
             base.OnDestroy();
         }
@@ -132,6 +80,8 @@ namespace Unity.Physics.Systems
 
             // Extract types used by initialize jobs
             var entityType = GetArchetypeChunkEntityType();
+            var localToWorldType = GetArchetypeChunkComponentType<LocalToWorld>(true);
+            var parentType = GetArchetypeChunkComponentType<Parent>(true);
             var positionType = GetArchetypeChunkComponentType<Translation>(true);
             var rotationType = GetArchetypeChunkComponentType<Rotation>(true);
             var physicsColliderType = GetArchetypeChunkComponentType<PhysicsCollider>(true);
@@ -146,50 +96,57 @@ namespace Unity.Physics.Systems
             int numStaticBodies = StaticEntityGroup.CalculateEntityCount();
             int numJoints = JointEntityGroup.CalculateEntityCount();
 
-            m_StaticLayerChangeInfo.NumStaticBodies = numStaticBodies + 1;
-            m_StaticLayerChangeInfo.HaveStaticBodiesChanged = 0;
-
-            if (numStaticBodies != (PhysicsWorld.StaticBodies.Length - 1)) //-1 for fake static body we add
-            {
-                // Quick test if number of bodies changed
-                m_StaticLayerChangeInfo.HaveStaticBodiesChanged = 1;
-            }
-            else
-            {
-                // Make a job to test for changes
-                int numChunks; // There has to be a better way of doing this...
-                using (NativeArray<ArchetypeChunk> chunks = StaticEntityGroup.CreateArchetypeChunkArray(Allocator.TempJob))
-                {
-                    numChunks = chunks.Length;
-                }
-
-                var chunksHaveChanges = new NativeArray<int>(numChunks, Allocator.TempJob);
-
-                inputDeps = new Jobs.CheckStaticBodyChangesJob
-                {
-                    PositionType = positionType,
-                    RotationType = rotationType,
-                    PhysicsColliderType = physicsColliderType,
-                    ChunkHasChangesOutput = chunksHaveChanges,
-                    m_LastSystemVersion = LastSystemVersion
-                }.Schedule(StaticEntityGroup, inputDeps);
-
-                inputDeps = new Jobs.CheckStaticBodyChangesReduceJob
-                {
-                    ChunkHasChangesOutput = chunksHaveChanges,
-                    HaveStaticBodiesChanged = m_StaticLayerChangeInfo.HaveStaticBodiesChangedArray,
-                    NumStaticBodies = m_StaticLayerChangeInfo.NumStaticBodiesArray
-                }.Schedule(inputDeps);
-            }
+            int previousStaticBodyCount = PhysicsWorld.NumStaticBodies;
 
             // Resize the world's native arrays
             PhysicsWorld.Reset(
-                numStaticBodies: numStaticBodies + 1,   // +1 for the default static body
-                numDynamicBodies: numDynamicBodies,
-                numJoints: numJoints);
+                numStaticBodies + 1, // +1 for the default static body
+                numDynamicBodies,
+                numJoints);
+
+            // Determine if the static bodies have changed in any way that will require the static broadphase tree to be rebuilt
+            JobHandle staticBodiesCheckHandle = default;
+            var haveStaticBodiesChanged = new NativeArray<int>(1, Allocator.TempJob);
+            haveStaticBodiesChanged[0] = 0;
+            {
+                if (PhysicsWorld.NumStaticBodies != previousStaticBodyCount)
+                {
+                    haveStaticBodiesChanged[0] = 1;
+                }
+                else
+                {
+                    // Make a job to test for changes
+                    int numChunks;
+                    using (NativeArray<ArchetypeChunk> chunks = StaticEntityGroup.CreateArchetypeChunkArray(Allocator.TempJob))
+                    {
+                        numChunks = chunks.Length;
+                    }
+                    var chunksHaveChanges = new NativeArray<int>(numChunks, Allocator.TempJob);
+
+                    staticBodiesCheckHandle = new Jobs.CheckStaticBodyChangesJob
+                    {
+                        LocalToWorldType = localToWorldType,
+                        ParentType = parentType,
+                        PositionType = positionType,
+                        RotationType = rotationType,
+                        PhysicsColliderType = physicsColliderType,
+                        ChunkHasChangesOutput = chunksHaveChanges,
+                        m_LastSystemVersion = LastSystemVersion
+                    }.Schedule(StaticEntityGroup, inputDeps);
+
+                    staticBodiesCheckHandle = new Jobs.CheckStaticBodyChangesReduceJob
+                    {
+                        ChunkHasChangesOutput = chunksHaveChanges,
+                        Result = haveStaticBodiesChanged
+                    }.Schedule(staticBodiesCheckHandle);
+                }
+            }
 
             using (var jobHandles = new NativeList<JobHandle>(4, Allocator.Temp))
             {
+                // Static body changes check jobs
+                jobHandles.Add(staticBodiesCheckHandle);
+
                 // Create the default static body at the end of the body list
                 // TODO: could skip this if no joints present
                 jobHandles.Add(new Jobs.CreateDefaultStaticRigidBody
@@ -206,6 +163,8 @@ namespace Unity.Physics.Systems
                     jobHandles.Add(new Jobs.CreateRigidBodies
                     {
                         EntityType = entityType,
+                        LocalToWorldType = localToWorldType,
+                        ParentType = parentType,
                         PositionType = positionType,
                         RotationType = rotationType,
                         PhysicsColliderType = physicsColliderType,
@@ -236,6 +195,8 @@ namespace Unity.Physics.Systems
                     jobHandles.Add(new Jobs.CreateRigidBodies
                     {
                         EntityType = entityType,
+                        LocalToWorldType = localToWorldType,
+                        ParentType = parentType,
                         PositionType = positionType,
                         RotationType = rotationType,
                         PhysicsColliderType = physicsColliderType,
@@ -274,11 +235,13 @@ namespace Unity.Physics.Systems
                 PhysicsStep stepComponent = PhysicsStep.Default;
                 if (HasSingleton<PhysicsStep>())
                 {
-                    stepComponent = GetSingleton<PhysicsStep>();
+                   stepComponent = GetSingleton<PhysicsStep>();
                 }
 
-                jobHandles.Add(PhysicsWorld.CollisionWorld.Broadphase.ScheduleBuildJobs(ref PhysicsWorld, timeStep, stepComponent.Gravity,
-                    stepComponent.ThreadCountHint, ref m_StaticLayerChangeInfo, handle));
+                JobHandle buildBroadphaseHandle = PhysicsWorld.CollisionWorld.ScheduleBuildBroadphaseJobs(
+                    ref PhysicsWorld, timeStep, stepComponent.Gravity,
+                    haveStaticBodiesChanged, handle, stepComponent.ThreadCountHint);
+                jobHandles.Add(haveStaticBodiesChanged.Dispose(buildBroadphaseHandle));
 
                 FinalJobHandle = JobHandle.CombineDependencies(jobHandles);
             }
@@ -293,6 +256,8 @@ namespace Unity.Physics.Systems
             [BurstCompile]
             internal struct CheckStaticBodyChangesJob : IJobChunk
             {
+                [ReadOnly] public ArchetypeChunkComponentType<LocalToWorld> LocalToWorldType;
+                [ReadOnly] public ArchetypeChunkComponentType<Parent> ParentType;
                 [ReadOnly] public ArchetypeChunkComponentType<Translation> PositionType;
                 [ReadOnly] public ArchetypeChunkComponentType<Rotation> RotationType;
                 [ReadOnly] public ArchetypeChunkComponentType<PhysicsCollider> PhysicsColliderType;
@@ -300,9 +265,10 @@ namespace Unity.Physics.Systems
                 public NativeArray<int> ChunkHasChangesOutput;
                 public uint m_LastSystemVersion;
 
-                public unsafe void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
+                public void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
                 {
                     bool didChunkChange =
+                        chunk.DidChange(LocalToWorldType, m_LastSystemVersion) ||
                         chunk.DidChange(PositionType, m_LastSystemVersion) ||
                         chunk.DidChange(RotationType, m_LastSystemVersion) ||
                         chunk.DidChange(PhysicsColliderType, m_LastSystemVersion);
@@ -314,8 +280,7 @@ namespace Unity.Physics.Systems
             internal struct CheckStaticBodyChangesReduceJob : IJob
             {
                 [ReadOnly] [DeallocateOnJobCompletion] public NativeArray<int> ChunkHasChangesOutput;
-                public NativeArray<int> HaveStaticBodiesChanged;
-                public NativeArray<int> NumStaticBodies;
+                public NativeArray<int> Result;
 
                 public void Execute()
                 {
@@ -323,13 +288,12 @@ namespace Unity.Physics.Systems
                     {
                         if (ChunkHasChangesOutput[i] > 0)
                         {
-                            HaveStaticBodiesChanged[0] = 1;
+                            Result[0] = 1;
                             return;
                         }
                     }
 
-                    NumStaticBodies[0] = 0;
-                    HaveStaticBodiesChanged[0] = 0;
+                    Result[0] = 0;
                 }
             }
 
@@ -345,7 +309,7 @@ namespace Unity.Physics.Systems
                     NativeBodies[BodyIndex] = new RigidBody
                     {
                         WorldFromBody = new RigidTransform(quaternion.identity, float3.zero),
-                        Collider = null,
+                        Collider = default,
                         Entity = Entity.Null,
                         CustomTags = 0
                     };
@@ -356,6 +320,8 @@ namespace Unity.Physics.Systems
             internal struct CreateRigidBodies : IJobChunk
             {
                 [ReadOnly] public ArchetypeChunkEntityType EntityType;
+                [ReadOnly] public ArchetypeChunkComponentType<LocalToWorld> LocalToWorldType;
+                [ReadOnly] public ArchetypeChunkComponentType<Parent> ParentType;
                 [ReadOnly] public ArchetypeChunkComponentType<Translation> PositionType;
                 [ReadOnly] public ArchetypeChunkComponentType<Rotation> RotationType;
                 [ReadOnly] public ArchetypeChunkComponentType<PhysicsCollider> PhysicsColliderType;
@@ -364,9 +330,10 @@ namespace Unity.Physics.Systems
 
                 [NativeDisableContainerSafetyRestriction] public NativeSlice<RigidBody> RigidBodies;
 
-                public unsafe void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
+                public void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
                 {
                     NativeArray<PhysicsCollider> chunkColliders = chunk.GetNativeArray(PhysicsColliderType);
+                    NativeArray<LocalToWorld> chunkLocalToWorlds = chunk.GetNativeArray(LocalToWorldType);
                     NativeArray<Translation> chunkPositions = chunk.GetNativeArray(PositionType);
                     NativeArray<Rotation> chunkRotations = chunk.GetNativeArray(RotationType);
                     NativeArray<Entity> chunkEntities = chunk.GetNativeArray(EntityType);
@@ -377,37 +344,55 @@ namespace Unity.Physics.Systems
 
                     bool hasChunkPhysicsColliderType = chunk.Has(PhysicsColliderType);
                     bool hasChunkPhysicsCustomTagsType = chunk.Has(PhysicsCustomTagsType);
+                    bool hasChunkParentType = chunk.Has(ParentType);
+                    bool hasChunkLocalToWorldType = chunk.Has(LocalToWorldType);
+                    bool hasChunkPositionType = chunk.Has(PositionType);
+                    bool hasChunkRotationType = chunk.Has(RotationType);
 
+                    RigidTransform worldFromBody = RigidTransform.identity;
                     for (int i = 0; i < instanceCount; i++, rbIndex++)
                     {
+                        // if entities are in a transform hierarchy then Translation/Rotation are in the space of their parents
+                        // in that case, LocalToWorld is the only common denominator for world space
+                        if (hasChunkParentType)
+                        {
+                            if (hasChunkLocalToWorldType)
+                            {
+                                var localToWorld = chunkLocalToWorlds[i];
+                                worldFromBody = Math.DecomposeRigidBodyTransform(localToWorld.Value);
+                            }
+                        }
+                        else
+                        {
+                            if (hasChunkPositionType)
+                            {
+                                worldFromBody.pos = chunkPositions[i].Value;
+                            }
+                            else if (hasChunkLocalToWorldType)
+                            {
+                                worldFromBody.pos = chunkLocalToWorlds[i].Position;
+                            }
+
+                            if (hasChunkRotationType)
+                            {
+                                worldFromBody.rot = chunkRotations[i].Value;
+                            }
+                            else if (hasChunkLocalToWorldType)
+                            {
+                                var localToWorld = chunkLocalToWorlds[i];
+                                worldFromBody.rot = Math.DecomposeRigidBodyOrientation(localToWorld.Value);
+                            }
+                        }
+
                         RigidBodies[rbIndex] = new RigidBody
                         {
-                            WorldFromBody = new RigidTransform(chunkRotations[i].Value, chunkPositions[i].Value),
-                            Collider = hasChunkPhysicsColliderType ? chunkColliders[i].ColliderPtr : null,
+                            WorldFromBody = new RigidTransform(worldFromBody.rot, worldFromBody.pos),
+                            Collider = hasChunkPhysicsColliderType ? chunkColliders[i].Value : default,
                             Entity = chunkEntities[i],
                             CustomTags = hasChunkPhysicsCustomTagsType ? chunkCustomTags[i].Value : (byte)0
                         };
                     }
                 }
-            }
-
-            [BurstCompile]
-            private static MotionData CreateMotionData(
-                Translation position, Rotation orientation,
-                PhysicsMass physicsMass, PhysicsDamping damping,
-                float gravityFactor)
-            {
-                return new MotionData
-                {
-                    WorldFromMotion = new RigidTransform(
-                        math.mul(orientation.Value, physicsMass.InertiaOrientation),
-                        math.rotate(orientation.Value, physicsMass.CenterOfMass) + position.Value
-                    ),
-                    BodyFromMotion = physicsMass.Transform,
-                    LinearDamping = damping.Linear,
-                    AngularDamping = damping.Angular,
-                    GravityFactor = gravityFactor
-                };
             }
 
             [BurstCompile]
@@ -451,17 +436,17 @@ namespace Unity.Physics.Systems
                         AngularExpansionFactor = 1.0f,
                     };
 
-                    // Create motion velocities
-                    var defaultInverseInertiaAndMass = new float4(defaultPhysicsMass.InverseInertia, defaultPhysicsMass.InverseMass);
                     for (int i = 0, motionIndex = motionStart; i < instanceCount; i++, motionIndex++)
                     {
                         MotionVelocities[motionIndex] = new MotionVelocity
                         {
-                            LinearVelocity = chunkVelocities[i].Linear,    // world space
-                            AngularVelocity = chunkVelocities[i].Angular,  // inertia space
-                            InverseInertiaAndMass = hasChunkPhysicsMassType ? new float4(chunkMasses[i].InverseInertia, chunkMasses[i].InverseMass) : defaultInverseInertiaAndMass,
-                            AngularExpansionFactor = hasChunkPhysicsMassType ? chunkMasses[i].AngularExpansionFactor : defaultPhysicsMass.AngularExpansionFactor,
+                            LinearVelocity = chunkVelocities[i].Linear,
+                            AngularVelocity = chunkVelocities[i].Angular,
+                            InverseInertia = hasChunkPhysicsMassType ? chunkMasses[i].InverseInertia : defaultPhysicsMass.InverseInertia,
+                            InverseMass = hasChunkPhysicsMassType ? chunkMasses[i].InverseMass : defaultPhysicsMass.InverseMass,
+                            AngularExpansionFactor = hasChunkPhysicsMassType ? chunkMasses[i].AngularExpansionFactor : defaultPhysicsMass.AngularExpansionFactor
                         };
+
                     }
 
                     // Note: these defaults assume a dynamic body with infinite mass, hence no damping 
@@ -477,11 +462,21 @@ namespace Unity.Physics.Systems
                     // Create motion datas
                     for (int i = 0, motionIndex = motionStart; i < instanceCount; i++, motionIndex++)
                     {
-                        MotionDatas[motionIndex] = CreateMotionData(
-                            chunkPositions[i], chunkRotations[i],
-                            hasChunkPhysicsMassType ? chunkMasses[i] : defaultPhysicsMass,
-                            hasChunkPhysicsDampingType ? chunkDampings[i] : defaultPhysicsDamping,
-                            hasChunkPhysicsGravityFactorType ? chunkGravityFactors[i].Value : defaultGravityFactor);
+                        PhysicsMass mass = hasChunkPhysicsMassType ? chunkMasses[i] : defaultPhysicsMass;
+                        PhysicsDamping damping = hasChunkPhysicsDampingType ? chunkDampings[i] : defaultPhysicsDamping;
+                        float gravityFactor = hasChunkPhysicsGravityFactorType ? chunkGravityFactors[i].Value : defaultGravityFactor;
+
+                        MotionDatas[motionIndex] = new MotionData
+                        {
+                            WorldFromMotion = new RigidTransform(
+                                math.mul(chunkRotations[i].Value, mass.InertiaOrientation),
+                                math.rotate(chunkRotations[i].Value, mass.CenterOfMass) + chunkPositions[i].Value
+                            ),
+                            BodyFromMotion = new RigidTransform(mass.InertiaOrientation, mass.CenterOfMass),
+                            LinearDamping = damping.Linear,
+                            AngularDamping = damping.Angular,
+                            GravityFactor = gravityFactor
+                        };
                     }
                 }
             }
@@ -499,7 +494,7 @@ namespace Unity.Physics.Systems
 
                 public int DefaultStaticBodyIndex;
 
-                public unsafe void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
+                public void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
                 {
                     NativeArray<PhysicsJoint> chunkJoint = chunk.GetNativeArray(JointComponentType);
                     NativeArray<Entity> chunkEntities = chunk.GetNativeArray(EntityType);
@@ -549,21 +544,23 @@ namespace Unity.Physics.Systems
                             }
                         }
 
-                        Assert.IsTrue(pair.BodyAIndex != -1 && pair.BodyBIndex != -1);
-
-                        bool isStaticStaticPair = pair.BodyAIndex >= NumDynamicBodies && pair.BodyBIndex >= NumDynamicBodies;
-                        // Mark static-static constrains as invalid since they are not going to affect simulation in any way.
-                        if (isStaticStaticPair)
+                        bool isInvalid = false;
+                        // Invalid if we have not found the body indices...
+                        isInvalid |= (pair.BodyAIndex == -1 || pair.BodyBIndex == -1);
+                        // ... or if we are constraining two static bodies
+                        // Mark static-static invalid since they are not going to affect simulation in any way.
+                        isInvalid |= (pair.BodyAIndex >= NumDynamicBodies && pair.BodyBIndex >= NumDynamicBodies);
+                        if (isInvalid)
                         {
                             pair = BodyIndexPair.Invalid;
                         }
 
                         Joints[firstEntityIndex + i] = new Joint
                         {
-                            JointData = (JointData*)joint.JointData.GetUnsafePtr(),
+                            JointData = chunkJoint[i].JointData,
                             BodyPair = pair,
                             Entity = chunkEntities[i],
-                            EnableCollision = joint.EnableCollision,
+                            EnableCollision = chunkJoint[i].EnableCollision
                         };
                     }
                 }

@@ -1,4 +1,5 @@
 ﻿using System;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -95,8 +96,8 @@ namespace Unity.Physics
         }
 
         // Solve the Jacobian
-        public void Solve(ref MotionVelocity velocityA, ref MotionVelocity velocityB, Solver.StepInput stepInput,
-            ref NativeStream.Writer collisionEventsWriter, ref NativeStream.Writer triggerEventsWriter)
+        public void Solve([NoAlias] ref MotionVelocity velocityA, [NoAlias] ref MotionVelocity velocityB, Solver.StepInput stepInput,
+            [NoAlias] ref NativeStream.Writer collisionEventsWriter, [NoAlias] ref NativeStream.Writer triggerEventsWriter)
         {
             if (Enabled)
             {
@@ -350,11 +351,11 @@ namespace Unity.Physics
 
         // Calculate the inverse effective mass of a linear jacobian
         public static float CalculateInvEffectiveMassDiag(
-            float3 angA, float4 invInertiaAndMassA,
-            float3 angB, float4 invInertiaAndMassB)
+            float3 angA, float3 invInertiaA, float invMassA,
+            float3 angB, float3 invInertiaB, float invMassB)
         {
-            float3 angularPart = angA * angA * invInertiaAndMassA.xyz + angB * angB * invInertiaAndMassB.xyz;
-            float linearPart = invInertiaAndMassA.w + invInertiaAndMassB.w;
+            float3 angularPart = angA * angA * invInertiaA + angB * angB * invInertiaB;
+            float linearPart = invMassA + invMassB;
             return (angularPart.x + angularPart.y) + (angularPart.z + linearPart);
         }
 
@@ -393,37 +394,16 @@ namespace Unity.Physics
     unsafe struct JacobianIterator
     {
         NativeStream.Reader m_Reader;
-        int m_CurrentWorkItem;
-        readonly bool m_IterateAll;
-        readonly int m_MaxWorkItemIndex;
 
-        public JacobianIterator(NativeStream.Reader jacobianStreamReader, int workItemIndex, bool iterateAll = false)
+        public JacobianIterator(NativeStream.Reader jacobianStreamReader, int workItemIndex)
         {
             m_Reader = jacobianStreamReader;
-            m_IterateAll = iterateAll;
-            m_MaxWorkItemIndex = workItemIndex;
-
-            if (iterateAll)
-            {
-                m_CurrentWorkItem = 0;
-                MoveReaderToNextForEachIndex();
-            }
-            else
-            {
-                m_CurrentWorkItem = workItemIndex;
-                m_Reader.BeginForEachIndex(workItemIndex);
-            }
+            m_Reader.BeginForEachIndex(workItemIndex);
         }
 
         public bool HasJacobiansLeft()
         {
             return m_Reader.RemainingItemCount > 0;
-        }
-
-        public ref JacobianHeader ReadJacobianHeader(out int readSize)
-        {
-            readSize = Read<int>();
-            return ref UnsafeUtilityEx.AsRef<JacobianHeader>(Read(readSize));
         }
 
         public ref JacobianHeader ReadJacobianHeader()
@@ -432,23 +412,9 @@ namespace Unity.Physics
             return ref UnsafeUtilityEx.AsRef<JacobianHeader>(Read(readSize));
         }
 
-        private void MoveReaderToNextForEachIndex()
-        {
-            while (m_Reader.RemainingItemCount == 0 && m_CurrentWorkItem < m_MaxWorkItemIndex)
-            {
-                m_Reader.BeginForEachIndex(m_CurrentWorkItem);
-                m_CurrentWorkItem++;
-            }
-        }
-
         private byte* Read(int size)
         {
             byte* dataPtr = m_Reader.ReadUnsafePtr(size);
-
-            if (m_IterateAll)
-            {
-                MoveReaderToNextForEachIndex();
-            }
 
             return dataPtr;
         }

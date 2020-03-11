@@ -1,4 +1,5 @@
-using System;
+#if !HAVOK_PHYSICS_EXISTS
+
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -44,7 +45,11 @@ namespace Unity.Physics.Authoring
                         OutputStreamContext = sharedOutput
                     };
 
-                    JobHandle gatherJobHandle = ScheduleContactsJob(gatherJob, simulation, ref world, inDeps);
+                    JobHandle gatherJobHandle = new DisplayContactsJob
+                    {
+                        DisplayContactIndices = false,
+                        OutputStreamContext = sharedOutput
+                    }.Schedule(simulation, ref world, inDeps);
 
                     var finishJob = new FinishDisplayContactsJob
                     {
@@ -60,15 +65,10 @@ namespace Unity.Physics.Authoring
             return inputDeps;
         }
 
-        protected virtual JobHandle ScheduleContactsJob(DisplayContactsJob job, ISimulation simulation, ref PhysicsWorld world, JobHandle inDeps)
-        {
-            // Explicitly call ScheduleImpl here, to avoid a dependency on Havok.Physics
-            return job.ScheduleImpl(simulation, ref world, inDeps);
-        }
-
         // Job which iterates over contacts from narrowphase and writes display info to a DebugStream.
+        // Cannot be burst-ed since we're converting int to char[] in order to write it to output stream
         //[BurstCompile]
-        protected unsafe struct DisplayContactsJob : IContactsJob
+        private unsafe struct DisplayContactsJob : IContactsJobBase
         {
             internal bool DisplayContactIndices;
             [NativeDisableUnsafePtrRestriction]
@@ -81,13 +81,14 @@ namespace Unity.Physics.Authoring
                 OutputStreamContext->Arrow(x0, x1, UnityEngine.Color.green);
                 if (DisplayContactIndices)
                 {
+                    // The following line is not Burst-compatible
                     OutputStreamContext->Text(point.Index.ToString().ToCharArray(), x0, UnityEngine.Color.red);
                 }
             }
         }
 
         [BurstCompile]
-        protected unsafe struct FinishDisplayContactsJob : IJob
+        private unsafe struct FinishDisplayContactsJob : IJob
         {
             [NativeDisableUnsafePtrRestriction]
             internal DebugStream.Context* OutputStreamContext;
@@ -100,3 +101,5 @@ namespace Unity.Physics.Authoring
         }
     }
 }
+
+#endif
