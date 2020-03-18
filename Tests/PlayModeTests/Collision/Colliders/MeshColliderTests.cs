@@ -129,7 +129,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             {
                 triangles = indices.Reinterpret<int3>(UnsafeUtility.SizeOf<int>());
             }
-
+            
             Measure.Method(() =>
             {
                 new TestMeshBuilderJob
@@ -138,8 +138,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
                     Vertices = vertices,
                     Triangles = triangles
                 }.Run();
-            }).Definition(sampleUnit: SampleUnit.Millisecond)
-              .MeasurementCount(1)
+            }).MeasurementCount(1)
               .Run();
 
             vertices.Dispose();

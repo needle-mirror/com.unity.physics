@@ -91,7 +91,7 @@ namespace Unity.Physics
         {
             float lenZero = math.lengthsq(v) - 1.0f;
             float absLenZero = math.abs(lenZero);
-            return absLenZero < Constants.Eps;
+            return absLenZero < Constants.UnityEpsilon;
         }
 
         // Return two normals perpendicular to the input vector

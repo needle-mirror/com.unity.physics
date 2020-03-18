@@ -545,8 +545,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
             Measure.Method(() =>
             {
                 job.Run();
-            }).Definition(sampleUnit: SampleUnit.Millisecond)
-              .MeasurementCount(1)
+            }).MeasurementCount(1)
               .Run();
 
             points.Dispose();

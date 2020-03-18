@@ -40,7 +40,7 @@ namespace Unity.Physics
             m_Bodies = world.Bodies;
 
             int numDynamicBodies = world.NumDynamicBodies;
-            if (InputVelocities.Length < numDynamicBodies)
+            if (!InputVelocities.IsCreated || InputVelocities.Length < numDynamicBodies)
             {
                 if (InputVelocities.IsCreated)
                 {
@@ -85,7 +85,7 @@ namespace Unity.Physics
             m_Bodies = world.Bodies;
 
             int numDynamicBodies = world.NumDynamicBodies;
-            if (InputVelocities.Length < numDynamicBodies)
+            if (!InputVelocities.IsCreated || InputVelocities.Length < numDynamicBodies)
             {
                 // TODO: can we find a way to setup InputVelocities within a job?
                 if (InputVelocities.IsCreated)

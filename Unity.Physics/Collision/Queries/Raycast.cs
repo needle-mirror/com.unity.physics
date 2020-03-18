@@ -1,5 +1,5 @@
 using System;
-using System.ComponentModel;
+using Unity.Entities;
 using Unity.Mathematics;
 using static Unity.Physics.Math;
 
@@ -13,7 +13,7 @@ namespace Unity.Physics
     public struct Ray
     {
         /// <summary>
-        /// The Origin point of the Ray in World Space.
+        /// The Origin point of the Ray in query space.
         /// </summary>
         /// <value> Point vector coordinate. </value>
         public float3 Origin;
@@ -69,6 +69,7 @@ namespace Unity.Physics
         public CollisionFilter Filter;
 
         internal Ray Ray;
+        internal QueryContext QueryContext;
     }
 
     // A hit from a ray cast query
@@ -84,51 +85,35 @@ namespace Unity.Physics
         public float Fraction { get; set; }
 
         /// <summary>
-        /// The point in World Space where the hit occurred.
+        ///
         /// </summary>
-        /// <value> The value is 0,0,0 if no hit occurs. </value>
-        public float3 Position;
-
-        /// <summary>
-        /// The normal of the point where the hit occurred.
-        /// </summary>
-        public float3 SurfaceNormal;
-
-        /// <summary>
-        /// The entity index of the RigidBody that was hit.
-        /// </summary>
-        public int RigidBodyIndex;
-
-        /// <summary>
-        /// The ColliderKey is used to identify the hit child in any CompositeCollider (e.g. MeshCollider or CompoundCollider).
-        /// </summary>
-        /// <value> A reference to which triangle or quad in the collider was hit. </value>
-        public ColliderKey ColliderKey;
+        /// <value> Returns RigidBodyIndex of queried body.</value>
+        public int RigidBodyIndex { get; set; }
 
         /// <summary>
         ///
         /// </summary>
-        /// <param name="transform"></param>
-        /// <param name="numSubKeyBits"></param>
-        /// <param name="subKey"></param>
-        public void Transform(MTransform transform, uint numSubKeyBits, uint subKey)
-        {
-            Position = Mul(transform, Position);
-            SurfaceNormal = math.mul(transform.Rotation, SurfaceNormal);
-            ColliderKey.PushSubKey(numSubKeyBits, subKey);
-        }
+        /// <value> Returns ColliderKey of queried leaf collider</value>
+        public ColliderKey ColliderKey { get; set; }
 
         /// <summary>
         ///
         /// </summary>
-        /// <param name="transform"></param>
-        /// <param name="rigidBodyIndex"></param>
-        public void Transform(MTransform transform, int rigidBodyIndex)
-        {
-            Position = Mul(transform, Position);
-            SurfaceNormal = math.mul(transform.Rotation, SurfaceNormal);
-            RigidBodyIndex = rigidBodyIndex;
-        }
+        /// <value> Returns Entity of queried body</value>
+        public Entity Entity { get; set; }
+
+        /// <summary>
+        /// The point in query space where the hit occurred.
+        /// </summary>
+        /// <value> Returns the position of the point where the hit occurred. </value>
+        public float3 Position { get; set; }
+
+        /// <summary>
+        ///
+        /// </summary>
+        /// <value> Returns the normal of the point where the hit occurred. </value>
+        public float3 SurfaceNormal { get; set; }
+
     }
 
     // Raycast query implementations
@@ -399,6 +384,11 @@ namespace Unity.Physics
                 return false;
             }
 
+            if (!input.QueryContext.IsInitialized)
+            {
+                input.QueryContext = QueryContext.DefaultContext;
+            }
+
             float fraction = collector.MaxFraction;
             float3 normal;
             bool hadHit;
@@ -443,14 +433,17 @@ namespace Unity.Physics
 
             if (hadHit)
             {
-                return collector.AddHit(new RaycastHit
+                var hit = new RaycastHit
                 {
                     Fraction = fraction,
-                    Position = input.Ray.Origin + input.Ray.Displacement * fraction,
-                    SurfaceNormal = normal,
-                    RigidBodyIndex = -1,
-                    ColliderKey = ColliderKey.Empty
-                });
+                    Position = Mul(input.QueryContext.WorldFromLocalTransform, input.Ray.Origin + (input.Ray.Displacement * fraction)),
+                    SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, normal),
+                    RigidBodyIndex = input.QueryContext.RigidBodyIndex,
+                    ColliderKey = input.QueryContext.ColliderKey,
+                    Entity = input.QueryContext.Entity
+                };
+
+                return collector.AddHit(hit);
             }
             return false;
         }
@@ -497,17 +490,21 @@ namespace Unity.Physics
 
                     if (hadHit && fraction < collector.MaxFraction)
                     {
-                        acceptHit |= collector.AddHit(new RaycastHit
+                        var normalizedNormal = math.normalize(unnormalizedNormal);
+
+                        var hit = new RaycastHit
                         {
                             Fraction = fraction,
-                            Position = input.Ray.Origin + input.Ray.Displacement * fraction,
-                            SurfaceNormal = math.normalize(unnormalizedNormal),
-                            RigidBodyIndex = -1,
-                            ColliderKey = new ColliderKey(m_NumColliderKeyBits, (uint)(primitiveKey << 1 | polygonIndex))
-                        });
+                            Position = Mul(input.QueryContext.WorldFromLocalTransform, input.Ray.Origin + input.Ray.Displacement * fraction),
+                            SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, normalizedNormal),
+                            RigidBodyIndex = input.QueryContext.RigidBodyIndex,
+                            ColliderKey = input.QueryContext.SetSubKey(m_NumColliderKeyBits, (uint)(primitiveKey << 1 | polygonIndex)),
+                            Entity = input.QueryContext.Entity
+                        };
+
+                        acceptHit |= collector.AddHit(hit);
                     }
                 }
-
                 return acceptHit;
             }
         }
@@ -546,18 +543,12 @@ namespace Unity.Physics
                     MTransform childFromCompound = Inverse(compoundFromChild);
                     inputLs.Ray.Origin = Mul(childFromCompound, input.Ray.Origin);
                     inputLs.Ray.Displacement = math.mul(childFromCompound.Rotation, input.Ray.Displacement);
+                    inputLs.QueryContext.ColliderKey = input.QueryContext.PushSubKey(m_CompoundCollider->NumColliderKeyBits, (uint)leafData);
+                    inputLs.QueryContext.NumColliderKeyBits = input.QueryContext.NumColliderKeyBits;
+                    inputLs.QueryContext.WorldFromLocalTransform = Mul(input.QueryContext.WorldFromLocalTransform, compoundFromChild);
                 }
 
-                int numHits = collector.NumHits;
-                float fraction = collector.MaxFraction;
-
-                if (child.Collider->CastRay(inputLs, ref collector))
-                {
-                    // Transform results back to compound space
-                    collector.TransformNewHits(numHits, fraction, compoundFromChild, m_CompoundCollider->NumColliderKeyBits, (uint)leafData);
-                    return true;
-                }
-                return false;
+                return child.Collider->CastRay(inputLs, ref collector);
             }
         }
 
@@ -616,16 +607,22 @@ namespace Unity.Physics
                             // Cast
                             float fraction = collector.MaxFraction;
                             bool triangleHit = RayTriangle(input.Ray.Origin, input.Ray.Displacement, a, b, c, ref fraction, out float3 unnormalizedNormal);
+
                             if (triangleHit && fraction < collector.MaxFraction)
                             {
-                                hadHit |= collector.AddHit(new RaycastHit
+                                var normalizedNormal = math.normalize(unnormalizedNormal);
+
+                                var hit = new RaycastHit
                                 {
                                     Fraction = fraction,
-                                    Position = input.Ray.Origin + input.Ray.Displacement * fraction,
-                                    SurfaceNormal = math.normalize(unnormalizedNormal),
-                                    RigidBodyIndex = -1,
-                                    ColliderKey = terrain.GetColliderKey(quadIndex, iTriangle)
-                                });
+                                    Position = Mul(input.QueryContext.WorldFromLocalTransform, input.Ray.Origin + input.Ray.Displacement * fraction),
+                                    SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, normalizedNormal),
+                                    RigidBodyIndex = input.QueryContext.RigidBodyIndex,
+                                    ColliderKey = input.QueryContext.SetSubKey(terrain.NumColliderKeyBits, terrain.GetSubKey(quadIndex, iTriangle)),
+                                    Entity = input.QueryContext.Entity
+                                };
+
+                                hadHit |= collector.AddHit(hit);
 
                                 if (collector.EarlyOutOnFirstHit && hadHit)
                                 {

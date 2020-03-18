@@ -13,31 +13,37 @@ namespace Unity.Physics
         {
             for (int i = 0; i < motionDatas.Length; i++)
             {
-                IntegrateMotionsJob.ExecuteImpl(i, motionDatas, motionVelocities, timeStep);
+                ParallelIntegrateMotionsJob.ExecuteImpl(i, motionDatas, motionVelocities, timeStep);
             }
         }
 
         // Schedule a job to integrate the world's motions forward by the given time step.
         internal static JobHandle ScheduleIntegrateJobs(ref DynamicsWorld world, float timeStep, JobHandle inputDeps, int threadCountHint = 0)
         {
-            var job = new IntegrateMotionsJob
-            {
-                MotionDatas = world.MotionDatas,
-                MotionVelocities = world.MotionVelocities,
-                TimeStep = timeStep
-            };
             if (threadCountHint <= 0)
             {
+                var job = new IntegrateMotionsJob
+                {
+                    MotionDatas = world.MotionDatas,
+                    MotionVelocities = world.MotionVelocities,
+                    TimeStep = timeStep
+                };
                 return job.Schedule(inputDeps);
             }
             else
             {
+                var job = new ParallelIntegrateMotionsJob
+                {
+                    MotionDatas = world.MotionDatas,
+                    MotionVelocities = world.MotionVelocities,
+                    TimeStep = timeStep
+                };
                 return job.Schedule(world.NumMotions, 64, inputDeps);
             }
         }
 
         [BurstCompile]
-        private struct IntegrateMotionsJob : IJobParallelFor, IJob
+        private struct ParallelIntegrateMotionsJob : IJobParallelFor
         {
             public NativeSlice<MotionData> MotionDatas;
             public NativeSlice<MotionVelocity> MotionVelocities;
@@ -46,11 +52,6 @@ namespace Unity.Physics
             public void Execute(int i)
             {
                 ExecuteImpl(i, MotionDatas, MotionVelocities, TimeStep);
-            }
-
-            public void Execute()
-            {
-                Integrate(MotionDatas, MotionVelocities, TimeStep);
             }
 
             internal static void ExecuteImpl(int i, NativeSlice<MotionData> motionDatas, NativeSlice<MotionVelocity> motionVelocities, float timeStep)
@@ -77,6 +78,19 @@ namespace Unity.Physics
                 // Write back
                 motionDatas[i] = motionData;
                 motionVelocities[i] = motionVelocity;
+            }
+        }
+
+        [BurstCompile]
+        private struct IntegrateMotionsJob : IJob
+        {
+            public NativeSlice<MotionData> MotionDatas;
+            public NativeSlice<MotionVelocity> MotionVelocities;
+            public float TimeStep;
+
+            public void Execute()
+            {
+                Integrate(MotionDatas, MotionVelocities, TimeStep);
             }
         }
 

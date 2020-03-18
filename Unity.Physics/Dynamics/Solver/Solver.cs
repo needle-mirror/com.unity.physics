@@ -25,7 +25,7 @@ namespace Unity.Physics
         {
             for (int i = 0; i < motionDatas.Length; i++)
             {
-                ApplyGravityAndCopyInputVelocitiesJob.ExecuteImpl(i, gravityAcceleration, motionDatas, motionVelocities, inputVelocities);
+                ParallelApplyGravityAndCopyInputVelocitiesJob.ExecuteImpl(i, gravityAcceleration, motionDatas, motionVelocities, inputVelocities);
             }
         }
 
@@ -33,19 +33,26 @@ namespace Unity.Physics
         internal static JobHandle ScheduleApplyGravityAndCopyInputVelocitiesJob(ref DynamicsWorld world, NativeSlice<Velocity> inputVelocities,
             float3 gravityAcceleration, JobHandle inputDeps, int threadCountHint = 0)
         {
-            var job = new ApplyGravityAndCopyInputVelocitiesJob
-            {
-                MotionDatas = world.MotionDatas,
-                MotionVelocities = world.MotionVelocities,
-                InputVelocities = inputVelocities,
-                GravityAcceleration = gravityAcceleration
-            };
             if (threadCountHint <= 0)
             {
+                var job = new ApplyGravityAndCopyInputVelocitiesJob
+                {
+                    MotionDatas = world.MotionDatas,
+                    MotionVelocities = world.MotionVelocities,
+                    InputVelocities = inputVelocities,
+                    GravityAcceleration = gravityAcceleration
+                };
                 return job.Schedule(inputDeps);
             }
             else
             {
+                var job = new ParallelApplyGravityAndCopyInputVelocitiesJob
+                {
+                    MotionDatas = world.MotionDatas,
+                    MotionVelocities = world.MotionVelocities,
+                    InputVelocities = inputVelocities,
+                    GravityAcceleration = gravityAcceleration
+                };
                 return job.Schedule(world.NumMotions, 64, inputDeps);
             }
         }
@@ -82,13 +89,12 @@ namespace Unity.Physics
                     Gravity = gravity,
                     NumSolverIterations = numSolverIterations,
                     World = world,
-                    DispatchPairs = dispatchPairs.AsDeferredJobArray(),
-                    SolverSchedulerInfo = solverSchedulerInfo
+                    DispatchPairs = dispatchPairs.AsDeferredJobArray()
                 }.Schedule(inputDeps);
             }
             else
             {
-                var buildJob = new BuildJacobiansJob
+                var buildJob = new ParallelBuildJacobiansJob
                 {
                     ContactsReader = contacts.AsReader(),
                     JacobiansWriter = jacobians.AsWriter(),
@@ -150,8 +156,7 @@ namespace Unity.Physics
                     NumIterations = numIterations,
                     Timestep = timestep,
                     TriggerEventsWriter = triggerEvents.AsWriter(),
-                    MotionVelocities = dynamicsWorld.MotionVelocities,
-                    Phases = solverSchedulerInfo.PhaseInfo
+                    MotionVelocities = dynamicsWorld.MotionVelocities
                 }.Schedule(inputDeps);
 
                 return returnHandles;
@@ -180,7 +185,7 @@ namespace Unity.Physics
                     bool lastIteration = solverIterationId == numIterations - 1;
                     for (int phaseId = 0; phaseId < numPhases; phaseId++)
                     {
-                        var job = new SolverJob
+                        var job = new ParallelSolverJob
                         {
                             JacobiansReader = jacobians.AsReader(),
                             PhaseIndex = phaseId,
@@ -225,7 +230,7 @@ namespace Unity.Physics
         #region Jobs
 
         [BurstCompile]
-        private struct ApplyGravityAndCopyInputVelocitiesJob : IJobParallelFor, IJob
+        private struct ParallelApplyGravityAndCopyInputVelocitiesJob : IJobParallelFor
         {
             public NativeSlice<MotionData> MotionDatas;
             public NativeSlice<MotionVelocity> MotionVelocities;
@@ -235,11 +240,6 @@ namespace Unity.Physics
             public void Execute(int i)
             {
                 ExecuteImpl(i, GravityAcceleration, MotionDatas, MotionVelocities, InputVelocities);
-            }
-
-            public void Execute()
-            {
-                ApplyGravityAndCopyInputVelocities(MotionDatas, MotionVelocities, InputVelocities, GravityAcceleration);
             }
 
             internal static void ExecuteImpl(int i, float3 gravityAcceleration,
@@ -264,7 +264,21 @@ namespace Unity.Physics
         }
 
         [BurstCompile]
-        private struct BuildJacobiansJob : IJobParallelForDefer, IJob
+        private struct ApplyGravityAndCopyInputVelocitiesJob : IJob
+        {
+            public NativeSlice<MotionData> MotionDatas;
+            public NativeSlice<MotionVelocity> MotionVelocities;
+            public NativeSlice<Velocity> InputVelocities;
+            public float3 GravityAcceleration;
+
+            public void Execute()
+            {
+                ApplyGravityAndCopyInputVelocities(MotionDatas, MotionVelocities, InputVelocities, GravityAcceleration);
+            }
+        }
+
+        [BurstCompile]
+        private struct ParallelBuildJacobiansJob : IJobParallelForDefer
         {
             [ReadOnly] public PhysicsWorld World;
 
@@ -273,14 +287,9 @@ namespace Unity.Physics
             public float TimeStep;
             [ReadOnly] public NativeArray<DispatchPairSequencer.DispatchPair> DispatchPairs;
             [ReadOnly] public int NumSolverIterations;
-
-            // IJobParallelForDefer specific
             public float InvTimeStep;
             public float GravityAcceleration;
             [ReadOnly] public DispatchPairSequencer.SolverSchedulerInfo SolverSchedulerInfo;
-
-            // IJob specific
-            public float3 Gravity;
 
             public void Execute(int workItemIndex)
             {
@@ -292,6 +301,19 @@ namespace Unity.Physics
                     new NativeSlice<DispatchPairSequencer.DispatchPair>(DispatchPairs, firstDispatchPairIndex, dispatchPairCount),
                     ref ContactsReader, ref JacobiansWriter);
             }
+        }
+
+        [BurstCompile]
+        private struct BuildJacobiansJob : IJob
+        {
+            [ReadOnly] public PhysicsWorld World;
+
+            public NativeStream.Reader ContactsReader;
+            public NativeStream.Writer JacobiansWriter;
+            public float TimeStep;
+            [ReadOnly] public NativeArray<DispatchPairSequencer.DispatchPair> DispatchPairs;
+            [ReadOnly] public int NumSolverIterations;
+            public float3 Gravity;
 
             public void Execute()
             {
@@ -302,7 +324,7 @@ namespace Unity.Physics
 
         [BurstCompile]
         [NoAlias]
-        private struct SolverJob : IJobParallelForDefer, IJob
+        private struct ParallelSolverJob : IJobParallelForDefer
         {
             [NativeDisableParallelForRestriction]
             public NativeSlice<MotionVelocity> MotionVelocities;
@@ -320,15 +342,10 @@ namespace Unity.Physics
             [NoAlias]
             public NativeStream.Writer TriggerEventsWriter;
 
-            // IJobParallelForDefer specific
             [ReadOnly]
             public NativeArray<DispatchPairSequencer.SolverSchedulerInfo.SolvePhaseInfo> Phases;
             public int PhaseIndex;
             public StepInput StepInput;
-
-            // IJob specific
-            public int NumIterations;
-            public float Timestep;
 
             public void Execute(int workItemIndex)
             {
@@ -339,6 +356,30 @@ namespace Unity.Physics
 
                 Solve(MotionVelocities, ref JacobiansReader, ref CollisionEventsWriter, ref TriggerEventsWriter, workItemIndex + workItemStartIndexOffset, StepInput);
             }
+        }
+
+        [BurstCompile]
+        [NoAlias]
+        private struct SolverJob : IJob
+        {
+            [NativeDisableParallelForRestriction]
+            public NativeSlice<MotionVelocity> MotionVelocities;
+
+            [NoAlias]
+            public NativeStream.Reader JacobiansReader;
+
+            //@TODO: Unity should have a Allow null safety restriction
+            [NativeDisableContainerSafetyRestriction]
+            [NoAlias]
+            public NativeStream.Writer CollisionEventsWriter;
+
+            //@TODO: Unity should have a Allow null safety restriction
+            [NativeDisableContainerSafetyRestriction]
+            [NoAlias]
+            public NativeStream.Writer TriggerEventsWriter;
+
+            public int NumIterations;
+            public float Timestep;
 
             public void Execute()
             {
@@ -351,7 +392,7 @@ namespace Unity.Physics
         #region Implementation
 
         private static void BuildJacobian(MTransform worldFromA, MTransform worldFromB, float3 normal, float3 armA, float3 armB,
-            float3 invInertiaA, float3 invInertiaB, float sumInvMass, out float3 angularA, out float3 angularB, out float invEffectiveMass)
+        float3 invInertiaA, float3 invInertiaB, float sumInvMass, out float3 angularA, out float3 angularB, out float invEffectiveMass)
         {
             float3 crossA = math.cross(armA, normal);
             angularA = math.mul(worldFromA.InverseRotation, crossA).xyz;

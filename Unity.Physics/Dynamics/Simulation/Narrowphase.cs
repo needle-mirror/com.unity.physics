@@ -13,7 +13,7 @@ namespace Unity.Physics
         {
             contactsWriter.BeginForEachIndex(0);
 
-            CreateContactsJob.ExecuteImpl(ref world, timeStep, dispatchPairs, 0, dispatchPairs.Length, ref contactsWriter);
+            ParallelCreateContactsJob.ExecuteImpl(ref world, timeStep, dispatchPairs, 0, dispatchPairs.Length, ref contactsWriter);
 
             contactsWriter.EndForEachIndex();
         }
@@ -34,7 +34,6 @@ namespace Unity.Physics
                     World = world,
                     TimeStep = timeStep,
                     DispatchPairs = dispatchPairs.AsDeferredJobArray(),
-                    SolverSchedulerInfo = solverSchedulerInfo,
                     ContactsWriter = contacts.AsWriter()
                 }.Schedule(inputDeps);
             }
@@ -44,7 +43,7 @@ namespace Unity.Physics
                 var contactsHandle = NativeStream.ScheduleConstruct(out contacts, numWorkItems, inputDeps, Allocator.TempJob);
                 var jacobiansHandle = NativeStream.ScheduleConstruct(out jacobians, numWorkItems, inputDeps, Allocator.TempJob);
 
-                var processHandle = new CreateContactsJob
+                var processHandle = new ParallelCreateContactsJob
                 {
                     World = world,
                     TimeStep = timeStep,
@@ -62,14 +61,12 @@ namespace Unity.Physics
 
         [BurstCompile]
         [NoAlias]
-        struct CreateContactsJob : IJobParallelForDefer, IJob
+        struct ParallelCreateContactsJob : IJobParallelForDefer
         {
             [NoAlias, ReadOnly] public PhysicsWorld World;
             [ReadOnly] public float TimeStep;
             [ReadOnly] public NativeArray<DispatchPairSequencer.DispatchPair> DispatchPairs;
             [NoAlias] public NativeStream.Writer ContactsWriter;
-
-            // IJobParallelForDefer specific
             [NoAlias, ReadOnly] public DispatchPairSequencer.SolverSchedulerInfo SolverSchedulerInfo;
 
             public unsafe void Execute(int workItemIndex)
@@ -81,11 +78,6 @@ namespace Unity.Physics
                 ExecuteImpl(ref World, TimeStep, DispatchPairs, dispatchPairReadOffset, numPairsToRead, ref ContactsWriter);
 
                 ContactsWriter.EndForEachIndex();
-            }
-
-            public void Execute()
-            {
-                CreateContacts(ref World, DispatchPairs, TimeStep, ref ContactsWriter);
             }
 
             internal static unsafe void ExecuteImpl(ref PhysicsWorld world, float timeStep,
@@ -121,6 +113,21 @@ namespace Unity.Physics
                         }
                     }
                 }
+            }
+        }
+
+        [BurstCompile]
+        [NoAlias]
+        struct CreateContactsJob : IJob
+        {
+            [NoAlias, ReadOnly] public PhysicsWorld World;
+            [ReadOnly] public float TimeStep;
+            [ReadOnly] public NativeArray<DispatchPairSequencer.DispatchPair> DispatchPairs;
+            [NoAlias] public NativeStream.Writer ContactsWriter;
+
+            public void Execute()
+            {
+                CreateContacts(ref World, DispatchPairs, TimeStep, ref ContactsWriter);
             }
         }
     }

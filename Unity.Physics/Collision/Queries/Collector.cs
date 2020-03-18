@@ -1,4 +1,7 @@
-﻿using Unity.Collections;
+﻿using System;
+using Unity.Collections;
+using Unity.Entities;
+using Unity.Mathematics;
 using UnityEngine.Assertions;
 using static Unity.Physics.Math;
 
@@ -6,10 +9,57 @@ namespace Unity.Physics
 {
     public interface IQueryResult
     {
+        // For casts this is fraction of the query at which the hit occurred.
+        // For distance queries, this is a distance from the query object
         float Fraction { get; }
 
-        void Transform(MTransform transform, uint parentSubKey, uint parentSubKeyBits);
-        void Transform(MTransform transform, int rigidBodyIndex);
+        // Index of the hit body in the CollisionWorld's rigid body array
+        int RigidBodyIndex { get; }
+
+        // ColliderKey of the hit leaf collider
+        ColliderKey ColliderKey { get; }
+
+        // Entity of the hit body
+        Entity Entity { get; }
+
+    }
+
+    struct QueryContext
+    {
+        public int RigidBodyIndex;
+        public ColliderKey ColliderKey;
+        public Entity Entity;
+        public uint NumColliderKeyBits;
+        public MTransform WorldFromLocalTransform;
+        public bool IsInitialized;
+
+        public static QueryContext DefaultContext => new QueryContext
+        {
+            RigidBodyIndex = -1,
+            ColliderKey = ColliderKey.Empty,
+            Entity = Entity.Null,
+            NumColliderKeyBits = 0,
+            WorldFromLocalTransform = MTransform.Identity,
+            IsInitialized = true
+        };
+
+        public ColliderKey SetSubKey(uint childSubKeyNumOfBits, uint childSubKey)
+        {
+            var parentColliderKey = ColliderKey;
+            parentColliderKey.PopSubKey(NumColliderKeyBits, out uint parentKey);
+
+            var colliderKey = new ColliderKey(childSubKeyNumOfBits, childSubKey);
+            colliderKey.PushSubKey(NumColliderKeyBits, parentKey);
+            return colliderKey;
+        }
+
+        public ColliderKey PushSubKey(uint childSubKeyNumOfBits, uint childSubKey)
+        {
+            var colliderKey = SetSubKey(childSubKeyNumOfBits, childSubKey);
+            NumColliderKeyBits += childSubKeyNumOfBits;
+            return colliderKey;
+        }
+
     }
 
     // Interface for collecting hits during a collision query
@@ -30,8 +80,6 @@ namespace Unity.Physics
         // Return true to accept the hit, or false to ignore it
         bool AddHit(T hit);
 
-        void TransformNewHits(int oldNumHits, float oldFraction, MTransform transform, uint numSubKeyBits, uint subKey);
-        void TransformNewHits(int oldNumHits, float oldFraction, MTransform transform, int rigidBodyIndex);
     }
 
     // A collector which exits the query as soon as any hit is detected.
@@ -54,10 +102,8 @@ namespace Unity.Physics
             return true;
         }
 
-        public void TransformNewHits(int oldNumHits, float oldFraction, MTransform transform, uint numSubKeyBits, uint subKey) { }
-        public void TransformNewHits(int oldNumHits, float oldFraction, MTransform transform, int rigidBodyIndex) { }
-
         #endregion
+
     }
 
     // A collector which stores only the closest hit.
@@ -88,23 +134,8 @@ namespace Unity.Physics
             return true;
         }
 
-        public void TransformNewHits(int oldNumHits, float oldFraction, MTransform transform, uint numSubKeyBits, uint subKey)
-        {
-            if (m_ClosestHit.Fraction < oldFraction)
-            {
-                m_ClosestHit.Transform(transform, numSubKeyBits, subKey);
-            }
-        }
-
-        public void TransformNewHits(int oldNumHits, float oldFraction, MTransform transform, int rigidBodyIndex)
-        {
-            if (m_ClosestHit.Fraction < oldFraction)
-            {
-                m_ClosestHit.Transform(transform, rigidBodyIndex);
-            }
-        }
-
         #endregion
+
     }
 
     // A collector which stores every hit.
@@ -122,7 +153,7 @@ namespace Unity.Physics
             AllHits = allHits;
         }
 
-        #region
+        #region ICollector
 
         public bool AddHit(T hit)
         {
@@ -131,26 +162,7 @@ namespace Unity.Physics
             return true;
         }
 
-        public void TransformNewHits(int oldNumHits, float oldFraction, MTransform transform, uint numSubKeyBits, uint subKey)
-        {
-            for (int i = oldNumHits; i < NumHits; i++)
-            {
-                T hit = AllHits[i];
-                hit.Transform(transform, numSubKeyBits, subKey);
-                AllHits[i] = hit;
-            }
-        }
-
-        public void TransformNewHits(int oldNumHits, float oldFraction, MTransform transform, int rigidBodyIndex)
-        {
-            for (int i = oldNumHits; i < NumHits; i++)
-            {
-                T hit = AllHits[i];
-                hit.Transform(transform, rigidBodyIndex);
-                AllHits[i] = hit;
-            }
-        }
-
         #endregion
+
     }
 }

@@ -44,7 +44,9 @@ namespace Unity.Physics.Tests.PerformanceTests
                     }
                 }
 
-                pairs[i] = indexB << 40 | indexA << 16;
+                pairs[i] =
+                    indexA << DispatchPairSequencer.DispatchPair.k_BodyAIndexShift |
+                    indexB << DispatchPairSequencer.DispatchPair.k_BodyBIndexShift;
             }
         }
 
@@ -91,13 +93,15 @@ namespace Unity.Physics.Tests.PerformanceTests
             {
                 job.Run();
             })
-            .Definition(sampleUnit: SampleUnit.Microsecond)
             .MeasurementCount(1)
             .Run();
 
+            // All bits associated with the BodyA index
+            ulong mask = ~DispatchPairSequencer.DispatchPair.k_BodyAMask;
+
             for (int i = 0; i < count - 1; i++)
             {
-                Assert.IsTrue((sortedPairs[i] & 0xffffff0000000000) <= (sortedPairs[i + 1] & 0xffffff0000000000),
+                Assert.IsTrue((sortedPairs[i] & mask) <= (sortedPairs[i + 1] & mask),
                     $"Not sorted for index {i}, sortedPairs[i]= {sortedPairs[i]}, sortedPairs[i+1]= {sortedPairs[i + 1]}");
             }
 
@@ -136,7 +140,9 @@ namespace Unity.Physics.Tests.PerformanceTests
 
             // Do a single pass of radix sort on bodyA only.
             var tempCount = new NativeArray<int>(maxBodyIndex + 1, Allocator.TempJob);
-            DispatchPairSequencer.RadixSortPerBodyAJob.RadixSortPerBodyA((ulong*)pairs.GetUnsafePtr(), (ulong*)sortedPairs.GetUnsafePtr(), pairs.Length, tempCount, numDigits, maxBodyIndex, 16);
+            DispatchPairSequencer.RadixSortPerBodyAJob.RadixSortPerBodyA(
+                (ulong*)pairs.GetUnsafePtr(), (ulong*)sortedPairs.GetUnsafePtr(),
+                pairs.Length, tempCount, numDigits, maxBodyIndex, DispatchPairSequencer.DispatchPair.k_BodyAIndexShift);
 
             var job = new DispatchPairSequencer.SortSubArraysJob
             {
@@ -148,13 +154,15 @@ namespace Unity.Physics.Tests.PerformanceTests
             {
                 job.Run(tempCount.Length);
             })
-            .Definition(sampleUnit: SampleUnit.Microsecond)
             .MeasurementCount(1)
             .Run();
 
+            // Mask all bits NOT associated with the BodyA index
+            ulong mask = DispatchPairSequencer.DispatchPair.k_BodyAMask;
+
             for (int i = 0; i < count - 1; i++)
             {
-                Assert.IsTrue((sortedPairs[i] & 0x00000000ffffffff) < (sortedPairs[i + 1] & 0x00000000ffffffff) ||
+                Assert.IsTrue((sortedPairs[i] & mask) < (sortedPairs[i + 1] & mask) ||
                     (sortedPairs[i] <= sortedPairs[i + 1]),
                     $"Not sorted for index {i}, sortedPairs[i] = {sortedPairs[i]}, sortedPairs[i+1] = {sortedPairs[i + 1]}");
             }

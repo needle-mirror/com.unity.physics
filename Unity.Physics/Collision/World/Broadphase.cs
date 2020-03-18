@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine.Assertions;
@@ -596,18 +597,18 @@ namespace Unity.Physics
                     MTransform bodyFromWorld = Inverse(worldFromBody);
                     inputLs.Ray.Origin = Mul(bodyFromWorld, input.Ray.Origin);
                     inputLs.Ray.Displacement = math.mul(bodyFromWorld.Rotation, input.Ray.Displacement);
+                    inputLs.QueryContext = new QueryContext
+                    {
+                        RigidBodyIndex = rigidBodyIndex,
+                        NumColliderKeyBits = 0,
+                        ColliderKey = ColliderKey.Empty,
+                        WorldFromLocalTransform = worldFromBody,
+                        Entity = body.Entity,
+                        IsInitialized = true
+                    };
                 }
 
-                float fraction = collector.MaxFraction;
-                int numHits = collector.NumHits;
-
-                if (body.CastRay(inputLs, ref collector))
-                {
-                    // Transform results back into world space
-                    collector.TransformNewHits(numHits, fraction, worldFromBody, rigidBodyIndex);
-                    return true;
-                }
-                return false;
+                return body.CastRay(inputLs, ref collector);
             }
 
             public unsafe bool ColliderCastLeaf<T>(ColliderCastInput input, int rigidBodyIndex, ref T collector)
@@ -623,20 +624,21 @@ namespace Unity.Physics
                 {
                     Collider = input.Collider,
                     Orientation = math.mul(math.inverse(body.WorldFromBody.rot), input.Orientation),
+                    QueryContext = new QueryContext
+                    {
+                        RigidBodyIndex = rigidBodyIndex,
+                        NumColliderKeyBits = 0,
+                        ColliderKey = ColliderKey.Empty,
+                        WorldFromLocalTransform = worldFromBody,
+                        Entity = body.Entity,
+                        IsInitialized = true
+                    }
                 };
+
                 inputLs.Ray.Origin = Mul(bodyFromWorld, input.Ray.Origin);
                 inputLs.Ray.Displacement = math.mul(bodyFromWorld.Rotation, input.Ray.Displacement);
 
-                float fraction = collector.MaxFraction;
-                int numHits = collector.NumHits;
-
-                if (body.CastCollider(inputLs, ref collector))
-                {
-                    // Transform results back into world space
-                    collector.TransformNewHits(numHits, fraction, worldFromBody, rigidBodyIndex);
-                    return true;
-                }
-                return false;
+                return body.CastCollider(inputLs, ref collector);
             }
 
             public bool DistanceLeaf<T>(PointDistanceInput input, int rigidBodyIndex, ref T collector)
@@ -652,19 +654,19 @@ namespace Unity.Physics
                 {
                     Position = Mul(bodyFromWorld, input.Position),
                     MaxDistance = input.MaxDistance,
-                    Filter = input.Filter
+                    Filter = input.Filter,
+                    QueryContext = new QueryContext
+                    {
+                        RigidBodyIndex = rigidBodyIndex,
+                        ColliderKey = ColliderKey.Empty,
+                        NumColliderKeyBits = 0,
+                        WorldFromLocalTransform = worldFromBody,
+                        Entity = body.Entity,
+                        IsInitialized = true
+                    }
                 };
 
-                float fraction = collector.MaxFraction;
-                int numHits = collector.NumHits;
-
-                if (body.CalculateDistance(inputLs, ref collector))
-                {
-                    // Transform results back into world space
-                    collector.TransformNewHits(numHits, fraction, worldFromBody, rigidBodyIndex);
-                    return true;
-                }
-                return false;
+                return body.CalculateDistance(inputLs, ref collector);
             }
 
             public unsafe bool DistanceLeaf<T>(ColliderDistanceInput input, int rigidBodyIndex, ref T collector)
@@ -682,19 +684,19 @@ namespace Unity.Physics
                     Transform = new RigidTransform(
                         math.mul(math.inverse(body.WorldFromBody.rot), input.Transform.rot),
                         Mul(bodyFromWorld, input.Transform.pos)),
-                    MaxDistance = input.MaxDistance
+                    MaxDistance = input.MaxDistance,
+                    QueryContext = new QueryContext
+                    {
+                        RigidBodyIndex = rigidBodyIndex,
+                        ColliderKey = ColliderKey.Empty,
+                        NumColliderKeyBits = 0,
+                        WorldFromLocalTransform = worldFromBody,
+                        Entity = body.Entity,
+                        IsInitialized = true
+                    }
                 };
 
-                float fraction = collector.MaxFraction;
-                int numHits = collector.NumHits;
-
-                if (body.CalculateDistance(inputLs, ref collector))
-                {
-                    // Transform results back into world space
-                    collector.TransformNewHits(numHits, fraction, worldFromBody, rigidBodyIndex);
-                    return true;
-                }
-                return false;
+                return body.CalculateDistance(inputLs, ref collector);
             }
 
             public unsafe void AabbLeaf<T>(OverlapAabbInput input, int rigidBodyIndex, ref T collector)

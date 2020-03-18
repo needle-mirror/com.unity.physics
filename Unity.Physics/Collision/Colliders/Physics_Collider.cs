@@ -137,6 +137,7 @@ namespace Unity.Physics
                 // Disallow changing the filter of composite types directly, since that is a combination of its children
                 if(m_Header.CollisionType == CollisionType.Convex)
                 {
+                    m_Header.Version++;
                     m_Header.Filter = value;
                 }
             }

@@ -17,53 +17,73 @@ namespace Unity.Physics
 
         // A pair of interacting bodies (either potentially colliding, or constrained together using a Joint).
         // The indices are compressed into a single 64 bit value, for deterministic sorting, as follows:
-        // [BodyAIndex|BodyBIndex|JointIndex]
+        //
+        //        6         5         4         3         2         1         
+        //    4321098765432109876543210987654321098765432109876543210987654321
+        // 0b_1111111111111111111111111111111111111111111111111111111111111111
+        //    [        BodyA-24      ][       BodyB-24       ]C[  Joint-15   ]
+        //
+        //
+        // This gives a limit of 
+        //    16,777,216 Rigid bodies
+        //    32,767 Joints (1 bit used for Enable [C]ollisions flag)
+        //
         // We additionally choose indices so that BodyAIndex < BodyBIndex. This has subtle side-effects:
         // * If one body in the pair is static, it will be body B.
         // * Indices used for jointed pairs are not necessarily the same as selected in the joint
         // * For some body A, all it's static collisions will be contiguous.
-        [DebuggerDisplay("{IsJoint ? \"Joint\" : \"Contact\"}, [{BodyAIndex}, {BodyBIndex}]")]
+        //
+        [DebuggerDisplay("{IsContact ? \"Contact\" : \"Joint\"}, [{BodyAIndex}, {BodyBIndex}]")]
         public struct DispatchPair
         {
             private ulong m_Data;
 
-            private const int k_InvalidBodyIndex = 0xffffff;
-            private const int k_InvalidJointIndex = 0x7fff;
-            private const ulong k_EnableJointCollisionBit = 0x8000;
+            internal static readonly uint k_InvalidBodyIndex = 0b_0000_0000_1111_1111_1111_1111_1111_1111; // 24 bits
+            internal static readonly uint k_InvalidJointIndex = 0b_0000_0000_0000_0000_0111_1111_1111_1111; // 15 bits
 
-            internal bool IsValid => m_Data != 0xffffffffffffffff;
-            internal bool IsContact => JointIndex == k_InvalidJointIndex;
-            internal bool IsJoint => JointIndex != k_InvalidJointIndex;
+            internal static readonly int k_JointIndexShift = 0;
+            internal static readonly int k_BodyBIndexShift = k_JointIndexShift + math.countbits(k_InvalidJointIndex) + 1;//EnableCollisions
+            internal static readonly int k_BodyAIndexShift = k_BodyBIndexShift + math.countbits(k_InvalidBodyIndex);
 
-            public static DispatchPair Invalid => new DispatchPair { m_Data = 0xffffffffffffffff };
+            internal static readonly ulong k_BodyAMask = ~((ulong)(k_InvalidBodyIndex) << k_BodyAIndexShift);
+            internal static readonly ulong k_BodyBMask = ~((ulong)(k_InvalidBodyIndex) << k_BodyBIndexShift);
+            internal static readonly ulong k_JointMask = ~((ulong)(k_InvalidJointIndex) << k_JointIndexShift);
+
+            private static readonly ulong k_EnableJointCollisionBit = ((ulong)k_InvalidJointIndex + 1) << k_JointIndexShift;
+
+            public bool IsValid => m_Data != DispatchPair.Invalid.m_Data;
+            public bool IsJoint => JointIndex != k_InvalidJointIndex;
+            public bool IsContact => !(IsJoint);
+
+            public static DispatchPair Invalid => new DispatchPair { m_Data = ~(ulong)0x0 };
 
             public int BodyAIndex
             {
-                get => (int)(m_Data >> 40);
+                get => (int)((m_Data >> k_BodyAIndexShift) & k_InvalidBodyIndex);
                 internal set
                 {
                     Assert.IsTrue(value < k_InvalidBodyIndex);
-                    m_Data = (m_Data & 0x000000ffffffffff) | ((ulong)value << 40);
+                    m_Data = (m_Data & k_BodyAMask) | ((ulong)value << k_BodyAIndexShift);
                 }
             }
 
             public int BodyBIndex
             {
-                get => (int)((m_Data >> 16) & k_InvalidBodyIndex);
+                get => (int)((m_Data >> k_BodyBIndexShift) & k_InvalidBodyIndex);
                 internal set
                 {
                     Assert.IsTrue(value < k_InvalidBodyIndex);
-                    m_Data = (m_Data & 0xffffff000000ffff) | ((ulong)value << 16);
+                    m_Data = (m_Data & k_BodyBMask) | ((ulong)value << k_BodyBIndexShift);
                 }
             }
 
             public int JointIndex
             {
-                get => (int)(m_Data & k_InvalidJointIndex);
+                get => (int)((m_Data >> k_JointIndexShift) & k_InvalidJointIndex);
                 internal set
                 {
                     Assert.IsTrue(value < k_InvalidJointIndex);
-                    m_Data = (m_Data & 0xffffffffffff0000) | (uint)(value);
+                    m_Data = (m_Data & k_JointMask) | (uint)(value << k_JointIndexShift);
                 }
             }
 
@@ -74,7 +94,10 @@ namespace Unity.Physics
 
             public static DispatchPair CreateCollisionPair(BodyIndexPair pair)
             {
-                return Create(pair, k_InvalidJointIndex, 1);
+                // Note: The EnabledCollisions flag is set (1) deliberately.
+                // Setting all bits related to the Joint ensures that joints are
+                // always solved before the higher priority contacts.
+                return Create(pair, (int)k_InvalidJointIndex, 1);
             }
 
             public static DispatchPair CreateJoint(BodyIndexPair pair, int jointIndex, int allowCollision)
@@ -85,12 +108,16 @@ namespace Unity.Physics
 
             private static DispatchPair Create(BodyIndexPair pair, int jointIndex, int allowCollision)
             {
-                Assert.IsTrue(pair.BodyAIndex < 0xffffff && pair.BodyBIndex < 0xffffff);
+                Assert.IsTrue(pair.BodyAIndex < k_InvalidBodyIndex && pair.BodyBIndex < k_InvalidBodyIndex);
                 int selectedA = math.min(pair.BodyAIndex, pair.BodyBIndex);
                 int selectedB = math.max(pair.BodyAIndex, pair.BodyBIndex);
                 return new DispatchPair
                 {
-                    m_Data = ((ulong)selectedA << 40) | ((ulong)selectedB << 16) | ((ulong)math.min(1, allowCollision) << 15) | (uint)jointIndex
+                    m_Data =
+                        ((ulong)selectedA << k_BodyAIndexShift) |
+                        ((ulong)selectedB << k_BodyBIndexShift) |
+                        (allowCollision == 0 ? 0 : k_EnableJointCollisionBit) |
+                        ((ulong)jointIndex << k_JointIndexShift)
                 };
             }
         }
@@ -311,7 +338,8 @@ namespace Unity.Physics
                 returnHandles.FinalDisposeHandle = JobHandle.CombineDependencies(disposeBroadphasePairs0, disposeBroadphasePairs1);
 
                 // Sort into the target array
-                sortHandle = ScheduleSortJob(world.NumBodies, unsortedPairs.AsDeferredJobArray(), sortedPairs.AsDeferredJobArray(), dispatchHandle);
+                sortHandle = ScheduleSortJob(world.NumBodies,
+                    unsortedPairs.AsDeferredJobArray(), sortedPairs.AsDeferredJobArray(), dispatchHandle);
             }
 
             // Create phases for multi-threading
@@ -420,8 +448,8 @@ namespace Unity.Physics
         }
 
         // Helper function to schedule jobs to sort an array of dispatch pairs.
-        // The first single threaded job is a single pass Radix sort on bits 16th to 40th (bodyA index),
-        // resulting in sub arrays with the same bodyA index.
+        // The first single threaded job is a single pass Radix sort on the bits associated
+        // with DispatchPair.BodyAIndex, resulting in sub arrays with the same bodyA index.
         // The second parallel job dispatches default sorts on each sub array.
         private static unsafe JobHandle ScheduleSortJob(
             int numBodies,
@@ -467,7 +495,7 @@ namespace Unity.Physics
 
         #endregion
 
-       #region Jobs
+        #region Jobs
 
         // Combines body pairs and joint pairs into an array of dispatch pairs
         [BurstCompile]
@@ -479,7 +507,7 @@ namespace Unity.Physics
 
             // Joints from dynamics world
             [ReadOnly] public NativeSlice<Joint> Joints;
-
+            
             // Outputs
             public NativeList<DispatchPair> UnsortedDispatchPairs;
             public NativeList<DispatchPair> DispatchPairsUninitialized;
@@ -489,8 +517,10 @@ namespace Unity.Physics
                 ExecuteImpl(DynamicVsDynamicPairs, StaticVsDynamicPairs, Joints, UnsortedDispatchPairs, DispatchPairsUninitialized);
             }
 
-            internal static void ExecuteImpl(NativeStream dynamicVsDynamicPairs, NativeStream staticVsDynamicPairs,
-                NativeSlice<Joint> joints, NativeList<DispatchPair> unsortedDispatchPairs, NativeList<DispatchPair> dispatchPairsUninitialized)
+            internal static void ExecuteImpl(
+                NativeStream dynamicVsDynamicPairs, NativeStream staticVsDynamicPairs,
+                NativeSlice<Joint> joints, 
+                NativeList<DispatchPair> unsortedDispatchPairs, NativeList<DispatchPair> dispatchPairsUninitialized)
             {
                 int numValidJoints = 0;
                 for (int i = 0; i < joints.Length; i++)
@@ -504,7 +534,10 @@ namespace Unity.Physics
                 var dynamicVsDynamicPairReader = dynamicVsDynamicPairs.AsReader();
                 var staticVsDynamicPairReader = staticVsDynamicPairs.AsReader();
 
-                int numDispatchPairs = dynamicVsDynamicPairReader.ComputeItemCount() + staticVsDynamicPairReader.ComputeItemCount() + numValidJoints;
+                int numDispatchPairs =
+                    staticVsDynamicPairReader.ComputeItemCount() +
+                    dynamicVsDynamicPairReader.ComputeItemCount() +
+                    numValidJoints;
 
                 unsortedDispatchPairs.ResizeUninitialized(numDispatchPairs);
                 dispatchPairsUninitialized.ResizeUninitialized(numDispatchPairs);
@@ -560,7 +593,9 @@ namespace Unity.Physics
 
             public void Execute()
             {
-                CreateDispatchPairs(ref DynamicVsDynamicBroadphasePairsStream, ref StaticVsDynamicBroadphasePairsStream, NumDynamicBodies, Joints, ref DispatchPairs);
+                CreateDispatchPairs(
+                    ref DynamicVsDynamicBroadphasePairsStream, ref StaticVsDynamicBroadphasePairsStream,
+                    NumDynamicBodies, Joints, ref DispatchPairs);
             }
         }
 
@@ -582,21 +617,26 @@ namespace Unity.Physics
 
             public void Execute()
             {
-                const int shift = 40;
                 Assert.AreEqual(InputArray.Length, OutputArray.Length);
-                RadixSortPerBodyA((ulong*)InputArray.GetUnsafeReadOnlyPtr(), (ulong*)OutputArray.GetUnsafePtr(), InputArray.Length, DigitCount, MaxDigits, MaxIndex, shift);
+                RadixSortPerBodyA(
+                    (ulong*)InputArray.GetUnsafeReadOnlyPtr(),
+                    (ulong*)OutputArray.GetUnsafePtr(),
+                    InputArray.Length, DigitCount, MaxDigits, MaxIndex,
+                    DispatchPair.k_BodyAIndexShift);
             }
 
-            // Performs single pass of Radix sort on NativeArray<ulong> based on 16th to 40th bit. Those bits contain bodyA index in DispatchPair.
-            public static void RadixSortPerBodyA(ulong* inputArray, ulong* outputArray, int length, NativeArray<int> digitCount, int maxDigits, int maxIndex, int shift)
+            // Performs single pass of Radix sort on NativeArray<ulong> based on the bits
+            // associated with BodyAIndex in DispatchPair.
+            public static void RadixSortPerBodyA(ulong* inputArray, ulong* outputArray,
+                int length, NativeArray<int> digitCount, int maxDigits, int maxIndex, int bitShift)
             {
-                ulong mask = ((ulong)(1 << maxDigits) - 1) << shift;
+                ulong mask = ((ulong)(1 << maxDigits) - 1) << bitShift;
 
                 // Count digits
                 for (int i = 0; i < length; i++)
                 {
                     ulong usIndex = inputArray[i] & mask;
-                    int sIndex = (int)(usIndex >> shift);
+                    int sIndex = (int)(usIndex >> bitShift);
                     digitCount[sIndex]++;
                 }
 
@@ -615,7 +655,7 @@ namespace Unity.Physics
                 {
                     ulong value = inputArray[i];
                     ulong usindex = value & mask;
-                    int sindex = (int)(usindex >> shift);
+                    int sindex = (int)(usindex >> bitShift);
                     int index = digitCount[sindex]++;
                     if (index == 1 && length == 1)
                     {
@@ -633,7 +673,9 @@ namespace Unity.Physics
             [NativeDisableParallelForRestriction]
             public NativeArray<DispatchPair> InOutArray;
 
-            // Typically lastDigitIndex is resulting RadixSortPerBodyAJob.digitCount. nextElementIndex[i] = index of first element with bodyA index == i + 1
+            // Typically lastDigitIndex is resulting in 
+            // RadixSortPerBodyAJob.digitCount.nextElementIndex[i] = index of first element 
+            // with bodyA index == i + 1
             [NativeDisableParallelForRestriction]
             [DeallocateOnJobCompletion] public NativeArray<int> NextElementIndex;
 
@@ -655,7 +697,8 @@ namespace Unity.Physics
             // Sorts sub array using default sort
             unsafe public static void DefaultSortOfSubArrays(ulong* inOutArray, int startIndex, int length)
             {
-                // inOutArray[startIndex] to inOutArray[startIndex + length - 1] have the same bodyA index (16th to 40th big) so we can do a simple sorting.
+                // inOutArray[startIndex] to inOutArray[startIndex + length - 1] have the same bodyA index 
+                // so we can do a simple sorting.
                 if (length > 2)
                 {
                     NativeSortExtension.Sort(inOutArray + startIndex, length);

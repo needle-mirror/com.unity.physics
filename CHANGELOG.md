@@ -1,3 +1,39 @@
+## [0.3.1-preview] - 2020-03-19
+
+### Upgrade guide
+ * User implemented query collectors (`ICollector<T>`) may no longer work. The reason is that `ICollector<T>.TransformNewHits()` was removed. To get the collectors working again, move all logic from
+ `ICollector<T>.TransformNewHits()` to `ICollector<T>.AddHit()`. All the information is now available in `ICollector<T>.AddHit()`. Also, `IQueryResult.Transform()` was removed, and user implementations of it will not get called anywhere in the engine.
+
+### Changes
+
+* Dependencies
+    * Updated Burst from `1.3.0-preview.3` to `1.3.0-preview.7`
+
+* Run-Time API
+    * The following properties are added to `IQueryResult` interface:
+        * `RigidBodyIndex`
+        * `ColliderKey`
+        * `Entity`
+    * `ICollector.AddHit()` now has all the information ready to perform custom logic, instead of waiting for TransformNewHits().
+    * Removed `Transform()` from `IQueryResult` interface and from all its implementations.
+    * Removed both `TransformNewHits()` methods from `ICollector` interface and from all its implementations. All the information is now ready in `ICollector.AddHit()`.
+
+* Authoring/Conversion API
+
+* Run-Time Behavior
+
+* Authoring/Conversion Behavior
+
+### Fixes
+
+* Setting `Collider.Filter` now increments the header version so that the simulation backends can recognise the change.
+* Asking for collision/trigger events in scenes with no dynamic bodies no longer throws errors.
+* Updated to new version of Burst, which fixes a regression that caused `ConvexCollider.Create()` to produce hulls with a very small bevel radius.
+* DOTS Run-time failures due to multiple inheritance of jobs have now been fixed.
+* Changed `Math.IsNormalized` to use a larger tolerance when comparing float3 length.
+
+### Known Issues
+
 ## [0.3.0-preview.1] - 2020-03-12
 
 ### Upgrade guide
