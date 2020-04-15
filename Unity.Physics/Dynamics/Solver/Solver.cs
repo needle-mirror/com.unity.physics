@@ -68,7 +68,7 @@ namespace Unity.Physics
             float invTimeStep = timeStep > 0.0f ? 1.0f / timeStep : 0.0f;
             float gravityAcceleration = math.length(gravity);
             BuildJacobians(ref world, timeStep, invTimeStep, gravityAcceleration, numSolverIterations,
-                new NativeSlice<DispatchPairSequencer.DispatchPair>(dispatchPairs, 0, dispatchPairs.Length), ref contactsReader, ref jacobiansWriter);
+                dispatchPairs, 0, dispatchPairs.Length, ref contactsReader, ref jacobiansWriter);
         }
 
         // Schedule jobs to build Jacobians from the contacts stored in the simulation context
@@ -298,7 +298,7 @@ namespace Unity.Physics
                 ContactsReader.BeginForEachIndex(workItemIndex);
                 JacobiansWriter.BeginForEachIndex(workItemIndex);
                 BuildJacobians(ref World, TimeStep, InvTimeStep, GravityAcceleration, NumSolverIterations,
-                    new NativeSlice<DispatchPairSequencer.DispatchPair>(DispatchPairs, firstDispatchPairIndex, dispatchPairCount),
+                    DispatchPairs, firstDispatchPairIndex, dispatchPairCount,
                     ref ContactsReader, ref JacobiansWriter);
             }
         }
@@ -542,16 +542,18 @@ namespace Unity.Physics
             float invTimestep,
             float gravityAcceleration,
             int numSolverIterations,
-            NativeSlice<DispatchPairSequencer.DispatchPair> dispatchPairs,
+            NativeArray<DispatchPairSequencer.DispatchPair> dispatchPairs,
+            int firstDispatchPairIndex,
+            int dispatchPairCount,
             ref NativeStream.Reader contactReader,
             ref NativeStream.Writer jacobianWriter)
         {
             // Contact resting velocity for restitution
             float negContactRestingVelocity = -gravityAcceleration * timestep;
 
-            for (int i = 0; i < dispatchPairs.Length; i++)
+            for (int i = 0; i < dispatchPairCount; i++)
             {
-                var pair = dispatchPairs[i];
+                var pair = dispatchPairs[i + firstDispatchPairIndex];
                 if (!pair.IsValid)
                 {
                     continue;

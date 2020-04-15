@@ -43,10 +43,12 @@ namespace Unity.Physics.Authoring
             m_ChangedLeavesByBody.Dispose();
         }
 
-        struct ChildInstance
+        struct ChildInstance : IComparable<ChildInstance>
         {
             public Hash128 Hash;
             public CompoundCollider.ColliderBlobInstance Child;
+
+            public int CompareTo(ChildInstance other) => Hash.CompareTo(other.Hash);
         }
 
         protected override void OnUpdate()
@@ -155,11 +157,16 @@ namespace Unity.Physics.Authoring
                         }
                         else
                         {
+                            // sort children by hash to ensure deterministic results
+                            // required because instance ID on hash map key is non-deterministic between runs,
+                            // but it affects the order of values returned by NativeHashMap<T>.GetValueArray()
+                            colliders.Sort();
+
                             // otherwise it is a compound
                             var childHashes = new NativeArray<Hash128>(colliders.Length, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                             var childOffsets = new NativeArray<RigidTransform>(colliders.Length, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
                             var childBlobs = new NativeArray<CompoundCollider.ColliderBlobInstance>(colliders.Length, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-                            for (var i = 0; i < children.Length; ++i)
+                            for (var i = 0; i < children.Count(); ++i)
                             {
                                 childHashes[i] = colliders[i].Hash;
                                 childOffsets[i] = colliders[i].Child.CompoundFromChild;

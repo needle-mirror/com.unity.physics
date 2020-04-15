@@ -149,6 +149,10 @@ namespace Unity.Physics
 
         public CollisionFilter Filter => m_Header.Filter;
 
+        // Mass properties are calculated based on the AABB of the mesh.
+        // This is a rough approximation, but only makes a difference
+        // in the case of dynamic meshes, which shouldn't be used a lot
+        // for performance reasons.
         public MassProperties MassProperties
         {
             get
@@ -165,7 +169,7 @@ namespace Unity.Physics
                             (size.x * size.x + size.z * size.z) / 12.0f,
                             (size.x * size.x + size.y * size.y) / 12.0f)
                     },
-                    Volume = 0,
+                    Volume = size.x * size.y * size.z,
                     AngularExpansionFactor = math.length(m_Aabb.Extents) * 0.5f
                 };
             }

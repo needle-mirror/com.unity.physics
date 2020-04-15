@@ -926,8 +926,51 @@ namespace Unity.Physics
                     numActivePhases++;
                 }
 
+                // Uncomment this code when testing scheduler
+//               CheckIntegrity(phasedDispatchPairs, numDynamicBodies, ref phaseInfo);
+
                 //<todo.eoin.usermod Can we get rid of this max()? Needed if the user wants to add contacts themselves.
                 numWorkItems = math.max(1, SolverSchedulerInfo.CalculateNumWorkItems(phaseInfo));
+            }
+
+            private static void CheckIntegrity(NativeArray<DispatchPair> phasedDispatchPairs,
+                int numDynamicBodies, ref NativeArray<SolverSchedulerInfo.SolvePhaseInfo> solverPhaseInfos)
+            {
+                int dispatchPairCount = 0;
+                for (int i = 0; i < solverPhaseInfos.Length; i++)
+                {
+                    SolverSchedulerInfo.SolvePhaseInfo info = solverPhaseInfos[i];
+                    dispatchPairCount += info.DispatchPairCount;
+
+                    var firstWorkItemIndex = info.FirstWorkItemIndex;
+                    {
+                        for (int j = firstWorkItemIndex; j < firstWorkItemIndex + info.NumWorkItems - 1; j++)
+                        {
+                            for (int k = j + 1; k < j + 1 + info.NumWorkItems; k++)
+                            {
+                                int firstIndex = j * info.BatchSize;
+                                int secondIndex = k * info.BatchSize;
+                                for (int pairIndex1 = firstIndex; pairIndex1 < math.min(firstIndex + info.BatchSize, dispatchPairCount); pairIndex1++)
+                                {
+                                    int aIndex1 = phasedDispatchPairs[pairIndex1].BodyAIndex;
+                                    int bIndex1 = phasedDispatchPairs[pairIndex1].BodyBIndex;
+                                    for (int pairIndex2 = secondIndex; pairIndex2 < math.min(secondIndex + info.BatchSize, dispatchPairCount); pairIndex2++)
+                                    {
+                                        int aIndex2 = phasedDispatchPairs[pairIndex2].BodyAIndex;
+                                        int bIndex2 = phasedDispatchPairs[pairIndex2].BodyBIndex;
+
+                                        // Verify that different batches can't contain same dynamic bodies
+                                        Assert.AreNotEqual(aIndex1, aIndex2);
+                                        if (bIndex1 < numDynamicBodies || bIndex2 < numDynamicBodies)
+                                        {
+                                            Assert.AreNotEqual(bIndex1, bIndex2);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             private unsafe struct BatchInfo

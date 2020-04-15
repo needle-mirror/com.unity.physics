@@ -288,7 +288,7 @@ namespace Unity.Physics.Authoring
 
             JobHandle.CombineDependencies(convexJob, meshJob).Complete();
 
-            if (convexColliders.Length > 0)
+            if (convexColliders.Count() > 0)
             {
                 using (var kvp = convexColliders.GetKeyValueArrays(Allocator.Temp))
                 {
@@ -297,7 +297,7 @@ namespace Unity.Physics.Authoring
                 }
             }
 
-            if (meshColliders.Length > 0)
+            if (meshColliders.Count() > 0)
             {
                 using (var kvp = meshColliders.GetKeyValueArrays(Allocator.Temp))
                 {

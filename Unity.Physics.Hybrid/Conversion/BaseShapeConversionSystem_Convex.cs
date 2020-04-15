@@ -33,7 +33,7 @@ namespace Unity.Physics.Authoring
         {
             // create collider blob assets
             var convexCollidersArray =
-                new NativeArray<KeyValuePair<Hash128, BlobAssetReference<Collider>>>(inputs.Length, Allocator.TempJob);
+                new NativeArray<KeyValuePair<Hash128, BlobAssetReference<Collider>>>(inputs.Count(), Allocator.TempJob);
             const int arrayLength = 5;
             var jobHandle = new ProduceConvexCollidersJob
             {
@@ -41,10 +41,10 @@ namespace Unity.Physics.Authoring
                 InputValues = inputs.GetValueArray(Allocator.TempJob),
                 AllPoints = points,
                 Output = convexCollidersArray
-            }.Schedule(inputs.Length, arrayLength, inputDeps);
+            }.Schedule(inputs.Count(), arrayLength, inputDeps);
 
             // put blob assets into hash map
-            convexColliders = new NativeHashMap<Hash128, BlobAssetReference<Collider>>(inputs.Length, Allocator.TempJob);
+            convexColliders = new NativeHashMap<Hash128, BlobAssetReference<Collider>>(inputs.Count(), Allocator.TempJob);
             jobHandle = new ConvertToHashMapJob<Hash128, BlobAssetReference<Collider>>
             {
                 Input = convexCollidersArray,

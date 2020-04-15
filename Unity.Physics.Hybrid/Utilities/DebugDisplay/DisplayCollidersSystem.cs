@@ -61,6 +61,7 @@ namespace Unity.Physics.Authoring
                 public Vector3 Position;
                 public Quaternion Orientation;
 
+                [Preserve]
                 public float4x4 Transform => float4x4.TRS(Position, Orientation, Scale);
             }
 

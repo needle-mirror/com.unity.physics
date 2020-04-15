@@ -811,6 +811,15 @@ namespace Unity.Physics.Authoring
             public void Execute(int index) => Output[index] = math.mul(LocalToShape, new float4(Points[index], 1f)).xyz;
         }
 
+        /// <summary>
+        /// Fit this shape to render geometry in its GameObject hierarchy.
+        /// Children in the hierarchy will influence the result if they have enabled MeshRenderer components or have vertices bound to them on a SkinnedMeshRenderer.
+        /// Children will only count as influences if this shape is the first ancestor shape in their hierarchy.
+        /// As such, you should add shape components to all GameObjects that should have them before you call this method on any of them.
+        /// </summary>
+        /// <param name="minimumSkinnedVertexWeight">
+        /// The minimum total weight that a vertex in a skinned mesh must have assigned to this object and/or any of its influencing children.
+        /// </param>
         public void FitToEnabledRenderMeshes(float minimumSkinnedVertexWeight = 0f)
         {
             var shapeType = m_ShapeType;
@@ -833,7 +842,13 @@ namespace Unity.Physics.Authoring
                     bounds.Encapsulate(points[i]);
 
                 SetBox(
-                    new BoxGeometry { Center = bounds.center, Size = bounds.size, Orientation = orientation }
+                    new BoxGeometry
+                    {
+                        Center = bounds.center,
+                        Size = bounds.size,
+                        Orientation = orientation,
+                        BevelRadius = m_ConvexHullGenerationParameters.BevelRadius
+                    }
                 );
             }
 

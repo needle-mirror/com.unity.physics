@@ -35,7 +35,7 @@ namespace Unity.Physics.Authoring
         {
             // create collider blob assets
             var meshCollidersArray =
-                new NativeArray<KeyValuePair<Hash128, BlobAssetReference<Collider>>>(inputs.Length, Allocator.TempJob);
+                new NativeArray<KeyValuePair<Hash128, BlobAssetReference<Collider>>>(inputs.Count(), Allocator.TempJob);
             const int arrayLength = 5;
             var jobHandle = new ProduceMeshCollidersJob
             {
@@ -44,10 +44,10 @@ namespace Unity.Physics.Authoring
                 AllVertices = vertices,
                 AllIndices = indices,
                 Output = meshCollidersArray
-            }.Schedule(inputs.Length, arrayLength, inputDeps);
+            }.Schedule(inputs.Count(), arrayLength, inputDeps);
 
             // put blob assets into hash map
-            meshColliders = new NativeHashMap<Hash128, BlobAssetReference<Collider>>(inputs.Length, Allocator.TempJob);
+            meshColliders = new NativeHashMap<Hash128, BlobAssetReference<Collider>>(inputs.Count(), Allocator.TempJob);
             jobHandle = new ConvertToHashMapJob<Hash128, BlobAssetReference<Collider>>
             {
                 Input = meshCollidersArray,

@@ -1,6 +1,39 @@
+## [0.3.2-preview] - 2020-04-16
+
+### Upgrade guide
+
+* All `PhysicsShapeAuthoring` components that were newly added after version 0.3.0 were incorrectly initialized to have a bevel radius of 0. It is recommended that you audit recently authored content to assign reasonable non-zero values.
+
+### Changes
+
+* Dependencies
+    * Updated Collections from `0.5.2-preview.8` to `0.7.1-preview.3`
+    * Updated Entities from `0.6.0-preview.24` to `0.9.0-preview.6`
+    * Updated Jobs from `0.2.5-preview.20` to `0.2.8-preview.3`
+
+* Run-Time Behavior
+    * In order to test gameplay end to end determinism users should:
+        * Navigate to UnityPhysicsEndToEndDeterminismTest.cs (and HavokPhysicsEndToEndDeterminsmTest.cs if using HavokPhysics)
+        * Remove #if !UNITY_EDITOR guards around [TestFixture] and [UnityTest] attributes (alternatively, users can run the tests
+          in standalone mode without the need to remove #ifs)
+        * Add scene that needs to be tested (File -> Build Settings -> Add Open Scenes)
+        * Make sure that synchronous burst is enabled
+        * Run the test in Test Runner
+
+* Authoring/Conversion Behavior
+    * Compound conversion system is now deterministic between runs.
+
+### Fixes
+
+* Volume of dynamic meshes is now being approximated with the volume of the mesh AABB, as opposed to previously being set to 0.
+* Fixed regression causing newly added `PhysicsShapeAuthoring` components to initialize with a bevel radius of 0.
+
+### Known Issues
+
 ## [0.3.1-preview] - 2020-03-19
 
 ### Upgrade guide
+
  * User implemented query collectors (`ICollector<T>`) may no longer work. The reason is that `ICollector<T>.TransformNewHits()` was removed. To get the collectors working again, move all logic from
  `ICollector<T>.TransformNewHits()` to `ICollector<T>.AddHit()`. All the information is now available in `ICollector<T>.AddHit()`. Also, `IQueryResult.Transform()` was removed, and user implementations of it will not get called anywhere in the engine.
 
@@ -18,12 +51,6 @@
     * Removed `Transform()` from `IQueryResult` interface and from all its implementations.
     * Removed both `TransformNewHits()` methods from `ICollector` interface and from all its implementations. All the information is now ready in `ICollector.AddHit()`.
 
-* Authoring/Conversion API
-
-* Run-Time Behavior
-
-* Authoring/Conversion Behavior
-
 ### Fixes
 
 * Setting `Collider.Filter` now increments the header version so that the simulation backends can recognise the change.
@@ -31,8 +58,6 @@
 * Updated to new version of Burst, which fixes a regression that caused `ConvexCollider.Create()` to produce hulls with a very small bevel radius.
 * DOTS Run-time failures due to multiple inheritance of jobs have now been fixed.
 * Changed `Math.IsNormalized` to use a larger tolerance when comparing float3 length.
-
-### Known Issues
 
 ## [0.3.0-preview.1] - 2020-03-12
 

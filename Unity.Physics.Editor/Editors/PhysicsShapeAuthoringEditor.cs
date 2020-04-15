@@ -80,8 +80,8 @@ namespace Unity.Physics.Editor
 
             static readonly string[] k_NonReadableGeometryWarning =
             {
-                L10n.Tr($"{k_Singular} has a non-readable mesh, but is not part of a sub-scene. Assign a custom mesh with Read/Write enabled in its import settings if it needs to be converted at run-time."),
-                L10n.Tr($"{k_Plural} has a non-readable mesh, but is not part of a sub-scene. Assign a custom mesh with Read/Write enabled in its import settings if it needs to be converted at run-time.")
+                L10n.Tr($"{k_Singular} has a non-readable mesh in its hierarchy. Assign a custom mesh with Read/Write enabled in its import settings if it needs to be converted at run-time."),
+                L10n.Tr($"{k_Plural} has a non-readable mesh in its hierarchy. Assign a custom mesh with Read/Write enabled in its import settings if it needs to be converted at run-time.")
             };
 
             public static string GetNonReadableGeometryWarning(int numTargets) =>
