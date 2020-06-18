@@ -1,13 +1,12 @@
 using System;
 using Unity.Mathematics;
 using UnityEngine;
-using UnityEngine.Serialization;
 
 namespace Unity.Physics.Authoring
 {
     interface IPhysicsMaterialProperties
     {
-        bool IsTrigger { get; set; }
+        CollisionResponsePolicy CollisionResponse { get; set; }
 
         PhysicsMaterialCoefficient Friction { get; set; }
 
@@ -17,11 +16,8 @@ namespace Unity.Physics.Authoring
 
         PhysicsCategoryTags CollidesWith { get; set; }
 
-        bool RaisesCollisionEvents { get; set; }
-
         // TODO: Enable Mass Factors?
         // TODO: Surface Velocity?
-        // TODO: Max Impulse?
 
         CustomPhysicsMaterialTags CustomTags { get; set; }
     }
@@ -29,12 +25,11 @@ namespace Unity.Physics.Authoring
     interface IInheritPhysicsMaterialProperties : IPhysicsMaterialProperties
     {
         PhysicsMaterialTemplate Template { get; set; }
-        bool OverrideIsTrigger { get; set; }
+        bool OverrideCollisionResponse { get; set; }
         bool OverrideFriction { get; set; }
         bool OverrideRestitution { get; set; }
         bool OverrideBelongsTo { get; set; }
         bool OverrideCollidesWith { get; set; }
-        bool OverrideRaisesCollisionEvents { get; set; }
         bool OverrideCustomTags { get; set; }
     }
 
@@ -46,15 +41,12 @@ namespace Unity.Physics.Authoring
         public Material.CombinePolicy CombineMode;
     }
 
-    abstract class OverridableValue
+    abstract class OverridableValue<T> where T : struct
     {
         public bool Override { get => m_Override; set => m_Override = value; }
         [SerializeField]
         bool m_Override;
-    }
 
-    abstract class OverridableValue<T> : OverridableValue where T : struct
-    {
         public T Value
         {
             get => m_Value;
@@ -72,7 +64,7 @@ namespace Unity.Physics.Authoring
     }
 
     [Serializable]
-    class OverridableBool : OverridableValue<bool> {}
+    class OverridableCollisionResponse : OverridableValue<CollisionResponsePolicy> { }
 
     [Serializable]
     class OverridableMaterialCoefficient : OverridableValue<PhysicsMaterialCoefficient>
@@ -82,45 +74,13 @@ namespace Unity.Physics.Authoring
     }
 
     [Serializable]
-    class OverridableTags : OverridableValue
-    {
-        public OverridableTags(int capacity) => m_Value = new bool[capacity];
-
-        public uint Value
-        {
-            get
-            {
-                var result = 0;
-                for (var i = 0; i < m_Value.Length; ++i)
-                    result |= (m_Value[i] ? 1 : 0) << i;
-                return unchecked((uint)result);
-            }
-            set
-            {
-                for (var i = 0; i < m_Value.Length; ++i)
-                    m_Value[i] = (value & (1 << i)) != 0;
-                Override = true;
-            }
-        }
-
-        public bool this[int index]
-        {
-            get => m_Value[index];
-            set
-            {
-                m_Value[index] = value;
-                Override = true;
-            }
-        }
-
-        [SerializeField]
-        bool[] m_Value;
-
-        public void OnValidate(int capacity) => Array.Resize(ref m_Value, capacity);
-    }
+    class OverridableCategoryTags : OverridableValue<PhysicsCategoryTags> { }
 
     [Serializable]
-    class PhysicsMaterialProperties : IInheritPhysicsMaterialProperties
+    class OverridableCustomMaterialTags : OverridableValue<CustomPhysicsMaterialTags> { }
+
+    [Serializable]
+    partial class PhysicsMaterialProperties : IInheritPhysicsMaterialProperties, ISerializationCallbackReceiver
     {
         public PhysicsMaterialProperties(bool supportsTemplate) => m_SupportsTemplate = supportsTemplate;
 
@@ -139,14 +99,19 @@ namespace Unity.Physics.Authoring
         static T Get<T>(OverridableValue<T> value, T? templateValue) where T : struct =>
             value.Override || templateValue == null ? value.Value : templateValue.Value;
 
-        public bool OverrideIsTrigger { get => m_IsTrigger.Override; set => m_IsTrigger.Override = value; }
-        public bool IsTrigger
+        public bool OverrideCollisionResponse { get => m_CollisionResponse.Override; set => m_CollisionResponse.Override = value; }
+
+        public CollisionResponsePolicy CollisionResponse
         {
-            get => Get(m_IsTrigger, m_Template == null ? null : m_Template?.IsTrigger);
-            set => m_IsTrigger.Value = value;
+            get => Get(m_CollisionResponse, m_Template == null ? null : m_Template?.CollisionResponse);
+            set => m_CollisionResponse.Value = value;
         }
         [SerializeField]
-        OverridableBool m_IsTrigger = new OverridableBool();
+        OverridableCollisionResponse m_CollisionResponse = new OverridableCollisionResponse
+        {
+            Value = CollisionResponsePolicy.Collide,
+            Override = false
+        };
 
         public bool OverrideFriction { get => m_Friction.Override; set => m_Friction.Override = value; }
         public PhysicsMaterialCoefficient Friction
@@ -174,65 +139,136 @@ namespace Unity.Physics.Authoring
             Override = false
         };
 
-        static uint Get(OverridableTags tags, uint? templateValue) =>
-            tags.Override || templateValue == null ? tags.Value : templateValue.Value;
-
-        public bool OverrideBelongsTo { get => m_BelongsTo.Override; set => m_BelongsTo.Override = value; }
+        public bool OverrideBelongsTo { get => m_BelongsToCategories.Override; set => m_BelongsToCategories.Override = value; }
         public PhysicsCategoryTags BelongsTo
         {
-            get => new PhysicsCategoryTags { Value = Get(m_BelongsTo, m_Template?.BelongsTo.Value) };
-            set => m_BelongsTo.Value = value.Value;
+            get => Get(m_BelongsToCategories, m_Template == null ? null : m_Template?.BelongsTo);
+            set => m_BelongsToCategories.Value = value;
         }
         [SerializeField]
-        OverridableTags m_BelongsTo = new OverridableTags(32) { Value = unchecked((uint)~0), Override = false};
+        OverridableCategoryTags m_BelongsToCategories =
+            new OverridableCategoryTags { Value = PhysicsCategoryTags.Everything, Override = false };
 
-        public bool OverrideCollidesWith { get => m_CollidesWith.Override; set => m_CollidesWith.Override = value; }
+        public bool OverrideCollidesWith { get => m_CollidesWithCategories.Override; set => m_CollidesWithCategories.Override = value; }
         public PhysicsCategoryTags CollidesWith
         {
-            get => new PhysicsCategoryTags { Value = Get(m_CollidesWith, m_Template?.CollidesWith.Value) };
-            set => m_CollidesWith.Value = value.Value;
+            get => Get(m_CollidesWithCategories, m_Template == null ? null : m_Template?.CollidesWith);
+            set => m_CollidesWithCategories.Value = value;
         }
         [SerializeField]
-        OverridableTags m_CollidesWith = new OverridableTags(32) { Value = unchecked((uint)~0), Override = false };
+        OverridableCategoryTags m_CollidesWithCategories =
+            new OverridableCategoryTags { Value = PhysicsCategoryTags.Everything, Override = false };
 
-        public bool OverrideRaisesCollisionEvents { get => m_RaisesCollisionEvents.Override; set => m_RaisesCollisionEvents.Override = value; }
-        public bool RaisesCollisionEvents
-        {
-            get => Get(m_RaisesCollisionEvents, m_Template == null ? null : m_Template?.RaisesCollisionEvents);
-            set => m_RaisesCollisionEvents.Value = value;
-        }
-        [SerializeField]
-        OverridableBool m_RaisesCollisionEvents = new OverridableBool();
-
-        public bool OverrideCustomTags { get => m_CustomTags.Override; set => m_CustomTags.Override = value; }
+        public bool OverrideCustomTags { get => m_CustomMaterialTags.Override; set => m_CustomMaterialTags.Override = value; }
         public CustomPhysicsMaterialTags CustomTags
         {
-            get => new CustomPhysicsMaterialTags { Value = unchecked((byte)Get(m_CustomTags, m_Template?.CustomTags.Value)) };
-            set => m_CustomTags.Value= value.Value;
+            get => Get(m_CustomMaterialTags, m_Template == null ? null : m_Template?.CustomTags);
+            set => m_CustomMaterialTags.Value = value;
         }
         [SerializeField]
-        [FormerlySerializedAs("m_CustomFlags")]
-        OverridableTags m_CustomTags = new OverridableTags(8);
+        OverridableCustomMaterialTags m_CustomMaterialTags =
+            new OverridableCustomMaterialTags { Value = default, Override = false };
 
         internal static void OnValidate(ref PhysicsMaterialProperties material, bool supportsTemplate)
         {
+            material.UpgradeVersionIfNecessary();
+
             material.m_SupportsTemplate = supportsTemplate;
             if (!supportsTemplate)
             {
                 material.m_Template = null;
-                material.m_IsTrigger.Override = true;
+                material.m_CollisionResponse.Override = true;
                 material.m_Friction.Override = true;
                 material.m_Restitution.Override = true;
-                material.m_BelongsTo.Override = true;
-                material.m_CollidesWith.Override = true;
-                material.m_RaisesCollisionEvents.Override = true;
-                material.m_CustomTags.Override = true;
             }
             material.m_Friction.OnValidate();
             material.m_Restitution.OnValidate();
-            material.m_BelongsTo.OnValidate(32);
-            material.m_CollidesWith.OnValidate(32);
-            material.m_CustomTags.OnValidate(8);
         }
+
+        const int k_LatestVersion = 1;
+
+        [SerializeField]
+        int m_SerializedVersion = 0;
+
+        void ISerializationCallbackReceiver.OnBeforeSerialize() { }
+
+        void ISerializationCallbackReceiver.OnAfterDeserialize() => UpgradeVersionIfNecessary();
+
+        internal static bool s_SuppressUpgradeWarnings;
+
+#pragma warning disable 618
+        void UpgradeVersionIfNecessary()
+        {
+            if (m_SerializedVersion < k_LatestVersion)
+            {
+                if (m_SerializedVersion < 1)
+                {
+                    if (m_BelongsTo_Deprecated.HasData)
+                    {
+                        m_BelongsToCategories.Value = new PhysicsCategoryTags { Value = m_BelongsTo_Deprecated.Value };
+                        m_BelongsToCategories.Override = m_BelongsTo_Deprecated.Override;
+                        m_BelongsTo_Deprecated = new OverridableTags_Deprecated(0);
+                    }
+
+                    if (m_CollidesWith_Deprecated.HasData)
+                    {
+                        m_CollidesWithCategories.Value = new PhysicsCategoryTags { Value = m_CollidesWith_Deprecated.Value };
+                        m_CollidesWithCategories.Override = m_CollidesWith_Deprecated.Override;
+                        m_CollidesWith_Deprecated = new OverridableTags_Deprecated(0);
+                    }
+
+                    if (m_CustomTags_Deprecated.HasData)
+                    {
+                        m_CustomMaterialTags.Value = new CustomPhysicsMaterialTags { Value = (byte)m_CustomTags_Deprecated.Value };
+                        m_CustomMaterialTags.Override = m_CustomTags_Deprecated.Override;
+                        m_CustomTags_Deprecated = new OverridableTags_Deprecated(0);
+                    }
+
+                    if (m_IsTrigger_Deprecated.Value)
+                    {
+                        CollisionResponse = CollisionResponsePolicy.RaiseTriggerEvents;
+                        OverrideCollisionResponse = m_IsTrigger_Deprecated.Override;
+                    }
+                    else if (m_SupportsTemplate && m_IsTrigger_Deprecated.Override)
+                    {
+                        CollisionResponse = CollisionResponsePolicy.Collide;
+                        OverrideCollisionResponse = m_IsTrigger_Deprecated.Override;
+                    }
+                    else if (m_RaisesCollisionEvents_Deprecated.Value)
+                    {
+                        CollisionResponse = CollisionResponsePolicy.CollideRaiseCollisionEvents;
+                        OverrideCollisionResponse = m_RaisesCollisionEvents_Deprecated.Override;
+                    }
+                    else if (m_SupportsTemplate && m_RaisesCollisionEvents_Deprecated.Override)
+                    {
+                        CollisionResponse = CollisionResponsePolicy.Collide;
+                        OverrideCollisionResponse = m_RaisesCollisionEvents_Deprecated.Override;
+                    }
+
+                    m_SerializedVersion = 1;
+
+                    if (!s_SuppressUpgradeWarnings)
+                    {
+                        Debug.LogWarning(
+                            "Physics material properties were implicitly upgraded on an object. " +
+                            "To ensure proper upgrading when moving to Unity Physics 0.4.0, it is recommended you use the tool in the main menu at Window -> DOTS -> Physics -> Upgrade Data."
+                        );
+                    }
+                }
+            }
+
+            // Prevent user from setting values for deprecated fields
+            m_BelongsTo_Deprecated.Value = 0;
+            m_BelongsTo_Deprecated.Override = false;
+            m_CollidesWith_Deprecated.Value = 0;
+            m_CollidesWith_Deprecated.Override = false;
+            m_CustomTags_Deprecated.Value = 0;
+            m_CustomTags_Deprecated.Override = false;
+            m_IsTrigger_Deprecated.Value = false;
+            m_IsTrigger_Deprecated.Override = false;
+            m_RaisesCollisionEvents_Deprecated.Value = false;
+            m_RaisesCollisionEvents_Deprecated.Override = false;
+        }
+#pragma warning restore 618
     }
 }

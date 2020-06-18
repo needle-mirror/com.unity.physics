@@ -1,37 +1,115 @@
 using System;
+using Unity.Assertions;
 using Unity.Mathematics;
 
 namespace Unity.Physics
 {
+    /// <summary>
+    /// Defines the collision response policy of a collider
+    /// </summary>
+    public enum CollisionResponsePolicy : byte
+    {
+        /// <summary>
+        /// The collider will collide normally
+        /// </summary>
+        Collide = 0,
+        /// <summary>
+        /// The collider will collide normally and raise collision events
+        /// </summary>
+        CollideRaiseCollisionEvents = 1,
+        /// <summary>
+        /// The collider will raise trigger events when it overlaps another collider
+        /// </summary>
+        RaiseTriggerEvents = 3,
+        /// <summary>
+        /// The collider will skip collision, but can still move and intercept queries
+        /// </summary>
+        None = byte.MaxValue - 1,
+    }
+
     // Describes how an object should respond to collisions with other objects.
     public struct Material : IEquatable<Material>
     {
-        public MaterialFlags Flags;
+        internal MaterialFlags Flags;
         public CombinePolicy FrictionCombinePolicy;
         public CombinePolicy RestitutionCombinePolicy;
         public byte CustomTags;
         public float Friction;
         public float Restitution;
 
-        // If true, the object does not collide but raises trigger events instead
-        public bool IsTrigger => (Flags & MaterialFlags.IsTrigger) != 0;
-
-        // If true, the object raises collision events if an impulse is applied during solving
-        public bool EnableCollisionEvents => (Flags & MaterialFlags.EnableCollisionEvents) != 0;
+        public CollisionResponsePolicy CollisionResponse
+        {
+            get => FlagsToCollisionResponse(Flags);
+            set
+            {
+                switch (value)
+                {
+                    case CollisionResponsePolicy.None:
+                        Flags |= MaterialFlags.DisableCollisions;
+                        Flags &= ~MaterialFlags.IsTrigger & ~MaterialFlags.EnableCollisionEvents;
+                        return;
+                    case CollisionResponsePolicy.RaiseTriggerEvents:
+                        Flags |= MaterialFlags.IsTrigger;
+                        Flags &= ~MaterialFlags.DisableCollisions & ~MaterialFlags.EnableCollisionEvents;
+                        return;
+                    case CollisionResponsePolicy.CollideRaiseCollisionEvents:
+                        Flags |= MaterialFlags.EnableCollisionEvents;
+                        Flags &= ~MaterialFlags.IsTrigger & ~MaterialFlags.DisableCollisions;
+                        return;
+                    case CollisionResponsePolicy.Collide:
+                        Flags &= ~MaterialFlags.DisableCollisions & ~MaterialFlags.EnableCollisionEvents & ~MaterialFlags.IsTrigger;
+                        return;
+                    default:
+                        Assert.IsTrue(false, "Invalid collision response provided!");
+                        return;
+                }
+            }
+        }
 
         // If true, the object can have its inertia and mass overridden during solving
-        public bool EnableMassFactors => (Flags & MaterialFlags.EnableMassFactors) != 0;
+        public bool EnableMassFactors
+        {
+            get { return (Flags & MaterialFlags.EnableMassFactors) != 0; }
+            set
+            {
+                if (value != EnableMassFactors)
+                {
+                    // Toggle the bit since the value is changing
+                    Flags ^= MaterialFlags.EnableMassFactors;
+                }
+            }
+        }
 
         // If true, the object can apply a surface velocity to its contact points
-        public bool EnableSurfaceVelocity => (Flags & MaterialFlags.EnableSurfaceVelocity) != 0;
-
-        [Flags]
-        public enum MaterialFlags : byte
+        public bool EnableSurfaceVelocity
         {
+            get { return (Flags & MaterialFlags.EnableSurfaceVelocity) != 0; }
+            set
+            {
+                if (value != EnableSurfaceVelocity)
+                {
+                    // Toggle the bit since the value is changing
+                    Flags ^= MaterialFlags.EnableSurfaceVelocity;
+                }
+            }
+        }
+
+        // Higher priority flags render lower priority ones useless, while same priority flags can co-exist.
+        // Priority is as follows:
+        // 1. DisableCollisions
+        // 2. IsTrigger
+        // 3. EnableCollisionEvents
+        // 3. EnableMassFactors
+        // 3. EnableSurfaceVelocity
+        [Flags]
+        internal enum MaterialFlags : byte
+        {
+            None = 0,
             IsTrigger = 1 << 0,
             EnableCollisionEvents = 1 << 1,
             EnableMassFactors = 1 << 2,
-            EnableSurfaceVelocity = 1 << 3
+            EnableSurfaceVelocity = 1 << 3,
+            DisableCollisions = 1 << 4
         }
 
         // Defines how a value from a pair of materials should be combined.
@@ -51,6 +129,34 @@ namespace Unity.Physics
             Friction = 0.5f,
             Restitution = 0.0f
         };
+
+        private static CollisionResponsePolicy FlagsToCollisionResponse(MaterialFlags flags)
+        {
+            if ((flags & MaterialFlags.DisableCollisions) != 0)
+            {
+                return CollisionResponsePolicy.None;
+            }
+            else if ((flags & MaterialFlags.IsTrigger) != 0)
+            {
+                return CollisionResponsePolicy.RaiseTriggerEvents;
+            }
+            else if ((flags & MaterialFlags.EnableCollisionEvents) != 0)
+            {
+                return CollisionResponsePolicy.CollideRaiseCollisionEvents;
+            }
+            else
+            {
+                return CollisionResponsePolicy.Collide;
+            }
+        }
+
+        // Get combined collision response of the 2 materials.
+        // Used only internally by the manifold creation pipeline.
+        internal static CollisionResponsePolicy GetCombinedCollisionResponse(Material materialA, Material materialB)
+        {
+            var flags = materialA.Flags | materialB.Flags;
+            return FlagsToCollisionResponse(flags);
+        }
 
         // Get a combined friction value for a pair of materials.
         // The combine policy with the highest value takes priority.
@@ -115,5 +221,15 @@ namespace Unity.Physics
                 math.hash(new float2(Friction, Restitution))
             )));
         }
+
+        #region Obsolete
+
+        [Obsolete("IsTrigger has been deprecated. Use CollisionResponse instead. (RemovedAfter 2020-09-02)")]
+        public bool IsTrigger => (Flags & MaterialFlags.IsTrigger) != 0;
+
+        [Obsolete("EnableCollisionEvents has been deprecated. Use CollisionResponse instead. (RemovedAfter 2020-09-02)")]
+        public bool EnableCollisionEvents => (Flags & MaterialFlags.EnableCollisionEvents) != 0;
+
+        #endregion
     }
 }

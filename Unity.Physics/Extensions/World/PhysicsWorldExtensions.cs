@@ -99,7 +99,7 @@ namespace Unity.Physics.Extensions
         {
             if (!(0 <= rigidBodyIndex && rigidBodyIndex < world.NumDynamicBodies)) return;
 
-            Unity.Collections.NativeSlice<MotionVelocity> motionVelocities = world.MotionVelocities;
+            Unity.Collections.NativeArray<MotionVelocity> motionVelocities = world.MotionVelocities;
             MotionVelocity mv = motionVelocities[rigidBodyIndex];
             mv.LinearVelocity = linearVelocity;
             motionVelocities[rigidBodyIndex] = mv;
@@ -140,7 +140,7 @@ namespace Unity.Physics.Extensions
             MotionData md = world.MotionDatas[rigidBodyIndex];
             float3 angularVelocityMotionSpace = math.rotate(math.inverse(md.WorldFromMotion.rot), angularVelocity);
 
-            Unity.Collections.NativeSlice<MotionVelocity> motionVelocities = world.MotionVelocities;
+            Unity.Collections.NativeArray<MotionVelocity> motionVelocities = world.MotionVelocities;
             MotionVelocity mv = motionVelocities[rigidBodyIndex];
             mv.AngularVelocity = angularVelocityMotionSpace;
             motionVelocities[rigidBodyIndex] = mv;
@@ -155,7 +155,7 @@ namespace Unity.Physics.Extensions
             float3 angularImpulseWorldSpace = math.cross(point - md.WorldFromMotion.pos, linearImpulse);
             float3 angularImpulseMotionSpace = math.rotate(math.inverse(md.WorldFromMotion.rot), angularImpulseWorldSpace);
 
-            Unity.Collections.NativeSlice<MotionVelocity> motionVelocities = world.MotionVelocities;
+            Unity.Collections.NativeArray<MotionVelocity> motionVelocities = world.MotionVelocities;
             MotionVelocity mv = motionVelocities[rigidBodyIndex];
             mv.ApplyLinearImpulse(linearImpulse); 
             mv.ApplyAngularImpulse(angularImpulseMotionSpace);
@@ -167,7 +167,7 @@ namespace Unity.Physics.Extensions
         {
             if (!(0 <= rigidBodyIndex && rigidBodyIndex < world.NumDynamicBodies)) return;
 
-            Unity.Collections.NativeSlice<MotionVelocity> motionVelocities = world.MotionVelocities;
+            Unity.Collections.NativeArray<MotionVelocity> motionVelocities = world.MotionVelocities;
             MotionVelocity mv = motionVelocities[rigidBodyIndex];
             mv.ApplyLinearImpulse(linearImpulse);
             motionVelocities[rigidBodyIndex] = mv;
@@ -181,7 +181,7 @@ namespace Unity.Physics.Extensions
             MotionData md = world.MotionDatas[rigidBodyIndex];
             float3 angularImpulseInertiaSpace = math.rotate(math.inverse(md.WorldFromMotion.rot), angularImpulse);
 
-            Unity.Collections.NativeSlice<MotionVelocity> motionVelocities = world.MotionVelocities;
+            Unity.Collections.NativeArray<MotionVelocity> motionVelocities = world.MotionVelocities;
             MotionVelocity mv = motionVelocities[rigidBodyIndex];
             mv.ApplyAngularImpulse(angularImpulseInertiaSpace);
             motionVelocities[rigidBodyIndex] = mv;

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -8,10 +9,16 @@ namespace Unity.Physics.Authoring
 {
     [UpdateAfter(typeof(BeginColliderConversionSystem))]
     [UpdateBefore(typeof(BuildCompoundCollidersConversionSystem))]
-    [ConverterVersion("adamm", 2)]
+    [ConverterVersion("adamm", 4)]
     public sealed class PhysicsShapeConversionSystem : BaseShapeConversionSystem<PhysicsShapeAuthoring>
     {
-        static Material ProduceMaterial(PhysicsShapeAuthoring shape) => shape.GetMaterial();
+        Material ProduceMaterial(PhysicsShapeAuthoring shape)
+        {
+            var materialTemplate = shape.MaterialTemplate;
+            if (materialTemplate != null)
+                DeclareAssetDependency(shape.gameObject, materialTemplate);
+            return shape.GetMaterial();
+        }
 
         static CollisionFilter ProduceCollisionFilter(PhysicsShapeAuthoring shape) => shape.GetFilter();
 
@@ -21,7 +28,8 @@ namespace Unity.Physics.Authoring
 
         internal override ShapeComputationData GenerateComputationData(
             PhysicsShapeAuthoring shape, ColliderInstance colliderInstance,
-            NativeList<float3> allConvexHullPoints, NativeList<float3> allMeshVertices, NativeList<int3> allMeshTriangles
+            NativeList<float3> allConvexHullPoints, NativeList<float3> allMeshVertices, NativeList<int3> allMeshTriangles,
+            HashSet<UnityEngine.Mesh> meshAssets
         )
         {
             var res = new ShapeComputationData();
@@ -78,7 +86,7 @@ namespace Unity.Physics.Authoring
                     res.ConvexHullProperties.Material = res.Material;
                     res.ConvexHullProperties.GenerationParameters = shape.ConvexHullGenerationParameters.ToRunTime();
 
-                    res.Instance.Hash = shape.GetBakedConvexInputs();
+                    res.Instance.Hash = shape.GetBakedConvexInputs(meshAssets);
 
                     if (BlobComputationContext.NeedToComputeBlobAsset(res.Instance.Hash))
                     {
@@ -130,7 +138,7 @@ namespace Unity.Physics.Authoring
                             using (var vertices = new NativeList<float3>(defaultVertexCount, Allocator.Temp))
                             using (var triangles = new NativeList<int3>(defaultVertexCount - 2, Allocator.Temp))
                             {
-                                shape.GetBakedMeshProperties(vertices, triangles);
+                                shape.GetBakedMeshProperties(vertices, triangles, meshAssets);
                                 if (vertices.Length == 0 || triangles.Length == 0)
                                 {
                                     throw new InvalidOperationException(

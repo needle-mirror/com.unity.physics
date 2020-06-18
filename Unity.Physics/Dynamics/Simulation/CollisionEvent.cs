@@ -1,3 +1,4 @@
+using System;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -13,11 +14,12 @@ namespace Unity.Physics
         internal Velocity InputVelocityA;
         internal Velocity InputVelocityB;
 
-        public EntityPair Entities { get; internal set; }
-
-        public BodyIndexPair BodyIndices => EventData.Value.BodyIndices;
-
-        public ColliderKeyPair ColliderKeys => EventData.Value.ColliderKeys;
+        public Entity EntityB => EventData.Value.Entities.EntityB;
+        public Entity EntityA => EventData.Value.Entities.EntityA;
+        public int BodyIndexB => EventData.Value.BodyIndices.BodyIndexB;
+        public int BodyIndexA => EventData.Value.BodyIndices.BodyIndexA;
+        public ColliderKey ColliderKeyB => EventData.Value.ColliderKeys.ColliderKeyB;
+        public ColliderKey ColliderKeyA => EventData.Value.ColliderKeys.ColliderKeyA;
 
         public float3 Normal => EventData.Value.Normal;
 
@@ -34,6 +36,15 @@ namespace Unity.Physics
 
             return EventData.Value.CalculateDetails(ref physicsWorld, TimeStep, InputVelocityA, InputVelocityB, contactPoints);
         }
+
+        [Obsolete("Entities has been deprecated. Use EntityA and EntityB directly. (RemovedAfter 2020-08-01)")]
+        public EntityPair Entities => EventData.Value.Entities;
+
+        [Obsolete("BodyIndices has been deprecated. Use BodyIndexA and BodyIndexB directly. (RemovedAfter 2020-08-01)")]
+        public BodyIndexPair BodyIndices => EventData.Value.BodyIndices;
+
+        [Obsolete("ColliderKeys has been deprecated. Use ColliderKeyA and ColliderKeyB directly. (RemovedAfter 2020-08-01)")]
+        public ColliderKeyPair ColliderKeys => EventData.Value.ColliderKeys;
 
         // Extra details about a collision
         public struct Details
@@ -72,21 +83,19 @@ namespace Unity.Physics
         [NativeDisableContainerSafetyRestriction]
         private readonly NativeStream m_EventDataStream;
 
-        private readonly NativeSlice<RigidBody> m_Bodies;
-        private readonly NativeSlice<Velocity> m_InputVelocities;
+        private readonly NativeArray<Velocity> m_InputVelocities;
         private readonly float m_TimeStep;
 
-        internal CollisionEvents(NativeStream eventDataStream, NativeSlice<RigidBody> bodies, NativeSlice<Velocity> inputVelocities, float timeStep)
+        internal CollisionEvents(NativeStream eventDataStream, NativeArray<Velocity> inputVelocities, float timeStep)
         {
             m_EventDataStream = eventDataStream;
-            m_Bodies = bodies;
             m_InputVelocities = inputVelocities;
             m_TimeStep = timeStep;
         }
 
         public Enumerator GetEnumerator()
         {
-            return new Enumerator(m_EventDataStream, m_Bodies, m_InputVelocities, m_TimeStep);
+            return new Enumerator(m_EventDataStream, m_InputVelocities, m_TimeStep);
         }
 
         public struct Enumerator /* : IEnumerator<CollisionEvent> */
@@ -96,22 +105,20 @@ namespace Unity.Physics
             private readonly int m_NumWorkItems;
             private CollisionEventDataRef m_Current;
 
-            private readonly NativeSlice<RigidBody> m_Bodies;
-            private readonly NativeSlice<Velocity> m_InputVelocities;
+            private readonly NativeArray<Velocity> m_InputVelocities;
             private readonly float m_TimeStep;
 
             public CollisionEvent Current
             {
-                get => m_Current.Value.CreateCollisionEvent(m_TimeStep, m_Bodies, m_InputVelocities);
+                get => m_Current.Value.CreateCollisionEvent(m_TimeStep, m_InputVelocities);
             }
 
-            internal Enumerator(NativeStream stream, NativeSlice<RigidBody> bodies, NativeSlice<Velocity> inputVelocities, float timeStep)
+            internal Enumerator(NativeStream stream, NativeArray<Velocity> inputVelocities, float timeStep)
             {
                 m_Reader = stream.IsCreated ? stream.AsReader() : new NativeStream.Reader();
                 m_CurrentWorkItem = 0;
                 m_NumWorkItems = stream.IsCreated ? stream.ForEachCount : 0;
 
-                m_Bodies = bodies;
                 m_InputVelocities = inputVelocities;
                 m_TimeStep = timeStep;
 
@@ -157,6 +164,7 @@ namespace Unity.Physics
     {
         public BodyIndexPair BodyIndices;
         public ColliderKeyPair ColliderKeys;
+        public EntityPair Entities;
         public float3 Normal;
 
         // The total impulse applied by the solver for this pair
@@ -165,21 +173,16 @@ namespace Unity.Physics
         // Number of narrow phase contact points
         internal int NumNarrowPhaseContactPoints;
 
-        internal unsafe CollisionEvent CreateCollisionEvent(float timeStep, NativeSlice<RigidBody> bodies, NativeSlice<Velocity> inputVelocities)
+        internal unsafe CollisionEvent CreateCollisionEvent(float timeStep, NativeArray<Velocity> inputVelocities)
         {
-            int bodyAIndex = BodyIndices.BodyAIndex;
-            int bodyBIndex = BodyIndices.BodyBIndex;
+            int bodyIndexA = BodyIndices.BodyIndexA;
+            int bodyIndexB = BodyIndices.BodyIndexB;
             return new CollisionEvent
             {
                 EventData = new CollisionEventDataRef((CollisionEventData*)(UnsafeUtility.AddressOf(ref this))),
-                Entities = new EntityPair
-                {
-                    EntityA = bodies[bodyAIndex].Entity,
-                    EntityB = bodies[bodyBIndex].Entity
-                },
                 TimeStep = timeStep,
-                InputVelocityA = bodyAIndex < inputVelocities.Length ? inputVelocities[bodyAIndex] : Velocity.Zero,
-                InputVelocityB = bodyBIndex < inputVelocities.Length ? inputVelocities[bodyBIndex] : Velocity.Zero
+                InputVelocityA = bodyIndexA < inputVelocities.Length ? inputVelocities[bodyIndexA] : Velocity.Zero,
+                InputVelocityB = bodyIndexB < inputVelocities.Length ? inputVelocities[bodyIndexB] : Velocity.Zero
             };
         }
 
@@ -192,22 +195,22 @@ namespace Unity.Physics
         {
             byte* ptr = (byte*)UnsafeUtility.AddressOf(ref this);
             ptr += UnsafeUtility.SizeOf<CollisionEventData>() + pointIndex * UnsafeUtility.SizeOf<ContactPoint>();
-            return ref UnsafeUtilityEx.AsRef<ContactPoint>(ptr);
+            return ref UnsafeUtility.AsRef<ContactPoint>(ptr);
         }
 
         // Calculate extra details about the collision, by re-integrating the leaf colliders to the time of collision
         internal unsafe CollisionEvent.Details CalculateDetails(
             ref PhysicsWorld physicsWorld, float timeStep, Velocity inputVelocityA, Velocity inputVelocityB, NativeArray<ContactPoint> narrowPhaseContactPoints)
         {
-            int bodyAIndex = BodyIndices.BodyAIndex;
-            int bodyBIndex = BodyIndices.BodyBIndex;
-            bool bodyAIsDynamic = bodyAIndex < physicsWorld.MotionVelocities.Length;
-            bool bodyBIsDynamic = bodyBIndex < physicsWorld.MotionVelocities.Length;
+            int bodyIndexA = BodyIndices.BodyIndexA;
+            int bodyIndexB = BodyIndices.BodyIndexB;
+            bool bodyAIsDynamic = bodyIndexA < physicsWorld.MotionVelocities.Length;
+            bool bodyBIsDynamic = bodyIndexB < physicsWorld.MotionVelocities.Length;
 
-            MotionVelocity motionVelocityA = bodyAIsDynamic ? physicsWorld.MotionVelocities[bodyAIndex] : MotionVelocity.Zero;
-            MotionVelocity motionVelocityB = bodyBIsDynamic ? physicsWorld.MotionVelocities[bodyBIndex] : MotionVelocity.Zero;
-            MotionData motionDataA = bodyAIsDynamic ? physicsWorld.MotionDatas[bodyAIndex] : MotionData.Zero;
-            MotionData motionDataB = bodyBIsDynamic ? physicsWorld.MotionDatas[bodyBIndex] : MotionData.Zero;
+            MotionVelocity motionVelocityA = bodyAIsDynamic ? physicsWorld.MotionVelocities[bodyIndexA] : MotionVelocity.Zero;
+            MotionVelocity motionVelocityB = bodyBIsDynamic ? physicsWorld.MotionVelocities[bodyIndexB] : MotionVelocity.Zero;
+            MotionData motionDataA = bodyAIsDynamic ? physicsWorld.MotionDatas[bodyIndexA] : MotionData.Zero;
+            MotionData motionDataB = bodyBIsDynamic ? physicsWorld.MotionDatas[bodyIndexB] : MotionData.Zero;
 
             float estimatedImpulse = SolverImpulse;
 
@@ -349,6 +352,6 @@ namespace Unity.Physics
             m_CollisionEventData = collisionEventData;
         }
 
-        public unsafe ref CollisionEventData Value => ref UnsafeUtilityEx.AsRef<CollisionEventData>(m_CollisionEventData);
+        public unsafe ref CollisionEventData Value => ref UnsafeUtility.AsRef<CollisionEventData>(m_CollisionEventData);
     }
 }

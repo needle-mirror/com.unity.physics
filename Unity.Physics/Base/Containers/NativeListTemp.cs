@@ -2,6 +2,9 @@ using System;
 using Unity.Burst;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
+#if !UNITY_ENTITIES_0_12_OR_NEWER
+using UnsafeUtility = Unity.Physics.UnsafeUtility;
+#endif
 
 #pragma warning disable 649
 
@@ -35,7 +38,7 @@ namespace Unity.Collections
             where T : struct
         {
             var ptr = UnsafeUtility.AddressOf(ref list);
-            ref var listRef = ref UnsafeUtilityEx.AsRef<NativeListTemp>(ptr);
+            ref var listRef = ref UnsafeUtility.AsRef<NativeListTemp>(ptr);
 
             var jobData = new DisposeListJob { ListTemp = listRef };
 

@@ -369,7 +369,7 @@ public class DebugStream : ComponentSystem
         public void OnDrawGizmos()
         {
             // Make sure all potential debug display jobs are finished
-            DebugDraw.m_EndFramePhysicsSystem.FinalJobHandle.Complete();
+            DebugDraw.m_EndFramePhysicsSystem.GetOutputDependency().Complete();
 
             if (DebugDraw != null)
             {
@@ -381,7 +381,7 @@ public class DebugStream : ComponentSystem
     protected override void OnUpdate()
     {
         // Make sure all potential debug display jobs are finished
-        m_EndFramePhysicsSystem.FinalJobHandle.Complete();
+        m_EndFramePhysicsSystem.GetOutputDependency().Complete();
 
         // Reset
         for (int i = 0; i < m_DebugStreams.Count; i++)
@@ -404,5 +404,6 @@ public class DebugStream : ComponentSystem
     {
         for (int i = 0; i < m_DebugStreams.Count; i++)
             m_DebugStreams[i].Dispose();
+        m_DebugStreams.Clear();
     }
 }

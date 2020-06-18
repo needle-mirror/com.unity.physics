@@ -1,6 +1,7 @@
 ﻿using System;
 using Unity.Entities;
 using Unity.Mathematics;
+using Unity.Collections.LowLevel.Unsafe;
 using static Unity.Physics.BoundingVolumeHierarchy;
 using static Unity.Physics.Math;
 
@@ -10,7 +11,7 @@ namespace Unity.Physics
     // and the Start & End positions of a line segment the Collider is to be swept along.
     public unsafe struct ColliderCastInput
     {
-        public Collider* Collider;
+        [NativeDisableUnsafePtrRestriction] public Collider* Collider;
         public quaternion Orientation { get; set; }
 
         public float3 Start
@@ -31,6 +32,9 @@ namespace Unity.Physics
 
         internal Ray Ray;
         internal QueryContext QueryContext;
+        
+        public override string ToString() =>
+            $"RaycastInput {{ Start = {Start}, End = {End}, Collider = {Collider->Type}, Orientation = {Orientation} }}";
     }
 
     // A hit from a collider cast query
@@ -72,6 +76,9 @@ namespace Unity.Physics
         /// <value> Returns the normal of the point where the hit occurred. </value>
         public float3 SurfaceNormal { get; set; }
 
+        public override string ToString() =>
+            $"ColliderCastHit {{ Fraction = {Fraction}, RigidBodyIndex = {RigidBodyIndex}, ColliderKey = {ColliderKey}, Entity = {Entity}, Position = {Position}, SurfaceNormal = {SurfaceNormal} }}";
+        
     }
 
     // Collider cast query implementations

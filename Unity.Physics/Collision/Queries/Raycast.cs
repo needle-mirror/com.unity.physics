@@ -70,6 +70,9 @@ namespace Unity.Physics
 
         internal Ray Ray;
         internal QueryContext QueryContext;
+        
+        public override string ToString() =>
+            $"RaycastInput {{ Start = {Start}, End = {End}, Filter = {Filter} }}";
     }
 
     // A hit from a ray cast query
@@ -114,6 +117,8 @@ namespace Unity.Physics
         /// <value> Returns the normal of the point where the hit occurred. </value>
         public float3 SurfaceNormal { get; set; }
 
+        public override string ToString() =>
+            $"RaycastHit {{ Fraction = {Fraction}, RigidBodyIndex = {RigidBodyIndex}, ColliderKey = {ColliderKey}, Entity = {Entity}, Position = {Position}, SurfaceNormal = {SurfaceNormal} }}";
     }
 
     // Raycast query implementations

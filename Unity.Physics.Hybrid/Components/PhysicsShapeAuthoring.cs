@@ -34,7 +34,6 @@ namespace Unity.Physics.Authoring
     }
 
     [AddComponentMenu("DOTS/Physics/Physics Shape")]
-    [DisallowMultipleComponent]
     [RequiresEntityConversion]
     public sealed partial class PhysicsShapeAuthoring : MonoBehaviour, IInheritPhysicsMaterialProperties, ISerializationCallbackReceiver
     {
@@ -111,9 +110,9 @@ namespace Unity.Physics.Authoring
             set => m_Material.Template = value;
         }
 
-        public bool OverrideIsTrigger { get => m_Material.OverrideIsTrigger; set => m_Material.OverrideIsTrigger = value; }
-        public bool IsTrigger { get => m_Material.IsTrigger; set => m_Material.IsTrigger = value; }
-
+        public bool OverrideCollisionResponse { get => m_Material.OverrideCollisionResponse; set => m_Material.OverrideCollisionResponse = value; }
+        public CollisionResponsePolicy CollisionResponse { get => m_Material.CollisionResponse; set => m_Material.CollisionResponse = value; }
+        
         public bool OverrideFriction { get => m_Material.OverrideFriction; set => m_Material.OverrideFriction = value; }
         public PhysicsMaterialCoefficient Friction { get => m_Material.Friction; set => m_Material.Friction = value; }
 
@@ -148,17 +147,6 @@ namespace Unity.Physics.Authoring
         {
             get => m_Material.CollidesWith;
             set => m_Material.CollidesWith = value;
-        }
-
-        public bool OverrideRaisesCollisionEvents
-        {
-            get => m_Material.OverrideRaisesCollisionEvents;
-            set => m_Material.OverrideRaisesCollisionEvents = value;
-        }
-        public bool RaisesCollisionEvents
-        {
-            get => m_Material.RaisesCollisionEvents;
-            set => m_Material.RaisesCollisionEvents = value;
         }
 
         public bool OverrideCustomTags
@@ -292,11 +280,12 @@ namespace Unity.Physics.Authoring
         static UnityMesh s_ReusableBakeMesh;
 
         public void GetConvexHullProperties(NativeList<float3> pointCloud) =>
-            GetConvexHullProperties(pointCloud, true, default, default, default);
+            GetConvexHullProperties(pointCloud, true, default, default, default, default);
 
         internal unsafe void GetConvexHullProperties(
             NativeList<float3> pointCloud, bool validate,
-            NativeList<HashableShapeInputs> inputs, NativeList<int> allSkinIndices, NativeList<float> allBlendShapeWeights
+            NativeList<HashableShapeInputs> inputs, NativeList<int> allSkinIndices, NativeList<float> allBlendShapeWeights,
+            HashSet<UnityMesh> meshAssets
         )
         {
             if (pointCloud.IsCreated)
@@ -307,6 +296,7 @@ namespace Unity.Physics.Authoring
                 allSkinIndices.Clear();
             if (allBlendShapeWeights.IsCreated)
                 allBlendShapeWeights.Clear();
+            meshAssets?.Clear();
 
             var triangles = pointCloud.IsCreated
                 ? new NativeList<int3>(pointCloud.Capacity - 2, Allocator.Temp)
@@ -318,7 +308,7 @@ namespace Unity.Physics.Authoring
                     return;
 
                 AppendMeshPropertiesToNativeBuffers(
-                    transform.localToWorldMatrix, m_CustomMesh, pointCloud, triangles, validate, inputs
+                    transform.localToWorldMatrix, m_CustomMesh, pointCloud, triangles, validate, inputs, meshAssets
                 );
             }
             else
@@ -330,7 +320,7 @@ namespace Unity.Physics.Authoring
                         if (scope.IsChildActiveAndBelongsToShape(meshFilter, validate))
                         {
                             AppendMeshPropertiesToNativeBuffers(
-                                meshFilter.transform.localToWorldMatrix, meshFilter.sharedMesh, pointCloud, triangles, validate, inputs
+                                meshFilter.transform.localToWorldMatrix, meshFilter.sharedMesh, pointCloud, triangles, validate, inputs, meshAssets
                             );
                         }
                     }
@@ -343,15 +333,7 @@ namespace Unity.Physics.Authoring
                         this, skinnedPoints, validate, skinnedInputs, allSkinIndices, allBlendShapeWeights
                     );
                     if (pointCloud.IsCreated)
-                    {
-                        pointCloud.ResizeUninitialized(pointCloud.Length + skinnedPoints.Length);
-                        UnsafeUtility.MemCpy(
-                            pointCloud.GetUnsafePtr(),
-                            skinnedPoints.GetUnsafePtr(),
-                            skinnedPoints.Length * UnsafeUtility.SizeOf<float3>()
-                        );
                         pointCloud.AddRange(skinnedPoints);
-                    }
                     if (inputs.IsCreated)
                         inputs.AddRange(skinnedInputs);
                 }
@@ -465,7 +447,7 @@ namespace Unity.Physics.Authoring
             GetMeshProperties(vertices, triangles, true, default);
 
         internal void GetMeshProperties(
-            NativeList<float3> vertices, NativeList<int3> triangles, bool validate, NativeList<HashableShapeInputs> inputs
+            NativeList<float3> vertices, NativeList<int3> triangles, bool validate, NativeList<HashableShapeInputs> inputs, HashSet<UnityMesh> meshAssets = null
         )
         {
             if (vertices.IsCreated)
@@ -474,14 +456,15 @@ namespace Unity.Physics.Authoring
                 triangles.Clear();
             if (inputs.IsCreated)
                 inputs.Clear();
-
+            meshAssets?.Clear();
+            
             if (m_CustomMesh != null)
             {
                 if (validate && !m_CustomMesh.IsValidForConversion(gameObject))
                     return;
-
+                
                 AppendMeshPropertiesToNativeBuffers(
-                    transform.localToWorldMatrix, m_CustomMesh, vertices, triangles, validate, inputs
+                    transform.localToWorldMatrix, m_CustomMesh, vertices, triangles, validate, inputs, meshAssets
                 );
             }
             else
@@ -493,7 +476,7 @@ namespace Unity.Physics.Authoring
                         if (scope.IsChildActiveAndBelongsToShape(meshFilter, validate))
                         {
                             AppendMeshPropertiesToNativeBuffers(
-                                meshFilter.transform.localToWorldMatrix, meshFilter.sharedMesh, vertices, triangles, validate, inputs
+                                meshFilter.transform.localToWorldMatrix, meshFilter.sharedMesh, vertices, triangles, validate, inputs, meshAssets
                             );
                         }
                     }
@@ -503,7 +486,7 @@ namespace Unity.Physics.Authoring
 
         void AppendMeshPropertiesToNativeBuffers(
             float4x4 localToWorld, UnityMesh mesh, NativeList<float3> vertices, NativeList<int3> triangles, bool validate,
-            NativeList<HashableShapeInputs> inputs
+            NativeList<HashableShapeInputs> inputs, HashSet<UnityMesh> meshAssets
         )
         {
             if (mesh == null || validate && !mesh.IsValidForConversion(gameObject))
@@ -539,6 +522,8 @@ namespace Unity.Physics.Authoring
 
             if (inputs.IsCreated)
                 inputs.Add(HashableShapeInputs.FromMesh(mesh, childToShape));
+
+            meshAssets?.Add(mesh);
         }
 
         void UpdateCapsuleAxis()
@@ -716,15 +701,35 @@ namespace Unity.Physics.Authoring
             // included so tick box appears in Editor
         }
 
+        const int k_LatestVersion = 1;
+
+        [SerializeField]
+        int m_SerializedVersion = 0;
+
         void ISerializationCallbackReceiver.OnBeforeSerialize() { }
 
-        void ISerializationCallbackReceiver.OnAfterDeserialize()
+        void ISerializationCallbackReceiver.OnAfterDeserialize() => UpgradeVersionIfNecessary();
+
+#pragma warning disable 618
+        void UpgradeVersionIfNecessary()
         {
-            // migrate existing serialized data from old m_ConvexRadius field
-            if (m_ConvexRadius_Deprecated >= 0f)
-                m_ConvexHullGenerationParameters.BevelRadius = m_ConvexRadius_Deprecated;
+            if (m_SerializedVersion < k_LatestVersion)
+            {
+                if (m_SerializedVersion < 1)
+                {
+                    // migrate existing serialized data from old m_ConvexRadius field
+                    if (m_ConvexRadius_Deprecated >= 0f)
+                        m_ConvexHullGenerationParameters.BevelRadius = m_ConvexRadius_Deprecated;
+                    m_ConvexRadius_Deprecated = -1f;
+
+                    m_SerializedVersion = 1;
+                }
+            }
+
+            // Prevent user from setting values for deprecated fields
             m_ConvexRadius_Deprecated = -1f;
         }
+#pragma warning restore 618
 
         static void Validate(ref CylindricalProperties props)
         {
@@ -734,6 +739,8 @@ namespace Unity.Physics.Authoring
 
         void OnValidate()
         {
+            UpgradeVersionIfNecessary();
+
             m_PrimitiveSize = math.max(m_PrimitiveSize, new float3());
             Validate(ref m_Capsule);
             Validate(ref m_Cylinder);
@@ -767,7 +774,7 @@ namespace Unity.Physics.Authoring
             m_CylinderSideCount =
                 math.clamp(m_CylinderSideCount, CylinderGeometry.MinSideCount, CylinderGeometry.MaxSideCount);
             m_ConvexHullGenerationParameters.OnValidate();
-            m_ConvexRadius_Deprecated = -1f; // prevent user from setting a value for deprecated field
+
             PhysicsMaterialProperties.OnValidate(ref m_Material, true);
         }
 
@@ -830,7 +837,7 @@ namespace Unity.Physics.Authoring
                 // temporarily un-assign custom mesh and assume this shape is a convex hull
                 var customMesh = m_CustomMesh;
                 m_CustomMesh = null;
-                GetConvexHullProperties(points, Application.isPlaying, default, default, default);
+                GetConvexHullProperties(points, Application.isPlaying, default, default, default, default);
                 m_CustomMesh = customMesh;
                 if (points.Length == 0)
                     return;
@@ -901,7 +908,7 @@ namespace Unity.Physics.Authoring
         internal void InitializeConvexHullGenerationParameters()
         {
             var pointCloud = new NativeList<float3>(65535, Allocator.Temp);
-            GetConvexHullProperties(pointCloud, false, default, default, default);
+            GetConvexHullProperties(pointCloud, false, default, default, default, default);
             m_ConvexHullGenerationParameters.InitializeToRecommendedAuthoringValues(pointCloud);
         }
     }

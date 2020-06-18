@@ -1,13 +1,11 @@
 using System;
 using NUnit.Framework;
 using Unity.Burst;
-using Unity.Collections;
-using Unity.Mathematics;
-using UnityEngine;
-using Assert = UnityEngine.Assertions.Assert;
-using TestUtils = Unity.Physics.Tests.Utils.TestUtils;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
+using Unity.Mathematics;
+using Assert = UnityEngine.Assertions.Assert;
+using TestUtils = Unity.Physics.Tests.Utils.TestUtils;
 
 namespace Unity.Physics.Tests.Collision.Colliders
 {
@@ -43,7 +41,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             };
 
             var collider = BoxCollider.Create(geometry);
-            var boxCollider = UnsafeUtilityEx.AsRef<BoxCollider>(collider.GetUnsafePtr());
+            var boxCollider = UnsafeUtility.AsRef<BoxCollider>(collider.GetUnsafePtr());
 
             Assert.AreEqual(geometry.Center, boxCollider.Center);
             Assert.AreEqual(geometry.Center, boxCollider.Geometry.Center);

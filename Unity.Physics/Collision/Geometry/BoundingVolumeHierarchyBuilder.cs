@@ -420,7 +420,7 @@ namespace Unity.Physics
             JobHandle handle = inputDeps;
 
             var branchNodeOffsets = new NativeArray<int>(Constants.MaxNumTreeBranches, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-            int oldNumBranches = numBranches[0];
+            var oldNumBranches = new NativeArray<int>(1, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
 
             // Build initial branches
             handle = new BuildFirstNLevelsJob
@@ -431,6 +431,7 @@ namespace Unity.Physics
                 Ranges = ranges,
                 BranchNodeOffsets = branchNodeOffsets,
                 BranchCount = numBranches,
+                OldBranchCount = oldNumBranches,
                 ThreadCount = numThreadsHint,
                 ShouldDoWork = shouldDoWork
             }.Schedule(handle);
@@ -764,12 +765,16 @@ namespace Unity.Physics
             public NativeArray<Builder.Range> Ranges;
             public NativeArray<int> BranchNodeOffsets;
             public NativeArray<int> BranchCount;
+            public NativeArray<int> OldBranchCount;
             public NativeArray<int> ShouldDoWork;
 
             public int ThreadCount;
 
             public void Execute()
             {
+                // Save old branch count for finalize tree job
+                OldBranchCount[0] = BranchCount[0];
+
                 if (ShouldDoWork[0] == 0)
                 {
                     // If we need to to skip tree building tasks, than set BranchCount to zero so
@@ -827,7 +832,7 @@ namespace Unity.Physics
             [NativeDisableUnsafePtrRestriction]
             public CollisionFilter* NodeFilters;
             public int NumNodes;
-            public int OldBranchCount;
+            [DeallocateOnJobCompletion] [ReadOnly] public NativeArray<int> OldBranchCount;
             public NativeArray<int> BranchCount;
 
             public void Execute()
@@ -835,7 +840,7 @@ namespace Unity.Physics
                 if (ShouldDoWork[0] == 0)
                 {
                     // Restore original branch count
-                    BranchCount[0] = OldBranchCount;
+                    BranchCount[0] = OldBranchCount[0];
                     return;
                 }
 

@@ -1,10 +1,9 @@
 ﻿using System;
-using UnityEngine;
 
 namespace Unity.Physics.Authoring
 {
     [Serializable]
-    public struct PhysicsCategoryTags
+    public struct PhysicsCategoryTags : IEquatable<PhysicsCategoryTags>
     {
         public static PhysicsCategoryTags Everything => new PhysicsCategoryTags { Value = unchecked((uint)~0) };
         public static PhysicsCategoryTags Nothing => new PhysicsCategoryTags { Value = 0 };
@@ -199,5 +198,11 @@ namespace Unity.Physics.Authoring
                 Category31 = (value & (1 << 31)) != 0;
             }
         }
+
+        public bool Equals(PhysicsCategoryTags other) => Value == other.Value;
+
+        public override bool Equals(object obj) => obj is PhysicsCategoryTags other && Equals(other);
+
+        public override int GetHashCode() => unchecked((int)Value);
     }
 }

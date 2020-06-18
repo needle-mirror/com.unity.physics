@@ -1168,7 +1168,7 @@ namespace Unity.Physics.Tests.Utils
             PhysicsWorld world = new PhysicsWorld(numBodies, 0, 0);
 
             // Create bodies
-            NativeSlice<RigidBody> bodies = world.StaticBodies;
+            NativeArray<RigidBody> bodies = world.StaticBodies;
             for (int i = 0; i < numBodies; i++)
             {
                 bodies[i] = new RigidBody
@@ -1187,7 +1187,7 @@ namespace Unity.Physics.Tests.Utils
             // Build the broadphase
             if (direct)
             {
-                world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionDatas, world.MotionVelocities,
+                world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
                     world.CollisionWorld.CollisionTolerance, 1.0f, -9.81f * math.up());
             }
             else

@@ -23,26 +23,26 @@ namespace Unity.Physics.Tests.Dynamics.Schedule
             var phasedDispatchPairs = new NativeArray<DispatchPair>(20, Allocator.Temp);
             var sortedDispatchPairs = new NativeArray<DispatchPair>(20, Allocator.Temp);
             {
-                sortedDispatchPairs[0] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyAIndex = 0, BodyBIndex = 1 });
-                sortedDispatchPairs[1] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyAIndex = 0, BodyBIndex = 2 });
-                sortedDispatchPairs[2] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyAIndex = 0, BodyBIndex = 3 });
-                sortedDispatchPairs[3] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyAIndex = 0, BodyBIndex = 4 });
-                sortedDispatchPairs[4] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyAIndex = 0, BodyBIndex = 5 });
-                sortedDispatchPairs[5] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyAIndex = 0, BodyBIndex = 6 });
-                sortedDispatchPairs[6] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyAIndex = 0, BodyBIndex = 7 });
-                sortedDispatchPairs[7] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyAIndex = 0, BodyBIndex = 8 });
-                sortedDispatchPairs[8] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyAIndex = 0, BodyBIndex = 15 });
-                sortedDispatchPairs[9] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyAIndex = 0, BodyBIndex = 16 });
-                sortedDispatchPairs[10] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyAIndex = 1, BodyBIndex = 2 });
-                sortedDispatchPairs[11] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyAIndex = 1, BodyBIndex = 3 });
-                sortedDispatchPairs[12] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyAIndex = 1, BodyBIndex = 4 });
-                sortedDispatchPairs[13] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyAIndex = 1, BodyBIndex = 5 });
-                sortedDispatchPairs[14] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyAIndex = 1, BodyBIndex = 6 });
-                sortedDispatchPairs[15] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyAIndex = 1, BodyBIndex = 7 });
-                sortedDispatchPairs[16] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyAIndex = 1, BodyBIndex = 8 });
-                sortedDispatchPairs[17] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyAIndex = 1, BodyBIndex = 9 });
-                sortedDispatchPairs[18] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyAIndex = 1, BodyBIndex = 15 });
-                sortedDispatchPairs[19] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyAIndex = 1, BodyBIndex = 16 });
+                sortedDispatchPairs[0] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyIndexA = 0, BodyIndexB = 1 });
+                sortedDispatchPairs[1] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyIndexA = 0, BodyIndexB = 2 });
+                sortedDispatchPairs[2] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyIndexA = 0, BodyIndexB = 3 });
+                sortedDispatchPairs[3] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyIndexA = 0, BodyIndexB = 4 });
+                sortedDispatchPairs[4] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyIndexA = 0, BodyIndexB = 5 });
+                sortedDispatchPairs[5] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyIndexA = 0, BodyIndexB = 6 });
+                sortedDispatchPairs[6] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyIndexA = 0, BodyIndexB = 7 });
+                sortedDispatchPairs[7] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyIndexA = 0, BodyIndexB = 8 });
+                sortedDispatchPairs[8] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyIndexA = 0, BodyIndexB = 15 });
+                sortedDispatchPairs[9] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyIndexA = 0, BodyIndexB = 16 });
+                sortedDispatchPairs[10] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyIndexA = 1, BodyIndexB = 2 });
+                sortedDispatchPairs[11] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyIndexA = 1, BodyIndexB = 3 });
+                sortedDispatchPairs[12] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyIndexA = 1, BodyIndexB = 4 });
+                sortedDispatchPairs[13] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyIndexA = 1, BodyIndexB = 5 });
+                sortedDispatchPairs[14] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyIndexA = 1, BodyIndexB = 6 });
+                sortedDispatchPairs[15] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyIndexA = 1, BodyIndexB = 7 });
+                sortedDispatchPairs[16] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyIndexA = 1, BodyIndexB = 8 });
+                sortedDispatchPairs[17] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyIndexA = 1, BodyIndexB = 9 });
+                sortedDispatchPairs[18] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyIndexA = 1, BodyIndexB = 15 });
+                sortedDispatchPairs[19] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyIndexA = 1, BodyIndexB = 16 });
             }
 
             var createDispatchPairsJob = new CreateDispatchPairPhasesJob
@@ -75,12 +75,12 @@ namespace Unity.Physics.Tests.Dynamics.Schedule
                                 int secondIndex = k * info.BatchSize;
                                 for (int pairIndex1 = firstIndex; pairIndex1 < math.min(firstIndex + info.BatchSize, dispatchPairCount); pairIndex1++)
                                 {
-                                    int aIndex1 = phasedDispatchPairs[pairIndex1].BodyAIndex;
-                                    int bIndex1 = phasedDispatchPairs[pairIndex1].BodyBIndex;
+                                    int aIndex1 = phasedDispatchPairs[pairIndex1].BodyIndexA;
+                                    int bIndex1 = phasedDispatchPairs[pairIndex1].BodyIndexB;
                                     for (int pairIndex2 = secondIndex; pairIndex2 < math.min(secondIndex + info.BatchSize, dispatchPairCount); pairIndex2++)
                                     {
-                                        int aIndex2 = phasedDispatchPairs[pairIndex2].BodyAIndex;
-                                        int bIndex2 = phasedDispatchPairs[pairIndex2].BodyBIndex;
+                                        int aIndex2 = phasedDispatchPairs[pairIndex2].BodyIndexA;
+                                        int bIndex2 = phasedDispatchPairs[pairIndex2].BodyIndexB;
 
                                         // Verify that different batches can't contain same dynamic bodies
                                         Assert.AreNotEqual(aIndex1, aIndex2);

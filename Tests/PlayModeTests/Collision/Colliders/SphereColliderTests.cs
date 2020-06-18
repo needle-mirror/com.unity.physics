@@ -1,12 +1,10 @@
-using System;
 using NUnit.Framework;
 using Unity.Burst;
+using Unity.Jobs;
 using Unity.Mathematics;
-using UnityEngine;
 using Assert = UnityEngine.Assertions.Assert;
 using TestUtils = Unity.Physics.Tests.Utils.TestUtils;
 using Unity.Collections.LowLevel.Unsafe;
-using Unity.Jobs;
 
 namespace Unity.Physics.Tests.Collision.Colliders
 {
@@ -39,7 +37,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             };
 
             var collider = SphereCollider.Create(sphere);
-            var sphereCollider = UnsafeUtilityEx.AsRef<SphereCollider>(collider.GetUnsafePtr());
+            var sphereCollider = UnsafeUtility.AsRef<SphereCollider>(collider.GetUnsafePtr());
 
             TestUtils.AreEqual(sphere.Center, sphereCollider.Center, 1e-3f);
             TestUtils.AreEqual(sphere.Center, sphereCollider.Geometry.Center, 1e-3f);

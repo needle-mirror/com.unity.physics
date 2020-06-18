@@ -13,7 +13,7 @@ namespace Unity.Physics.Tests.Base.Containers
 
             collisionEventWriter.Write(size);
             byte* eventPtr = collisionEventWriter.Allocate(size);
-            ref CollisionEventData eventRef = ref UnsafeUtilityEx.AsRef<CollisionEventData>(eventPtr);
+            ref CollisionEventData eventRef = ref UnsafeUtility.AsRef<CollisionEventData>(eventPtr);
             eventRef = collisionEvent;
             for (int i = 0; i < numContactPoints; i++)
             {
@@ -93,7 +93,7 @@ namespace Unity.Physics.Tests.Base.Containers
             NativeArray<Velocity> inputVelocities = new NativeArray<Velocity>(dummyWorld.NumDynamicBodies, Allocator.Temp);
 
             // Iterate over written events and make sure they are all read
-            CollisionEvents collisionEvents = new CollisionEvents(collisionEventStream, dummyWorld.Bodies, inputVelocities, timeStep);
+            CollisionEvents collisionEvents = new CollisionEvents(collisionEventStream, inputVelocities, timeStep);
             int readCount = 0;
             foreach(var collisionEvent in collisionEvents)
             {
@@ -154,7 +154,7 @@ namespace Unity.Physics.Tests.Base.Containers
             PhysicsWorld dummyWorld = new PhysicsWorld(10, 10, 0);
 
             // Iterate over written events and make sure they are all read
-            TriggerEvents triggerEvents = new TriggerEvents(triggerEventStream, dummyWorld.Bodies);
+            TriggerEvents triggerEvents = new TriggerEvents(triggerEventStream);
             int readCount = 0;
             foreach (var triggerEvent in triggerEvents)
             {

@@ -24,8 +24,8 @@ namespace Unity.Physics.Tests.Dynamics.CollisionEvents
                 int length = CollisionEventData.CalculateSize(3);
                 collisionEventData = new CollisionEventDataRef((CollisionEventData*)(UnsafeUtility.Malloc(length, 1, Allocator.Temp)));
             }
-            collisionEventData.Value.BodyIndices.BodyAIndex = 0;
-            collisionEventData.Value.BodyIndices.BodyBIndex = 1;
+            collisionEventData.Value.BodyIndices.BodyIndexA = 0;
+            collisionEventData.Value.BodyIndices.BodyIndexB = 1;
             collisionEventData.Value.ColliderKeys.ColliderKeyA = ColliderKey.Empty;
             collisionEventData.Value.ColliderKeys.ColliderKeyB = ColliderKey.Empty;
             collisionEventData.Value.Normal = new float3(0.0f, -1.00000f, 0.0f);
@@ -77,7 +77,6 @@ namespace Unity.Physics.Tests.Dynamics.CollisionEvents
             {
                 LinearDamping = 0.0f,
                 AngularDamping = 0.0f,
-                GravityFactor = 1.0f,
                 BodyFromMotion = new RigidTransform(new quaternion(0.0f, 0.0f, 0.0f, 1.0f), new float3(0.0f, 0.0f, 0.0f)),
                 WorldFromMotion = new RigidTransform(new quaternion(0.09212853f, 0.1400256f, -0.006776567f, -0.9858292f), new float3(-22.17587f, 0.5172966f, -52.24425f))
             };
@@ -87,7 +86,8 @@ namespace Unity.Physics.Tests.Dynamics.CollisionEvents
                 AngularVelocity = new float3(-7.30913f, -4.78899f, 1.14168f),
                 InverseInertia = new float3(0.00045f, 0.00045f, 0.00045f),
                 InverseMass = 0.00018f,
-                AngularExpansionFactor = 2.05061f
+                AngularExpansionFactor = 2.05061f,
+                GravityFactor = 1.0f
             };
 
             // Calculate the collision event details and make sure 1 contact point is returned

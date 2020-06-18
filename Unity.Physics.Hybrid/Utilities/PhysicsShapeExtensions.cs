@@ -89,23 +89,13 @@ namespace Unity.Physics.Authoring
         internal static Material GetMaterial(this PhysicsShapeAuthoring shape)
         {
             // TODO: TBD how we will author editor content for other shape flags
-            var flags = new Material.MaterialFlags();
-            if (shape.IsTrigger)
-            {
-                flags = Material.MaterialFlags.IsTrigger;
-            }
-            else if (shape.RaisesCollisionEvents)
-            {
-                flags = Material.MaterialFlags.EnableCollisionEvents;
-            }
-
             return new Material
             {
                 Friction = shape.Friction.Value,
                 FrictionCombinePolicy = shape.Friction.CombineMode,
                 Restitution = shape.Restitution.Value,
                 RestitutionCombinePolicy = shape.Restitution.CombineMode,
-                Flags = flags,
+                CollisionResponse = shape.CollisionResponse,
                 CustomTags = shape.CustomTags.Value
             };
         }
@@ -816,13 +806,13 @@ namespace Unity.Physics.Authoring
             shape.SetPlane(center, planeSize, orientation);
         }
 
-        internal static Hash128 GetBakedConvexInputs(this PhysicsShapeAuthoring shape)
+        internal static Hash128 GetBakedConvexInputs(this PhysicsShapeAuthoring shape, HashSet<UnityEngine.Mesh> meshAssets)
         {
             using (var inputs = new NativeList<HashableShapeInputs>(8, Allocator.TempJob))
             using (var allSkinIndices = new NativeList<int>(4096, Allocator.TempJob))
             using (var allBlendShapeWeights = new NativeList<float>(64, Allocator.TempJob))
             {
-                shape.GetConvexHullProperties(default, true, inputs, allSkinIndices, allBlendShapeWeights);
+                shape.GetConvexHullProperties(default, true, inputs, allSkinIndices, allBlendShapeWeights, meshAssets);
 
                 using (var hash = new NativeArray<Hash128>(1, Allocator.TempJob))
                 {
@@ -846,7 +836,7 @@ namespace Unity.Physics.Authoring
 
         internal static void GetBakedConvexProperties(this PhysicsShapeAuthoring shape, NativeList<float3> pointCloud)
         {
-            shape.GetConvexHullProperties(pointCloud, true, default, default, default);
+            shape.GetConvexHullProperties(pointCloud, true, default, default, default, default);
             shape.BakePoints(pointCloud);
         }
 
@@ -916,10 +906,11 @@ namespace Unity.Physics.Authoring
         }
 
         internal static void GetBakedMeshProperties(
-            this PhysicsShapeAuthoring shape, NativeList<float3> vertices, NativeList<int3> triangles
+            this PhysicsShapeAuthoring shape, NativeList<float3> vertices, NativeList<int3> triangles,
+            HashSet<UnityEngine.Mesh> meshAssets = null
         )
         {
-            shape.GetMeshProperties(vertices, triangles, true, default);
+            shape.GetMeshProperties(vertices, triangles, true, default, meshAssets);
             shape.BakePoints(vertices);
         }
     }

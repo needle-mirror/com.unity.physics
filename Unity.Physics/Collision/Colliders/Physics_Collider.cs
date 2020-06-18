@@ -428,6 +428,8 @@ namespace Unity.Physics
             subKey = uint.MaxValue;
             return false;
         }
+
+        public override string ToString() => $"ColliderKey {{ {nameof(Value)} = {Value} }}";
     }
 
     // Stores a ColliderKey along with the number of bits in it that are used.

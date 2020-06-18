@@ -30,6 +30,12 @@ namespace Unity.Physics
             public static implicit operator FloatRange(float2 f) => new FloatRange { Min = f.x, Max = f.y };
 
             public override string ToString() => $"FloatRange {{ Min = {Min}, Max = {Max} }}";
+
+            /// <summary>
+            /// Returns a sorted copy of this instance.
+            /// </summary>
+            /// <returns>A copy of this instance, where <see cref="Min"/> is the lesser of <see cref="Min"/> and <see cref="Max"/>, and <see cref="Max"/> is the greater of the two.</returns>
+            public FloatRange Sorted() => math.select(this, ((float2)this).yx, Min > Max);
         }
     }
 }

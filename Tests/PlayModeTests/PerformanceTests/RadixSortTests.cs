@@ -45,8 +45,8 @@ namespace Unity.Physics.Tests.PerformanceTests
                 }
 
                 pairs[i] =
-                    indexA << DispatchPairSequencer.DispatchPair.k_BodyAIndexShift |
-                    indexB << DispatchPairSequencer.DispatchPair.k_BodyBIndexShift;
+                    indexA << DispatchPairSequencer.DispatchPair.k_BodyIndexAShift |
+                    indexB << DispatchPairSequencer.DispatchPair.k_BodyIndexBShift;
             }
         }
 
@@ -142,7 +142,7 @@ namespace Unity.Physics.Tests.PerformanceTests
             var tempCount = new NativeArray<int>(maxBodyIndex + 1, Allocator.TempJob);
             DispatchPairSequencer.RadixSortPerBodyAJob.RadixSortPerBodyA(
                 (ulong*)pairs.GetUnsafePtr(), (ulong*)sortedPairs.GetUnsafePtr(),
-                pairs.Length, tempCount, numDigits, maxBodyIndex, DispatchPairSequencer.DispatchPair.k_BodyAIndexShift);
+                pairs.Length, tempCount, numDigits, maxBodyIndex, DispatchPairSequencer.DispatchPair.k_BodyIndexAShift);
 
             var job = new DispatchPairSequencer.SortSubArraysJob
             {

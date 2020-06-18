@@ -1,5 +1,4 @@
-﻿using System;
-using Unity.Burst;
+﻿using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -9,7 +8,7 @@ namespace Unity.Physics
     public static class Integrator
     {
         // Integrate the world's motions forward by the given time step.
-        public static void Integrate(NativeSlice<MotionData> motionDatas, NativeSlice<MotionVelocity> motionVelocities, float timeStep)
+        public static void Integrate(NativeArray<MotionData> motionDatas, NativeArray<MotionVelocity> motionVelocities, float timeStep)
         {
             for (int i = 0; i < motionDatas.Length; i++)
             {
@@ -45,8 +44,8 @@ namespace Unity.Physics
         [BurstCompile]
         private struct ParallelIntegrateMotionsJob : IJobParallelFor
         {
-            public NativeSlice<MotionData> MotionDatas;
-            public NativeSlice<MotionVelocity> MotionVelocities;
+            public NativeArray<MotionData> MotionDatas;
+            public NativeArray<MotionVelocity> MotionVelocities;
             public float TimeStep;
 
             public void Execute(int i)
@@ -54,7 +53,7 @@ namespace Unity.Physics
                 ExecuteImpl(i, MotionDatas, MotionVelocities, TimeStep);
             }
 
-            internal static void ExecuteImpl(int i, NativeSlice<MotionData> motionDatas, NativeSlice<MotionVelocity> motionVelocities, float timeStep)
+            internal static void ExecuteImpl(int i, NativeArray<MotionData> motionDatas, NativeArray<MotionVelocity> motionVelocities, float timeStep)
             {
                 MotionData motionData = motionDatas[i];
                 MotionVelocity motionVelocity = motionVelocities[i];
@@ -84,8 +83,8 @@ namespace Unity.Physics
         [BurstCompile]
         private struct IntegrateMotionsJob : IJob
         {
-            public NativeSlice<MotionData> MotionDatas;
-            public NativeSlice<MotionVelocity> MotionVelocities;
+            public NativeArray<MotionData> MotionDatas;
+            public NativeArray<MotionVelocity> MotionVelocities;
             public float TimeStep;
 
             public void Execute()

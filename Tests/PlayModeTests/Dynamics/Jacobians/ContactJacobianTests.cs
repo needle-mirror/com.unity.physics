@@ -18,7 +18,8 @@ namespace Unity.Physics.Tests.Dynamics.Jacobians
             var stepInput = new Solver.StepInput();
             var collisionEventsWriter = new NativeStream.Writer();
 
-            jacobian.SolveContact(ref jacHeader, ref velocityA, ref velocityB, stepInput, ref collisionEventsWriter);
+            jacobian.SolveContact(ref jacHeader, ref velocityA, ref velocityB, stepInput, ref collisionEventsWriter,
+                false, Solver.MotionStabilizationInput.Default, Solver.MotionStabilizationInput.Default);
 
             Assert.AreEqual(new JacobianHeader(), jacHeader);
             Assert.AreEqual(MotionVelocity.Zero, velocityA);

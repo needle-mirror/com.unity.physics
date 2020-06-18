@@ -76,27 +76,13 @@ namespace Unity.Physics.Authoring
             {
                 var inputParameters = InputValues[index];
 
-                var vertices = new NativeArray<float3>(
-                    inputParameters.VertexCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory
-                );
-                UnsafeUtility.MemCpy(
-                    vertices.GetUnsafePtr(),
-                    (float3*)AllVertices.GetUnsafeReadOnlyPtr() + inputParameters.VerticesStart,
-                    UnsafeUtility.SizeOf<float3>() * inputParameters.VertexCount
-                );
-
-                var triangles = new NativeArray<int3>(
-                    inputParameters.TriangleCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory
-                );
-                UnsafeUtility.MemCpy(
-                    triangles.GetUnsafePtr(),
-                    (int3*)AllIndices.GetUnsafeReadOnlyPtr() + inputParameters.TrianglesStart,
-                    UnsafeUtility.SizeOf<int3>() * inputParameters.TriangleCount
-                );
-
                 Output[index] = new KeyValuePair<Hash128, BlobAssetReference<Collider>>(
                     InputKeys[index],
-                    MeshCollider.Create(vertices, triangles, inputParameters.Filter, inputParameters.Material)
+                    MeshCollider.Create(
+                        AllVertices.GetSubArray(inputParameters.VerticesStart, inputParameters.VertexCount),
+                        AllIndices.GetSubArray(inputParameters.TrianglesStart, inputParameters.TriangleCount),
+                        inputParameters.Filter, inputParameters.Material
+                    )
                 );
             }
         }

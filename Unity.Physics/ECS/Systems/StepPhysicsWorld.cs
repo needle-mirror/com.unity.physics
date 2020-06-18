@@ -7,14 +7,16 @@ namespace Unity.Physics.Systems
 {
     // Simulates the physics world forwards in time
     [UpdateAfter(typeof(BuildPhysicsWorld)), UpdateBefore(typeof(ExportPhysicsWorld)), AlwaysUpdateSystem]
-    public class StepPhysicsWorld : JobComponentSystem
+    public class StepPhysicsWorld : SystemBase, IPhysicsSystem
     {
+        private JobHandle m_InputDependency;
+        private JobHandle m_OutputDependency;
+
         // The simulation implementation
         public ISimulation Simulation { get; private set; } = new DummySimulation();
 
-        // The final job handle produced by this system.
-        // This includes all simulation jobs as well as array disposal jobs.
-        public JobHandle FinalJobHandle => Simulation.FinalJobHandle;
+        [Obsolete("FinalJobHandle has been deprecated. Use GetOutputDependency() instead. (RemovedAfter 2020-08-07) (UnityUpgradable) -> GetOutputDependency()")]
+        public JobHandle FinalJobHandle => GetOutputDependency();
 
         // The final simulation job handle produced by this system.
         // Systems which read the simulation results should depend on this.
@@ -28,6 +30,8 @@ namespace Unity.Physics.Systems
         private readonly SimulationCreator[] m_SimulationCreators = new SimulationCreator[k_NumSimulationTypes];
 
         BuildPhysicsWorld m_BuildPhysicsWorldSystem;
+        ExportPhysicsWorld m_ExportPhysicsWorldSystem;
+        EndFramePhysicsSystem m_EndFramePhysicsSystem;
 
         // needs to match the number of SimulationType enum members
         internal static int k_NumSimulationTypes = 3;
@@ -35,6 +39,8 @@ namespace Unity.Physics.Systems
         protected override void OnCreate()
         {
             m_BuildPhysicsWorldSystem = World.GetOrCreateSystem<BuildPhysicsWorld>();
+            m_ExportPhysicsWorldSystem = World.GetOrCreateSystem<ExportPhysicsWorld>();
+            m_EndFramePhysicsSystem = World.GetOrCreateSystem<EndFramePhysicsSystem>();
 
 #if !NET_DOTS
             Assert.AreEqual(Enum.GetValues(typeof(SimulationType)).Length, k_NumSimulationTypes);
@@ -66,9 +72,10 @@ namespace Unity.Physics.Systems
             m_Callbacks.Enqueue(phase, callback, dependency);
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDeps)
+        protected override void OnUpdate()
         {
-            var handle = JobHandle.CombineDependencies(m_BuildPhysicsWorldSystem.FinalJobHandle, inputDeps);
+            // Combine implicit input dependency with the user one
+            var handle = JobHandle.CombineDependencies(Dependency, m_InputDependency);
 
             PhysicsStep stepComponent = PhysicsStep.Default;
             if (HasSingleton<PhysicsStep>())
@@ -95,16 +102,37 @@ namespace Unity.Physics.Systems
                 World = m_BuildPhysicsWorldSystem.PhysicsWorld,
                 TimeStep = timeStep,
                 Gravity = stepComponent.Gravity,
-                SynchronizeCollisionWorld = false,
-                NumSolverIterations = stepComponent.SolverIterationCount
+                SynchronizeCollisionWorld = stepComponent.SynchronizeCollisionWorld > 0,
+                NumSolverIterations = stepComponent.SolverIterationCount,
+                SolverStabilizationHeuristicSettings = stepComponent.SolverStabilizationHeuristicSettings
             }, m_Callbacks, handle, stepComponent.ThreadCountHint);
 
             // Clear the callbacks. User must enqueue them again before the next step.
             m_Callbacks.Clear();
 
             // Return the final simulation handle
-            // (Not FinalJobHandle since other systems shouldn't need to depend on the dispose jobs) 
-            return JobHandle.CombineDependencies(FinalSimulationJobHandle, handle);
+            // (Not FinalJobHandle since other systems shouldn't need to depend on the dispose jobs)
+            m_OutputDependency = FinalSimulationJobHandle;
+
+            // Combine implicit output dependency with user one
+            Dependency = JobHandle.CombineDependencies(m_OutputDependency, Dependency);
+
+            // Inform next systems in the pipeline of their dependency
+            m_ExportPhysicsWorldSystem.AddInputDependency(m_OutputDependency);
+            m_EndFramePhysicsSystem.AddInputDependency(Simulation.FinalJobHandle);
+
+            // Invalidate input dependency since it's been used now
+            m_InputDependency = default;
+        }
+
+        public void AddInputDependency(JobHandle inputDep)
+        {
+            m_InputDependency = JobHandle.CombineDependencies(m_InputDependency, inputDep);
+        }
+
+        public JobHandle GetOutputDependency()
+        {
+            return Simulation.FinalJobHandle;
         }
 
         // A simulation which does nothing
@@ -118,8 +146,6 @@ namespace Unity.Physics.Systems
                 new SimulationJobHandles(inputDeps);
             public JobHandle FinalSimulationJobHandle => new JobHandle();
             public JobHandle FinalJobHandle => new JobHandle();
-            [Obsolete("ScheduleStepJobs() has been deprecated. Use the new ScheduleStepJobs method that takes callbacks and threadCountHint as input and returns SimulationStepHandles. (RemovedAfter 2020-05-01)")]
-            public void ScheduleStepJobs(SimulationStepInput input, JobHandle inputDeps) { }
         }
     }
 }

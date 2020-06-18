@@ -11,7 +11,7 @@ namespace Unity.Physics.Authoring
 {
     /// Create and dispatch a DisplayMassPropertiesJob
     [UpdateAfter(typeof(StepPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
-    public class DisplayMassPropertiesSystem : JobComponentSystem
+    public class DisplayMassPropertiesSystem : SystemBase
     {
         BuildPhysicsWorld m_BuildPhysicsWorldSystem;
         StepPhysicsWorld m_StepPhysicsWorld;
@@ -26,24 +26,24 @@ namespace Unity.Physics.Authoring
             m_DebugStreamSystem = World.GetOrCreateSystem<DebugStream>();
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDeps)
+        protected override void OnUpdate()
         {
             if (!(HasSingleton<PhysicsDebugDisplayData>() && GetSingleton<PhysicsDebugDisplayData>().DrawMassProperties != 0))
             {
-                return inputDeps;
+                return;
             }
 
-            inputDeps = JobHandle.CombineDependencies(inputDeps, m_StepPhysicsWorld.FinalSimulationJobHandle);
+            var handle = JobHandle.CombineDependencies(Dependency, m_StepPhysicsWorld.FinalSimulationJobHandle);
 
-            JobHandle handle = new DisplayMassPropertiesJob
+            handle = new DisplayMassPropertiesJob
             {
                 OutputStream = m_DebugStreamSystem.GetContext(1),
                 MotionDatas = m_BuildPhysicsWorldSystem.PhysicsWorld.MotionDatas,
                 MotionVelocities = m_BuildPhysicsWorldSystem.PhysicsWorld.MotionVelocities
-            }.Schedule(inputDeps);
+            }.Schedule(handle);
 
-            m_EndFramePhysicsSystem.HandlesToWaitFor.Add(handle);
-            return handle;
+            m_EndFramePhysicsSystem.AddInputDependency(handle);
+            Dependency = handle;
         }
 
         // Job to write mass properties info to a DebugStream for any moving bodies
@@ -53,8 +53,8 @@ namespace Unity.Physics.Authoring
         {
             public DebugStream.Context OutputStream;
 
-            [ReadOnly] public NativeSlice<MotionData> MotionDatas;
-            [ReadOnly] public NativeSlice<MotionVelocity> MotionVelocities;
+            [ReadOnly] public NativeArray<MotionData> MotionDatas;
+            [ReadOnly] public NativeArray<MotionVelocity> MotionVelocities;
 
             public void Execute()
             {

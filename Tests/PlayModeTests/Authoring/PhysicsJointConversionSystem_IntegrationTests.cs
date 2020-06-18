@@ -23,19 +23,21 @@ namespace Unity.Physics.Tests.Authoring
             CreateHierarchy(new[] { jointType }, Array.Empty<Type>(), Array.Empty<Type>());
             Root.GetComponent<LegacyJoint>().enableCollision = true;
 
-            TestConvertedData<PhysicsJoint>(j => Assert.That(j.EnableCollision, Is.Not.EqualTo(0)));
+            TestConvertedData<PhysicsConstrainedBodyPair>(pair => Assert.That(pair.EnableCollision, Is.Not.EqualTo(0)));
         }
 
         [Test]
         public void ConversionSystems_WhenGOHasSpringJoint_IsMinDistanceValueSet()
         {
             CreateHierarchy(new[] { typeof(LegacySpring) }, Array.Empty<Type>(), Array.Empty<Type>());
-            Root.GetComponent<LegacySpring>().minDistance = 100.0f;
+            Root.GetComponent<LegacySpring>().minDistance = 100f;
+            var expectedMin =
+                math.min(Root.GetComponent<LegacySpring>().minDistance, Root.GetComponent<LegacySpring>().maxDistance);
 
             TestConvertedData<PhysicsJoint>(j =>
             {
-                Assume.That(j.JointData.Value.Constraints.Length, Is.EqualTo(1)); // TODO: is this a correct assumption, or should it be two separate constraints for min/max with different stiffness?
-                Assert.That(j.JointData.Value.Constraints[0].Min, Is.EqualTo(100.0f));
+                Assume.That(j.GetConstraints().Length, Is.EqualTo(1)); // TODO: is this a correct assumption, or should it be two separate constraints for min/max with different stiffness?
+                Assert.That(j[0].Min, Is.EqualTo(expectedMin));
             });
         }
         
@@ -43,12 +45,14 @@ namespace Unity.Physics.Tests.Authoring
         public void ConversionSystems_WhenGOHasSpringJoint_IsMaxDistanceValueSet()
         {
             CreateHierarchy(new[] { typeof(LegacySpring) }, Array.Empty<Type>(), Array.Empty<Type>());
-            Root.GetComponent<LegacySpring>().maxDistance = 100.0f;
+            Root.GetComponent<LegacySpring>().maxDistance = 100f;
+            var expectedMax =
+                math.max(Root.GetComponent<LegacySpring>().minDistance, Root.GetComponent<LegacySpring>().maxDistance);
 
             TestConvertedData<PhysicsJoint>(j =>
             {
-                Assume.That(j.JointData.Value.Constraints.Length, Is.EqualTo(1)); // TODO: is this a correct assumption, or should it be two separate constraints for min/max with different stiffness?
-                Assert.That(j.JointData.Value.Constraints[0].Max, Is.EqualTo(100.0f));
+                Assume.That(j.GetConstraints().Length, Is.EqualTo(1)); // TODO: is this a correct assumption, or should it be two separate constraints for min/max with different stiffness?
+                Assert.That(j[0].Max, Is.EqualTo(expectedMax));
             });
         }
 
@@ -61,8 +65,8 @@ namespace Unity.Physics.Tests.Authoring
 
             TestConvertedData<PhysicsJoint>(j =>
             {
-                Assume.That(j.JointData.Value.Constraints.Length, Is.GreaterThanOrEqualTo(2), "HingeJoint should always produce at least 2 constraints");
-                var linearConstraint = j.JointData.Value.Constraints[j.JointData.Value.Constraints.Length - 1];
+                Assume.That(j.GetConstraints().Length, Is.GreaterThanOrEqualTo(2), "HingeJoint should always produce at least 2 constraints");
+                var linearConstraint = j[j.GetConstraints().Length - 1];
                 linearConstraint.SpringDamping = linearConstraint.SpringFrequency = 0f; // ignore spring settings
                 Assert.That(
                     linearConstraint,
@@ -86,8 +90,8 @@ namespace Unity.Physics.Tests.Authoring
 
             TestConvertedData<PhysicsJoint>(j =>
             {
-                Assume.That(j.JointData.Value.Constraints.Length, Is.EqualTo(2), "Unlimited HingeJoint should always produce exactly 2 constraints");
-                var angularConstraint = j.JointData.Value.Constraints[0];
+                Assume.That(j.GetConstraints().Length, Is.EqualTo(2), "Unlimited HingeJoint should always produce exactly 2 constraints");
+                var angularConstraint = j[0];
                 angularConstraint.SpringDamping = angularConstraint.SpringFrequency = 0f; // ignore spring settings
                 Assert.That(
                     angularConstraint,
@@ -113,8 +117,8 @@ namespace Unity.Physics.Tests.Authoring
 
             TestConvertedData<PhysicsJoint>(j =>
             {
-                Assume.That(j.JointData.Value.Constraints.Length, Is.EqualTo(3), "Limited HingeJoint should always produce exactly 3 constraints");
-                var angularConstraint = j.JointData.Value.Constraints[0];
+                Assume.That(j.GetConstraints().Length, Is.EqualTo(3), "Limited HingeJoint should always produce exactly 3 constraints");
+                var angularConstraint = j[0];
                 angularConstraint.SpringDamping = angularConstraint.SpringFrequency = 0f; // ignore spring settings
                 var expectedLimits = math.radians(limits);
                 Assert.That(
@@ -137,8 +141,8 @@ namespace Unity.Physics.Tests.Authoring
 
             TestConvertedData<PhysicsJoint>(j =>
             {
-                Assume.That(j.JointData.Value.Constraints.Length, Is.EqualTo(4), "CharacterJoint should always produce exactly 4 constraints");
-                var linearConstraint = j.JointData.Value.Constraints[j.JointData.Value.Constraints.Length - 1];
+                Assume.That(j.GetConstraints().Length, Is.EqualTo(4), "CharacterJoint should always produce exactly 4 constraints");
+                var linearConstraint = j[j.GetConstraints().Length - 1];
                 linearConstraint.SpringDamping = linearConstraint.SpringFrequency = 0f; // ignore spring settings
                 Assert.That(
                     linearConstraint,
@@ -167,8 +171,8 @@ namespace Unity.Physics.Tests.Authoring
 
             TestConvertedData<PhysicsJoint>(j =>
             {
-                Assume.That(j.JointData.Value.Constraints.Length, Is.EqualTo(4), "CharacterJoint should always produce exactly 4 constraints");
-                var angularConstraint = j.JointData.Value.Constraints[0];
+                Assume.That(j.GetConstraints().Length, Is.EqualTo(4), "CharacterJoint should always produce exactly 4 constraints");
+                var angularConstraint = j[0];
                 angularConstraint.SpringDamping = angularConstraint.SpringFrequency = 0f; // ignore spring settings
                 var expectedLimits = -math.radians(limits).yx;
                 Assert.That(
@@ -197,8 +201,8 @@ namespace Unity.Physics.Tests.Authoring
 
             TestConvertedData<PhysicsJoint>(j =>
             {
-                Assume.That(j.JointData.Value.Constraints.Length, Is.EqualTo(4), "CharacterJoint should always produce exactly 4 constraints");
-                var angularConstraint = j.JointData.Value.Constraints[1];
+                Assume.That(j.GetConstraints().Length, Is.EqualTo(4), "CharacterJoint should always produce exactly 4 constraints");
+                var angularConstraint = j[1];
                 angularConstraint.SpringDamping = angularConstraint.SpringFrequency = 0f; // ignore spring settings
                 var expectedLimits = new float2(-math.radians(limit), math.radians(limit));
                 Assert.That(
@@ -227,8 +231,8 @@ namespace Unity.Physics.Tests.Authoring
 
             TestConvertedData<PhysicsJoint>(j =>
             {
-                Assume.That(j.JointData.Value.Constraints.Length, Is.EqualTo(4), "CharacterJoint should always produce exactly 4 constraints");
-                var angularConstraint = j.JointData.Value.Constraints[2];
+                Assume.That(j.GetConstraints().Length, Is.EqualTo(4), "CharacterJoint should always produce exactly 4 constraints");
+                var angularConstraint = j[2];
                 angularConstraint.SpringDamping = angularConstraint.SpringFrequency = 0f; // ignore spring settings
                 var expectedLimits = new float2(-math.radians(limit), math.radians(limit));
                 Assert.That(
@@ -256,7 +260,7 @@ namespace Unity.Physics.Tests.Authoring
             joint.angularYMotion = ConfigurableJointMotion.Free;
             joint.angularZMotion = ConfigurableJointMotion.Free;
 
-            TestConvertedData<PhysicsJoint>(j => Assert.That(j.JointData.Value.Constraints.Length, Is.EqualTo(0), "Unlimited ConfigurableJoint should produce no constraints"));
+            TestConvertedData<PhysicsJoint>(j => Assert.That(j.GetConstraints().Length, Is.EqualTo(0), "Unlimited ConfigurableJoint should produce no constraints"));
         }
 
         [TestCase(ConfigurableJointMotion.Locked, ConfigurableJointMotion.Free, ConfigurableJointMotion.Free, true, false, false, TestName = "Linear locked (x)")]
@@ -283,9 +287,9 @@ namespace Unity.Physics.Tests.Authoring
 
             TestConvertedData<PhysicsJoint>(j =>
             {
-                Assume.That(j.JointData.Value.Constraints.Length, Is.EqualTo(1), "ConfigurableJoint with uniform limits on a single axis should produce exactly 1 constraint");
+                Assume.That(j.GetConstraints().Length, Is.EqualTo(1), "ConfigurableJoint with uniform limits on a single axis should produce exactly 1 constraint");
                 var expectedConstrainedAxes = new bool3(expectedConstrainedX, expectedConstrainedY, expectedConstrainedZ);
-                Assert.That(j.JointData.Value.Constraints[0].ConstrainedAxes, Is.EqualTo(expectedConstrainedAxes));
+                Assert.That(j[0].ConstrainedAxes, Is.EqualTo(expectedConstrainedAxes));
             });
         }
 
@@ -312,9 +316,9 @@ namespace Unity.Physics.Tests.Authoring
 
             TestConvertedData<PhysicsJoint>(j =>
             {
-                Assume.That(j.JointData.Value.Constraints.Length, Is.EqualTo(1), "ConfigurableJoint with limits on only one axis should produce exactly 1 constraint");
+                Assume.That(j.GetConstraints().Length, Is.EqualTo(1), "ConfigurableJoint with limits on only one axis should produce exactly 1 constraint");
                 var expectedConstrainedAxes = new bool3(expectedConstrainedX, expectedConstrainedY, expectedConstrainedZ);
-                Assert.That(j.JointData.Value.Constraints[0].ConstrainedAxes, Is.EqualTo(expectedConstrainedAxes));
+                Assert.That(j[0].ConstrainedAxes, Is.EqualTo(expectedConstrainedAxes));
             });
         }
         
@@ -332,10 +336,10 @@ namespace Unity.Physics.Tests.Authoring
 
             TestConvertedData<PhysicsJoint>(j =>
             {
-                Assume.That(j.JointData.Value.Constraints.Length, Is.EqualTo(3), "ConfigurableJoint with angular limits on all axes should produce exactly 3 constraints");
-                Assert.That(j.JointData.Value.Constraints[0].ConstrainedAxes, Is.EqualTo(new bool3(true, false, false)));
-                Assert.That(j.JointData.Value.Constraints[1].ConstrainedAxes, Is.EqualTo(new bool3(false, true, false)));
-                Assert.That(j.JointData.Value.Constraints[2].ConstrainedAxes, Is.EqualTo(new bool3(false, false, true)));
+                Assume.That(j.GetConstraints().Length, Is.EqualTo(3), "ConfigurableJoint with angular limits on all axes should produce exactly 3 constraints");
+                Assert.That(j[0].ConstrainedAxes, Is.EqualTo(new bool3(true, false, false)));
+                Assert.That(j[1].ConstrainedAxes, Is.EqualTo(new bool3(false, true, false)));
+                Assert.That(j[2].ConstrainedAxes, Is.EqualTo(new bool3(false, false, true)));
             });
         }
 
@@ -361,8 +365,8 @@ namespace Unity.Physics.Tests.Authoring
 
             TestConvertedData<PhysicsJoint>(j =>
             {
-                Assume.That(j.JointData.Value.Constraints.Length, Is.EqualTo(1), "ConfigurableJoint with limits on only one axis should produce exactly 1 constraint");
-                var angularConstraint = j.JointData.Value.Constraints[0];
+                Assume.That(j.GetConstraints().Length, Is.EqualTo(1), "ConfigurableJoint with limits on only one axis should produce exactly 1 constraint");
+                var angularConstraint = j[0];
                 angularConstraint.SpringDamping = angularConstraint.SpringFrequency = 0f; // ignore spring settings
                 var expectedLimits = -math.radians(limits).yx;
                 Assert.That(
@@ -397,8 +401,8 @@ namespace Unity.Physics.Tests.Authoring
 
             TestConvertedData<PhysicsJoint>(j =>
             {
-                Assume.That(j.JointData.Value.Constraints.Length, Is.EqualTo(1), "ConfigurableJoint with limits on only one axis should produce exactly 1 constraint");
-                var angularConstraint = j.JointData.Value.Constraints[0];
+                Assume.That(j.GetConstraints().Length, Is.EqualTo(1), "ConfigurableJoint with limits on only one axis should produce exactly 1 constraint");
+                var angularConstraint = j[0];
                 angularConstraint.SpringDamping = angularConstraint.SpringFrequency = 0f; // ignore spring settings
                 var expectedLimits = new float2(-math.radians(limit), math.radians(limit));
                 Assert.That(
@@ -433,8 +437,8 @@ namespace Unity.Physics.Tests.Authoring
 
             TestConvertedData<PhysicsJoint>(j =>
             {
-                Assume.That(j.JointData.Value.Constraints.Length, Is.EqualTo(1), "ConfigurableJoint with limits on only one axis should produce exactly 1 constraint");
-                var angularConstraint = j.JointData.Value.Constraints[0];
+                Assume.That(j.GetConstraints().Length, Is.EqualTo(1), "ConfigurableJoint with limits on only one axis should produce exactly 1 constraint");
+                var angularConstraint = j[0];
                 angularConstraint.SpringDamping = angularConstraint.SpringFrequency = 0f; // ignore spring settings
                 var expectedLimits = new float2(-math.radians(limit), math.radians(limit));
                 Assert.That(
@@ -448,6 +452,17 @@ namespace Unity.Physics.Tests.Authoring
                     })
                 );
             });
+        }
+
+        [Test]
+        public void ConversionSystems_WhenGameObjectHasMultipleJointComponents_CreatesMultipleJoints(
+            [Values(typeof(LegacyHinge), typeof(LegacyFixed), typeof(LegacySpring), typeof(LegacyCharacter), typeof(LegacyConfigurable))]
+            Type jointType
+        )
+        {
+            CreateHierarchy(new[] { jointType, jointType }, Array.Empty<Type>(), Array.Empty<Type>());
+
+            TestConvertedData<PhysicsJoint>(joints => Assert.That(joints, Has.Length.EqualTo(2).And.All.Not.EqualTo(default(PhysicsJoint))), 2);
         }
 
         /*

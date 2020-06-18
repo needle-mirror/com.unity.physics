@@ -146,17 +146,23 @@ namespace Unity.Physics
 
                 // Apply materials
                 {
-                    Material.MaterialFlags combinedFlags = materialA.Flags | materialB.Flags;
-                    if ((combinedFlags & Material.MaterialFlags.IsTrigger) != 0)
+                    // Combined collision response of the two
+                    CollisionResponsePolicy combinedCollisionResponse = Material.GetCombinedCollisionResponse(materialA, materialB);
+                    Unity.Assertions.Assert.IsFalse(combinedCollisionResponse == CollisionResponsePolicy.None,
+                        "DisableCollisions pairs should have been filtered out earlier!");
+
+                    if (combinedCollisionResponse == CollisionResponsePolicy.RaiseTriggerEvents)
                     {
                         header.JacobianFlags |= JacobianFlags.IsTrigger;
                     }
                     else
                     {
-                        if ((combinedFlags & Material.MaterialFlags.EnableCollisionEvents) != 0)
+                        if (combinedCollisionResponse == CollisionResponsePolicy.CollideRaiseCollisionEvents)
                         {
                             header.JacobianFlags |= JacobianFlags.EnableCollisionEvents;
                         }
+
+                        Material.MaterialFlags combinedFlags = materialA.Flags | materialB.Flags;
                         if ((combinedFlags & Material.MaterialFlags.EnableMassFactors) != 0)
                         {
                             header.JacobianFlags |= JacobianFlags.EnableMassFactors;
@@ -204,11 +210,20 @@ namespace Unity.Physics
             Material materialA = ((ConvexColliderHeader*)convexColliderA)->Material;
             Material materialB = ((ConvexColliderHeader*)convexColliderB)->Material;
 
+            CollisionResponsePolicy combinedCollisionResponse = Material.GetCombinedCollisionResponse(materialA, materialB);
+
+            // Skip the shapes if any of them is marked with a "None" collision response
+            if (combinedCollisionResponse == CollisionResponsePolicy.None)
+            {
+                return;
+            }
+
             // Skip if the bodies have infinite mass and the materials don't want to raise any solver events,
             // since the resulting contacts can't have any effect during solving
             if (context.BodiesHaveInfiniteMass)
             {
-                if (((materialA.Flags | materialB.Flags) & (Material.MaterialFlags.IsTrigger | Material.MaterialFlags.EnableCollisionEvents)) == 0)
+                if (combinedCollisionResponse != CollisionResponsePolicy.RaiseTriggerEvents &&
+                    combinedCollisionResponse != CollisionResponsePolicy.CollideRaiseCollisionEvents)
                 {
                     return;
                 }
@@ -367,6 +382,14 @@ namespace Unity.Physics
             [NoAlias] Collider* convexColliderA, [NoAlias] Collider* compositeColliderB, [NoAlias] in MTransform worldFromA, [NoAlias] in MTransform worldFromB,
             MotionExpansion expansion, bool flipped)
         {
+            Material materialA = ((ConvexColliderHeader*)convexColliderA)->Material;
+
+            // Skip the collision if convexColliderA is marked with a "None" collision response
+            if (materialA.CollisionResponse == CollisionResponsePolicy.None)
+            {
+                return;
+            }
+
             // Calculate swept AABB of A in B
             MTransform bFromWorld = Inverse(worldFromB);
             MTransform bFromA = Mul(bFromWorld, worldFromA);
@@ -617,11 +640,20 @@ namespace Unity.Physics
             Material materialA = ((ConvexColliderHeader*)convexColliderA)->Material;
             Material materialB = ((TerrainCollider*)terrainColliderB)->Material;
 
+            CollisionResponsePolicy combinedCollisionResponse = Material.GetCombinedCollisionResponse(materialA, materialB);
+
+            // Skip the shapes if any of them is marked with a "None" collision response
+            if (combinedCollisionResponse == CollisionResponsePolicy.None)
+            {
+                return;
+            }
+
             // Skip if the bodies have infinite mass and the materials don't want to raise any solver events,
             // since the resulting contacts can't have any effect during solving
             if (context.BodiesHaveInfiniteMass)
             {
-                if (((materialA.Flags | materialB.Flags) & (Material.MaterialFlags.IsTrigger | Material.MaterialFlags.EnableCollisionEvents)) == 0)
+                if (combinedCollisionResponse != CollisionResponsePolicy.RaiseTriggerEvents &&
+                    combinedCollisionResponse != CollisionResponsePolicy.CollideRaiseCollisionEvents)
                 {
                     return;
                 }

@@ -1,11 +1,7 @@
-﻿using System;
+﻿using Unity.Collections;
 using NUnit.Framework;
 using Unity.Mathematics;
-using Unity.Collections;
-using Unity.Entities;
 using Random = Unity.Mathematics.Random;
-using Unity.Burst;
-using Unity.Jobs;
 using static Unity.Physics.Math;
 
 namespace Unity.Physics.Tests.Joints
@@ -153,9 +149,9 @@ namespace Unity.Physics.Tests.Joints
         // Test runner
         //
 
-        delegate BlobAssetReference<JointData> GenerateJoint(ref Random rnd);
+        delegate Joint GenerateJoint(ref Random rnd);
 
-        unsafe static void SolveSingleJoint(JointData* jointData, int numIterations, float timestep,
+        unsafe static void SolveSingleJoint(Joint jointData, int numIterations, float timestep,
             ref MotionVelocity velocityA, ref MotionVelocity velocityB, ref MotionData motionA, ref MotionData motionB, out NativeStream jacobiansOut)
         {
             var stepInput = new Solver.StepInput
@@ -171,7 +167,7 @@ namespace Unity.Physics.Tests.Joints
             {
                 NativeStream.Writer jacobianWriter = jacobiansOut.AsWriter();
                 jacobianWriter.BeginForEachIndex(0);
-                Solver.BuildJointJacobian(jointData, new BodyIndexPair(), velocityA, velocityB, motionA, motionB, timestep, numIterations, ref jacobianWriter);
+                Solver.BuildJointJacobian(jointData, velocityA, velocityB, motionA, motionB, timestep, numIterations, ref jacobianWriter);
                 jacobianWriter.EndForEachIndex();
             }
 
@@ -186,7 +182,8 @@ namespace Unity.Physics.Tests.Joints
                 while (jacIterator.HasJacobiansLeft())
                 {
                     ref JacobianHeader header = ref jacIterator.ReadJacobianHeader();
-                    header.Solve(ref velocityA, ref velocityB, stepInput, ref eventWriter, ref eventWriter);
+                    header.Solve(ref velocityA, ref velocityB, stepInput, ref eventWriter, ref eventWriter,
+                        false, Solver.MotionStabilizationInput.Default, Solver.MotionStabilizationInput.Default);
                 }
             }
 
@@ -214,7 +211,7 @@ namespace Unity.Physics.Tests.Joints
                 uint state = rnd.state;
 
                 // Generate a random ball and socket joint
-                JointData* jointData = (JointData*)generateJoint(ref rnd).GetUnsafePtr();
+                Joint jointData = generateJoint(ref rnd);
 
                 // Generate random motions
                 MotionVelocity velocityA, velocityB;
@@ -299,13 +296,20 @@ namespace Unity.Physics.Tests.Joints
             max = rnd.NextBool() ? rnd.NextBool() ? float.MaxValue : min : rnd.NextFloat(min, maxClosed);
         }
 
+        Joint CreateTestJoint(PhysicsJoint joint) => new Joint
+        {
+            AFromJoint = joint.BodyAFromJoint.AsMTransform(),
+            BFromJoint = joint.BodyBFromJoint.AsMTransform(),
+            Constraints = joint.GetConstraints()
+        };
+
         [Test]
         public unsafe void BallAndSocketTest()
         {
             RunJointTest("BallAndSocketTest", (ref Random rnd) =>
             {
                 generateRandomPivots(ref rnd, out float3 pivotA, out float3 pivotB);
-                return JointData.CreateBallAndSocket(pivotA, pivotB);
+                return CreateTestJoint(PhysicsJoint.CreateBallAndSocket(pivotA, pivotB));
             });
         }
         
@@ -316,7 +320,7 @@ namespace Unity.Physics.Tests.Joints
             {
                 generateRandomPivots(ref rnd, out float3 pivotA, out float3 pivotB);
                 generateRandomLimits(ref rnd, 0.0f, 0.5f, out float minDistance, out float maxDistance);
-                return JointData.CreateLimitedDistance(pivotA, pivotB, new FloatRange(minDistance, maxDistance));
+                return CreateTestJoint(PhysicsJoint.CreateLimitedDistance(pivotA, pivotB, new FloatRange(minDistance, maxDistance)));
             });
         }
         
@@ -325,15 +329,15 @@ namespace Unity.Physics.Tests.Joints
         {
             RunJointTest("PrismaticTest", (ref Random rnd) =>
             {
-                var jointFrameA = new JointFrame();
-                var jointFrameB = new JointFrame();
+                var jointFrameA = new BodyFrame();
+                var jointFrameB = new BodyFrame();
                 generateRandomPivots(ref rnd, out jointFrameA.Position, out jointFrameB.Position);
                 generateRandomAxes(ref rnd, out jointFrameA.Axis, out jointFrameB.Axis);
                 Math.CalculatePerpendicularNormalized(jointFrameA.Axis, out jointFrameA.PerpendicularAxis, out _);
                 Math.CalculatePerpendicularNormalized(jointFrameB.Axis, out jointFrameB.PerpendicularAxis, out _);
                 var distance = new FloatRange { Min = rnd.NextFloat(-0.5f, 0.5f) };
-                distance.Max = rnd.NextBool() ? distance.Min : rnd.NextFloat(distance.Min, 0.5f); // note, can't use open limitsbecause the accuracy can get too low as the pivots separate
-                return JointData.CreatePrismatic(jointFrameA, jointFrameB, distance, default);
+                distance.Max = rnd.NextBool() ? distance.Min : rnd.NextFloat(distance.Min, 0.5f); // note, can't use open limits because the accuracy can get too low as the pivots separate
+                return CreateTestJoint(PhysicsJoint.CreatePrismatic(jointFrameA, jointFrameB, distance));
             });
         }
         
@@ -342,11 +346,11 @@ namespace Unity.Physics.Tests.Joints
         {
             RunJointTest("HingeTest", (ref Random rnd) =>
             {
-                var jointFrameA = new JointFrame();
-                var jointFrameB = new JointFrame();
+                var jointFrameA = new BodyFrame();
+                var jointFrameB = new BodyFrame();
                 generateRandomPivots(ref rnd, out jointFrameA.Position, out jointFrameB.Position);
                 generateRandomAxes(ref rnd, out jointFrameA.Axis, out jointFrameB.Axis);
-                return JointData.CreateHinge(jointFrameA, jointFrameB);
+                return CreateTestJoint(PhysicsJoint.CreateHinge(jointFrameA, jointFrameB));
             });
         }
 
@@ -355,15 +359,15 @@ namespace Unity.Physics.Tests.Joints
         {
             RunJointTest("LimitedHingeTest", (ref Random rnd) =>
             {
-                var jointFrameA = new JointFrame();
-                var jointFrameB = new JointFrame();
+                var jointFrameA = new BodyFrame();
+                var jointFrameB = new BodyFrame();
                 generateRandomPivots(ref rnd, out jointFrameA.Position, out jointFrameB.Position);
                 generateRandomAxes(ref rnd, out jointFrameA.Axis, out jointFrameB.Axis);
                 Math.CalculatePerpendicularNormalized(jointFrameA.Axis, out jointFrameA.PerpendicularAxis, out _);
                 Math.CalculatePerpendicularNormalized(jointFrameB.Axis, out jointFrameB.PerpendicularAxis, out _);
                 FloatRange limits;
                 generateRandomLimits(ref rnd, -(float)math.PI, (float)math.PI, out limits.Min, out limits.Max);
-                return JointData.CreateLimitedHinge(jointFrameA, jointFrameB, limits);
+                return CreateTestJoint(PhysicsJoint.CreateLimitedHinge(jointFrameA, jointFrameB, limits));
             });
         }
 
@@ -379,7 +383,7 @@ namespace Unity.Physics.Tests.Joints
                 generateRandomPivots(ref rnd, out jointFrameA.pos, out jointFrameB.pos);
                 jointFrameA.rot = generateRandomTransform(ref rnd).rot;
                 jointFrameB.rot = generateRandomTransform(ref rnd).rot;
-                return JointData.CreateFixed(jointFrameA, jointFrameB);
+                return CreateTestJoint(PhysicsJoint.CreateFixed(jointFrameA, jointFrameB));
             });
         }
         
@@ -424,15 +428,13 @@ namespace Unity.Physics.Tests.Joints
                     float minLimit = (j - 1) * angle;
                     float maxLimit = j * angle;
 
-                    BlobAssetReference<JointData> jointData = JointData.Create(
-                        RigidTransform.identity,
-                        RigidTransform.identity,
-                        new NativeArray<Constraint>(1, Allocator.Temp)
-                        {
-                            [0]  = Constraint.Twist(i, new FloatRange(minLimit, maxLimit))
-                        }
-                    );
-                    SolveSingleJoint((JointData*)jointData.GetUnsafePtr(), 4, 1.0f, ref velocityA, ref velocityB, ref motionA, ref motionB, out NativeStream jacobians);
+                    var jointData = new Joint
+                    {
+                        AFromJoint = MTransform.Identity,
+                        BFromJoint = MTransform.Identity
+                    };
+                    jointData.Constraints.Add(Constraint.Twist(i, new FloatRange(minLimit, maxLimit)));
+                    SolveSingleJoint(jointData, 4, 1.0f, ref velocityA, ref velocityB, ref motionA, ref motionB, out NativeStream jacobians);
 
                     quaternion expectedOrientation = quaternion.AxisAngle(axis, minLimit + maxLimit);
                     Utils.TestUtils.AreEqual(expectedOrientation, motionA.WorldFromMotion.rot, 1e-3f);
@@ -440,29 +442,5 @@ namespace Unity.Physics.Tests.Joints
                 }
             }
         }
-        
-        [BurstCompile(CompileSynchronously = true)]
-        struct CreateJointDataFromBurstJob : IJob
-        {
-            public void Execute()
-            {
-                Random rnd = new Random();
-                rnd.InitState(10);
-                generateRandomPivots(ref rnd, out float3 pivotA, out float3 pivotB);
-                
-                JointData.Create(
-                    new RigidTransform(generateRandomTransform(ref rnd).rot, pivotA),
-                    new RigidTransform(generateRandomTransform(ref rnd).rot, pivotB),
-                    new NativeArray<Constraint>(2, Allocator.Temp)
-                    {
-                        [0] = Constraint.BallAndSocket(),
-                        [1] = Constraint.FixedAngle()
-                    }           
-                );
-            }
-        }
-
-        [Test]
-        public void JointData_Create_WhenCalledFromBurstJob_DoesNotThrow() => new CreateJointDataFromBurstJob().Run();
     }
 }

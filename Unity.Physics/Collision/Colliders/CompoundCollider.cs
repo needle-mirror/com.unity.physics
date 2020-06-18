@@ -171,13 +171,37 @@ namespace Unity.Physics
         {
             BlobArray.Accessor<Child> children = Children;
 
+            // Check if all children are triggers or have collisions disabled.
+            // If so, we'll include them in mass properties of the compound collider.
+            // This is mostly targeted for single collider compounds, as they should behave
+            // the same as when there is no compound.
+            bool skipTriggersAndDisabledColliders = false;
+            {
+                for (int i = 0; i < NumChildren; ++i)
+                {
+                    ref Child child = ref children[i];
+                    var convexChildCollider = (ConvexCollider*)child.Collider;
+                    if (child.Collider->CollisionType == CollisionType.Convex &&
+                        (convexChildCollider->Material.CollisionResponse != CollisionResponsePolicy.RaiseTriggerEvents &&
+                         convexChildCollider->Material.CollisionResponse != CollisionResponsePolicy.None))
+                    {
+                        // If there are children with regular collisions, all triggers and disabled colliders should be skipped
+                        skipTriggersAndDisabledColliders = true;
+                        break;
+                    }
+                }
+            }
+
             // Calculate combined center of mass
             float3 combinedCenterOfMass = float3.zero;
             float combinedVolume = 0.0f;
             for (int i = 0; i < NumChildren; ++i)
             {
                 ref Child child = ref children[i];
-                if (child.Collider->CollisionType == CollisionType.Convex && ((ConvexCollider*)child.Collider)->Material.IsTrigger)
+                var convexChildCollider = (ConvexCollider*)child.Collider;
+                if (skipTriggersAndDisabledColliders && child.Collider->CollisionType == CollisionType.Convex &&
+                    (convexChildCollider->Material.CollisionResponse == CollisionResponsePolicy.RaiseTriggerEvents ||
+                     convexChildCollider->Material.CollisionResponse == CollisionResponsePolicy.None))
                     continue;
 
                 var mp = child.Collider->MassProperties;
@@ -199,7 +223,10 @@ namespace Unity.Physics
                 for (int i = 0; i < NumChildren; ++i)
                 {
                     ref Child child = ref children[i];
-                    if (child.Collider->CollisionType == CollisionType.Convex && ((ConvexCollider*)child.Collider)->Material.IsTrigger)
+                    var convexChildCollider = (ConvexCollider*)child.Collider;
+                    if (skipTriggersAndDisabledColliders && child.Collider->CollisionType == CollisionType.Convex &&
+                        (convexChildCollider->Material.CollisionResponse == CollisionResponsePolicy.RaiseTriggerEvents ||
+                            convexChildCollider->Material.CollisionResponse == CollisionResponsePolicy.None))
                         continue;
 
                     var mp = child.Collider->MassProperties;

@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
+using Unity.Assertions;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
+using static Unity.Physics.Math;
 
 namespace Unity.Physics
 {
@@ -55,6 +57,15 @@ namespace Unity.Physics
         public bool CastRay(RaycastInput input, ref NativeList<RaycastHit> allHits) => QueryWrappers.RayCast(ref this, input, ref allHits);
         public bool CastRay<T>(RaycastInput input, ref T collector) where T : struct, ICollector<RaycastHit>
         {
+            // Transform the ray into body space
+            var worldFromBody = new MTransform(WorldFromBody);
+            MTransform bodyFromWorld = Inverse(worldFromBody);
+
+            input.Ray.Origin = Mul(bodyFromWorld, input.Ray.Origin);
+            input.Ray.Displacement = math.mul(bodyFromWorld.Rotation, input.Ray.Displacement);
+
+            SetQueryContextParameters(ref input.QueryContext, ref worldFromBody);
+
             return Collider.IsCreated && Collider.Value.CastRay(input, ref collector);
         }
 
@@ -63,6 +74,16 @@ namespace Unity.Physics
         public bool CastCollider(ColliderCastInput input, ref NativeList<ColliderCastHit> allHits) => QueryWrappers.ColliderCast(ref this, input, ref allHits);
         public bool CastCollider<T>(ColliderCastInput input, ref T collector) where T : struct, ICollector<ColliderCastHit>
         {
+            // Transform the input into body space
+            MTransform worldFromBody = new MTransform(WorldFromBody);
+            MTransform bodyFromWorld = Inverse(worldFromBody);
+
+            input.Orientation = math.mul(math.inverse(WorldFromBody.rot), input.Orientation);
+            input.Ray.Origin = Mul(bodyFromWorld, input.Ray.Origin);
+            input.Ray.Displacement = math.mul(bodyFromWorld.Rotation, input.Ray.Displacement);
+
+            SetQueryContextParameters(ref input.QueryContext, ref worldFromBody);
+
             return Collider.IsCreated && Collider.Value.CastCollider(input, ref collector);
         }
 
@@ -71,6 +92,14 @@ namespace Unity.Physics
         public bool CalculateDistance(PointDistanceInput input, ref NativeList<DistanceHit> allHits) => QueryWrappers.CalculateDistance(ref this, input, ref allHits);
         public bool CalculateDistance<T>(PointDistanceInput input, ref T collector) where T : struct, ICollector<DistanceHit>
         {
+            // Transform the input into body space
+            MTransform worldFromBody = new MTransform(WorldFromBody);
+            MTransform bodyFromWorld = Inverse(worldFromBody);
+
+            input.Position = Mul(bodyFromWorld, input.Position);
+
+            SetQueryContextParameters(ref input.QueryContext, ref worldFromBody);
+
             return Collider.IsCreated && Collider.Value.CalculateDistance(input, ref collector);
         }
 
@@ -79,14 +108,41 @@ namespace Unity.Physics
         public bool CalculateDistance(ColliderDistanceInput input, ref NativeList<DistanceHit> allHits) => QueryWrappers.CalculateDistance(ref this, input, ref allHits);
         public bool CalculateDistance<T>(ColliderDistanceInput input, ref T collector) where T : struct, ICollector<DistanceHit>
         {
+            // Transform the input into body space
+            MTransform worldFromBody = new MTransform(WorldFromBody);
+            MTransform bodyFromWorld = Inverse(worldFromBody);
+
+            input.Transform = new RigidTransform(
+                math.mul(math.inverse(WorldFromBody.rot), input.Transform.rot),
+                Mul(bodyFromWorld, input.Transform.pos));
+
+            SetQueryContextParameters(ref input.QueryContext, ref worldFromBody);
+
             return Collider.IsCreated && Collider.Value.CalculateDistance(input, ref collector);
         }
 
         #endregion
 
-        #region Obsolete
-        [Obsolete("HasCollider has been deprecated. Use Collider.IsCreated instead. (RemovedAfter 2020-03-18)")]
-        public bool HasCollider => Collider.IsCreated;
+        #region private
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void SetQueryContextParameters (ref QueryContext context, ref MTransform worldFromBody)
+        {
+            // QueryContext.WorldFromLocalTransform is not expected to be initialized at this point
+            // and should have default value (zeros in all fields)
+            Assert.IsTrue(context.WorldFromLocalTransform.Translation.Equals(float3.zero));
+            Assert.IsTrue(context.WorldFromLocalTransform.Rotation.Equals(float3x3.zero));
+
+            context.ColliderKey = ColliderKey.Empty;
+            context.Entity = Entity;
+            context.WorldFromLocalTransform = worldFromBody;
+            if (!context.IsInitialized)
+            {
+                context.RigidBodyIndex = -1;
+                context.IsInitialized = true;
+            }
+        }
+
         #endregion
     }
 
@@ -94,12 +150,26 @@ namespace Unity.Physics
     public struct BodyIndexPair
     {
         // B before A to match Havok
-        public int BodyBIndex;
-        public int BodyAIndex;
+        public int BodyIndexB;
+        public int BodyIndexA;
 
-        public bool IsValid => BodyBIndex != -1 && BodyAIndex != -1;
+        public bool IsValid => BodyIndexB != -1 && BodyIndexA != -1;
 
-        public static BodyIndexPair Invalid => new BodyIndexPair { BodyBIndex = -1, BodyAIndex = -1 };
+        public static BodyIndexPair Invalid => new BodyIndexPair { BodyIndexB = -1, BodyIndexA = -1 };
+
+        [Obsolete("BodyBIndex has been deprecated. Use BodyIndexB. (RemovedAfter 2020-08-01)")]
+        public int BodyBIndex
+        {
+            get { return BodyIndexB; }
+            set { BodyIndexB = value; }
+        }
+
+        [Obsolete("BodyAIndex has been deprecated. Use BodyIndexA. (RemovedAfter 2020-08-01)")]
+        public int BodyAIndex
+        {
+            get { return BodyIndexA; }
+            set { BodyIndexA = value; }
+        }
     }
 
     // A pair of entities

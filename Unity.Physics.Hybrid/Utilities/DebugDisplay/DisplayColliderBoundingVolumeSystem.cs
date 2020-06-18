@@ -16,7 +16,7 @@ namespace Unity.Physics.Authoring
     public unsafe struct DisplayColliderAabbsJob : IJob //<todo.eoin.udebug This can be a parallelfor job
     {
         public DebugStream.Context OutputStream;
-        [ReadOnly] public NativeSlice<RigidBody> Bodies;
+        [ReadOnly] public NativeArray<RigidBody> Bodies;
 
         public void Execute()
         {
@@ -38,7 +38,7 @@ namespace Unity.Physics.Authoring
 
     /// Create a DisplayColliderAabbsJob
     [UpdateAfter(typeof(BuildPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
-    public class DisplayColliderAabbsSystem : JobComponentSystem
+    public class DisplayColliderAabbsSystem : SystemBase
     {
         BuildPhysicsWorld m_BuildPhysicsWorldSystem;
         StepPhysicsWorld m_StepPhysicsWorld;
@@ -51,16 +51,16 @@ namespace Unity.Physics.Authoring
             m_DebugStreamSystem = World.GetOrCreateSystem<DebugStream>();
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDeps)
+        protected override void OnUpdate()
         {
             if (!(HasSingleton<PhysicsDebugDisplayData>() && GetSingleton<PhysicsDebugDisplayData>().DrawColliderAabbs != 0))
             {
-                return inputDeps;
+                return;
             }
 
             if (m_BuildPhysicsWorldSystem.PhysicsWorld.NumBodies == 0)
             {
-                return inputDeps;
+                return;
             }
 
             SimulationCallbacks.Callback callback = (ref ISimulation simulation, ref PhysicsWorld world, JobHandle deps) =>
@@ -72,7 +72,6 @@ namespace Unity.Physics.Authoring
                 }.Schedule(deps);
             };
             m_StepPhysicsWorld.EnqueueCallback(SimulationCallbacks.Phase.PostCreateDispatchPairs, callback);
-            return inputDeps;
         }
     }
 }

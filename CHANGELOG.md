@@ -1,3 +1,148 @@
+## [0.4.0-preview.5] - 2020-06-18
+
+### Upgrade guide
+
+* `RigidBody` queries may no longer work, since they required inputs to be transformed to body space. As of this release, body queries require input in world space.
+* Core physics systems now expose `AddInputDependency()` and `GetOutputDependency()` methods for user code to be able to plug in user systems between any of the core physics systems (`BuildPhysicsWorld`, `StepPhysicsWorld`, `ExportPhysicsWorld` and `EndFramePhysicsSystem`).
+* The serialization layout has changed for `PhysicsShapeAuthoring` and `PhysicsMaterialTemplate`. Because data are upgraded before Prefab overrides are applied, you must manually re-apply any Prefab overrides that existed on scene objects, nested Prefabs, or Prefab variants for the migrated properties. It is recommended you use the data upgrade utility under the menu item Window -> DOTS -> Physics -> Upgrade Data.
+    * `m_IsTrigger` and `m_RaisesCollisionEvents` have been replaced with `m_CollisionResponse`.
+    * `m_BelongsTo` has been replaced with `m_BelongsToCategories`
+    * `m_CollidesWith` has been replaced with `m_CollidesWithCategories`
+    * `m_CustomTags` has been replaced with `m_CustomMaterialTags`
+
+### Changes
+
+* Dependencies
+    * Updated minimum Unity Editor version from `2019.3.0f1` to `2019.4.0f1`
+    * Updated Burst from `1.3.0-preview.7` to `1.3.0`
+    * Updated Collections from `0.7.1-preview.3` to `0.9.0-preview.6`
+    * Updated Entities from `0.9.0-preview.6` to `0.11.1-preview.4`
+    * Updated Jobs from `0.2.8-preview.3` to `0.2.10-preview.12`
+    * Updated Performance Testing API from `1.3.3-preview` to `2.0.8-preview`
+
+* Run-Time API
+    * Added the following new types:
+        * `BuildPhysicsWorld.CollisionWorldProxyGroup`
+        * `CollisionResponsePolicy` (introduces a new value, `None`, which allows a shape to move and participate in queries, without generating a collision response or overlap events)
+        * `CollisionWorldProxy` to synchronize `CollisionWorld` with data flow graph node sets
+        * `ColliderCastNode` to perform queries in a data flow graph node
+        * `ForceMode` to use with extension methods analogous to those used with classic `Rigidbody`
+        * `JointComponentExtensions` for use with `PhysicsJoint`
+        * `JointType` to serve as a hint to code modifying joint limits
+        * `PhysicsExclude` to easily exclude bodies from physics temporarily
+        * `PhysicsMassOverride` to easily make dynamic bodies enter and exit a kinematic state
+        * `PhysicsConstrainedBodyPair`
+        * `PhysicsJointCompanion` to keep track of sets of joints used to stabilize complex joint configurations
+        * `RaycastNode` to perform queries in a data flow graph node
+        * `Solver.StabilizationData`
+        * `Solver.StabilizationHeuristicSettings`
+    * Added the following members:
+        * `ComponentExtensions.ApplyExplosionForce()` equivalent to classic `Rigidbody.ApplyExplosionForce()` method.
+        * `ComponentExtensions.GetImpulseFromForce()` to map `ForceMode` variants to impulses.
+        * `FloatRange.Sorted()` to ensure `Min` is not larger than `Max`.
+        * `PhysicsStep.SolverStabilizationHeuristicSettings` to enable and configure solver stabilization heuristic. This can improve behavior in stacking scenarios, as well as overall stability of bodies and piles, but may result in behavior artifacts. It is off by default to avoid breaking existing behavior. Setting it to true enables the heuristic and its default parameters.
+        * `PhysicsStep.SynchronizeCollisionWorld` to enable rebuild of the dynamic bodies bounding volume hierarchy after the step. This enables precise query results before the next `BuildPhysicsWorld` update call. Note that `BuildPhysicsWorld` will do this work on the following frame anyway, so only use this option when another system must know about the results of the simulation before the end of the frame (e.g., to destroy or create some other body that must be present in the following frame). In most cases, tolerating a frame of latency is easier to work with and is better for performance.
+        * `PhysicsVelocity.CalculateVelocityToTarget()` to move kinematic bodies to desired target locations without teleporting them.
+        * `SurfaceConstraintInfo.IsMaxSlope`
+        * Implemented `ToString()` on some types
+            * `ColliderCastHit`
+            * `ColliderCastInput`
+            * `ColliderKey`
+            * `RaycastHit`
+            * `RaycastInput`
+    * Renamed the following members/type:
+        * `BodyAIndex` and `BodyBIndex` are now `BodyIndexA` and `BodyIndexB` across the codebase for consistency.
+        * `ComponentExtensions.GetAngularVelocity()` and `SetAngularVelocity()` are now `GetAngularVelocityWorldSpace()` and `SetAngularVelocityWorldSpace()`, respectively.
+        * `ComponentExtensions.GetCenterOfMass()` and `SetCenterOfMass()` are now `GetCenterOfMassWorldSpace()` and `SetCenterOfMassWorldSpace()`.
+        * `JointFrame` is now `BodyFrame`
+    * Changed the following members/types:
+        * Replaced all usages of `NativeSlice` with `NativeArray`.
+        * Replaced pair interfaces on events and modifiers (`CollisionEvent`, `TriggerEvent`, `ModifiableContactHeader`, `ModifiableBodyPair` and `ModifiableJacobianHeader`) with direct accessors: 
+            * `EntityPair` is now `EntityA` and `EntityB`
+            * `BodyIndexPair` is now `BodyAIndex` and `BodyBIndex`
+            * `ColliderKeyPair` is now `ColliderKeyA` and `ColliderKeyB`
+            * `CustomTagsPair` is now `CustomTagsA` and `CustomTagsB` 
+        * `Material.MaterialFlags` is now internal. Access flags through individual properties (`CollisionResponse`, `EnableMassFactors` and `EnableSurfaceVelocity`).
+        * `Joint` is now a fixed size.
+            * `Joint.EnableCollision` is now `byte` instead of `int`.
+            * `Joint.JointData` has been deprecated. Use `AFromJoint`, `BFromJoint`, `Constraints`, and `Version` instead.
+        * `PhysicsJoint` is now mutable. 
+        * `PhysicsJoint.CreatePrismatic()` factory does not take a `distanceFromAxis` parameter (in contrast to `JointData` factory)
+        * `PhysicsJoint.CreateRagdoll()` factory now takes perpendicular angular limits in the range (-pi/2, pi/2) instead of (0, pi) in old `JointData` factory.
+    * Deprecated the following members/types:
+        * `EndFramePhysicsSystem.HandlesToWaitFor` (use `AddInputDependency()` instead).
+        * `FinalJobHandle` on all core physics systems (`BuildPhysicsWorld`, `StepPhysicsWorld`, `ExportPhysicsWorld` and `EndFramePhysicsSystem`) (use `GetOutputDependency()` instead).
+        * `JointData`
+        * `Material.IsTrigger` (use `CollisionResponse` instead)
+        * `Material.EnableCollisionEvents` (use `CollisionResponse` instead)
+        * `PhysicsJoint.EntityA` (now defined on `PhysicsConstrainedBodyPair`)
+        * `PhysicsJoint.EntityB` (now defined on `PhysicsConstrainedBodyPair`)
+        * `PhysicsJoint.EnableCollision` (now defined on `PhysicsConstrainedBodyPair`)
+        * `PhysicsJoint.JointData` (use `BodyAFromJoint`, `BodyBFromJoint`, and `GetConstraints()`/`SetConstraints()` instead).
+        * `SimulationContext.Reset()` passing `PhysicsWorld` (use signature passing `SimulationStepInput` instead).
+    * Removed the following members/types:        
+        * `CollisionFilter.IsValid`
+        * `CollisionWorld.ScheduleUpdateDynamicLayer()`
+        * `Constraint` factory signatures passing `float` values for ranges:
+            * `Cone()`
+            * `Cylindrical()`
+            * `Planar()`
+            * `Twist()`
+        * `ISimulation.ScheduleStepJobs()` signature without callbacks and thread count hint (as well as all implementations)
+        * `JointData` factory signatures passing `float3` and `quaternion` pairs for joint frames, as well as `Constraint[]`:
+            * `CreateFixed()`
+            * `CreateHinge()`
+            * `CreateLimitedHinge()`
+            * `CreatePrismatic()`
+            * `CreateRagdoll()`
+        * `MassFactors.InvInertiaAndMassFactorA`
+        * `MassFactors.InvInertiaAndMassFactorB`
+        * `MotionData.GravityFactor` (use `MotionVelocity.GravityFactor` instead)
+        * `MotionVelocity.InverseInertiaAndMass`
+        * `RigidBody.HasCollider`
+        * `SimplexSolver.Solve()` signature passing `PhysicsWorld`
+        * `SimulationStepInput.ThreadCountHint`
+
+* Authoring/Conversion API
+    * Added the following types
+        * `BeginJointConversionSystem`
+        * `EndJointConversionSystem` (allows other conversion systems to find joint entities created during conversion)
+        * `PhysicsMaterialTemplate.CollisionResponse`
+        * `PhysicsShapeAuthoring.CollisionResponse`
+        * `PhysicsShapeAuthoring.OverrideCollisionResponse`
+    * Added the following members
+        * `PhysicsStepAuthoring.EnableSolverStabilizationHeuristic` to enable solver stabilization heuristic with default settings
+        * `PhysicsStepAuthoring.SynchronizeCollisionWorld`
+    * Deprecated the following members/types:
+        * `LegacyJointConversionSystem` has been marked obsolete and will be made internal in the future. Use `BeginJointConversionSystem` and `EndJointConversionSystem` to schedule system updates as needed.
+        * `PhysicsMaterialTemplate.IsTrigger` (use `CollisionResponse` property instead)
+        * `PhysicsMaterialTemplate.RaisesCollisionEvents` (use `CollisionResponse` property instead)
+        * `PhysicsShapeAuthoring.IsTrigger` (use `CollisionResponse` property instead)
+        * `PhysicsShapeAuthoring.RaisesCollisionEvents` (use `CollisionResponse` property instead)
+        * `PhysicsShapeAuthoring.OverrideIsTrigger` (use `OverrideCollisionResponse` property instead)
+        * `PhysicsShapeAuthoring.OverrideRaisesCollisionEvents` (use `OverrideCollisionResponse` property instead)
+    * Removed the following expired members:
+        * `LegacyColliderConversionSystem.ProduceMaterial()` (removed without expiration; class is not intended to be sub-classed outside the package)
+        * `PhysicsShapeAuthoring.GetCapsuleProperties()` signature returning `CapsuleGeometry`
+        * `PhysicsShapeAuthoring.SetCapsule()` signature passing `CapsuleGeometry`
+
+* Run-Time Behavior
+    * `BuildPhysicsWorld.JointEntityGroup` now requires both a `PhysicsJoint` and `PhysicsConstrainedBodyPair` component.
+    * `Constraint` factory methods taking a `FloatRange` swizzle the input value if needed to ensure that `Min` cannot be greater than `Max`.
+    * `RigidBody` queries (`Raycast()`, `ColliderCast()`, `PointDistance()`, and `ColliderDistance()`) now use world space input, and provide world space output, instead of using body space.     
+
+* Authoring/Conversion Behavior
+    * It is now possible to create a compound collider by adding multiple `PhysicsShapeAuthoring` components to a single GameObject.
+    * It is now possible to convert a GameObject with multiple `Joint` components on it.
+
+### Fixes
+
+* When using Unity 2019.3.1f1 and newer, making changes to a `PhysicsMaterialTemplate` asset or a `Mesh` asset will now trigger a reimport of any sub-scenes containing shapes that reference it.
+* `IBodyPairsJob` now skips all joint pairs, when previously it didn't skip the joint pair if it was the first one in the list.
+* Fixed the issue of the `CompoundCollider` with no colliding children (all children are triggers) having invalid mass properties.
+* Fixed a potential race condition when `SynchronizeCollisionWorld` was set to true in the `SimulationStepInput`.
+* `CollisionFilter` and `Advanced` material properties in the Inspector can now be expanded by clicking the label.
+
 ## [0.3.2-preview] - 2020-04-16
 
 ### Upgrade guide

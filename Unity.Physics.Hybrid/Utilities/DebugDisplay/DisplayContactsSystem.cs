@@ -12,7 +12,7 @@ namespace Unity.Physics.Authoring
 {
     // A system which draws all contact points produced by the physics step system
     [UpdateBefore(typeof(StepPhysicsWorld))]
-    public class DisplayContactsSystem : JobComponentSystem
+    public class DisplayContactsSystem : SystemBase
     {
         StepPhysicsWorld m_StepWorld;
         DebugStream m_DebugStreamSystem;
@@ -23,11 +23,11 @@ namespace Unity.Physics.Authoring
             m_DebugStreamSystem = World.GetOrCreateSystem<DebugStream>();
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDeps)
+        protected override void OnUpdate()
         {
             if (!(HasSingleton<PhysicsDebugDisplayData>() && GetSingleton<PhysicsDebugDisplayData>().DrawContacts != 0))
             {
-                return inputDeps;
+                return;
             }
 
             SimulationCallbacks.Callback callback = (ref ISimulation simulation, ref PhysicsWorld world, JobHandle inDeps) =>
@@ -61,8 +61,6 @@ namespace Unity.Physics.Authoring
             };
 
             m_StepWorld.EnqueueCallback(SimulationCallbacks.Phase.PostCreateContacts, callback);
-
-            return inputDeps;
         }
 
         // Job which iterates over contacts from narrowphase and writes display info to a DebugStream.

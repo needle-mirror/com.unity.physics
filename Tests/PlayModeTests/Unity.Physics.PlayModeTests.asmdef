@@ -13,6 +13,7 @@
         "Unity.Physics.Editor",
         "Unity.Transforms",
         "Unity.Jobs",
+        "Unity.DataFlowGraph",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],
@@ -32,6 +33,11 @@
             "name": "com.unity.modules.physics",
             "expression": "",
             "define": "LEGACY_PHYSICS"
+        },
+        {
+            "name": "com.unity.dataflowgraph",
+            "expression": "",
+            "define": "UNITY_DATAFLOWGRAPH_EXISTS"
         }
     ],
     "noEngineReferences": false

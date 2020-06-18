@@ -1,5 +1,7 @@
+using System;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Entities;
 
 namespace Unity.Physics
 {
@@ -7,9 +9,21 @@ namespace Unity.Physics
     public struct TriggerEvent
     {
         internal TriggerEventData EventData;
-        public EntityPair Entities { get; internal set; }
 
+        public Entity EntityB => EventData.Entities.EntityB;
+        public Entity EntityA => EventData.Entities.EntityA;
+        public int BodyIndexB => EventData.BodyIndices.BodyIndexB;
+        public int BodyIndexA => EventData.BodyIndices.BodyIndexA;
+        public ColliderKey ColliderKeyB => EventData.ColliderKeys.ColliderKeyB;
+        public ColliderKey ColliderKeyA => EventData.ColliderKeys.ColliderKeyA;
+
+        [Obsolete("Entities has been deprecated. Use EntityA and EntityB directly. (RemovedAfter 2020-08-01)")]
+        public EntityPair Entities => EventData.Entities;
+
+        [Obsolete("BodyIndices has been deprecated. Use BodyIndexA and BodyIndexB directly. (RemovedAfter 2020-08-01)")]
         public BodyIndexPair BodyIndices => EventData.BodyIndices;
+
+        [Obsolete("ColliderKeys has been deprecated. Use ColliderKeyA and ColliderKeyB directly. (RemovedAfter 2020-08-01)")]
         public ColliderKeyPair ColliderKeys => EventData.ColliderKeys;
     }
 
@@ -21,17 +35,14 @@ namespace Unity.Physics
         [NativeDisableContainerSafetyRestriction]
         private readonly NativeStream m_EventDataStream;
 
-        private readonly NativeSlice<RigidBody> m_Bodies;
-
-        internal TriggerEvents(NativeStream eventDataStream, NativeSlice<RigidBody> bodies)
+        internal TriggerEvents(NativeStream eventDataStream)
         {
             m_EventDataStream = eventDataStream;
-            m_Bodies = bodies;
         }
 
         public Enumerator GetEnumerator()
         {
-            return new Enumerator(m_EventDataStream, m_Bodies);
+            return new Enumerator(m_EventDataStream);
         }
 
         public struct Enumerator /* : IEnumerator<TriggerEvent> */
@@ -39,18 +50,15 @@ namespace Unity.Physics
             private NativeStream.Reader m_Reader;
             private int m_CurrentWorkItem;
             private readonly int m_NumWorkItems;
-            private readonly NativeSlice<RigidBody> m_Bodies;
 
             public TriggerEvent Current { get; private set; }
 
-            internal Enumerator(NativeStream stream, NativeSlice<RigidBody> bodies)
+            internal Enumerator(NativeStream stream)
             {
                 m_Reader = stream.IsCreated ? stream.AsReader() : new NativeStream.Reader();
                 m_CurrentWorkItem = 0;
                 m_NumWorkItems = stream.IsCreated ? stream.ForEachCount : 0;
                 Current = default;
-
-                m_Bodies = bodies;
 
                 AdvanceReader();
             }
@@ -61,7 +69,7 @@ namespace Unity.Physics
                 {
                     var eventData = m_Reader.Read<TriggerEventData>();
 
-                    Current = eventData.CreateTriggerEvent(m_Bodies);
+                    Current = eventData.CreateTriggerEvent();
 
                     AdvanceReader();
                     return true;
@@ -85,17 +93,13 @@ namespace Unity.Physics
     {
         public BodyIndexPair BodyIndices;
         public ColliderKeyPair ColliderKeys;
+        public EntityPair Entities;
 
-        internal TriggerEvent CreateTriggerEvent(NativeSlice<RigidBody> bodies)
+        internal TriggerEvent CreateTriggerEvent()
         {
             return new TriggerEvent
             {
-                EventData = this,
-                Entities = new EntityPair
-                {
-                    EntityA = bodies[BodyIndices.BodyAIndex].Entity,
-                    EntityB = bodies[BodyIndices.BodyBIndex].Entity
-                }
+                EventData = this
             };
         }
     }

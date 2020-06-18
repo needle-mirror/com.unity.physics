@@ -11,7 +11,7 @@ namespace Unity.Physics.Authoring
 {
     // A system which draws any trigger events produced by the physics step system
     [UpdateAfter(typeof(StepPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
-    public class DisplayTriggerEventsSystem : JobComponentSystem
+    public class DisplayTriggerEventsSystem : SystemBase
     {
         BuildPhysicsWorld m_BuildPhysicsWorldSystem;
         StepPhysicsWorld m_StepPhysicsWorldSystem;
@@ -26,11 +26,11 @@ namespace Unity.Physics.Authoring
             m_DebugStreamSystem = World.GetOrCreateSystem<DebugStream>();
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDeps)
+        protected override void OnUpdate()
         {
             if (!(HasSingleton<PhysicsDebugDisplayData>() && GetSingleton<PhysicsDebugDisplayData>().DrawTriggerEvents != 0))
             {
-                return inputDeps;
+                return;
             }
 
             unsafe
@@ -50,7 +50,7 @@ namespace Unity.Physics.Authoring
                 {
                     World = m_BuildPhysicsWorldSystem.PhysicsWorld,
                     OutputStreamContext = sharedOutput
-                }.Schedule(m_StepPhysicsWorldSystem.Simulation, ref m_BuildPhysicsWorldSystem.PhysicsWorld, inputDeps);
+                }.Schedule(m_StepPhysicsWorldSystem.Simulation, ref m_BuildPhysicsWorldSystem.PhysicsWorld, Dependency);
 
 #pragma warning disable 618
                 JobHandle finishHandle = new FinishDisplayTriggerEventsJob
@@ -59,9 +59,9 @@ namespace Unity.Physics.Authoring
                 }.Schedule(handle);
 #pragma warning restore 618
 
-                m_EndFramePhysicsSystem.HandlesToWaitFor.Add(finishHandle);
+                m_EndFramePhysicsSystem.AddInputDependency(finishHandle);
 
-                return handle;
+                Dependency = handle;
             }
         }
 
@@ -75,8 +75,8 @@ namespace Unity.Physics.Authoring
 
             public unsafe void Execute(TriggerEvent triggerEvent)
             {
-                RigidBody bodyA = World.Bodies[triggerEvent.BodyIndices.BodyAIndex];
-                RigidBody bodyB = World.Bodies[triggerEvent.BodyIndices.BodyBIndex];
+                RigidBody bodyA = World.Bodies[triggerEvent.BodyIndexA];
+                RigidBody bodyB = World.Bodies[triggerEvent.BodyIndexB];
 
                 Aabb aabbA = bodyA.Collider.Value.CalculateAabb(bodyA.WorldFromBody);
                 Aabb aabbB = bodyB.Collider.Value.CalculateAabb(bodyB.WorldFromBody);

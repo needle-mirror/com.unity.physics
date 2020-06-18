@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
-using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Physics.Authoring;
 using UnityEngine;
@@ -40,9 +39,9 @@ namespace Unity.Physics.Tests.Authoring
         public void PhysicsShapeConversionSystem_WhenBodyHasOneSiblingShape_CreatesPrimitive()
         {
             CreateHierarchy(
-                new[] { typeof(ConvertToEntity), typeof(PhysicsBodyAuthoring), typeof(PhysicsShapeAuthoring) },
-                new[] { typeof(ConvertToEntity) },
-                new[] { typeof(ConvertToEntity) }
+                new[] { typeof(PhysicsBodyAuthoring), typeof(PhysicsShapeAuthoring) },
+                Array.Empty<Type>(),
+                Array.Empty<Type>()
             );
             Root.GetComponent<PhysicsShapeAuthoring>().SetBox(new BoxGeometry { Size = 1f, Orientation = quaternion.identity });
 
@@ -53,9 +52,9 @@ namespace Unity.Physics.Tests.Authoring
         public void PhysicsShapeConversionSystem_WhenBodyHasOneDescendentShape_CreatesCompound()
         {
             CreateHierarchy(
-                new[] { typeof(ConvertToEntity), typeof(PhysicsBodyAuthoring) },
-                new[] { typeof(ConvertToEntity), typeof(PhysicsShapeAuthoring) },
-                new[] { typeof(ConvertToEntity) }
+                new[] { typeof(PhysicsBodyAuthoring) },
+                new[] { typeof(PhysicsShapeAuthoring) },
+                Array.Empty<Type>()
             );
             Parent.GetComponent<PhysicsShapeAuthoring>().SetBox(new BoxGeometry { Size = 1f, Orientation = quaternion.identity });
 
@@ -74,12 +73,46 @@ namespace Unity.Physics.Tests.Authoring
         }
 
         [Test]
+        public void PhysicsShapeConversionSystem_WhenBodyHasOneDescendentShape_CreatesCompoundWithFiniteMass()
+        {
+            CreateHierarchy(
+                new[] { typeof(PhysicsBodyAuthoring) },
+                new[] { typeof(PhysicsShapeAuthoring) },
+                Array.Empty<Type>()
+            );
+            Parent.GetComponent<PhysicsShapeAuthoring>().SetBox(new BoxGeometry { Size = 1f, Orientation = quaternion.identity });
+            Parent.GetComponent<PhysicsShapeAuthoring>().CollisionResponse = CollisionResponsePolicy.RaiseTriggerEvents;
+
+            TestConvertedData<PhysicsCollider>(
+                c =>
+                {
+                    Assert.That(c.Value.Value.Type, Is.EqualTo(ColliderType.Compound));
+                    unsafe
+                    {
+                        var compoundCollider = (CompoundCollider*)c.Value.GetUnsafePtr();
+                        Assume.That(compoundCollider->Children, Has.Length.EqualTo(1));
+                        Assume.That(compoundCollider->Children[0].Collider->Type, Is.EqualTo(ColliderType.Box));
+
+                        // Make sure compound mass properties are calculated properly
+                        Assert.That(compoundCollider->MassProperties.Volume > 0.0f);
+                        Assert.That(math.all(math.isfinite(compoundCollider->MassProperties.MassDistribution.Transform.pos)));
+                        Assert.That(math.all(math.isfinite(compoundCollider->MassProperties.MassDistribution.Transform.rot.value)));
+                        Assert.That(math.all(math.isfinite(compoundCollider->MassProperties.MassDistribution.InertiaTensor)));
+                        Assert.That(math.all(math.isfinite(compoundCollider->MassProperties.MassDistribution.InertiaMatrix.c0)));
+                        Assert.That(math.all(math.isfinite(compoundCollider->MassProperties.MassDistribution.InertiaMatrix.c1)));
+                        Assert.That(math.all(math.isfinite(compoundCollider->MassProperties.MassDistribution.InertiaMatrix.c2)));
+                    }
+                }
+            );
+        }
+
+        [Test]
         public void PhysicsShapeConversionSystem_WhenBodyHasMultipleDescendentShapes_CreatesCompound()
         {
             CreateHierarchy(
-                new[] { typeof(ConvertToEntity), typeof(PhysicsBodyAuthoring) },
-                new[] { typeof(ConvertToEntity), typeof(PhysicsShapeAuthoring) },
-                new[] { typeof(ConvertToEntity), typeof(PhysicsShapeAuthoring) }
+                new[] { typeof(PhysicsBodyAuthoring) },
+                new[] { typeof(PhysicsShapeAuthoring) },
+                new[] { typeof(PhysicsShapeAuthoring) }
             );
             Parent.GetComponent<PhysicsShapeAuthoring>().SetBox(new BoxGeometry { Size = 1f, Orientation = quaternion.identity });
             Child.GetComponent<PhysicsShapeAuthoring>().SetSphere(new SphereGeometry { Radius = 1f }, quaternion.identity);
@@ -260,15 +293,25 @@ namespace Unity.Physics.Tests.Authoring
             }, 2);
         }
 
+        static readonly TestCaseData[] k_MultipleAuthoringComponentsTestCases = {
+            new TestCaseData(
+                new[] { typeof(PhysicsBodyAuthoring), typeof(PhysicsShapeAuthoring), typeof(PhysicsShapeAuthoring) },
+                new[] { ColliderType.Box, ColliderType.Box }
+            ).SetName("Multiple PhysicsShapeAuthoring"),
 #if LEGACY_PHYSICS
-        [Test]
-        public void PhysicsShapeConversionSystem_WhenBodyHasMultipleDifferentSiblingShapes_CreatesCompound_WithFlatHierarchy()
+            new TestCaseData(
+                new[] { typeof(PhysicsBodyAuthoring), typeof(LegacyBox), typeof(LegacyCapsule), typeof(LegacySphere), typeof(PhysicsShapeAuthoring) },
+                new[] { ColliderType.Box, ColliderType.Box, ColliderType.Capsule, ColliderType.Sphere }
+            ).SetName("Mix of classic and new shape types")
+#endif
+        };
+
+        [TestCaseSource(nameof(k_MultipleAuthoringComponentsTestCases))]
+        public void ConversionSystems_WhenBodyHasMultipleShapeComponents_CreatesCompound(
+            Type[] componentTypes, ColliderType[] expectedColliderTypes
+        )
         {
-            CreateHierarchy(
-                new[] { typeof(ConvertToEntity), typeof(PhysicsBodyAuthoring), typeof(LegacyBox), typeof(LegacyCapsule), typeof(LegacySphere), typeof(PhysicsShapeAuthoring) },
-                new[] { typeof(ConvertToEntity) },
-                new[] { typeof(ConvertToEntity) }
-            );
+            CreateHierarchy(componentTypes, Array.Empty<Type>(), Array.Empty<Type>());
             Root.GetComponent<PhysicsShapeAuthoring>().SetBox(new BoxGeometry { Size = 1f });
 
             TestConvertedData<PhysicsCollider>(
@@ -282,12 +325,13 @@ namespace Unity.Physics.Tests.Authoring
                         var childTypes = Enumerable.Range(0, compoundCollider->NumChildren)
                             .Select(i => compoundCollider->Children[i].Collider->Type)
                             .ToArray();
-                        Assert.That(childTypes, Is.EquivalentTo(new[] { ColliderType.Box, ColliderType.Box, ColliderType.Capsule, ColliderType.Sphere }));
+                        Assert.That(childTypes, Is.EquivalentTo(expectedColliderTypes));
                     }
                 }
             );
         }
 
+#if LEGACY_PHYSICS
         [Test]
         [Ignore("Behavior is inconsistent on some platforms.")]
         public void LegacyMeshColliderConversionSystem_WhenMeshColliderHasNonReadableMesh_ThrowsException(

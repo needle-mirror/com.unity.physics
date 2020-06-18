@@ -1,6 +1,4 @@
-﻿using System;
-using System.ComponentModel;
-using Unity.Collections;
+﻿using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine.Assertions;
 
@@ -21,19 +19,12 @@ namespace Unity.Physics
         public int Priority;
         public bool Touched;
         public bool IsTooSteep;
+        public bool IsMaxSlope;
     }
 
     public static class SimplexSolver
     {
         const float k_Epsilon = 0.0001f;
-
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("This signature has been deprecated. Please use the signature that does not pass PhysicsWorld. (RemovedAfter 2020-04-24)")]
-        public static void Solve(
-            PhysicsWorld world, float deltaTime, float minDeltaTime, float3 up, float maxVelocity,
-            NativeList<SurfaceConstraintInfo> constraints, ref float3 position, ref float3 velocity, out float integratedTime, bool useConstraintVelocities = true
-        ) =>
-            Solve(deltaTime, minDeltaTime, up, maxVelocity, constraints, ref position, ref velocity, out integratedTime, useConstraintVelocities);
 
         public static unsafe void Solve(
             float deltaTime, float minDeltaTime, float3 up, float maxVelocity,

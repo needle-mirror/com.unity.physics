@@ -20,7 +20,7 @@ namespace Unity.Physics.Authoring
         //< and some reuse of the DebugDraw code.
         unsafe class DrawComponent : MonoBehaviour
         {
-            public NativeSlice<RigidBody> Bodies;
+            public NativeArray<RigidBody> Bodies;
             public int NumDynamicBodies;
             public int EnableColliders;
             public int EnableEdges;
@@ -105,10 +105,13 @@ namespace Unity.Physics.Authoring
                     startVertexIndex += hull.Faces[f].NumVertices + 1;
                 }
 
-                UnityEngine.Mesh mesh = new UnityEngine.Mesh();
-                mesh.vertices = vertices;
-                mesh.normals = normals;
-                mesh.triangles = triangles;
+                var mesh = new UnityEngine.Mesh
+                {
+                    hideFlags = HideFlags.HideAndDontSave,
+                    vertices = vertices,
+                    normals = normals,
+                    triangles = triangles
+                };
 
                 results.Add(new DisplayResult
                 {
@@ -202,11 +205,16 @@ namespace Unity.Physics.Authoring
                     }
                 }
 
-                var displayMesh = new UnityEngine.Mesh();
-                displayMesh.indexFormat = vertices.Count > UInt16.MaxValue ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16;
-                displayMesh.vertices = vertices.ToArray();
-                displayMesh.normals = normals.ToArray();
-                displayMesh.triangles = triangles.ToArray();
+                var displayMesh = new UnityEngine.Mesh
+                {
+                    hideFlags = HideFlags.HideAndDontSave,
+                    indexFormat = vertices.Count > UInt16.MaxValue
+                        ? UnityEngine.Rendering.IndexFormat.UInt32
+                        : UnityEngine.Rendering.IndexFormat.UInt16
+                };
+                displayMesh.SetVertices(vertices);
+                displayMesh.SetNormals(normals);
+                displayMesh.SetTriangles(triangles, 0);
 
                 results.Add(new DisplayResult
                 {
@@ -231,9 +239,10 @@ namespace Unity.Physics.Authoring
             {
                 ref var terrain = ref terrainCollider->Terrain;
 
-                var vertices = new List<Vector3>();
-                var normals = new List<Vector3>();
-                var triangles = new List<int>();
+                var numVertices = (terrain.Size.x - 1) * (terrain.Size.y - 1) * 6;
+                var vertices = new List<Vector3>(numVertices);
+                var normals = new List<Vector3>(numVertices);
+                var triangles = new List<int>(numVertices);
 
                 int vertexIndex = 0;
                 for (int i = 0; i < terrain.Size.x - 1; i++)
@@ -274,11 +283,16 @@ namespace Unity.Physics.Authoring
                     }
                 }
 
-                var displayMesh = new UnityEngine.Mesh();
-                displayMesh.indexFormat = vertices.Count > UInt16.MaxValue ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16;
-                displayMesh.vertices = vertices.ToArray();
-                displayMesh.normals = normals.ToArray();
-                displayMesh.triangles = triangles.ToArray();
+                var displayMesh = new UnityEngine.Mesh
+                {
+                    hideFlags = HideFlags.HideAndDontSave,
+                    indexFormat = vertices.Count > UInt16.MaxValue
+                        ? UnityEngine.Rendering.IndexFormat.UInt32
+                        : UnityEngine.Rendering.IndexFormat.UInt16
+                };
+                displayMesh.SetVertices(vertices);
+                displayMesh.SetNormals(normals);
+                displayMesh.SetTriangles(triangles, 0);
 
                 results.Add(new DisplayResult
                 {
@@ -539,6 +553,9 @@ namespace Unity.Physics.Authoring
                     return;
                 }
 
+                if (!Bodies.IsCreated)
+                    return;
+
                 for (int b = 0; b < Bodies.Length; b++)
                 {
                     var body = Bodies[b];
@@ -594,7 +611,19 @@ namespace Unity.Physics.Authoring
 
         protected override void OnCreate()
         {
+            base.OnCreate();
             m_BuildPhysicsWorldSystem = World.GetOrCreateSystem<BuildPhysicsWorld>();
+        }
+
+        protected override void OnDestroy()
+        {
+            if (m_DrawComponent != null)
+            {
+                m_DrawComponent.Bodies = default;
+            }
+
+            m_BuildPhysicsWorldSystem = null;
+            base.OnDestroy();
         }
 
         protected override void OnUpdate()

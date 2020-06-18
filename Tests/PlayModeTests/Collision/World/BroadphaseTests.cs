@@ -23,7 +23,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         static public unsafe void addStaticBoxToWorld(Physics.PhysicsWorld world, int index, Vector3 pos, Quaternion orientation, Vector3 size)
         {
             Assert.IsTrue(index < world.NumStaticBodies, "Static body index is out of range in addStaticBoxToWorld");
-            NativeSlice<Physics.RigidBody> staticBodies = world.StaticBodies;
+            NativeArray<Physics.RigidBody> staticBodies = world.StaticBodies;
             Physics.RigidBody rb = staticBodies[index];
             BlobAssetReference<Collider> collider = BoxCollider.Create(new BoxGeometry
             {
@@ -40,7 +40,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         static public unsafe void addDynamicBoxToWorld(Physics.PhysicsWorld world, int index, Vector3 pos, Quaternion orientation, Vector3 size)
         {
             Assert.IsTrue(index < world.NumDynamicBodies, "Dynamic body index is out of range in addDynamicBoxToWorld");
-            NativeSlice<Physics.RigidBody> dynamicBodies = world.DynamicBodies;
+            NativeArray<Physics.RigidBody> dynamicBodies = world.DynamicBodies;
             Physics.RigidBody rb = dynamicBodies[index];
             BlobAssetReference<Collider> collider = BoxCollider.Create(new BoxGeometry
             {
@@ -132,7 +132,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         {
             Physics.PhysicsWorld world = createTestWorld(1);
             addStaticBoxToWorld(world, 0, new Vector3(0, 0, 0), Quaternion.identity, new Vector3(10, 0.1f, 10));
-            world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionDatas, world.MotionVelocities,
+            world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
                     world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
             world.Dispose();
         }
@@ -146,7 +146,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             {
                 addStaticBoxToWorld(world, i, new Vector3(i * 11, 0, 0), Quaternion.identity, new Vector3(10, 0.1f, 10));
             }
-            world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionDatas, world.MotionVelocities,
+            world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
                     world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
             world.Dispose();
         }
@@ -160,7 +160,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             {
                 addStaticBoxToWorld(world, i, new Vector3(i * 11, 0, 0), Quaternion.identity, new Vector3(10, 0.1f, 10));
             }
-            world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionDatas, world.MotionVelocities,
+            world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
                     world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
             world.Dispose();
         }
@@ -234,7 +234,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         {
             Physics.PhysicsWorld world = createTestWorld(0, 1);
             addDynamicBoxToWorld(world, 0, new Vector3(0, 0, 0), Quaternion.identity, new Vector3(10, 10, 10));
-            world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionDatas, world.MotionVelocities,
+            world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
                     world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
             world.Dispose();
         }
@@ -248,7 +248,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             {
                 addDynamicBoxToWorld(world, i, new Vector3(i * 11, 0, 0), Quaternion.identity, new Vector3(10, 10, 10));
             }
-            world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionDatas, world.MotionVelocities,
+            world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
                     world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
             world.Dispose();
         }
@@ -262,7 +262,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             {
                 addDynamicBoxToWorld(world, i, new Vector3(i * 11, 0, 0), Quaternion.identity, new Vector3(10, 10, 10));
             }
-            world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionDatas, world.MotionVelocities,
+            world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
                     world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
             world.Dispose();
         }
@@ -298,7 +298,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 addStaticBoxToWorld(world, i, new Vector3(i * 11, 0, 0), Quaternion.identity, new Vector3(10, 0.1f, 10));
                 addDynamicBoxToWorld(world, i, new Vector3(i * 11, 5, 0), Quaternion.identity, new Vector3(1, 1, 1));
             }
-            world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionDatas, world.MotionVelocities,
+            world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
                     world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
             world.Dispose();
         }
@@ -325,7 +325,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         public void BuildBPEmptyWorldTest()
         {
             Physics.PhysicsWorld world = createTestWorld();
-            world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionDatas, world.MotionVelocities,
+            world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
                     world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
             world.Dispose();
         }

@@ -70,18 +70,13 @@ namespace Unity.Physics.Authoring
             public void Execute(int index)
             {
                 var inputParameters = InputValues[index];
-                var points = new NativeArray<float3>(
-                    inputParameters.PointCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory
-                );
-                UnsafeUtility.MemCpy(
-                    points.GetUnsafePtr(),
-                    (float3*)AllPoints.GetUnsafeReadOnlyPtr() + inputParameters.PointsStart,
-                    UnsafeUtility.SizeOf<float3>() * inputParameters.PointCount
-                );
 
                 Output[index] = new KeyValuePair<Hash128, BlobAssetReference<Collider>>(
                     InputKeys[index],
-                    ConvexCollider.Create(points, inputParameters.GenerationParameters, inputParameters.Filter, inputParameters.Material)
+                    ConvexCollider.Create(
+                        AllPoints.GetSubArray(inputParameters.PointsStart, inputParameters.PointCount),
+                        inputParameters.GenerationParameters, inputParameters.Filter, inputParameters.Material
+                    )
                 );
             }
         }

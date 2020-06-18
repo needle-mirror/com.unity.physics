@@ -96,17 +96,17 @@ namespace Unity.Physics
                             // Create contact manifolds for this pair of bodies
                             var pair = new BodyIndexPair
                             {
-                                BodyAIndex = dispatchPair.BodyAIndex,
-                                BodyBIndex = dispatchPair.BodyBIndex
+                                BodyIndexA = dispatchPair.BodyIndexA,
+                                BodyIndexB = dispatchPair.BodyIndexB
                             };
 
-                            RigidBody rigidBodyA = world.Bodies[pair.BodyAIndex];
-                            RigidBody rigidBodyB = world.Bodies[pair.BodyBIndex];
+                            RigidBody rigidBodyA = world.Bodies[pair.BodyIndexA];
+                            RigidBody rigidBodyB = world.Bodies[pair.BodyIndexB];
 
-                            MotionVelocity motionVelocityA = pair.BodyAIndex < world.MotionVelocities.Length ?
-                                world.MotionVelocities[pair.BodyAIndex] : MotionVelocity.Zero;
-                            MotionVelocity motionVelocityB = pair.BodyBIndex < world.MotionVelocities.Length ?
-                                world.MotionVelocities[pair.BodyBIndex] : MotionVelocity.Zero;
+                            MotionVelocity motionVelocityA = pair.BodyIndexA < world.MotionVelocities.Length ?
+                                world.MotionVelocities[pair.BodyIndexA] : MotionVelocity.Zero;
+                            MotionVelocity motionVelocityB = pair.BodyIndexB < world.MotionVelocities.Length ?
+                                world.MotionVelocities[pair.BodyIndexB] : MotionVelocity.Zero;
 
                             ManifoldQueries.BodyBody(rigidBodyA, rigidBodyB, motionVelocityA, motionVelocityB,
                                 world.CollisionWorld.CollisionTolerance, timeStep, pair, ref contactWriter);

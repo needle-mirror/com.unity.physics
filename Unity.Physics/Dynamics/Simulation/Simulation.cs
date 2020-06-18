@@ -10,43 +10,76 @@ namespace Unity.Physics
     // and is only re-allocated if necessary.
     public struct SimulationContext : IDisposable
     {
-        // This container is read-only and is only used to get the entity for a given rigid body
-        // when reporting collision events. However, if SimulationContext is stored next to SimulationStepInput
-        // in a job, aliasing check will complain both have the same bodies array.
+        private int m_NumDynamicBodies;
+        private NativeArray<Velocity> m_InputVelocities;
+
+        // Solver stabilization data (it's completely ok to be unallocated)
         [NativeDisableContainerSafetyRestriction]
-        private NativeSlice<RigidBody> m_Bodies;
+        private NativeArray<Solver.StabilizationMotionData> m_SolverStabilizationMotionData;
+        internal NativeArray<Solver.StabilizationMotionData> SolverStabilizationMotionData => m_SolverStabilizationMotionData.GetSubArray(0, m_NumDynamicBodies);
 
         internal float TimeStep;
 
-        internal NativeArray<Velocity> InputVelocities;
+        internal NativeArray<Velocity> InputVelocities => m_InputVelocities.GetSubArray(0, m_NumDynamicBodies);
 
         internal NativeStream CollisionEventDataStream;
         internal NativeStream TriggerEventDataStream;
 
-        public CollisionEvents CollisionEvents =>
-            new CollisionEvents(CollisionEventDataStream, m_Bodies, InputVelocities, TimeStep);
-        public TriggerEvents TriggerEvents =>
-            new TriggerEvents(TriggerEventDataStream, m_Bodies);
+        public CollisionEvents CollisionEvents => new CollisionEvents(CollisionEventDataStream, InputVelocities, TimeStep);
+        public TriggerEvents TriggerEvents => new TriggerEvents(TriggerEventDataStream);
 
         private NativeArray<int> WorkItemCount;
+
+        [Obsolete("Reset() has been deprecated. Use the new method that takes SimulationStepInput instead. (RemovedAfter 2020-09-04)")]
+        public void Reset(ref PhysicsWorld world)
+        {
+            var stepInput = new SimulationStepInput
+            {
+                Gravity = PhysicsStep.Default.Gravity,
+                NumSolverIterations = PhysicsStep.Default.SolverIterationCount,
+                SolverStabilizationHeuristicSettings = PhysicsStep.Default.SolverStabilizationHeuristicSettings,
+                SynchronizeCollisionWorld = PhysicsStep.Default.SynchronizeCollisionWorld > 0,
+                TimeStep = 0.02f,
+                World = world
+            };
+            Reset(stepInput);
+        }
 
         // Resets the simulation storage
         // - Reallocates input velocities storage if necessary
         // - Disposes event streams and allocates new ones with a single work item
         // NOTE: Reset or ScheduleReset needs to be called before passing the SimulationContext
         // to a simulation step job. If you don't then you may get initialization errors.
-        public void Reset(ref PhysicsWorld world)
+        public void Reset(SimulationStepInput stepInput)
         {
-            m_Bodies = world.Bodies;
-
-            int numDynamicBodies = world.NumDynamicBodies;
-            if (!InputVelocities.IsCreated || InputVelocities.Length < numDynamicBodies)
+            m_NumDynamicBodies = stepInput.World.NumDynamicBodies;
+            if (!m_InputVelocities.IsCreated || m_InputVelocities.Length < m_NumDynamicBodies)
             {
-                if (InputVelocities.IsCreated)
+                if (m_InputVelocities.IsCreated)
                 {
-                    InputVelocities.Dispose();
+                    m_InputVelocities.Dispose();
                 }
-                InputVelocities = new NativeArray<Velocity>(numDynamicBodies, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+                m_InputVelocities = new NativeArray<Velocity>(m_NumDynamicBodies, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+            }
+
+            // Solver stabilization data
+            if (stepInput.SolverStabilizationHeuristicSettings.EnableSolverStabilization)
+            {
+                if (!m_SolverStabilizationMotionData.IsCreated || m_SolverStabilizationMotionData.Length < m_NumDynamicBodies)
+                {
+                    if (m_SolverStabilizationMotionData.IsCreated)
+                    {
+                        m_SolverStabilizationMotionData.Dispose();
+                    }
+                    m_SolverStabilizationMotionData = new NativeArray<Solver.StabilizationMotionData>(m_NumDynamicBodies, Allocator.Persistent, NativeArrayOptions.ClearMemory);
+                }
+                else if (m_NumDynamicBodies > 0)
+                {
+                    unsafe
+                    {
+                        UnsafeUtility.MemClear(m_SolverStabilizationMotionData.GetUnsafePtr(), m_NumDynamicBodies * UnsafeUtility.SizeOf<Solver.StabilizationMotionData>());
+                    }
+                }
             }
 
             if (CollisionEventDataStream.IsCreated)
@@ -80,19 +113,37 @@ namespace Unity.Physics
         // However, to make that possible we need a why to allocate InputVelocities within a job.
         // The core simulation does not chain jobs across multiple simulation steps and so 
         // will not hit this issue.
-        internal JobHandle ScheduleReset(ref PhysicsWorld world, JobHandle inputDeps, bool allocateEventDataStreams)
+        internal JobHandle ScheduleReset(SimulationStepInput stepInput, JobHandle inputDeps, bool allocateEventDataStreams)
         {
-            m_Bodies = world.Bodies;
-
-            int numDynamicBodies = world.NumDynamicBodies;
-            if (!InputVelocities.IsCreated || InputVelocities.Length < numDynamicBodies)
+            m_NumDynamicBodies = stepInput.World.NumDynamicBodies;
+            if (!m_InputVelocities.IsCreated || m_InputVelocities.Length < m_NumDynamicBodies)
             {
                 // TODO: can we find a way to setup InputVelocities within a job?
-                if (InputVelocities.IsCreated)
+                if (m_InputVelocities.IsCreated)
                 {
-                    InputVelocities.Dispose();
+                    m_InputVelocities.Dispose();
                 }
-                InputVelocities = new NativeArray<Velocity>(numDynamicBodies, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+                m_InputVelocities = new NativeArray<Velocity>(m_NumDynamicBodies, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+            }
+
+            // Solver stabilization data
+            if (stepInput.SolverStabilizationHeuristicSettings.EnableSolverStabilization)
+            {
+                if (!m_SolverStabilizationMotionData.IsCreated || m_SolverStabilizationMotionData.Length < m_NumDynamicBodies)
+                {
+                    if (m_SolverStabilizationMotionData.IsCreated)
+                    {
+                        m_SolverStabilizationMotionData.Dispose();
+                    }
+                    m_SolverStabilizationMotionData = new NativeArray<Solver.StabilizationMotionData>(m_NumDynamicBodies, Allocator.Persistent, NativeArrayOptions.ClearMemory);
+                }
+                else if (m_NumDynamicBodies > 0)
+                {
+                    unsafe
+                    {
+                        UnsafeUtility.MemClear(m_SolverStabilizationMotionData.GetUnsafePtr(), m_NumDynamicBodies * UnsafeUtility.SizeOf<Solver.StabilizationMotionData>());
+                    }
+                }
             }
 
             var handle = inputDeps;
@@ -118,9 +169,14 @@ namespace Unity.Physics
 
         public void Dispose()
         {
-            if (InputVelocities.IsCreated)
+            if (m_InputVelocities.IsCreated)
             {
-                InputVelocities.Dispose();
+                m_InputVelocities.Dispose();
+            }
+
+            if (m_SolverStabilizationMotionData.IsCreated)
+            {
+                m_SolverStabilizationMotionData.Dispose();
             }
 
             if (CollisionEventDataStream.IsCreated)
@@ -213,7 +269,7 @@ namespace Unity.Physics
                 input.World.NumDynamicBodies, input.World.Joints, ref dispatchPairs);
 
             // Apply gravity and copy input velocities
-            Solver.ApplyGravityAndCopyInputVelocities(input.World.DynamicsWorld.MotionDatas, input.World.DynamicsWorld.MotionVelocities,
+            Solver.ApplyGravityAndCopyInputVelocities(input.World.DynamicsWorld.MotionVelocities,
                 simulationContext.InputVelocities, input.TimeStep * input.Gravity);
 
             // Narrow phase
@@ -237,8 +293,9 @@ namespace Unity.Physics
                 var jacobiansReader = jacobians.AsReader();
                 var collisionEventsWriter = simulationContext.CollisionEventDataStream.AsWriter();
                 var triggerEventsWriter = simulationContext.TriggerEventDataStream.AsWriter();
-                Solver.SolveJacobians(ref jacobiansReader, input.World.DynamicsWorld.MotionVelocities, input.TimeStep, input.NumSolverIterations,
-                    ref collisionEventsWriter, ref triggerEventsWriter);
+                Solver.StabilizationData solverStabilizationData = new Solver.StabilizationData(input, simulationContext);
+                Solver.SolveJacobians(ref jacobiansReader, input.World.DynamicsWorld.MotionVelocities,
+                    input.TimeStep, input.NumSolverIterations, ref collisionEventsWriter, ref triggerEventsWriter, solverStabilizationData);
             }
 
             // Integrate motions
@@ -274,7 +331,7 @@ namespace Unity.Physics
             // Dispose and reallocate input velocity buffer, if dynamic body count has increased.
             // Dispose previous collision and trigger event data streams. 
             // New event streams are reallocated later when the work item count is known.
-            JobHandle handle = SimulationContext.ScheduleReset(ref input.World, inputDeps, false);
+            JobHandle handle = SimulationContext.ScheduleReset(input, inputDeps, false);
             SimulationContext.TimeStep = input.TimeStep;
 
             StepContext = new StepContext();
@@ -304,7 +361,8 @@ namespace Unity.Physics
 
             // Apply gravity and copy input velocities at this point (in parallel with the scheduler, but before the callbacks)
             var applyGravityAndCopyInputVelocitiesHandle = Solver.ScheduleApplyGravityAndCopyInputVelocitiesJob(
-                ref input.World.DynamicsWorld, SimulationContext.InputVelocities, input.TimeStep * input.Gravity, singleThreadedSim ? handle : postOverlapsHandle, threadCountHint);
+                input.World.DynamicsWorld.MotionVelocities, SimulationContext.InputVelocities,
+                input.TimeStep * input.Gravity, singleThreadedSim ? handle : postOverlapsHandle, threadCountHint);
 
             handle = JobHandle.CombineDependencies(handle, applyGravityAndCopyInputVelocitiesHandle);
             handle = callbacks.Execute(SimulationCallbacks.Phase.PostCreateDispatchPairs, this, ref input.World, handle);
@@ -326,9 +384,10 @@ namespace Unity.Physics
             handle = callbacks.Execute(SimulationCallbacks.Phase.PostCreateContactJacobians, this, ref input.World, handle);
 
             // Solve all Jacobians
+            Solver.StabilizationData solverStabilizationData = new Solver.StabilizationData(input, SimulationContext);
             handles = Solver.ScheduleSolveJacobiansJobs(ref input.World.DynamicsWorld, input.TimeStep, input.NumSolverIterations,
                 ref StepContext.Jacobians, ref SimulationContext.CollisionEventDataStream, ref SimulationContext.TriggerEventDataStream,
-                ref StepContext.SolverSchedulerInfo, handle, threadCountHint);
+                ref StepContext.SolverSchedulerInfo, solverStabilizationData, handle, threadCountHint);
             handle = handles.FinalExecutionHandle;
             var disposeHandle5 = handles.FinalDisposeHandle;
             handle = callbacks.Execute(SimulationCallbacks.Phase.PostSolveJacobians, this, ref input.World, handle);
@@ -372,12 +431,6 @@ namespace Unity.Physics
             }
 
             return m_StepHandles;
-        }
-
-        [Obsolete("ScheduleStepJobs() has been deprecated. Use the new ScheduleStepJobs method that takes callbacks and threadCountHint as input and returns SimulationStepHandles. (RemovedAfter 2020-05-01)")]
-        public void ScheduleStepJobs(SimulationStepInput input, JobHandle inputDeps)
-        {
-            m_StepHandles = ScheduleStepJobs(input, null, inputDeps, input.ThreadCountHint);
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
@@ -6,6 +7,7 @@ using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Profiling;
 using Hash128 = Unity.Entities.Hash128;
+using UnityMesh = UnityEngine.Mesh;
 
 namespace Unity.Physics.Authoring
 {
@@ -16,7 +18,8 @@ namespace Unity.Physics.Authoring
 
         internal abstract ShapeComputationData GenerateComputationData(
             T shape, ColliderInstance colliderInstance,
-            NativeList<float3> allConvexHullPoints, NativeList<float3> allMeshVertices, NativeList<int3> allMeshTriangles
+            NativeList<float3> allConvexHullPoints, NativeList<float3> allMeshVertices, NativeList<int3> allMeshTriangles,
+            HashSet<UnityMesh> meshAssets
         );
 
         void CreateNewBlobAssets(
@@ -35,11 +38,10 @@ namespace Unity.Physics.Authoring
             job.Schedule(count, 1).Complete();
         }
         
+        HashSet<UnityMesh> m_MeshAssets = new HashSet<UnityMesh>();
+        
         void GetInputDataFromAuthoringComponent(T shape)
         {
-            if (!ShouldConvertShape(shape))
-                return;
-
             var body = GetPrimaryBody(shape);
 
             var instance = new ColliderInstance
@@ -50,7 +52,7 @@ namespace Unity.Physics.Authoring
                 BodyFromShape = ColliderInstance.GetCompoundFromChild(shape.transform, body.transform)
             };
 
-            var data = GenerateComputationData(shape, instance, m_ConvexColliderPoints, m_MeshColliderVertices, m_MeshColliderTriangles);
+            var data = GenerateComputationData(shape, instance, m_ConvexColliderPoints, m_MeshColliderVertices, m_MeshColliderTriangles, m_MeshAssets);
             data.Instance.ConvertedAuthoringComponentIndex = m_EndColliderConversionSystem.PushAuthoringComponent(shape);
             data.Instance.ConvertedBodyTransformIndex = m_EndColliderConversionSystem.PushAuthoringComponent(body.transform);
             m_ShapeComputationData.Add(data);
@@ -63,6 +65,14 @@ namespace Unity.Physics.Authoring
                     m_MeshColliderJobs.TryAdd(data.Instance.Hash, data.MeshProperties);
             }
 
+            foreach (var mesh in m_MeshAssets)
+            {
+                if (mesh != null)
+                    DeclareAssetDependency(shape.gameObject, mesh);
+            }
+
+            m_MeshAssets.Clear();
+            
             if (body == shape.gameObject)
                 DstEntityManager.PostProcessTransformComponents(instance.BodyEntity, body.transform, BodyMotionType.Static);
         }
@@ -129,22 +139,32 @@ namespace Unity.Physics.Authoring
             m_MeshColliderTriangles.Dispose();
         }
 
+        static readonly List<T> s_ShapeInstances = new List<T>(8);
+
         protected override void OnUpdate()
         {
-            var shapeCount = m_ShapeQuery.CalculateEntityCount();
-            if (shapeCount == 0)
+            if (m_ShapeQuery.CalculateEntityCount() == 0)
                 return;
 
             // First pass
             Profiler.BeginSample("Collect Inputs from Authoring Components");
 
+            var shapeCount = 0;
             using (var shapeEntities = m_ShapeQuery.ToEntityArray(Allocator.TempJob))
             {
                 foreach (var shapeEntity in shapeEntities)
                 {
                     var shape = EntityManager.GetComponentObject<T>(shapeEntity);
-                    GetInputDataFromAuthoringComponent(shape);
+                    shape.GetComponents(s_ShapeInstances);
+                    foreach (var instance in s_ShapeInstances)
+                    {
+                        if (!ShouldConvertShape(instance))
+                            continue;
+                        GetInputDataFromAuthoringComponent(instance);
+                        ++shapeCount;
+                    }
                 }
+                s_ShapeInstances.Clear();
             }
 
             Profiler.EndSample();

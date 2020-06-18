@@ -1,11 +1,10 @@
-using System;
 using NUnit.Framework;
 using Unity.Burst;
+using Unity.Jobs;
 using Unity.Mathematics;
 using Assert = UnityEngine.Assertions.Assert;
 using TestUtils = Unity.Physics.Tests.Utils.TestUtils;
 using Unity.Collections.LowLevel.Unsafe;
-using Unity.Jobs;
 
 namespace Unity.Physics.Tests.Collision.Colliders
 {
@@ -51,7 +50,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             float3 normal = math.normalize(math.cross(vertices[1] - vertices[0], vertices[2] - vertices[0]));
 
             var collider = PolygonCollider.CreateTriangle(vertices[0], vertices[1], vertices[2]);
-            var triangleCollider = UnsafeUtilityEx.AsRef<PolygonCollider>(collider.GetUnsafePtr());
+            var triangleCollider = UnsafeUtility.AsRef<PolygonCollider>(collider.GetUnsafePtr());
             Assert.IsTrue(triangleCollider.IsTriangle);
             Assert.IsFalse(triangleCollider.IsQuad);
 
@@ -81,7 +80,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             float3 normal = math.normalize(math.cross(vertices[2] - vertices[1], vertices[0] - vertices[1]));
 
             var collider = PolygonCollider.CreateQuad(vertices[0], vertices[1], vertices[2], vertices[3]);
-            var quadCollider = UnsafeUtilityEx.AsRef<PolygonCollider>(collider.GetUnsafePtr());
+            var quadCollider = UnsafeUtility.AsRef<PolygonCollider>(collider.GetUnsafePtr());
             Assert.IsFalse(quadCollider.IsTriangle);
             Assert.IsTrue(quadCollider.IsQuad);
 
@@ -112,7 +111,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             float3 normal = math.normalize(math.cross(vertices[2] - vertices[1], vertices[0] - vertices[1]));
 
             var collider = PolygonCollider.CreateQuad(vertices[0], vertices[1], vertices[2], vertices[3]);
-            var quadCollider = UnsafeUtilityEx.AsRef<PolygonCollider>(collider.GetUnsafePtr());
+            var quadCollider = UnsafeUtility.AsRef<PolygonCollider>(collider.GetUnsafePtr());
             Assert.IsFalse(quadCollider.IsTriangle);
             Assert.IsTrue(quadCollider.IsQuad);
 

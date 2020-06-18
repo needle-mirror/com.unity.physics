@@ -18,12 +18,12 @@ namespace Unity.Physics
         public int NumDynamicBodies => CollisionWorld.NumDynamicBodies;
         public int NumJoints => DynamicsWorld.NumJoints;
 
-        public NativeSlice<RigidBody> Bodies => CollisionWorld.Bodies;
-        public NativeSlice<RigidBody> StaticBodies => CollisionWorld.StaticBodies;
-        public NativeSlice<RigidBody> DynamicBodies => CollisionWorld.DynamicBodies;
-        public NativeSlice<MotionData> MotionDatas => DynamicsWorld.MotionDatas;
-        public NativeSlice<MotionVelocity> MotionVelocities => DynamicsWorld.MotionVelocities;
-        public NativeSlice<Joint> Joints => DynamicsWorld.Joints;
+        public NativeArray<RigidBody> Bodies => CollisionWorld.Bodies;
+        public NativeArray<RigidBody> StaticBodies => CollisionWorld.StaticBodies;
+        public NativeArray<RigidBody> DynamicBodies => CollisionWorld.DynamicBodies;
+        public NativeArray<MotionData> MotionDatas => DynamicsWorld.MotionDatas;
+        public NativeArray<MotionVelocity> MotionVelocities => DynamicsWorld.MotionVelocities;
+        public NativeArray<Joint> Joints => DynamicsWorld.Joints;
 
         // Construct a world with the given number of uninitialized bodies and joints
         public PhysicsWorld(int numStaticBodies, int numDynamicBodies, int numJoints)

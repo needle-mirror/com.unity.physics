@@ -1,5 +1,4 @@
 using System;
-using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Unity.Mathematics;
@@ -84,13 +83,5 @@ namespace Unity.Physics
         {
             return BelongsTo == other.BelongsTo && CollidesWith == other.CollidesWith && GroupIndex == other.GroupIndex;
         }
-
-        #region Obsolete
-
-        [Obsolete("IsValid has been deprecated. Use !IsEmpty instead. (RemovedAfter 2020-04-30)")]
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public bool IsValid => BelongsTo > 0 && CollidesWith > 0;
-
-        #endregion
     }
 }

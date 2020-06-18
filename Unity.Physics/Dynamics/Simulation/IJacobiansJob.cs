@@ -1,6 +1,7 @@
 using System;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Entities;
 using Unity.Jobs;
 using Unity.Jobs.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -32,8 +33,14 @@ namespace Unity.Physics
         public bool ModifiersChanged { get; private set; }
         public bool AngularChanged { get; private set; }
 
-        public EntityPair Entities { get; internal set; }
-        public BodyIndexPair BodyPair => m_Header->BodyPair;
+        internal EntityPair EntityPair;
+
+        public Entity EntityB => EntityPair.EntityB;
+        public Entity EntityA => EntityPair.EntityA;
+
+        public int BodyIndexB => m_Header->BodyPair.BodyIndexB;
+        public int BodyIndexA => m_Header->BodyPair.BodyIndexA;
+
         public JacobianType Type => m_Header->Type;
         public JacobianFlags Flags
         {
@@ -54,7 +61,8 @@ namespace Unity.Physics
             }
         }
         public bool HasColliderKeys => m_Header->HasContactManifold;
-        public ColliderKeyPair ColliderKeys => m_Header->ColliderKeys;
+        public ColliderKey ColliderKeyB => m_Header->ColliderKeys.ColliderKeyB;
+        public ColliderKey ColliderKeyA => m_Header->ColliderKeys.ColliderKeyA;
 
         public bool HasMassFactors => m_Header->HasMassFactors;
         public MassFactors MassFactors
@@ -88,6 +96,15 @@ namespace Unity.Physics
             m_Header->AccessAngularJacobian(i) = j;
             AngularChanged = true;
         }
+
+        [Obsolete("Entities has been deprecated. Use EntityA and EntityB directly. (RemovedAfter 2020-08-01)")]
+        public EntityPair Entities => EntityPair;
+
+        [Obsolete("BodyIndices has been deprecated. Use BodyIndexA and BodyIndexB directly. (RemovedAfter 2020-08-01)")]
+        public BodyIndexPair BodyPair => m_Header->BodyPair;
+
+        [Obsolete("ColliderKeys has been deprecated. Use ColliderKeyA and ColliderKeyB directly. (RemovedAfter 2020-08-01)")]
+        public ColliderKeyPair ColliderKeys => m_Header->ColliderKeys;
     }
 
     public unsafe struct ModifiableContactJacobian
@@ -214,8 +231,8 @@ namespace Unity.Physics
 
             [ReadOnly] public NativeArray<int> NumWorkItems;
 
-            // Disable aliasing restriction in case T has a NativeSlice of PhysicsWorld.Bodies
-            [ReadOnly, NativeDisableContainerSafetyRestriction] public NativeSlice<RigidBody> Bodies;
+            // Disable aliasing restriction in case T has a NativeArray of PhysicsWorld.Bodies
+            [ReadOnly, NativeDisableContainerSafetyRestriction] public NativeArray<RigidBody> Bodies;
 
             int m_CurrentWorkItem;
 
@@ -237,7 +254,7 @@ namespace Unity.Physics
             private ref T2 Read<T2>() where T2 : struct
             {
                 int size = UnsafeUtility.SizeOf<T2>();
-                return ref UnsafeUtilityEx.AsRef<T2>(Read(size));
+                return ref UnsafeUtility.AsRef<T2>(Read(size));
             }
 
             public void MoveReaderToNextForEachIndex()
@@ -279,10 +296,10 @@ namespace Unity.Physics
                     var h = new ModifiableJacobianHeader
                     {
                         m_Header = header,
-                        Entities = new EntityPair
+                        EntityPair = new EntityPair
                         {
-                            EntityA = jobData.Bodies[header->BodyPair.BodyAIndex].Entity,
-                            EntityB = jobData.Bodies[header->BodyPair.BodyBIndex].Entity
+                            EntityA = jobData.Bodies[header->BodyPair.BodyIndexA].Entity,
+                            EntityB = jobData.Bodies[header->BodyPair.BodyIndexB].Entity
                         }
                     };
                     if (header->Type == JacobianType.Contact)

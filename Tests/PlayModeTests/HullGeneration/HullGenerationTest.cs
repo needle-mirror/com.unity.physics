@@ -339,7 +339,7 @@ struct TestResult
 [BurstCompile(CompileSynchronously = true)]
 unsafe struct BuildJob : IJob
 {
-    [ReadOnly] public NativeSlice<float3> Points;
+    [ReadOnly] public NativeArray<float3> Points;
     public float SimplificationTolerance; // Sum of tolerances for all simplification operations
     [NativeDisableUnsafePtrRestriction] public ConvexHullBuilder* Builder;
 
@@ -582,7 +582,7 @@ class HullGenerationTest : MonoBehaviour
         }
     }
 
-    unsafe HullStats TestPointSet(NativeSlice<float3> points, float simplificationTolerance, float mergeTolerance, float minAngle, float radius)
+    unsafe HullStats TestPointSet(NativeArray<float3> points, float simplificationTolerance, float mergeTolerance, float minAngle, float radius)
     {
         // Calculate the AABB
         Aabb domain = Aabb.Empty;
@@ -755,7 +755,7 @@ class HullGenerationTest : MonoBehaviour
         NativeArray<float3> points = GetPointSet(generator, pointSetIndex);
 
         // Build a hull and save stats
-        HullStats stats = TestPointSet(new NativeSlice<float3>(points), simplificationTolerance, mergeTolerance, minAngle, radius);
+        HullStats stats = TestPointSet(points, simplificationTolerance, mergeTolerance, minAngle, radius);
 
         // Destroy existing display object
         const string childName = "HullBuilderMeshDisplay";

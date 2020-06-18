@@ -635,7 +635,7 @@ namespace Unity.Physics.Tests.Collision.Queries
                             world.MotionVelocities[iBodyB] : MotionVelocity.Zero;
 
                         ManifoldQueries.BodyBody(bodyA, bodyB, motionVelocityA, motionVelocityB,
-                                world.CollisionWorld.CollisionTolerance, 1.0f, new BodyIndexPair { BodyAIndex = iBodyA, BodyBIndex = iBodyB }, ref contactWriter);
+                                world.CollisionWorld.CollisionTolerance, 1.0f, new BodyIndexPair { BodyIndexA = iBodyA, BodyIndexB = iBodyB }, ref contactWriter);
                         contactWriter.EndForEachIndex();
 
                         // Read each manifold

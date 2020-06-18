@@ -36,19 +36,20 @@ namespace Unity.Physics.Authoring
         }
         static PhysicMaterial s_DefaultMaterial;
 
-        protected static Material ProduceMaterial(LegacyCollider collider)
+        Material ProduceMaterial(LegacyCollider collider)
         {
-            var material = new Material
+            // n.b. need to manually opt in to collision events with legacy colliders if desired
+            var material = new Material();
+            if (collider.isTrigger)
             {
-                // n.b. need to manually opt in to collision events with legacy colliders if desired
-                Flags = collider.isTrigger
-                    ? Material.MaterialFlags.IsTrigger
-                    : new Material.MaterialFlags()
-            };
+                material.CollisionResponse = CollisionResponsePolicy.RaiseTriggerEvents;
+            }
 
             var legacyMaterial = collider.sharedMaterial;
             if (legacyMaterial == null)
                 legacyMaterial = DefaultMaterial;
+            else
+                DeclareAssetDependency(collider.gameObject, legacyMaterial);
 
             material.Friction = legacyMaterial.dynamicFriction;
             if (k_MaterialCombineLookup.TryGetValue(legacyMaterial.frictionCombine, out var combine))
@@ -73,7 +74,8 @@ namespace Unity.Physics.Authoring
 
         internal override ShapeComputationData GenerateComputationData(
             T shape, ColliderInstance colliderInstance,
-            NativeList<float3> allConvexHullPoints, NativeList<float3> allMeshVertices, NativeList<int3> allMeshTriangles
+            NativeList<float3> allConvexHullPoints, NativeList<float3> allMeshVertices,
+            NativeList<int3> allMeshTriangles, HashSet<UnityEngine.Mesh> meshAssets
         )
         {
             return new ShapeComputationData
@@ -99,14 +101,16 @@ namespace Unity.Physics.Authoring
 
     [UpdateAfter(typeof(BeginColliderConversionSystem))]
     [UpdateBefore(typeof(BuildCompoundCollidersConversionSystem))]
+    [ConverterVersion("adamm", 3)]
     public sealed class LegacyBoxColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacyBox>
     {
         internal override ShapeComputationData GenerateComputationData(
             LegacyBox shape, ColliderInstance colliderInstance,
-            NativeList<float3> allConvexHullPoints, NativeList<float3> allMeshVertices, NativeList<int3> allMeshTriangles
+            NativeList<float3> allConvexHullPoints, NativeList<float3> allMeshVertices, NativeList<int3> allMeshTriangles,
+            HashSet<UnityEngine.Mesh> meshAssets
         )
         {
-            var res = base.GenerateComputationData(shape, colliderInstance, allConvexHullPoints, allMeshVertices, allMeshTriangles);
+            var res = base.GenerateComputationData(shape, colliderInstance, allConvexHullPoints, allMeshVertices, allMeshTriangles, meshAssets);
             res.ShapeType = ShapeType.Box;
 
             var shapeLocalToWorld = shape.transform.localToWorldMatrix;
@@ -136,14 +140,16 @@ namespace Unity.Physics.Authoring
 
     [UpdateAfter(typeof(BeginColliderConversionSystem))]
     [UpdateBefore(typeof(BuildCompoundCollidersConversionSystem))]
+    [ConverterVersion("adamm", 3)]
     public sealed class LegacyCapsuleColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacyCapsule>
     {
         internal override ShapeComputationData GenerateComputationData(
             LegacyCapsule shape, ColliderInstance colliderInstance,
-            NativeList<float3> allConvexHullPoints, NativeList<float3> allMeshVertices, NativeList<int3> allMeshTriangles
+            NativeList<float3> allConvexHullPoints, NativeList<float3> allMeshVertices, NativeList<int3> allMeshTriangles,
+            HashSet<UnityEngine.Mesh> meshAssets
         )
         {
-            var res = base.GenerateComputationData(shape, colliderInstance, allConvexHullPoints, allMeshVertices, allMeshTriangles);
+            var res = base.GenerateComputationData(shape, colliderInstance, allConvexHullPoints, allMeshVertices, allMeshTriangles, meshAssets);
 
             res.ShapeType = ShapeType.Capsule;
 
@@ -172,14 +178,16 @@ namespace Unity.Physics.Authoring
 
     [UpdateAfter(typeof(BeginColliderConversionSystem))]
     [UpdateBefore(typeof(BuildCompoundCollidersConversionSystem))]
+    [ConverterVersion("adamm", 3)]
     public sealed class LegacySphereColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacySphere>
     {
         internal override ShapeComputationData GenerateComputationData(
             LegacySphere shape, ColliderInstance colliderInstance,
-            NativeList<float3> allConvexHullPoints, NativeList<float3> allMeshVertices, NativeList<int3> allMeshTriangles
+            NativeList<float3> allConvexHullPoints, NativeList<float3> allMeshVertices, NativeList<int3> allMeshTriangles,
+            HashSet<UnityEngine.Mesh> meshAssets
         )
         {
-            var res = base.GenerateComputationData(shape, colliderInstance, allConvexHullPoints, allMeshVertices, allMeshTriangles);
+            var res = base.GenerateComputationData(shape, colliderInstance, allConvexHullPoints, allMeshVertices, allMeshTriangles, meshAssets);
             res.ShapeType = ShapeType.Sphere;
 
             var shapeLocalToWorld = shape.transform.localToWorldMatrix;
@@ -202,14 +210,15 @@ namespace Unity.Physics.Authoring
 
     [UpdateAfter(typeof(BeginColliderConversionSystem))]
     [UpdateBefore(typeof(BuildCompoundCollidersConversionSystem))]
-    [ConverterVersion("adamm", 2)]
+    [ConverterVersion("adamm", 4)]
     public sealed class LegacyMeshColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacyMesh>
     {
         List<Vector3> m_Vertices = new List<Vector3>(65535 / 2);
 
         internal override ShapeComputationData GenerateComputationData(
             LegacyMesh shape, ColliderInstance colliderInstance,
-            NativeList<float3> allConvexHullPoints, NativeList<float3> allMeshVertices, NativeList<int3> allMeshTriangles
+            NativeList<float3> allConvexHullPoints, NativeList<float3> allMeshVertices, NativeList<int3> allMeshTriangles,
+            HashSet<UnityEngine.Mesh> meshAssets
         )
         {
             if (shape.sharedMesh == null)
@@ -226,7 +235,9 @@ namespace Unity.Physics.Authoring
                 );
             }
 
-            var res = base.GenerateComputationData(shape, colliderInstance, allConvexHullPoints, allMeshVertices, allMeshTriangles);
+            meshAssets.Add(shape.sharedMesh);
+            
+            var res = base.GenerateComputationData(shape, colliderInstance, allConvexHullPoints, allMeshVertices, allMeshTriangles, meshAssets);
 
             if (shape.convex)
             {

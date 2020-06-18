@@ -1,10 +1,9 @@
 using System;
-using UnityEngine;
 
 namespace Unity.Physics.Authoring
 {
     [Serializable]
-    public struct CustomPhysicsMaterialTags
+    public struct CustomPhysicsMaterialTags : IEquatable<CustomPhysicsMaterialTags>
     {
         public static CustomPhysicsMaterialTags Everything => new CustomPhysicsMaterialTags { Value = unchecked((byte)~0) };
         public static CustomPhysicsMaterialTags Nothing => new CustomPhysicsMaterialTags { Value = 0 };
@@ -79,5 +78,11 @@ namespace Unity.Physics.Authoring
                 Tag07 = (value & (1 << 7)) != 0;
             }
         }
+
+        public bool Equals(CustomPhysicsMaterialTags other) => Value == other.Value;
+
+        public override bool Equals(object obj) => obj is CustomPhysicsMaterialTags other && Equals(other);
+
+        public override int GetHashCode() => Value;
     }
 }

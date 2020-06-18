@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Runtime.CompilerServices;
 using Unity.Mathematics;
 
 namespace Unity.Physics
 {
-    // Describes how mass is distributed within an object.
+    // Describes how mass is distributed within an object
     // Represented by a transformed box inertia of unit mass.
     public struct MassDistribution
     {
@@ -66,16 +66,19 @@ namespace Unity.Physics
         public float LinearDamping;
         public float AngularDamping;
 
-        // A multiplier applied to the simulation step's gravity vector
-        public float GravityFactor;
+        [Obsolete("GravityFactor has been moved to MotionVelocity. (RemovedAfter 2020-09-04)")]
+        public float GravityFactor
+        {
+            get { return 1.0f; }
+            set { }
+        }
 
         public static readonly MotionData Zero = new MotionData
         {
             WorldFromMotion = RigidTransform.identity,
             BodyFromMotion = RigidTransform.identity,
             LinearDamping = 0.0f,
-            AngularDamping = 0.0f,
-            GravityFactor = 0.0f
+            AngularDamping = 0.0f
         };
     }
 
@@ -88,16 +91,8 @@ namespace Unity.Physics
         public float InverseMass;
         public float AngularExpansionFactor;
 
-        [Obsolete("InverseInertiaAndMass has been deprecated. Use the individual InverseInertia and InverseMass members instead. (RemovedAfter 2020-05-15)")]
-        public float4 InverseInertiaAndMass
-        {
-            get => new float4(InverseInertia, InverseMass);
-            set
-            {
-                InverseInertia = value.xyz;
-                InverseMass = value.w;
-            }
-        }
+        // A multiplier applied to the simulation step's gravity vector
+        public float GravityFactor;
 
         internal bool HasInfiniteInertiaAndMass => !math.any(InverseInertia) && InverseMass == 0.0f;
 
@@ -107,7 +102,8 @@ namespace Unity.Physics
             AngularVelocity = new float3(0),
             InverseInertia = new float3(0),
             InverseMass = 0.0f,
-            AngularExpansionFactor = 0.0f
+            AngularExpansionFactor = 0.0f,
+            GravityFactor = 0.0f
         };
 
         // Apply a linear impulse (in world space)

@@ -11,7 +11,7 @@ namespace Unity.Physics.Authoring
 {
     // A system which draws any collision events produced by the physics step system
     [UpdateAfter(typeof(StepPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
-    public class DisplayCollisionEventsSystem : JobComponentSystem
+    public class DisplayCollisionEventsSystem : SystemBase
     {
         BuildPhysicsWorld m_BuildPhysicsWorldSystem;
         StepPhysicsWorld m_StepPhysicsWorldSystem;
@@ -26,11 +26,11 @@ namespace Unity.Physics.Authoring
             m_DebugStreamSystem = World.GetOrCreateSystem<DebugStream>();
         }
 
-        protected override JobHandle OnUpdate(JobHandle inputDeps)
+        protected override void OnUpdate()
         {
             if (!(HasSingleton<PhysicsDebugDisplayData>() && GetSingleton<PhysicsDebugDisplayData>().DrawCollisionEvents != 0))
             {
-                return inputDeps;
+                return;
             }
 
             unsafe
@@ -45,7 +45,7 @@ namespace Unity.Physics.Authoring
                 {
                     World = m_BuildPhysicsWorldSystem.PhysicsWorld,
                     OutputStreamContext = sharedOutput
-                }.Schedule(m_StepPhysicsWorldSystem.Simulation, ref m_BuildPhysicsWorldSystem.PhysicsWorld, inputDeps);
+                }.Schedule(m_StepPhysicsWorldSystem.Simulation, ref m_BuildPhysicsWorldSystem.PhysicsWorld, Dependency);
 
 #pragma warning disable 618
 
@@ -55,9 +55,9 @@ namespace Unity.Physics.Authoring
                 }.Schedule(handle);
 #pragma warning restore 618
 
-                m_EndFramePhysicsSystem.HandlesToWaitFor.Add(finishHandle);
+                m_EndFramePhysicsSystem.AddInputDependency(finishHandle);
 
-                return handle;
+                Dependency = handle;
             }
         }
 

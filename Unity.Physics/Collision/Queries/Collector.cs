@@ -1,7 +1,5 @@
-﻿using System;
-using Unity.Collections;
+﻿using Unity.Collections;
 using Unity.Entities;
-using Unity.Mathematics;
 using UnityEngine.Assertions;
 using static Unity.Physics.Math;
 
@@ -59,7 +57,6 @@ namespace Unity.Physics
             NumColliderKeyBits += childSubKeyNumOfBits;
             return colliderKey;
         }
-
     }
 
     // Interface for collecting hits during a collision query

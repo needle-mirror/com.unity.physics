@@ -18,9 +18,9 @@ namespace Unity.Physics
         private NativeArray<Joint> m_Joints;
         private int m_NumJoints; // number of joints currently in use
 
-        public NativeSlice<MotionData> MotionDatas => new NativeSlice<MotionData>(m_MotionDatas, 0, m_NumMotions);
-        public NativeSlice<MotionVelocity> MotionVelocities => new NativeSlice<MotionVelocity>(m_MotionVelocities, 0, m_NumMotions);
-        public NativeSlice<Joint> Joints => new NativeSlice<Joint>(m_Joints, 0, m_NumJoints);
+        public NativeArray<MotionData> MotionDatas => m_MotionDatas.GetSubArray(0, m_NumMotions);
+        public NativeArray<MotionVelocity> MotionVelocities => m_MotionVelocities.GetSubArray(0, m_NumMotions);
+        public NativeArray<Joint> Joints => m_Joints.GetSubArray(0, m_NumJoints);
 
         public int NumMotions => m_NumMotions;
 

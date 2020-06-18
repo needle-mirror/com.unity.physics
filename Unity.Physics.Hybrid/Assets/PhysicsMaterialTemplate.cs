@@ -1,4 +1,3 @@
-using System;
 using UnityEngine;
 
 namespace Unity.Physics.Authoring
@@ -8,7 +7,7 @@ namespace Unity.Physics.Authoring
     {
         PhysicsMaterialTemplate() { }
 
-        public bool IsTrigger { get => m_Value.IsTrigger; set => m_Value.IsTrigger = value; }
+        public CollisionResponsePolicy CollisionResponse { get => m_Value.CollisionResponse; set => m_Value.CollisionResponse = value; }
 
         public PhysicsMaterialCoefficient Friction { get => m_Value.Friction; set => m_Value.Friction = value; }
         public PhysicsMaterialCoefficient Restitution { get => m_Value.Restitution; set => m_Value.Restitution = value; }
@@ -17,16 +16,12 @@ namespace Unity.Physics.Authoring
 
         public PhysicsCategoryTags CollidesWith { get => m_Value.CollidesWith; set => m_Value.CollidesWith = value; }
 
-        public bool RaisesCollisionEvents
-        {
-            get => m_Value.RaisesCollisionEvents;
-            set => m_Value.RaisesCollisionEvents = value;
-        }
-
         public CustomPhysicsMaterialTags CustomTags { get => m_Value.CustomTags; set => m_Value.CustomTags = value; }
 
         [SerializeField]
         PhysicsMaterialProperties m_Value = new PhysicsMaterialProperties(false);
+
+        void Reset() => OnValidate();
 
         void OnValidate() => PhysicsMaterialProperties.OnValidate(ref m_Value, false);
     }

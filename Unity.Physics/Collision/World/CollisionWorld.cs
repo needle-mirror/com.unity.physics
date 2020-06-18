@@ -19,9 +19,9 @@ namespace Unity.Physics
         public int NumStaticBodies => Broadphase.NumStaticBodies;
         public int NumDynamicBodies => Broadphase.NumDynamicBodies;
 
-        public NativeSlice<RigidBody> Bodies => new NativeSlice<RigidBody>(m_Bodies, 0, NumBodies);
-        public NativeSlice<RigidBody> StaticBodies => new NativeSlice<RigidBody>(m_Bodies, NumDynamicBodies, NumStaticBodies);
-        public NativeSlice<RigidBody> DynamicBodies => new NativeSlice<RigidBody>(m_Bodies, 0, NumDynamicBodies);
+        public NativeArray<RigidBody> Bodies => m_Bodies.GetSubArray(0, NumBodies);
+        public NativeArray<RigidBody> StaticBodies => m_Bodies.GetSubArray(NumDynamicBodies, NumStaticBodies);
+        public NativeArray<RigidBody> DynamicBodies => m_Bodies.GetSubArray(0, NumDynamicBodies);
 
         // Contacts are always created between rigid bodies if they are closer than this distance threshold.
         public float CollisionTolerance => 0.1f; // todo - make this configurable?
@@ -31,6 +31,12 @@ namespace Unity.Physics
         {
             m_Bodies = new NativeArray<RigidBody>(numStaticBodies + numDynamicBodies, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
             Broadphase = new Broadphase(numStaticBodies, numDynamicBodies);
+        }
+
+        internal CollisionWorld(NativeArray<RigidBody> bodies, Broadphase broadphase)
+        {
+            m_Bodies = bodies;
+            Broadphase = broadphase;
         }
 
         public void Reset(int numStaticBodies, int numDynamicBodies)
@@ -72,7 +78,7 @@ namespace Unity.Physics
         // Build the broadphase based on the given world.
         public void BuildBroadphase(ref PhysicsWorld world, float timeStep, float3 gravity, bool buildStaticTree = true)
         {
-            Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionDatas, world.MotionVelocities,
+            Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
                 world.CollisionWorld.CollisionTolerance, timeStep, gravity, buildStaticTree);
         }
 
@@ -108,7 +114,7 @@ namespace Unity.Physics
 
             // Update broadphase
             float aabbMargin = world.CollisionWorld.CollisionTolerance * 0.5f;
-            Broadphase.BuildDynamicTree(world.DynamicBodies, world.MotionDatas, world.MotionVelocities, gravity, timeStep, aabbMargin);
+            Broadphase.BuildDynamicTree(world.DynamicBodies, world.MotionVelocities, gravity, timeStep, aabbMargin);
         }
 
         // Schedule a set of jobs to synchronize the collision world with the dynamics world.
@@ -137,28 +143,20 @@ namespace Unity.Physics
             }
         }
 
-        [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
-        [Obsolete("ScheduleUpdateDynamicLayer() has been deprecated. Use the new ScheduleUpdateDynamicTree() method. (RemovedAfter 2020-05-01)")]
-        public JobHandle ScheduleUpdateDynamicLayer(
-            ref PhysicsWorld world, float timeStep, float3 gravity, int numThreadsHint, JobHandle inputDeps)
-        {
-            return ScheduleUpdateDynamicTree(ref world, timeStep, gravity, inputDeps, numThreadsHint);
-        }
-
         #region Jobs
 
         [BurstCompile]
         private struct UpdateRigidBodyTransformsJob : IJobParallelFor
         {
-            [ReadOnly] public NativeSlice<MotionData> MotionDatas;
-            public NativeSlice<RigidBody> RigidBodies;
+            [ReadOnly] public NativeArray<MotionData> MotionDatas;
+            public NativeArray<RigidBody> RigidBodies;
 
             public void Execute(int i)
             {
                 ExecuteImpl(i, MotionDatas, RigidBodies);
             }
 
-            internal static void ExecuteImpl(int i, NativeSlice<MotionData> motionDatas, NativeSlice<RigidBody> rigidBodies)
+            internal static void ExecuteImpl(int i, NativeArray<MotionData> motionDatas, NativeArray<RigidBody> rigidBodies)
             {
                 RigidBody rb = rigidBodies[i];
                 rb.WorldFromBody = math.mul(motionDatas[i].WorldFromMotion, math.inverse(motionDatas[i].BodyFromMotion));

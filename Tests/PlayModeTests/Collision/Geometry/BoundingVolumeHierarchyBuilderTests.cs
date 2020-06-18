@@ -1,5 +1,4 @@
-﻿using System;
-using NUnit.Framework;
+﻿using NUnit.Framework;
 using System.Collections.Generic;
 using Unity.Burst;
 using Unity.Collections;
@@ -7,7 +6,6 @@ using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.PerformanceTesting;
-using UnityEngine;
 using static Unity.Physics.BoundingVolumeHierarchy;
 using static Unity.Physics.BoundingVolumeHierarchy.Builder;
 using Assert = UnityEngine.Assertions.Assert;
@@ -162,7 +160,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
 
             var shouldDoWork = new NativeArray<int>(1, Allocator.Persistent);
             shouldDoWork[0] = 1;
-            int oldBranchCount = branchCount[0];
+            NativeArray<int> oldBranchCount = new NativeArray<int>(1, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
 
             var handle = new BuildFirstNLevelsJob
             {
@@ -171,6 +169,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
                 Ranges = ranges,
                 BranchNodeOffsets = branchNodeOffset,
                 BranchCount = branchCount,
+                OldBranchCount = oldBranchCount,
                 ThreadCount = threadCount,
                 ShouldDoWork = shouldDoWork
             }.Schedule();
@@ -237,7 +236,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
             var branchNodeOffset = new NativeArray<int>(Constants.MaxNumTreeBranches, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
             var shouldDoWork = new NativeArray<int>(1, Allocator.Persistent);
             shouldDoWork[0] = 1;
-            int oldBranchCount = branchCount[0];
+            NativeArray<int> oldBranchCount = new NativeArray<int>(1, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
 
             JobHandle handle = new BuildFirstNLevelsJob
             {
@@ -246,6 +245,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
                 Ranges = tree.Ranges,
                 BranchNodeOffsets = branchNodeOffset,
                 BranchCount = branchCount,
+                OldBranchCount = oldBranchCount,
                 ThreadCount = threadCount,
                 ShouldDoWork = shouldDoWork
             }.Schedule();
@@ -294,7 +294,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
 
             handle.Complete();
 
-            int numPairs = collisionPairs.ComputeItemCount();
+            int numPairs = collisionPairs.Count();
 
             Assert.AreEqual(elementCount / 2, numPairs);
             //Debug.Log($"Num colliding pairs: {numPairs}");
@@ -316,7 +316,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
             {
                 for (int i = 0; i < count; i++)
                 {
-                    SeenPairs.Add(new BodyIndexPair { BodyAIndex = pairLeft[0], BodyBIndex = r[0] });
+                    SeenPairs.Add(new BodyIndexPair { BodyIndexA = pairLeft[0], BodyIndexB = r[0] });
                 }
             }
             public void FlushIfNeeded() { }
@@ -379,7 +379,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
             // Pairs were removed, so the only remaining ones should be filtered
             foreach (BodyIndexPair pair in seenUnfiltered)
             {
-                bool shouldCollide = CollisionFilter.IsCollisionEnabled(bodyFilters[pair.BodyAIndex], bodyFilters[pair.BodyBIndex]);
+                bool shouldCollide = CollisionFilter.IsCollisionEnabled(bodyFilters[pair.BodyIndexA], bodyFilters[pair.BodyIndexB]);
                 Assert.IsFalse(shouldCollide);
             }
 
@@ -399,7 +399,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
             {
                 for (int i = 0; i < countR; i++)
                 {
-                    Pairs.Add(new BodyIndexPair { BodyAIndex = l, BodyBIndex = r[i] });
+                    Pairs.Add(new BodyIndexPair { BodyIndexA = l, BodyIndexB = r[i] });
                 }
             }
 
@@ -407,7 +407,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
             {
                 for (int i = 0; i < count; i++)
                 {
-                    Pairs.Add(new BodyIndexPair { BodyAIndex = pairLeft[i], BodyBIndex = r[i] });
+                    Pairs.Add(new BodyIndexPair { BodyIndexA = pairLeft[i], BodyIndexB = r[i] });
                 }
             }
 

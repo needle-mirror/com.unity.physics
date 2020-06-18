@@ -38,7 +38,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
                 Radius = 1.45f
             };
             var collider = CapsuleCollider.Create(geometry);
-            var capsuleCollider = UnsafeUtilityEx.AsRef<CapsuleCollider>(collider.GetUnsafePtr());
+            var capsuleCollider = UnsafeUtility.AsRef<CapsuleCollider>(collider.GetUnsafePtr());
             Assert.AreEqual(ColliderType.Capsule, capsuleCollider.Type);
             Assert.AreEqual(CollisionType.Convex, capsuleCollider.CollisionType);
             TestUtils.AreEqual(geometry.Vertex0, capsuleCollider.Vertex0);

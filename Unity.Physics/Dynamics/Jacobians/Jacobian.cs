@@ -97,14 +97,16 @@ namespace Unity.Physics
 
         // Solve the Jacobian
         public void Solve([NoAlias] ref MotionVelocity velocityA, [NoAlias] ref MotionVelocity velocityB, Solver.StepInput stepInput,
-            [NoAlias] ref NativeStream.Writer collisionEventsWriter, [NoAlias] ref NativeStream.Writer triggerEventsWriter)
+            [NoAlias] ref NativeStream.Writer collisionEventsWriter, [NoAlias] ref NativeStream.Writer triggerEventsWriter, bool enableFrictionVelocitiesHeuristic,
+            Solver.MotionStabilizationInput motionStabilizationSolverInputA, Solver.MotionStabilizationInput motionStabilizationSolverInputB)
         {
             if (Enabled)
             {
                 switch (Type)
                 {
                     case JacobianType.Contact:
-                        AccessBaseJacobian<ContactJacobian>().Solve(ref this, ref velocityA, ref velocityB, stepInput, ref collisionEventsWriter);
+                        AccessBaseJacobian<ContactJacobian>().Solve(ref this, ref velocityA, ref velocityB, stepInput, ref collisionEventsWriter,
+                            enableFrictionVelocitiesHeuristic, motionStabilizationSolverInputA, motionStabilizationSolverInputB);
                         break;
                     case JacobianType.Trigger:
                         AccessBaseJacobian<TriggerJacobian>().Solve(ref this, ref velocityA, ref velocityB, stepInput, ref triggerEventsWriter);
@@ -143,6 +145,12 @@ namespace Unity.Physics
                 UnsafeUtility.SizeOf<ColliderKeyPair>() : 0;
         }
 
+        private static int SizeOfEntityPair(JacobianType type, JacobianFlags flags)
+        {
+            return (type == JacobianType.Contact && (flags & JacobianFlags.EnableCollisionEvents) != 0) ?
+                UnsafeUtility.SizeOf<EntityPair>() : 0;
+        }
+
         private static int SizeOfSurfaceVelocity(JacobianType type, JacobianFlags flags)
         {
             return (type == JacobianType.Contact && (flags & JacobianFlags.EnableSurfaceVelocity) != 0) ?
@@ -157,7 +165,7 @@ namespace Unity.Physics
 
         private static int SizeOfModifierData(JacobianType type, JacobianFlags flags)
         {
-            return SizeOfColliderKeys(type, flags) + SizeOfSurfaceVelocity(type, flags) +
+            return SizeOfColliderKeys(type, flags) + SizeOfEntityPair(type, flags) + SizeOfSurfaceVelocity(type, flags) +
                 SizeOfMassFactors(type, flags);
         }
 
@@ -193,7 +201,7 @@ namespace Unity.Physics
         {
             byte* ptr = (byte*)UnsafeUtility.AddressOf(ref this);
             ptr += UnsafeUtility.SizeOf<JacobianHeader>();
-            return ref UnsafeUtilityEx.AsRef<T>(ptr);
+            return ref UnsafeUtility.AsRef<T>(ptr);
         }
 
         public unsafe ref ColliderKeyPair AccessColliderKeys()
@@ -201,7 +209,15 @@ namespace Unity.Physics
             Assert.IsTrue((Flags & JacobianFlags.EnableCollisionEvents) != 0);
             byte* ptr = (byte*)UnsafeUtility.AddressOf(ref this);
             ptr += UnsafeUtility.SizeOf<JacobianHeader>() + SizeOfBaseJacobian(Type);
-            return ref UnsafeUtilityEx.AsRef<ColliderKeyPair>(ptr);
+            return ref UnsafeUtility.AsRef<ColliderKeyPair>(ptr);
+        }
+
+        public unsafe ref EntityPair AccessEntities()
+        {
+            Assert.IsTrue((Flags & JacobianFlags.EnableCollisionEvents) != 0);
+            byte* ptr = (byte*)UnsafeUtility.AddressOf(ref this);
+            ptr += UnsafeUtility.SizeOf<JacobianHeader>() + SizeOfBaseJacobian(Type) + SizeOfColliderKeys(Type, Flags);
+            return ref UnsafeUtility.AsRef<EntityPair>(ptr);
         }
 
         public unsafe ref SurfaceVelocity AccessSurfaceVelocity()
@@ -209,8 +225,8 @@ namespace Unity.Physics
             Assert.IsTrue((Flags & JacobianFlags.EnableSurfaceVelocity) != 0);
             byte* ptr = (byte*)UnsafeUtility.AddressOf(ref this);
             ptr += UnsafeUtility.SizeOf<JacobianHeader>() + SizeOfBaseJacobian(Type) +
-                SizeOfColliderKeys(Type, Flags);
-            return ref UnsafeUtilityEx.AsRef<SurfaceVelocity>(ptr);
+                SizeOfColliderKeys(Type, Flags) + SizeOfEntityPair(Type, Flags);
+            return ref UnsafeUtility.AsRef<SurfaceVelocity>(ptr);
         }
 
         public unsafe ref MassFactors AccessMassFactors()
@@ -218,8 +234,8 @@ namespace Unity.Physics
             Assert.IsTrue((Flags & JacobianFlags.EnableMassFactors) != 0);
             byte* ptr = (byte*)UnsafeUtility.AddressOf(ref this);
             ptr += UnsafeUtility.SizeOf<JacobianHeader>() + SizeOfBaseJacobian(Type) +
-                SizeOfColliderKeys(Type, Flags) + SizeOfSurfaceVelocity(Type, Flags);
-            return ref UnsafeUtilityEx.AsRef<MassFactors>(ptr);
+                SizeOfColliderKeys(Type, Flags) + SizeOfEntityPair(Type, Flags) + SizeOfSurfaceVelocity(Type, Flags);
+            return ref UnsafeUtility.AsRef<MassFactors>(ptr);
         }
 
         public unsafe ref ContactJacAngAndVelToReachCp AccessAngularJacobian(int pointIndex)
@@ -228,7 +244,7 @@ namespace Unity.Physics
             byte* ptr = (byte*)UnsafeUtility.AddressOf(ref this);
             ptr += UnsafeUtility.SizeOf<JacobianHeader>() + SizeOfBaseJacobian(Type) + SizeOfModifierData(Type, Flags) +
                 pointIndex * UnsafeUtility.SizeOf<ContactJacAngAndVelToReachCp>();
-            return ref UnsafeUtilityEx.AsRef<ContactJacAngAndVelToReachCp>(ptr);
+            return ref UnsafeUtility.AsRef<ContactJacAngAndVelToReachCp>(ptr);
         }
 
         public unsafe ref ContactPoint AccessContactPoint(int pointIndex)
@@ -240,7 +256,7 @@ namespace Unity.Physics
             ptr += UnsafeUtility.SizeOf<JacobianHeader>() + SizeOfBaseJacobian(Type) + SizeOfModifierData(Type, Flags) +
                 baseJac.BaseJacobian.NumContacts * UnsafeUtility.SizeOf<ContactJacAngAndVelToReachCp>() +
                 pointIndex * UnsafeUtility.SizeOf<ContactPoint>();
-            return ref UnsafeUtilityEx.AsRef<ContactPoint>(ptr);
+            return ref UnsafeUtility.AsRef<ContactPoint>(ptr);
         }
 
         #endregion
@@ -409,7 +425,7 @@ namespace Unity.Physics
         public ref JacobianHeader ReadJacobianHeader()
         {
             int readSize = Read<int>();
-            return ref UnsafeUtilityEx.AsRef<JacobianHeader>(Read(readSize));
+            return ref UnsafeUtility.AsRef<JacobianHeader>(Read(readSize));
         }
 
         private byte* Read(int size)
@@ -422,7 +438,7 @@ namespace Unity.Physics
         private ref T Read<T>() where T : struct
         {
             int size = UnsafeUtility.SizeOf<T>();
-            return ref UnsafeUtilityEx.AsRef<T>(Read(size));
+            return ref UnsafeUtility.AsRef<T>(Read(size));
         }
     }
 }

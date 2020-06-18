@@ -28,12 +28,12 @@ namespace Unity.Physics
         //    16,777,216 Rigid bodies
         //    32,767 Joints (1 bit used for Enable [C]ollisions flag)
         //
-        // We additionally choose indices so that BodyAIndex < BodyBIndex. This has subtle side-effects:
+        // We additionally choose indices so that BodyIndexA < BodyIndexB. This has subtle side-effects:
         // * If one body in the pair is static, it will be body B.
         // * Indices used for jointed pairs are not necessarily the same as selected in the joint
         // * For some body A, all it's static collisions will be contiguous.
         //
-        [DebuggerDisplay("{IsContact ? \"Contact\" : \"Joint\"}, [{BodyAIndex}, {BodyBIndex}]")]
+        [DebuggerDisplay("{IsContact ? \"Contact\" : \"Joint\"}, [{BodyIndexA}, {BodyIndexB}]")]
         public struct DispatchPair
         {
             private ulong m_Data;
@@ -42,11 +42,11 @@ namespace Unity.Physics
             internal static readonly uint k_InvalidJointIndex = 0b_0000_0000_0000_0000_0111_1111_1111_1111; // 15 bits
 
             internal static readonly int k_JointIndexShift = 0;
-            internal static readonly int k_BodyBIndexShift = k_JointIndexShift + math.countbits(k_InvalidJointIndex) + 1;//EnableCollisions
-            internal static readonly int k_BodyAIndexShift = k_BodyBIndexShift + math.countbits(k_InvalidBodyIndex);
+            internal static readonly int k_BodyIndexBShift = k_JointIndexShift + math.countbits(k_InvalidJointIndex) + 1;//EnableCollisions
+            internal static readonly int k_BodyIndexAShift = k_BodyIndexBShift + math.countbits(k_InvalidBodyIndex);
 
-            internal static readonly ulong k_BodyAMask = ~((ulong)(k_InvalidBodyIndex) << k_BodyAIndexShift);
-            internal static readonly ulong k_BodyBMask = ~((ulong)(k_InvalidBodyIndex) << k_BodyBIndexShift);
+            internal static readonly ulong k_BodyAMask = ~((ulong)(k_InvalidBodyIndex) << k_BodyIndexAShift);
+            internal static readonly ulong k_BodyBMask = ~((ulong)(k_InvalidBodyIndex) << k_BodyIndexBShift);
             internal static readonly ulong k_JointMask = ~((ulong)(k_InvalidJointIndex) << k_JointIndexShift);
 
             private static readonly ulong k_EnableJointCollisionBit = ((ulong)k_InvalidJointIndex + 1) << k_JointIndexShift;
@@ -57,23 +57,23 @@ namespace Unity.Physics
 
             public static DispatchPair Invalid => new DispatchPair { m_Data = ~(ulong)0x0 };
 
-            public int BodyAIndex
+            public int BodyIndexA
             {
-                get => (int)((m_Data >> k_BodyAIndexShift) & k_InvalidBodyIndex);
+                get => (int)((m_Data >> k_BodyIndexAShift) & k_InvalidBodyIndex);
                 internal set
                 {
                     Assert.IsTrue(value < k_InvalidBodyIndex);
-                    m_Data = (m_Data & k_BodyAMask) | ((ulong)value << k_BodyAIndexShift);
+                    m_Data = (m_Data & k_BodyAMask) | ((ulong)value << k_BodyIndexAShift);
                 }
             }
 
-            public int BodyBIndex
+            public int BodyIndexB
             {
-                get => (int)((m_Data >> k_BodyBIndexShift) & k_InvalidBodyIndex);
+                get => (int)((m_Data >> k_BodyIndexBShift) & k_InvalidBodyIndex);
                 internal set
                 {
                     Assert.IsTrue(value < k_InvalidBodyIndex);
-                    m_Data = (m_Data & k_BodyBMask) | ((ulong)value << k_BodyBIndexShift);
+                    m_Data = (m_Data & k_BodyBMask) | ((ulong)value << k_BodyIndexBShift);
                 }
             }
 
@@ -108,14 +108,14 @@ namespace Unity.Physics
 
             private static DispatchPair Create(BodyIndexPair pair, int jointIndex, int allowCollision)
             {
-                Assert.IsTrue(pair.BodyAIndex < k_InvalidBodyIndex && pair.BodyBIndex < k_InvalidBodyIndex);
-                int selectedA = math.min(pair.BodyAIndex, pair.BodyBIndex);
-                int selectedB = math.max(pair.BodyAIndex, pair.BodyBIndex);
+                Assert.IsTrue(pair.BodyIndexA < k_InvalidBodyIndex && pair.BodyIndexB < k_InvalidBodyIndex);
+                int selectedA = math.min(pair.BodyIndexA, pair.BodyIndexB);
+                int selectedB = math.max(pair.BodyIndexA, pair.BodyIndexB);
                 return new DispatchPair
                 {
                     m_Data =
-                        ((ulong)selectedA << k_BodyAIndexShift) |
-                        ((ulong)selectedB << k_BodyBIndexShift) |
+                        ((ulong)selectedA << k_BodyIndexAShift) |
+                        ((ulong)selectedB << k_BodyIndexBShift) |
                         (allowCollision == 0 ? 0 : k_EnableJointCollisionBit) |
                         ((ulong)jointIndex << k_JointIndexShift)
                 };
@@ -252,7 +252,7 @@ namespace Unity.Physics
         // Merge streams of body pairs and joints into an sorted array of dispatch pairs
         public static void CreateDispatchPairs(
             ref NativeStream dynamicVsDynamicBodyPairs, ref NativeStream staticVsDynamicBodyPairs,
-            int numDynamicBodies, NativeSlice<Joint> joints, ref NativeList<DispatchPair> dispatchPairs)
+            int numDynamicBodies, NativeArray<Joint> joints, ref NativeList<DispatchPair> dispatchPairs)
         {
             // Create dispatch pairs
             var tempPairs = new NativeList<DispatchPair>(Allocator.Temp);
@@ -449,7 +449,7 @@ namespace Unity.Physics
 
         // Helper function to schedule jobs to sort an array of dispatch pairs.
         // The first single threaded job is a single pass Radix sort on the bits associated
-        // with DispatchPair.BodyAIndex, resulting in sub arrays with the same bodyA index.
+        // with DispatchPair.BodyIndexA, resulting in sub arrays with the same bodyA index.
         // The second parallel job dispatches default sorts on each sub array.
         private static unsafe JobHandle ScheduleSortJob(
             int numBodies,
@@ -506,7 +506,7 @@ namespace Unity.Physics
             [ReadOnly] public NativeStream StaticVsDynamicPairs;
 
             // Joints from dynamics world
-            [ReadOnly] public NativeSlice<Joint> Joints;
+            [ReadOnly] public NativeArray<Joint> Joints;
             
             // Outputs
             public NativeList<DispatchPair> UnsortedDispatchPairs;
@@ -519,7 +519,7 @@ namespace Unity.Physics
 
             internal static void ExecuteImpl(
                 NativeStream dynamicVsDynamicPairs, NativeStream staticVsDynamicPairs,
-                NativeSlice<Joint> joints, 
+                NativeArray<Joint> joints, 
                 NativeList<DispatchPair> unsortedDispatchPairs, NativeList<DispatchPair> dispatchPairsUninitialized)
             {
                 int numValidJoints = 0;
@@ -535,8 +535,8 @@ namespace Unity.Physics
                 var staticVsDynamicPairReader = staticVsDynamicPairs.AsReader();
 
                 int numDispatchPairs =
-                    staticVsDynamicPairReader.ComputeItemCount() +
-                    dynamicVsDynamicPairReader.ComputeItemCount() +
+                    staticVsDynamicPairReader.Count() +
+                    dynamicVsDynamicPairReader.Count() +
                     numValidJoints;
 
                 unsortedDispatchPairs.ResizeUninitialized(numDispatchPairs);
@@ -585,7 +585,7 @@ namespace Unity.Physics
         [BurstCompile]
         private struct CreateDispatchPairsJobST : IJob
         {
-            [ReadOnly] public NativeSlice<Joint> Joints;
+            [ReadOnly] public NativeArray<Joint> Joints;
             [ReadOnly] public NativeStream DynamicVsDynamicBroadphasePairsStream;
             [ReadOnly] public NativeStream StaticVsDynamicBroadphasePairsStream;
             public NativeList<DispatchPair> DispatchPairs;
@@ -622,11 +622,11 @@ namespace Unity.Physics
                     (ulong*)InputArray.GetUnsafeReadOnlyPtr(),
                     (ulong*)OutputArray.GetUnsafePtr(),
                     InputArray.Length, DigitCount, MaxDigits, MaxIndex,
-                    DispatchPair.k_BodyAIndexShift);
+                    DispatchPair.k_BodyIndexAShift);
             }
 
             // Performs single pass of Radix sort on NativeArray<ulong> based on the bits
-            // associated with BodyAIndex in DispatchPair.
+            // associated with BodyIndexA in DispatchPair.
             public static void RadixSortPerBodyA(ulong* inputArray, ulong* outputArray,
                 int length, NativeArray<int> digitCount, int maxDigits, int maxIndex, int bitShift)
             {
@@ -786,30 +786,30 @@ namespace Unity.Physics
                 // Find phase for each dynamic-dynamic pair
                 for (int i = 0; i < dispatchPairs.Length; i++)
                 {
-                    int bodyAIndex = dispatchPairs[i].BodyAIndex;
-                    int bodyBIndex = dispatchPairs[i].BodyBIndex;
+                    int bodyIndexA = dispatchPairs[i].BodyIndexA;
+                    int bodyIndexB = dispatchPairs[i].BodyIndexB;
 
-                    bool indicesChanged = !(lastPairA == bodyAIndex && lastPairB == bodyBIndex);
+                    bool indicesChanged = !(lastPairA == bodyIndexA && lastPairB == bodyIndexB);
                     bool isJoint = dispatchPairs[i].IsJoint;
 
-                    bool isBodyBStatic = bodyBIndex >= numDynamicBodies;
+                    bool isBodyBStatic = bodyIndexB >= numDynamicBodies;
 
                     if (indicesChanged || contactsPermitted || isJoint)
                     {
                         // Skip dynamic-static pairs since we need to ensure that those are solved after all dynamic-dynamic pairs.
                         if (!isBodyBStatic)
                         {
-                            int phaseIndex = FindFreePhaseDynamicDynamicPair(rigidBodyMask, bodyAIndex, bodyBIndex, lastPhaseIndex,
+                            int phaseIndex = FindFreePhaseDynamicDynamicPair(rigidBodyMask, bodyIndexA, bodyIndexB, lastPhaseIndex,
                                 phaseLookupTableDynamicDynamicPairs, useTables);
                             phaseIdPerPair[i] = (byte)phaseIndex;
 
                             if (phaseIndex != lastPhaseIndex)
                             {
-                                batchInfos[phaseIndex].Add(rigidBodyMask, bodyAIndex, bodyBIndex);
+                                batchInfos[phaseIndex].Add(rigidBodyMask, bodyIndexA, bodyIndexB);
                             }
                             else
                             {
-                                rigidBodyMask[bodyAIndex] |= (ushort)(1 << lastPhaseIndex);
+                                rigidBodyMask[bodyIndexA] |= (ushort)(1 << lastPhaseIndex);
                                 numPairsPerPhase[lastPhaseIndex]++;
                             }
                         }
@@ -818,8 +818,8 @@ namespace Unity.Physics
                         bool thisPermitsContacts = isJoint && dispatchPairs[i].JointAllowsCollision;
                         contactsPermitted = (contactsPermitted && !indicesChanged) || thisPermitsContacts;
 
-                        lastPairA = bodyAIndex;
-                        lastPairB = bodyBIndex;
+                        lastPairA = bodyIndexA;
+                        lastPairB = bodyIndexB;
                     }
                     else
                     {
@@ -836,18 +836,18 @@ namespace Unity.Physics
                 // Find phase for each dynamic-static pair.
                 for (int pairIndex = 0; pairIndex < dispatchPairs.Length; pairIndex++)
                 {
-                    int bodyBIndex = dispatchPairs[pairIndex].BodyBIndex;
+                    int bodyIndexB = dispatchPairs[pairIndex].BodyIndexB;
 
-                    bool isBodyBStatic = bodyBIndex >= numDynamicBodies;
+                    bool isBodyBStatic = bodyIndexB >= numDynamicBodies;
                     if (isBodyBStatic && phaseIdPerPair[pairIndex] == k_unitializedPair)
                     {
-                        int bodyAIndex = dispatchPairs[pairIndex].BodyAIndex;
+                        int bodyIndexA = dispatchPairs[pairIndex].BodyIndexA;
 
-                        int phaseIndex = FindFreePhaseDynamicStaticPair(rigidBodyMask, bodyAIndex, lastPhaseIndex,
+                        int phaseIndex = FindFreePhaseDynamicStaticPair(rigidBodyMask, bodyIndexA, lastPhaseIndex,
                             phaseLookupTableDynamicStaticPairs, useTables);
                         phaseIdPerPair[pairIndex] = (byte)phaseIndex;
 
-                        rigidBodyMask[bodyAIndex] |= (ushort)(1 << phaseIndex);
+                        rigidBodyMask[bodyIndexA] |= (ushort)(1 << phaseIndex);
                         if (phaseIndex != lastPhaseIndex)
                         {
                             batchInfos[phaseIndex].m_NumElements++;
@@ -875,8 +875,8 @@ namespace Unity.Physics
                 // Populate PhasedDispatchPairsArray with dynamic-dynamic pairs
                 for (int i = 0; i < dispatchPairs.Length; i++)
                 {
-                    int bodyBIndex = dispatchPairs[i].BodyBIndex;
-                    bool isBodyBStatic = bodyBIndex >= numDynamicBodies;
+                    int bodyIndexB = dispatchPairs[i].BodyIndexB;
+                    bool isBodyBStatic = bodyIndexB >= numDynamicBodies;
 
                     if (!isBodyBStatic && phaseIdPerPair[i] != invalidPhaseId)
                     {
@@ -889,8 +889,8 @@ namespace Unity.Physics
                 // Populate PhasedDispatchPairsArray with dynamic-static pairs
                 for (int i = 0; i < dispatchPairs.Length; i++)
                 {
-                    int bodyBIndex = dispatchPairs[i].BodyBIndex;
-                    bool isBodyBStatic = bodyBIndex >= numDynamicBodies;
+                    int bodyIndexB = dispatchPairs[i].BodyIndexB;
+                    bool isBodyBStatic = bodyIndexB >= numDynamicBodies;
 
                     if (isBodyBStatic && phaseIdPerPair[i] != invalidPhaseId)
                     {
@@ -952,12 +952,12 @@ namespace Unity.Physics
                                 int secondIndex = k * info.BatchSize;
                                 for (int pairIndex1 = firstIndex; pairIndex1 < math.min(firstIndex + info.BatchSize, dispatchPairCount); pairIndex1++)
                                 {
-                                    int aIndex1 = phasedDispatchPairs[pairIndex1].BodyAIndex;
-                                    int bIndex1 = phasedDispatchPairs[pairIndex1].BodyBIndex;
+                                    int aIndex1 = phasedDispatchPairs[pairIndex1].BodyIndexA;
+                                    int bIndex1 = phasedDispatchPairs[pairIndex1].BodyIndexB;
                                     for (int pairIndex2 = secondIndex; pairIndex2 < math.min(secondIndex + info.BatchSize, dispatchPairCount); pairIndex2++)
                                     {
-                                        int aIndex2 = phasedDispatchPairs[pairIndex2].BodyAIndex;
-                                        int bIndex2 = phasedDispatchPairs[pairIndex2].BodyBIndex;
+                                        int aIndex2 = phasedDispatchPairs[pairIndex2].BodyIndexA;
+                                        int bIndex2 = phasedDispatchPairs[pairIndex2].BodyIndexB;
 
                                         // Verify that different batches can't contain same dynamic bodies
                                         Assert.AreNotEqual(aIndex1, aIndex2);
@@ -975,14 +975,14 @@ namespace Unity.Physics
 
             private unsafe struct BatchInfo
             {
-                internal void Add(NativeArray<ushort> rigidBodyMasks, int bodyAIndex, int bodyBIndex)
+                internal void Add(NativeArray<ushort> rigidBodyMasks, int bodyIndexA, int bodyIndexB)
                 {
                     int indexInBuffer = m_NumElements++ * 2;
 
                     fixed (int* bodyIndices = m_BodyIndices)
                     {
-                        bodyIndices[indexInBuffer++] = bodyAIndex;
-                        bodyIndices[indexInBuffer] = bodyBIndex;
+                        bodyIndices[indexInBuffer++] = bodyIndexA;
+                        bodyIndices[indexInBuffer] = bodyIndexB;
 
                         if (m_NumElements == k_MinBatchSize)
                         {
@@ -1020,10 +1020,10 @@ namespace Unity.Physics
                 internal int m_NumElements;
             }
 
-            private static int FindFreePhaseDynamicDynamicPair(NativeArray<ushort> rigidBodyMask, int bodyAIndex, int bodyBIndex,
+            private static int FindFreePhaseDynamicDynamicPair(NativeArray<ushort> rigidBodyMask, int bodyIndexA, int bodyIndexB,
                 int lastPhaseIndex, NativeArray<ushort> phaseLookupTableDynamicDynamicPairs, bool useTable = true)
             {
-                int mask = rigidBodyMask[bodyAIndex] | rigidBodyMask[bodyBIndex];
+                int mask = rigidBodyMask[bodyIndexA] | rigidBodyMask[bodyIndexB];
                 int phaseIndex = -1;
                 if (useTable)
                 {
@@ -1056,10 +1056,10 @@ namespace Unity.Physics
                 return phaseIndex;
             }
 
-            private static int FindFreePhaseDynamicStaticPair(NativeArray<ushort> rigidBodyMask, int bodyAIndex,
+            private static int FindFreePhaseDynamicStaticPair(NativeArray<ushort> rigidBodyMask, int bodyIndexA,
                 int lastPhaseIndex, NativeArray<ushort> phaseLookupTableDynamicStaticPairs, bool useTable = true)
             {
-                int mask = rigidBodyMask[bodyAIndex];
+                int mask = rigidBodyMask[bodyIndexA];
 
                 int phaseIndex;
                 if (useTable)

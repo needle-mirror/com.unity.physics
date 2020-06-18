@@ -20,9 +20,7 @@ namespace Unity.Physics
         public float3 Gravity; // Gravity in the physics world
         public int NumSolverIterations; // Number of iterations to perform while solving constraints
         public bool SynchronizeCollisionWorld; // Whether to update the collision world after the step for more precise queries
-
-        [Obsolete("ThreadCountHint has been deprecated. Provide it directly to the ScheduleStepJobs method. (RemovedAfter 2020-05-01)")]
-        public int ThreadCountHint;
+        public Solver.StabilizationHeuristicSettings SolverStabilizationHeuristicSettings; // Settings for solver stabilization heuristic in Unity.Physics
     }
 
     // Result of ISimulation.ScheduleStepJobs()
@@ -49,10 +47,6 @@ namespace Unity.Physics
 
         // Schedule a set of jobs to step the simulation.
         SimulationJobHandles ScheduleStepJobs(SimulationStepInput input, SimulationCallbacks callbacks, JobHandle inputDeps, int threadCountHint = 0);
-
-        // Schedule a set of jobs to step the simulation.
-        [Obsolete("ScheduleStepJobs() has been deprecated. Use the new ScheduleStepJobs method that takes callbacks and threadCountHint as input and returns SimulationStepHandles. (RemovedAfter 2020-05-01)")]
-        void ScheduleStepJobs(SimulationStepInput input, JobHandle inputDeps);
 
         // The final scheduled simulation job.
         // Jobs which use the simulation results should depend on this.

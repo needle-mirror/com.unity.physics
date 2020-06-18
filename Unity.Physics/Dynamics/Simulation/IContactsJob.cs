@@ -1,6 +1,7 @@
 using System;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Entities;
 using Unity.Jobs;
 using Unity.Jobs.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -30,10 +31,17 @@ namespace Unity.Physics
         internal ContactHeader ContactHeader;
         public bool Modified { get; private set; }
 
-        public EntityPair Entities { get; internal set; }
-        public BodyIndexPair BodyIndexPair => ContactHeader.BodyPair;
-        public CustomTagsPair BodyCustomTags => ContactHeader.BodyCustomTags;
-        public ColliderKeyPair ColliderKeys => ContactHeader.ColliderKeys;
+        internal EntityPair EntityPair;
+
+        public Entity EntityB => EntityPair.EntityB;
+        public Entity EntityA => EntityPair.EntityA;
+        public int BodyIndexB => ContactHeader.BodyPair.BodyIndexB;
+        public int BodyIndexA => ContactHeader.BodyPair.BodyIndexA;
+        public byte CustomTagsB => ContactHeader.BodyCustomTags.CustomTagsB;
+        public byte CustomTagsA => ContactHeader.BodyCustomTags.CustomTagsA;
+        public ColliderKey ColliderKeyB => ContactHeader.ColliderKeys.ColliderKeyB;
+        public ColliderKey ColliderKeyA => ContactHeader.ColliderKeys.ColliderKeyA;
+
         public int NumContacts => ContactHeader.NumContacts;
 
         public JacobianFlags JacobianFlags
@@ -75,6 +83,18 @@ namespace Unity.Physics
                 Modified = true;
             }
         }
+
+        [Obsolete("Entities has been deprecated. Use EntityA and EntityB directly. (RemovedAfter 2020-08-01)")]
+        public EntityPair Entities => EntityPair;
+
+        [Obsolete("BodyIndexPair has been deprecated. Use BodyIndexA and BodyIndexB directly. (RemovedAfter 2020-08-01)")]
+        public BodyIndexPair BodyIndexPair => ContactHeader.BodyPair;
+
+        [Obsolete("ColliderKeys has been deprecated. Use ColliderKeyA and ColliderKeyB directly. (RemovedAfter 2020-08-01)")]
+        public ColliderKeyPair ColliderKeys => ContactHeader.ColliderKeys;
+
+        [Obsolete("BodyCustomTags has been deprecated. Use CustomTagsA and CustomTagsB directly. (RemovedAfter 2020-08-01)")]
+        public CustomTagsPair BodyCustomTags => ContactHeader.BodyCustomTags;
     }
 
     public struct ModifiableContactPoint
@@ -166,8 +186,8 @@ namespace Unity.Physics
 
             [NativeDisableContainerSafetyRestriction] public NativeStream.Reader ContactReader;
             [ReadOnly] public NativeArray<int> NumWorkItems;
-            // Disable aliasing restriction in case T has a NativeSlice of PhysicsWorld.Bodies
-            [ReadOnly, NativeDisableContainerSafetyRestriction] public NativeSlice<RigidBody> Bodies;
+            // Disable aliasing restriction in case T has a NativeArray of PhysicsWorld.Bodies
+            [ReadOnly, NativeDisableContainerSafetyRestriction] public NativeArray<RigidBody> Bodies;
         }
 
         internal struct ContactsJobProcess<T> where T : struct, IContactsJobBase
@@ -200,10 +220,10 @@ namespace Unity.Physics
                     var header = new ModifiableContactHeader
                     {
                         ContactHeader = *iterator.m_LastHeader,
-                        Entities = new EntityPair
+                        EntityPair = new EntityPair
                         {
-                            EntityA = jobData.Bodies[iterator.m_LastHeader->BodyPair.BodyAIndex].Entity,
-                            EntityB = jobData.Bodies[iterator.m_LastHeader->BodyPair.BodyBIndex].Entity
+                            EntityA = jobData.Bodies[iterator.m_LastHeader->BodyPair.BodyIndexA].Entity,
+                            EntityB = jobData.Bodies[iterator.m_LastHeader->BodyPair.BodyIndexB].Entity
                         }
                     };
                     var contact = new ModifiableContactPoint

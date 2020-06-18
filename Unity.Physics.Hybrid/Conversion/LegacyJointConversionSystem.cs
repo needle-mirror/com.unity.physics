@@ -1,5 +1,7 @@
 #if LEGACY_PHYSICS
 using System;
+using System.Collections.Generic;
+using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using Unity.Collections;
 using Unity.Entities;
@@ -15,35 +17,24 @@ using LegacySpring = UnityEngine.SpringJoint;
 
 namespace Unity.Physics.Authoring
 {
+    [AlwaysUpdateSystem]
+    [UpdateAfter(typeof(BeginJointConversionSystem))]
+    [UpdateBefore(typeof(EndJointConversionSystem))]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    [Obsolete("This class will be made internal in a future version. Please use "
+              + nameof(BeginJointConversionSystem)
+              + " and "
+              + nameof(EndJointConversionSystem)
+              + " as needed to express dependencies on built-in joint conversion. (RemovedAfter 2020-08-18)")]
     public sealed class LegacyJointConversionSystem : GameObjectConversionSystem
     {
-        void CreateJointEntity(GameObject gameObject, BlobAssetReference<JointData> jointData, Entity entityA, Entity entityB, bool enableCollision)
-        {
-            var componentData = new PhysicsJoint
-            {
-                JointData = jointData,
-                EntityA = entityA,
-                EntityB = entityB,
-                EnableCollision = enableCollision ? 1 : 0,
-            };
-
-            Entity jointEntity = CreateAdditionalEntity(gameObject);
-#if UNITY_EDITOR
-            var nameEntityA = DstEntityManager.GetName(entityA);
-            var nameEntityB = entityB == Entity.Null ? "PhysicsWorld" : DstEntityManager.GetName(entityB);
-            DstEntityManager.SetName(jointEntity, $"Joining {nameEntityA} + {nameEntityB}");
-#endif
-
-            DstEntityManager.AddOrSetComponent(jointEntity, componentData);
-        }
-
-        BlobAssetReference<JointData> CreateConfigurableJoint(
+        PhysicsJoint CreateConfigurableJoint(
             quaternion jointFrameOrientation,
             LegacyJoint joint, bool3 linearLocks, bool3 linearLimited, SoftJointLimit linearLimit, SoftJointLimitSpring linearSpring, bool3 angularFree, bool3 angularLocks,
             bool3 angularLimited, SoftJointLimit lowAngularXLimit, SoftJointLimit highAngularXLimit, SoftJointLimitSpring angularXLimitSpring, SoftJointLimit angularYLimit,
             SoftJointLimit angularZLimit, SoftJointLimitSpring angularYZLimitSpring)
         {
-            var constraints = new NativeList<Constraint>(Allocator.Temp);
+            var constraints = new FixedList128<Constraint>();
 
             // TODO: investigate mapping PhysX spring and damping to Unity Physics SpringFrequency and SpringDamping
             var springFrequency = Constraint.DefaultSpringFrequency;
@@ -51,27 +42,28 @@ namespace Unity.Physics.Authoring
             
             if (angularLimited[0])
             {
-                constraints.Add(Constraint.Twist(0, math.radians(new FloatRange(-highAngularXLimit.limit, -lowAngularXLimit.limit)), springFrequency, springDamping));
+                constraints.Add(Constraint.Twist(0, math.radians(new FloatRange(-highAngularXLimit.limit, -lowAngularXLimit.limit).Sorted()), springFrequency, springDamping));
             }
 
             if (angularLimited[1])
             {
-                constraints.Add(Constraint.Twist(1, math.radians(new FloatRange(-angularYLimit.limit, angularYLimit.limit)), springFrequency, springDamping));
+                constraints.Add(Constraint.Twist(1, math.radians(new FloatRange(-angularYLimit.limit, angularYLimit.limit).Sorted()), springFrequency, springDamping));
             }
 
             if (angularLimited[2])
             {
-                constraints.Add(Constraint.Twist(2, math.radians(new FloatRange(-angularZLimit.limit, angularZLimit.limit)), springFrequency, springDamping));
+                constraints.Add(Constraint.Twist(2, math.radians(new FloatRange(-angularZLimit.limit, angularZLimit.limit).Sorted()), springFrequency, springDamping));
             }
 
             if (math.any(linearLimited))
             {
+                var distanceRange = new FloatRange(-linearLimit.limit, linearLimit.limit).Sorted();
                 constraints.Add(new Constraint
                 {
                     ConstrainedAxes = linearLimited,
                     Type = ConstraintType.Linear,
-                    Min = math.csum((int3)linearLimited) == 1 ? -linearLimit.limit : 0f,
-                    Max = linearLimit.limit,
+                    Min = math.csum((int3)linearLimited) == 1 ? distanceRange.Min : 0f,
+                    Max = distanceRange.Max,
                     SpringFrequency = springFrequency,
                     SpringDamping = springDamping
                 });
@@ -112,7 +104,7 @@ namespace Unity.Physics.Authoring
                 new RigidTransform(joint.transform.rotation, joint.transform.position),
                 new RigidTransform(jointFrameOrientation, joint.anchor)
             );
-            var bodyAFromJoint = new JointFrame(math.mul(math.inverse(worldFromBodyA), legacyWorldFromJointA));
+            var bodyAFromJoint = new BodyFrame(math.mul(math.inverse(worldFromBodyA), legacyWorldFromJointA));
             
             var connectedEntity = GetPrimaryEntity(joint.connectedBody);
             var isConnectedBodyConverted =
@@ -122,82 +114,65 @@ namespace Unity.Physics.Authoring
             RigidTransform bFromBSource =
                 isConnectedBodyConverted ? RigidTransform.identity : worldFromBodyB;
 
-            var bodyBFromJoint = new JointFrame
+            var bodyBFromJoint = new BodyFrame
             {
                 Axis = math.mul(bFromA.rot, bodyAFromJoint.Axis),
                 PerpendicularAxis = math.mul(bFromA.rot, bodyAFromJoint.PerpendicularAxis),
                 Position = math.mul(bFromBSource, new float4(joint.connectedAnchor, 1f)).xyz
             };
-            
-            var jointData =  JointData.Create(bodyAFromJoint, bodyBFromJoint, constraints);
 
-            constraints.Dispose();
-            
+            var jointData = new PhysicsJoint
+            {
+                BodyAFromJoint = bodyAFromJoint,
+                BodyBFromJoint = bodyBFromJoint
+            };
+            jointData.SetConstraints(constraints);
             return jointData;
         }
 
-        bool IsMotionFree(ConfigurableJointMotion motion)
-        {
-            return motion == ConfigurableJointMotion.Free;
-        }
+        bool3 GetAxesWithMotionType(
+            ConfigurableJointMotion motionType,
+            ConfigurableJointMotion x, ConfigurableJointMotion y, ConfigurableJointMotion z
+        ) =>
+            new bool3(x == motionType, y == motionType, z == motionType);
 
-        bool IsMotionLocked(ConfigurableJointMotion motion)
-        {
-            return motion == ConfigurableJointMotion.Locked;
-        }
+        PhysicsConstrainedBodyPair GetConstrainedBodyPair(LegacyJoint joint) =>
+            new PhysicsConstrainedBodyPair(
+                GetPrimaryEntity(joint.gameObject),
+                joint.connectedBody == null ? Entity.Null : GetPrimaryEntity(joint.connectedBody),
+                joint.enableCollision
+            );
 
-        bool IsMotionLimited(ConfigurableJointMotion motion)
-        {
-            return motion == ConfigurableJointMotion.Limited;
-        }
-        
         void ConvertConfigurableJoint(LegacyConfigurable joint)
         {
-            var linearLocks = new bool3
-            (
-                IsMotionLocked(joint.xMotion),
-                IsMotionLocked(joint.yMotion),
-                IsMotionLocked(joint.zMotion)
-            );
-
-            var linearLimited = new bool3
-            (
-                IsMotionLimited(joint.xMotion),
-                IsMotionLimited(joint.yMotion),
-                IsMotionLimited(joint.zMotion)
-            );
-           
-            var angularFree = new bool3
-            (
-                IsMotionFree(joint.angularXMotion),
-                IsMotionFree(joint.angularYMotion),
-                IsMotionFree(joint.angularZMotion)
-            );
-
-            var angularLocks = new bool3
-            (
-                IsMotionLocked(joint.angularXMotion),
-                IsMotionLocked(joint.angularYMotion),
-                IsMotionLocked(joint.angularZMotion)
-            );
-
-            var angularLimited = new bool3
-            (
-                IsMotionLimited(joint.angularXMotion),
-                IsMotionLimited(joint.angularYMotion),
-                IsMotionLimited(joint.angularZMotion)
-            );
+            var linearLocks =
+                GetAxesWithMotionType(ConfigurableJointMotion.Locked, joint.xMotion, joint.yMotion, joint.zMotion);
+            var linearLimited =
+                GetAxesWithMotionType(ConfigurableJointMotion.Limited, joint.xMotion, joint.yMotion, joint.zMotion);
+            var angularFree =
+                GetAxesWithMotionType(ConfigurableJointMotion.Free, joint.angularXMotion, joint.angularYMotion, joint.angularZMotion);
+            var angularLocks =
+                GetAxesWithMotionType(ConfigurableJointMotion.Locked, joint.angularXMotion, joint.angularYMotion, joint.angularZMotion);
+            var angularLimited =
+                GetAxesWithMotionType(ConfigurableJointMotion.Limited, joint.angularXMotion, joint.angularYMotion, joint.angularZMotion);
 
             var jointFrameOrientation = GetJointFrameOrientation(joint.axis, joint.secondaryAxis);
             var jointData = CreateConfigurableJoint(jointFrameOrientation, joint, linearLocks, linearLimited, joint.linearLimit, joint.linearLimitSpring, angularFree, angularLocks, angularLimited,
                 joint.lowAngularXLimit, joint.highAngularXLimit, joint.angularXLimitSpring, joint.angularYLimit, joint.angularZLimit, joint.angularYZLimitSpring);
             
-            CreateJointEntity(joint.gameObject, jointData, GetPrimaryEntity(joint.gameObject), joint.connectedBody == null ? Entity.Null : GetPrimaryEntity(joint.connectedBody), joint.enableCollision);
+            m_EndJointConversionSystem.CreateJointEntity(joint, GetConstrainedBodyPair(joint), jointData);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static quaternion GetJointFrameOrientation(float3 axis, float3 secondaryAxis) =>
-            new JointFrame { Axis = axis, PerpendicularAxis = secondaryAxis }.AsRigidTransform().rot;
+        static quaternion GetJointFrameOrientation(float3 axis, float3 secondaryAxis)
+        {
+            // classic Unity uses a different approach than BodyFrame.ValidateAxes() for ortho-normalizing degenerate inputs
+            // ortho-normalizing here ensures behavior is consistent with classic Unity
+            var a = (Vector3)axis;
+            var p = (Vector3)secondaryAxis;
+            Vector3.OrthoNormalize(ref a, ref p);
+            return new BodyFrame { Axis = a, PerpendicularAxis = p }.AsRigidTransform().rot;
+        }
 
         void ConvertCharacterJoint(LegacyCharacter joint)
         {
@@ -212,22 +187,22 @@ namespace Unity.Physics.Authoring
             var jointData = CreateConfigurableJoint(jointFrameOrientation, joint, linearLocks, linearLimited, new SoftJointLimit { limit = 0f, bounciness = 0f }, new SoftJointLimitSpring { spring = 0f, damper = 0f }, angularFree, angularLocks, angularLimited,
                 joint.lowTwistLimit, joint.highTwistLimit, joint.twistLimitSpring, joint.swing1Limit, joint.swing2Limit, joint.swingLimitSpring);
 
-            CreateJointEntity(joint.gameObject, jointData, GetPrimaryEntity(joint.gameObject), joint.connectedBody == null ? Entity.Null : GetPrimaryEntity(joint.connectedBody), joint.enableCollision);
+            m_EndJointConversionSystem.CreateJointEntity(joint, GetConstrainedBodyPair(joint), jointData);
         }
 
         void ConvertSpringJoint(LegacySpring joint)
         {
-            var constraints = new NativeList<Constraint>(Allocator.Temp);
-            constraints.Add(new Constraint {
+            var distanceRange = new FloatRange(joint.minDistance, joint.maxDistance).Sorted();
+            var constraint = new Constraint {
                 ConstrainedAxes = new bool3(true),
                 Type = ConstraintType.Linear,
-                Min = joint.minDistance,
-                Max = joint.maxDistance,
+                Min = distanceRange.Min,
+                Max = distanceRange.Max,
                 SpringFrequency = 1f, // ?
                 SpringDamping = 0.1f // ?
-            });
+            };
 
-            var jointFrameA = JointFrame.Identity;
+            var jointFrameA = BodyFrame.Identity;
             jointFrameA.Position = joint.anchor;
 
             var connectedEntity = GetPrimaryEntity(joint.connectedBody);
@@ -238,13 +213,21 @@ namespace Unity.Physics.Authoring
             RigidTransform bFromBSource =
                 isConnectedBodyConverted ? RigidTransform.identity : Math.DecomposeRigidBodyTransform(joint.connectedBody.transform.localToWorldMatrix);
 
-            var jointFrameB = JointFrame.Identity;
+            var jointFrameB = BodyFrame.Identity;
             jointFrameB.Position = math.mul(bFromBSource, new float4(joint.connectedAnchor, 1f)).xyz;
 
-            var jointData = JointData.Create(jointFrameA, jointFrameB, constraints);
+            var jointData = new PhysicsJoint
+            {
+                BodyAFromJoint = jointFrameA,
+                BodyBFromJoint = jointFrameB
+            };
+            jointData.SetConstraints(new FixedList128<Constraint>
+            {
+                Length = 1,
+                [0] = constraint
+            });
 
-            CreateJointEntity(joint.gameObject, jointData, GetPrimaryEntity(joint.gameObject), joint.connectedBody == null ? Entity.Null : connectedEntity, joint.enableCollision);
-            constraints.Dispose();
+            m_EndJointConversionSystem.CreateJointEntity(joint, GetConstrainedBodyPair(joint), jointData);
         }
 
         void ConvertFixedJoint(LegacyFixed joint)
@@ -260,12 +243,12 @@ namespace Unity.Physics.Authoring
                 ? RigidTransform.identity
                 : Math.DecomposeRigidBodyTransform(joint.connectedBody.transform.localToWorldMatrix);
 
-            var bodyAFromJoint = new JointFrame(math.mul(math.inverse(worldFromBodyA), legacyWorldFromJointA));
-            var bodyBFromJoint = new JointFrame(math.mul(math.inverse(worldFromBodyB), legacyWorldFromJointA));
+            var bodyAFromJoint = new BodyFrame(math.mul(math.inverse(worldFromBodyA), legacyWorldFromJointA));
+            var bodyBFromJoint = new BodyFrame(math.mul(math.inverse(worldFromBodyB), legacyWorldFromJointA));
 
-            var jointData = JointData.CreateFixed(bodyAFromJoint, bodyBFromJoint);
+            var jointData = PhysicsJoint.CreateFixed(bodyAFromJoint, bodyBFromJoint);
 
-            CreateJointEntity(joint.gameObject, jointData, GetPrimaryEntity(joint.gameObject), joint.connectedBody == null ? Entity.Null : connectedEntity, joint.enableCollision);
+            m_EndJointConversionSystem.CreateJointEntity(joint, GetConstrainedBodyPair(joint), jointData);
         }
 
         void ConvertHingeJoint(LegacyHinge joint)
@@ -276,7 +259,7 @@ namespace Unity.Physics.Authoring
                 : Math.DecomposeRigidBodyTransform(joint.connectedBody.transform.localToWorldMatrix);
 
             Math.CalculatePerpendicularNormalized(joint.axis, out float3 perpendicularA, out _);
-            var bodyAFromJoint = new JointFrame
+            var bodyAFromJoint = new BodyFrame
             {
                 Axis = joint.axis,
                 PerpendicularAxis = perpendicularA,
@@ -291,30 +274,75 @@ namespace Unity.Physics.Authoring
             RigidTransform bFromBSource =
                 isConnectedBodyConverted ? RigidTransform.identity : worldFromBodyB;
 
-            var bodyBFromJoint = new JointFrame
+            var bodyBFromJoint = new BodyFrame
             {
                 Axis = math.mul(bFromA.rot, joint.axis),
                 PerpendicularAxis = math.mul(bFromA.rot, perpendicularA),
                 Position = math.mul(bFromBSource, new float4(joint.connectedAnchor, 1f)).xyz
             };
 
-            var limits = math.radians(new FloatRange(joint.limits.min, joint.limits.max));
+            var limits = math.radians(new FloatRange(joint.limits.min, joint.limits.max).Sorted());
             var jointData = joint.useLimits
-                ? JointData.CreateLimitedHinge(bodyAFromJoint, bodyBFromJoint, limits)
-                : JointData.CreateHinge(bodyAFromJoint, bodyBFromJoint);
+                ? PhysicsJoint.CreateLimitedHinge(bodyAFromJoint, bodyBFromJoint, limits)
+                : PhysicsJoint.CreateHinge(bodyAFromJoint, bodyBFromJoint);
 
-            CreateJointEntity(joint.gameObject, jointData, GetPrimaryEntity(joint.gameObject), joint.connectedBody == null ? Entity.Null : connectedEntity, joint.enableCollision);
+            m_EndJointConversionSystem.CreateJointEntity(joint, GetConstrainedBodyPair(joint), jointData);
         }
+
+        EndJointConversionSystem m_EndJointConversionSystem;
+
+        protected override void OnCreate()
+        {
+            base.OnCreate();
+
+            m_EndJointConversionSystem = World.GetOrCreateSystem<EndJointConversionSystem>();
+        }
+
+        static readonly List<LegacyCharacter> s_CharacterJointInstances = new List<CharacterJoint>(8);
+        static readonly List<LegacyConfigurable> s_ConfigurableJointInstances = new List<ConfigurableJoint>(8);
+        static readonly List<LegacyFixed> s_FixedJointInstances = new List<FixedJoint>(8);
+        static readonly List<LegacyHinge> s_HingeJointInstances = new List<HingeJoint>(8);
+        static readonly List<LegacySpring> s_SpringJointInstances = new List<SpringJoint>(8);
 
         protected override void OnUpdate()
         {
-            Entities.ForEach((LegacyConfigurable joint) => { ConvertConfigurableJoint(joint); });
-            Entities.ForEach((LegacyCharacter joint) => { ConvertCharacterJoint(joint); });
-            Entities.ForEach((LegacySpring joint) => { ConvertSpringJoint(joint); });
-            Entities.ForEach((LegacyFixed joint) => { ConvertFixedJoint(joint); });
-            Entities.ForEach((LegacyHinge joint) => { ConvertHingeJoint(joint); });
+            Entities.ForEach((LegacyCharacter joint) =>
+            {
+                joint.gameObject.GetComponents(s_CharacterJointInstances);
+                foreach (var instance in s_CharacterJointInstances)
+                    ConvertCharacterJoint(instance);
+            });
+            Entities.ForEach((LegacyConfigurable joint) =>
+            {
+                joint.gameObject.GetComponents(s_ConfigurableJointInstances);
+                foreach (var instance in s_ConfigurableJointInstances)
+                    ConvertConfigurableJoint(instance);
+            });
+            Entities.ForEach((LegacyFixed joint) =>
+            {
+                joint.gameObject.GetComponents(s_FixedJointInstances);
+                foreach (var instance in s_FixedJointInstances)
+                    ConvertFixedJoint(instance);
+            });
+            Entities.ForEach((LegacyHinge joint) =>
+            {
+                joint.gameObject.GetComponents(s_HingeJointInstances);
+                foreach (var instance in s_HingeJointInstances)
+                    ConvertHingeJoint(instance);
+            });
+            Entities.ForEach((LegacySpring joint) =>
+            {
+                joint.gameObject.GetComponents(s_SpringJointInstances);
+                foreach (var instance in s_SpringJointInstances)
+                    ConvertSpringJoint(instance);
+            });
+
+            s_CharacterJointInstances.Clear();
+            s_ConfigurableJointInstances.Clear();
+            s_FixedJointInstances.Clear();
+            s_HingeJointInstances.Clear();
+            s_SpringJointInstances.Clear();
         }
     }
-
 }
 #endif

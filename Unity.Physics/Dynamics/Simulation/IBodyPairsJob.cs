@@ -1,6 +1,7 @@
 using System;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Entities;
 using Unity.Jobs;
 using Unity.Jobs.LowLevel.Unsafe;
 
@@ -25,13 +26,24 @@ namespace Unity.Physics
 
     public struct ModifiableBodyPair
     {
-        public EntityPair Entities { get; internal set; }
-        public BodyIndexPair BodyIndices { get; internal set; }
+        internal EntityPair EntityPair;
+        internal BodyIndexPair BodyIndexPair;
+
+        public Entity EntityB => EntityPair.EntityB;
+        public Entity EntityA => EntityPair.EntityA;
+        public int BodyIndexB => BodyIndexPair.BodyIndexB;
+        public int BodyIndexA => BodyIndexPair.BodyIndexA;
 
         public void Disable()
         {
-            BodyIndices = BodyIndexPair.Invalid;
+            BodyIndexPair = BodyIndexPair.Invalid;
         }
+
+        [Obsolete("Entities has been deprecated. Use EntityA and EntityB directly. (RemovedAfter 2020-08-01)")]
+        public EntityPair Entities => EntityPair;
+
+        [Obsolete("BodyIndices has been deprecated. Use BodyIndexA and BodyIndexB directly. (RemovedAfter 2020-08-01)")]
+        public BodyIndexPair BodyIndices => BodyIndexPair;
     }
 
     public static class IBodyPairsJobExtensions
@@ -91,8 +103,8 @@ namespace Unity.Physics
         {
             public T UserJobData;
             public NativeArray<DispatchPairSequencer.DispatchPair> PhasedDispatchPairs;
-            //Need to disable aliasing restriction in case T has a NativeSlice of PhysicsWorld.Bodies:
-            [ReadOnly] [NativeDisableContainerSafetyRestriction] public NativeSlice<RigidBody> Bodies;
+            //Need to disable aliasing restriction in case T has a NativeArray of PhysicsWorld.Bodies:
+            [ReadOnly] [NativeDisableContainerSafetyRestriction] public NativeArray<RigidBody> Bodies;
         }
 
         internal struct BodyPairsJobProcess<T> where T : struct, IBodyPairsJobBase
@@ -115,31 +127,31 @@ namespace Unity.Physics
             public unsafe static void Execute(ref BodyPairsJobData<T> jobData, IntPtr additionalData,
                 IntPtr bufferRangePatchData, ref JobRanges ranges, int jobIndex)
             {
-                int currentIdx = 0;
-                while (currentIdx < jobData.PhasedDispatchPairs.Length)
+                for (int currentIdx = 0; currentIdx < jobData.PhasedDispatchPairs.Length; currentIdx++)
                 {
+                    // Skip joint pairs
+                    if (jobData.PhasedDispatchPairs[currentIdx].IsJoint)
+                    {
+                        continue;
+                    }
+
                     DispatchPairSequencer.DispatchPair dispatchPair = jobData.PhasedDispatchPairs[currentIdx];
                     var pair = new ModifiableBodyPair
                     {
-                        BodyIndices = new BodyIndexPair { BodyAIndex = dispatchPair.BodyAIndex, BodyBIndex = dispatchPair.BodyBIndex },
-                        Entities = new EntityPair
+                        BodyIndexPair = new BodyIndexPair { BodyIndexA = dispatchPair.BodyIndexA, BodyIndexB = dispatchPair.BodyIndexB },
+                        EntityPair = new EntityPair
                         {
-                            EntityA = jobData.Bodies[dispatchPair.BodyAIndex].Entity,
-                            EntityB = jobData.Bodies[dispatchPair.BodyBIndex].Entity
+                            EntityA = jobData.Bodies[dispatchPair.BodyIndexA].Entity,
+                            EntityB = jobData.Bodies[dispatchPair.BodyIndexB].Entity
                         }
                     };
 
                     jobData.UserJobData.Execute(ref pair);
 
-                    if (pair.BodyIndices.BodyAIndex == -1 || pair.BodyIndices.BodyBIndex == -1)
+                    if (pair.BodyIndexA == -1 || pair.BodyIndexB == -1)
                     {
                         jobData.PhasedDispatchPairs[currentIdx] = DispatchPairSequencer.DispatchPair.Invalid;
                     }
-
-                    do
-                    {
-                        currentIdx++;
-                    } while (currentIdx < jobData.PhasedDispatchPairs.Length && jobData.PhasedDispatchPairs[currentIdx].IsJoint);
                 }
             }
         }

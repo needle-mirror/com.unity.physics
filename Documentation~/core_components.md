@@ -29,10 +29,12 @@ The [coefficient of friction](https://en.wikipedia.org/wiki/Friction) of a body 
 
 Both friction and restitution have a `CombinePolicy` property which determines how the engine should merge two different values. For example, you may want to always use the largest or smallest value in a collision.
 
-In addition to these, a Material also has a set of flags, which enable special behaviors during the physics simulation. The two most important of these are:
+In addition to these, a Material also has a set of flags, which enable special behaviors during the physics simulation. The most important are represented by the `CollisionResponsePolicy`:
 
-* `IsTrigger`: if this flag is enabled, the Collider is treated as a "detector" rather than as a physical body. This means it cannot receive forces from a collision, instead, it will raise an event to signify that an overlap occurred. For example, you can use this to determine when your player enters a specific region.
-* `EnableCollisionEvents`: this is similar to the previous flag, but still allows the body to push other bodies normally. The events that the simulation raises can then be used to determine how objects are colliding. This would, for example, allow you to play sound events.
+* `Collide`: regular collider.
+* `RaiseTriggerEvents`: if this flag is enabled, the Collider is treated as a "detector" rather than as a physical body. This means it cannot receive forces from a collision, instead, it will raise an event to signify that an overlap occurred. For example, you can use this to determine when your player enters a specific region.
+* `CollideRaiseCollisionEvents`: this is similar to the previous flag, but still allows the body to push other bodies normally. The events that the simulation raises can then be used to determine how objects are colliding. This would, for example, allow you to play sound events.
+* `None`: collider moves and intercepts queries, but generates no collision response and no events.
 
 A Material template asset can be created in the **Create > DOTS > Physics > Physics Material Template** menu, in the project window.
 

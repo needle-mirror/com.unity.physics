@@ -85,29 +85,6 @@ namespace Unity.Physics.Tests.Authoring
         }
 
         [Test]
-        public void GetCapsuleProperties_WhenPointsAndOrientationNotIdentity_OrientationPointsDownAxisOfCompositeRotation()
-        {
-            var capsule = new CapsuleGeometry
-            {
-                Vertex0 = math.normalizesafe(new float3(-1f, -1f, 0f)),
-                Vertex1 = math.normalizesafe(new float3(1f, 1f, 0f))
-            };
-            var orientation = quaternion.AxisAngle(new float3 { z = 1f }, math.PI / 4f);
-            #pragma warning disable 618
-            m_Shape.SetCapsule(capsule, orientation);
-            #pragma warning restore 618
-
-            var capsuleAuthoring = m_Shape.GetCapsuleProperties();
-
-            var lookVector = math.mul(capsuleAuthoring.Orientation, new float3(0f, 0f, 1f));
-            var expectedLookVector = new float3 { y = 1f };
-            Assert.That(
-                math.dot(lookVector, expectedLookVector), Is.EqualTo(1f).Within(k_Tolerance),
-                $"Expected {expectedLookVector} but got {lookVector}"
-            );
-        }
-
-        [Test]
         public void GetCapsuleProperties_WhenShapeIsRotatedElongatedBox_MidpointIsBoxCenter(
             [Values(0f, 1f, 2f, 3f)]float sizeX,
             [Values(0f, 1f, 2f, 3f)]float sizeY,

@@ -229,6 +229,45 @@ namespace Unity.Physics
             return new quaternion(new float4(axis * sinCosHalfAngle.x, sinCosHalfAngle.y));
         }
 
+        /// <summary>
+        /// Convert a quaternion orientation to Euler angles.
+        /// Use this method to calculate angular velocity needed to achieve a target orientation.
+        /// </summary>
+        /// <param name="q">An orientation.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static float3 ToEulerAngles(this quaternion q)
+        {
+            // `q.value.xyz * 2f` is a good fast approximation in most cases
+            // but it is not robust to values we are currently getting from animation
+            // TODO: we should figure out why so we can use a faster alternative here
+
+            var qv = q.value;
+            var d1 = qv * qv.wwww * new float4(2f); // xw, yw, zw, ww
+            var d2 = qv * qv.yzxw * new float4(2f); // xy, yz, zx, ww
+            var d3 = qv * qv;
+
+            const float epsilon = 1e-6f;
+            const float CUTOFF = (1f - 2f * epsilon) * (1f - 2f * epsilon);
+
+            var y1 = d2.z - d1.y;
+            if (y1 * y1 < CUTOFF)
+            {
+                var x1 = d2.y + d1.x;
+                var x2 = d3.z + d3.w - d3.y - d3.x;
+                var z1 = d2.x + d1.z;
+                var z2 = d3.x + d3.w - d3.y - d3.z;
+                return new float3(math.atan2(x1, x2), -math.asin(y1), math.atan2(z1, z2));
+            }
+            else // xzx
+            {
+                y1 = math.clamp(y1, -1f, 1f);
+                var abcd = new float4(d2.z, d1.y, d2.x, d1.z);
+                var x1 = 2f * (abcd.x * abcd.w + abcd.y * abcd.z); // 2 * (ad + bc)
+                var x2 = math.csum(abcd * abcd * new float4(-1f, 1f, -1f, 1f));
+                return new float3(math.atan2(x1, x2), -math.asin(y1), 0f);
+            }
+        }
+
         // Returns the angle in degrees between /from/ and /to/. This is always the smallest
         internal static float Angle(float3 from, float3 to)
         {
