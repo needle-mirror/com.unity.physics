@@ -1,3 +1,23 @@
+## [0.4.1-preview] - 2020-07-28
+
+### Changes
+
+* Run-Time API
+    * Added the following members:
+        * `FloatRange.Mid`
+        * `AABB.ClosestPoint`
+    * Changed the following members/types:
+        * All systems now inherit `SystemBase` instead of `ComponentSystem`.
+
+### Fixes
+
+* When using Unity 2020.1.0b13 or newer, it is now possible to convert mesh colliders inside of sub-scenes when their input meshes do not have read/write enabled. Meshes converted at run-time must still have read/write enabled.
+* Stopped emitting warning messages about physics material properties being upgraded when creating new objects from editor scripts.
+* Fixed warnings from exceptions thrown in Bursted code paths when using Burst 1.4.0.
+* Fixed issue with static layer not being rebuilt when order of entities in chunk changes.
+* Fixed issue with invalid colliders with empty AABB breaking bounding volume hierarchy and making objects "disappear" from the world.
+* Fixed an editor crash when maximum level of composite collider nesting is breached.
+
 ## [0.4.0-preview.5] - 2020-06-18
 
 ### Upgrade guide

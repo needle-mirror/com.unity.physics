@@ -10,7 +10,7 @@ namespace Unity.Physics.Authoring
 {
     /// A system to display debug geometry for all body colliders
     [UpdateAfter(typeof(StepPhysicsWorld))]
-    public class DisplayBodyColliders : ComponentSystem
+    public class DisplayBodyColliders : SystemBase
     {
         BuildPhysicsWorld m_BuildPhysicsWorldSystem;
 
@@ -350,7 +350,7 @@ namespace Unity.Physics.Authoring
                 to = hullIn.Vertices[toIndex];
             }
 
-            void DrawColliderEdges(ConvexCollider* collider, RigidTransform worldFromConvex, bool drawVertices = false)
+            static void DrawColliderEdges(ConvexCollider* collider, RigidTransform worldFromConvex, bool drawVertices = false)
             {
                 Matrix4x4 originalMatrix = Gizmos.matrix;
                 Color originalColor = Gizmos.color;
@@ -433,7 +433,7 @@ namespace Unity.Physics.Authoring
                 internal Vector3 B;
             }
 
-            void DrawColliderEdges(MeshCollider* meshCollider, RigidTransform worldFromCollider)
+            static void DrawColliderEdges(MeshCollider* meshCollider, RigidTransform worldFromCollider)
             {
                 Matrix4x4 originalMatrix = Gizmos.matrix;
                 Color originalColor = Gizmos.color;
@@ -506,7 +506,7 @@ namespace Unity.Physics.Authoring
                 Gizmos.matrix = originalMatrix;
             }
 
-            void DrawColliderEdges(CompoundCollider* compoundCollider, RigidTransform worldFromCompound, bool drawVertices = false)
+            static void DrawColliderEdges(CompoundCollider* compoundCollider, RigidTransform worldFromCompound, bool drawVertices = false)
             {
                 for (int i = 0; i < compoundCollider->NumChildren; i++)
                 {
@@ -517,7 +517,7 @@ namespace Unity.Physics.Authoring
                 }
             }
 
-            void DrawColliderEdges(Collider* collider, RigidTransform worldFromCollider, bool drawVertices = false)
+            static void DrawColliderEdges(Collider* collider, RigidTransform worldFromCollider, bool drawVertices = false)
             {
                 switch (collider->CollisionType)
                 {
@@ -536,6 +536,11 @@ namespace Unity.Physics.Authoring
                         }
                         break;
                 }
+            }
+
+            static void DrawColliderEdges(BlobAssetReference<Collider> collider, RigidTransform worldFromCollider, bool drawVertices)
+            {
+                DrawColliderEdges((Collider*)collider.GetUnsafePtr(), worldFromCollider, drawVertices);
             }
 
             public void DrawConnectivity(RigidBody body, bool drawVertices = false)

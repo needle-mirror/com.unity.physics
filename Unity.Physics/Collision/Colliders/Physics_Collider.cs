@@ -197,7 +197,35 @@ namespace Unity.Physics
                         case ColliderType.Terrain:
                             return ((TerrainCollider*)collider)->NumColliderKeyBits;
                         default:
-                            //Assert.IsTrue(Enum.IsDefined(typeof(ColliderType), collider->Type));
+                            if (collider->CollisionType != CollisionType.Convex)
+                            {
+                                SafetyChecks.ThrowNotImplementedException();
+                            }
+                            return 0;
+                    }
+                }
+            }
+        }
+
+        public unsafe uint TotalNumColliderKeyBits
+        {
+            get
+            {
+                fixed (Collider* collider = &this)
+                {
+                    switch (collider->Type)
+                    {
+                        case ColliderType.Mesh:
+                            return ((MeshCollider*)collider)->TotalNumColliderKeyBits;
+                        case ColliderType.Compound:
+                            return ((CompoundCollider*)collider)->TotalNumColliderKeyBits;
+                        case ColliderType.Terrain:
+                            return ((TerrainCollider*)collider)->TotalNumColliderKeyBits;
+                        default:
+                            if (collider->CollisionType != CollisionType.Convex)
+                            {
+                                SafetyChecks.ThrowNotImplementedException();
+                            }
                             return 0;
                     }
                 }

@@ -26,10 +26,18 @@ namespace Unity.Physics.Tests.Authoring
         [OneTimeSetUp]
         public void OneTimeSetUp()
         {
-            NonReadableMesh = Resources.LoadAll<UnityMesh>("not-readable").Single();
-            Assume.That(NonReadableMesh.isReadable, Is.False, $"{NonReadableMesh} was readable.");
             ReadableMesh = Resources.GetBuiltinResource<UnityMesh>("New-Cylinder.fbx");
             Assume.That(ReadableMesh.isReadable, Is.True, $"{ReadableMesh} was not readable.");
+            NonReadableMesh = UnityMesh.Instantiate(ReadableMesh);
+            NonReadableMesh.UploadMeshData(true);
+            Assume.That(NonReadableMesh.isReadable, Is.False, $"{NonReadableMesh} was readable.");
+        }
+
+        [OneTimeTearDown]
+        public void OneTimeTearDown()
+        {
+            if (NonReadableMesh != null)
+                UnityMesh.DestroyImmediate(NonReadableMesh);
         }
 
         UnityMesh NonReadableMesh { get; set; }

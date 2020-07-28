@@ -1,4 +1,3 @@
-using System;
 using Unity.Collections.LowLevel.Unsafe;
 
 namespace Unity.Physics
@@ -30,10 +29,7 @@ namespace Unity.Physics
             {
                 get
                 {
-#if ENABLE_UNITY_COLLECTIONS_CHECKS
-                    if ((uint)index >= (uint)Length)
-                        throw new IndexOutOfRangeException(string.Format("Index {0} is out of range Length {1}", index, Length));
-#endif
+                    SafetyChecks.CheckIndexAndThrow(index, Length);
                     return ref UnsafeUtility.ArrayElementAsRef<T>((byte*)m_OffsetPtr + *m_OffsetPtr, index);
                 }
             }

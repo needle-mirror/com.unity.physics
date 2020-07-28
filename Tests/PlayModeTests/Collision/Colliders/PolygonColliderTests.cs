@@ -1,10 +1,10 @@
+using System;
 using NUnit.Framework;
 using Unity.Burst;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Mathematics;
-using Assert = UnityEngine.Assertions.Assert;
 using TestUtils = Unity.Physics.Tests.Utils.TestUtils;
-using Unity.Collections.LowLevel.Unsafe;
 
 namespace Unity.Physics.Tests.Collision.Colliders
 {
@@ -126,91 +126,75 @@ namespace Unity.Physics.Tests.Collision.Colliders
             Assert.AreEqual(CollisionType.Convex, quadCollider.CollisionType);
         }
 
-        /// <summary>
-        /// Test that exceptions are thrown properly for invalid arguments of <see cref="PolygonCollider"/> creation.
-        /// </summary>
+#if ENABLE_UNITY_COLLECTIONS_CHECKS
         [Test]
-        public void TestCreateInvalid()
+        public void PolygonCollider_CreateTriangle_WhenArgOutOfRange_Throws(
+            [Values(0, 1, 2)] int errantArg,
+            [Values(float.PositiveInfinity, float.NegativeInfinity, float.NaN)] float errantValue
+        )
         {
-            // +inf vertex
+            var vertices = new[]
             {
-                float3[] vertices =
-                {
-                new float3(-4.5f, float.PositiveInfinity, 1.0f),
-                new float3(3.4f, 2.7f, 1.0f),
-                new float3(3.4f, 0.7f, 1.0f),
-                new float3(-3.4f, 1.2f, 1.1f)
-                };
-                TestUtils.ThrowsException<System.ArgumentException>(
-                    () => PolygonCollider.CreateTriangle(vertices[0], vertices[1], vertices[2])
-                );
-                TestUtils.ThrowsException<System.ArgumentException>(
-                    () => PolygonCollider.CreateQuad(vertices[0], vertices[1], vertices[2], vertices[3])
-                );
-            }
-
-            // -inf vertex
-            {
-                float3[] vertices =
-                {
-                new float3(-4.5f, float.NegativeInfinity, 1.0f),
-                new float3(3.4f, 2.7f, 1.0f),
-                new float3(3.4f, 0.7f, 1.0f),
-                new float3(-3.4f, 1.2f, 1.1f)
-                };
-                TestUtils.ThrowsException<System.ArgumentException>(
-                    () => PolygonCollider.CreateTriangle(vertices[0], vertices[1], vertices[2])
-                );
-                TestUtils.ThrowsException<System.ArgumentException>(
-                    () => PolygonCollider.CreateQuad(vertices[0], vertices[1], vertices[2], vertices[3])
-                );
-            }
-
-            // nan vertex
-            {
-                float3[] vertices =
-                {
-                new float3(-4.5f, float.NaN, 1.0f),
-                new float3(3.4f, 2.7f, 1.0f),
-                new float3(3.4f, 0.7f, 1.0f),
-                new float3(-3.4f, 1.2f, 1.1f)
-                };
-                TestUtils.ThrowsException<System.ArgumentException>(
-                    () => PolygonCollider.CreateTriangle(vertices[0], vertices[1], vertices[2])
-                );
-                TestUtils.ThrowsException<System.ArgumentException>(
-                    () => PolygonCollider.CreateQuad(vertices[0], vertices[1], vertices[2], vertices[3])
-                );
-            }
-
-            // non-planar quad
-            {
-                float3[] nonPlanarQuad =
-                {
-                new float3(-4.5f, 0.0f, 1.0f),
-                new float3(3.4f, 0.7f, 1.0f),
-                new float3(3.4f, 2.7f, 1.0f),
-                new float3(-3.4f, 1.2f, 1.1f)
-                };
-                TestUtils.ThrowsException<System.ArgumentException>(
-                    () => PolygonCollider.CreateQuad(nonPlanarQuad[0], nonPlanarQuad[1], nonPlanarQuad[2], nonPlanarQuad[3])
-                );
-            }
-
-            // non-planar quad unsorted
-            {
-                float3[] nonPlanarQuad =
-                {
-                new float3(-4.5f, -0.30f, 1.0f),
-                new float3(3.4f, 2.7f, 1.0f),
-                new float3(3.4f, -0.7f, 1.0f),
-                new float3(-3.4f, 1.2f, 1.1f)
+                math.select(default, new float3(errantValue), errantArg == 0),
+                math.select(default, new float3(errantValue), errantArg == 1),
+                math.select(default, new float3(errantValue), errantArg == 2)
             };
-                TestUtils.ThrowsException<System.ArgumentException>(
-                    () => PolygonCollider.CreateQuad(nonPlanarQuad[0], nonPlanarQuad[1], nonPlanarQuad[2], nonPlanarQuad[3])
-                );
-            }
+
+            var ex = Assert.Throws<ArgumentException>(() => PolygonCollider.CreateTriangle(vertices[0], vertices[1], vertices[2]));
+            Assert.That(ex.ParamName, Is.EqualTo($"vertex{errantArg}"));
         }
+
+        [Test]
+        public void PolygonCollider_CreateQuad_WhenArgOutOfRange_Throws(
+            [Values(0, 1, 2, 3)] int errantArg,
+            [Values(float.PositiveInfinity, float.NegativeInfinity, float.NaN)] float errantValue
+        )
+        {
+            var vertices = new[]
+            {
+                math.select(default, new float3(errantValue), errantArg == 0),
+                math.select(default, new float3(errantValue), errantArg == 1),
+                math.select(default, new float3(errantValue), errantArg == 2),
+                math.select(default, new float3(errantValue), errantArg == 3)
+            };
+
+            var ex = Assert.Throws<ArgumentException>(() => PolygonCollider.CreateQuad(vertices[0], vertices[1], vertices[2],
+            vertices[3]));
+            Assert.That(ex.ParamName, Is.EqualTo($"vertex{errantArg}"));
+        }
+
+        [TestCase(
+            -4.5f, 0.0f, 1.0f,
+            3.4f, 0.7f, 1.0f,
+            3.4f, 2.7f, 1.0f,
+            -3.4f, 1.2f, 1.1f,
+            TestName = "Sorted quad vertices"
+        )]
+        [TestCase(
+            -4.5f, -0.30f, 1.0f,
+            3.4f, 2.7f, 1.0f,
+            3.4f, -0.7f, 1.0f,
+            -3.4f, 1.2f, 1.1f,
+            TestName = "Unsorted quad vertices"
+        )]
+        public void PolygonCollider_CreateQuad_WhenNotCoplanar_Throws(
+            float v00, float v01, float v02,
+            float v10, float v11, float v12,
+            float v20, float v21, float v22,
+            float v30, float v31, float v32
+        )
+        {
+            Assert.Throws<ArgumentException>(() =>
+            {
+                PolygonCollider.CreateQuad(
+                    new float3(v00, v01, v02),
+                    new float3(v10, v11, v12),
+                    new float3(v20, v21, v22),
+                    new float3(v30, v31, v32)
+                );
+            });
+        }
+#endif
 
         #endregion
 

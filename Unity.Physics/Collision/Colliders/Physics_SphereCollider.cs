@@ -1,5 +1,4 @@
 using System;
-using System.ComponentModel;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -24,18 +23,6 @@ namespace Unity.Physics
         }
 
         public override int GetHashCode() => unchecked((int)math.hash(new float4(m_Center, m_Radius)));
-
-        internal void Validate()
-        {
-            if (math.any(!math.isfinite(m_Center)))
-            {
-                throw new ArgumentException("Invalid sphere center");
-            }
-            if (!math.isfinite(m_Radius) || m_Radius <= 0.0f)
-            {
-                throw new ArgumentException("Invalid sphere radius");
-            }
-        }
     }
 
     // A collider in the shape of a sphere
@@ -97,9 +84,9 @@ namespace Unity.Physics
             SetGeometry(geometry);
         }
 
-        private void SetGeometry(SphereGeometry geometry)
+        void SetGeometry(SphereGeometry geometry)
         {
-            geometry.Validate();
+            SafetyChecks.CheckValidAndThrow(geometry, nameof(geometry));
 
             m_Header.Version += 1;
             ConvexHull.ConvexRadius = geometry.Radius;

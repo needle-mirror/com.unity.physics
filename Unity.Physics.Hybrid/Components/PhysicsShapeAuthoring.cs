@@ -9,6 +9,7 @@ using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityComponent = UnityEngine.Component;
 using UnityMesh = UnityEngine.Mesh;
 
@@ -282,7 +283,7 @@ namespace Unity.Physics.Authoring
         public void GetConvexHullProperties(NativeList<float3> pointCloud) =>
             GetConvexHullProperties(pointCloud, true, default, default, default, default);
 
-        internal unsafe void GetConvexHullProperties(
+        internal void GetConvexHullProperties(
             NativeList<float3> pointCloud, bool validate,
             NativeList<HashableShapeInputs> inputs, NativeList<int> allSkinIndices, NativeList<float> allBlendShapeWeights,
             HashSet<UnityMesh> meshAssets
@@ -298,17 +299,13 @@ namespace Unity.Physics.Authoring
                 allBlendShapeWeights.Clear();
             meshAssets?.Clear();
 
-            var triangles = pointCloud.IsCreated
-                ? new NativeList<int3>(pointCloud.Capacity - 2, Allocator.Temp)
-                : default;
-
             if (m_CustomMesh != null)
             {
                 if (validate && !m_CustomMesh.IsValidForConversion(gameObject))
                     return;
 
                 AppendMeshPropertiesToNativeBuffers(
-                    transform.localToWorldMatrix, m_CustomMesh, pointCloud, triangles, validate, inputs, meshAssets
+                    transform.localToWorldMatrix, m_CustomMesh, pointCloud, default, validate, inputs, meshAssets
                 );
             }
             else
@@ -320,7 +317,7 @@ namespace Unity.Physics.Authoring
                         if (scope.IsChildActiveAndBelongsToShape(meshFilter, validate))
                         {
                             AppendMeshPropertiesToNativeBuffers(
-                                meshFilter.transform.localToWorldMatrix, meshFilter.sharedMesh, pointCloud, triangles, validate, inputs, meshAssets
+                                meshFilter.transform.localToWorldMatrix, meshFilter.sharedMesh, pointCloud, default, validate, inputs, meshAssets
                             );
                         }
                     }
@@ -338,9 +335,6 @@ namespace Unity.Physics.Authoring
                         inputs.AddRange(skinnedInputs);
                 }
             }
-
-            if (triangles.IsCreated)
-                triangles.Dispose();
         }
 
         internal static void GetAllSkinnedPointsInHierarchyBelongingToShape(
@@ -494,30 +488,85 @@ namespace Unity.Physics.Authoring
 
             var childToShape = math.mul(transform.worldToLocalMatrix, localToWorld);
 
-            var offset = 0;
-            if (vertices.IsCreated)
-            {
-                offset = vertices.Length;
-                mesh.GetVertices(s_Vertices);
-                if (vertices.Capacity < vertices.Length + s_Vertices.Count)
-                    vertices.Capacity = vertices.Length + s_Vertices.Count;
-                foreach (var v in s_Vertices)
-                    vertices.Add(math.mul(childToShape, new float4(v, 1f)).xyz);
-                s_Vertices.Clear();
-            }
+            AppendMeshPropertiesToNativeBuffers(childToShape, mesh, vertices, triangles, inputs, meshAssets);
+        }
 
-            if (triangles.IsCreated)
+        internal static void AppendMeshPropertiesToNativeBuffers(
+            float4x4 childToShape, UnityMesh mesh, NativeList<float3> vertices, NativeList<int3> triangles,
+            NativeList<HashableShapeInputs> inputs, HashSet<UnityMesh> meshAssets
+        )
+        {
+#if UNITY_2020_1_OR_NEWER
+            var offset = 0u;
+#if UNITY_EDITOR
+            // TODO: when min spec is 2020.1, collect all meshes and their data via single Burst job rather than one at a time
+            using (var meshData = UnityEditor.MeshUtility.AcquireReadOnlyMeshData(mesh))
+#else
+            using (var meshData = UnityMesh.AcquireReadOnlyMeshData(mesh))
+#endif
+#else
+            var offset = 0;
+#endif
             {
-                for (var subMesh = 0; subMesh < mesh.subMeshCount; ++subMesh)
+                if (vertices.IsCreated)
                 {
-                    mesh.GetIndices(s_Indices, subMesh);
-                    var numTriangles = s_Indices.Count / 3;
-                    if (triangles.Capacity < triangles.Length + numTriangles)
-                        triangles.Capacity = triangles.Length + numTriangles;
-                    for (var i = 0; i < numTriangles; i++)
-                        triangles.Add(new int3(offset + s_Indices[i * 3], offset + s_Indices[i * 3 + 1], offset + s_Indices[i * 3 + 2]));
+#if UNITY_2020_1_OR_NEWER
+                    offset = (uint)vertices.Length;
+                    var tmpVertices = new NativeArray<Vector3>(meshData[0].vertexCount, Allocator.Temp);
+                    meshData[0].GetVertices(tmpVertices);
+#else
+                    offset = vertices.Length;
+                    mesh.GetVertices(s_Vertices);
+                    var tmpVertices = s_Vertices.ToNativeArray(Allocator.Temp);
+#endif
+                    if (vertices.Capacity < vertices.Length + tmpVertices.Length)
+                        vertices.Capacity = vertices.Length + tmpVertices.Length;
+                    foreach (var v in tmpVertices)
+                        vertices.Add(math.mul(childToShape, new float4(v, 1f)).xyz);
                 }
-                s_Indices.Clear();
+
+                if (triangles.IsCreated)
+                {
+#if UNITY_2020_1_OR_NEWER
+                    switch (meshData[0].indexFormat)
+                    {
+                        case IndexFormat.UInt16:
+                            var indices16 = meshData[0].GetIndexData<ushort>();
+                            var numTriangles = indices16.Length / 3;
+                            if (triangles.Capacity < triangles.Length + numTriangles)
+                                triangles.Capacity = triangles.Length + numTriangles;
+                            for (var sm = 0; sm < meshData[0].subMeshCount; ++sm)
+                            {
+                                var subMesh = meshData[0].GetSubMesh(sm);
+                                for (var i = 0; i < subMesh.indexCount; i += 3)
+                                    triangles.Add((int3)new uint3(offset + indices16[i], offset + indices16[i + 1], offset + indices16[i + 2]));
+                            }
+                            break;
+                        case IndexFormat.UInt32:
+                            var indices32 = meshData[0].GetIndexData<uint>();
+                            numTriangles = indices32.Length / 3;
+                            if (triangles.Capacity < triangles.Length + numTriangles)
+                                triangles.Capacity = triangles.Length + numTriangles;
+                            for (var sm = 0; sm < meshData[0].subMeshCount; ++sm)
+                            {
+                                var subMesh = meshData[0].GetSubMesh(sm);
+                                for (var i = 0; i < subMesh.indexCount; i += 3)
+                                    triangles.Add((int3)new uint3(offset + indices32[i], offset + indices32[i + 1], offset + indices32[i + 2]));
+                            }
+                            break;
+                    }
+#else
+                    for (var subMesh = 0; subMesh < mesh.subMeshCount; ++subMesh)
+                    {
+                        mesh.GetIndices(s_Indices, subMesh);
+                        var numTriangles = s_Indices.Count / 3;
+                        if (triangles.Capacity < triangles.Length + numTriangles)
+                            triangles.Capacity = triangles.Length + numTriangles;
+                        for (var i = 0; i < numTriangles; i++)
+                            triangles.Add(new int3(offset + s_Indices[i * 3], offset + s_Indices[i * 3 + 1], offset + s_Indices[i * 3 + 2]));
+                    }
+#endif
+                }
             }
 
             if (inputs.IsCreated)

@@ -3,6 +3,7 @@ using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Jobs.LowLevel.Unsafe;
+using Unity.Mathematics;
 
 namespace Unity.Physics
 {
@@ -240,10 +241,8 @@ namespace Unity.Physics
         // Steps the simulation immediately on a single thread without spawning any jobs.
         public static void StepImmediate(SimulationStepInput input, ref SimulationContext simulationContext)
         {
-            if (input.TimeStep < 0)
-                throw new ArgumentOutOfRangeException();
-            if (input.NumSolverIterations <= 0)
-                throw new ArgumentOutOfRangeException();
+            SafetyChecks.CheckFiniteAndPositiveAndThrow(input.TimeStep, nameof(input.TimeStep));
+            SafetyChecks.CheckInRangeAndThrow(input.NumSolverIterations, new int2(1, int.MaxValue), nameof(input.NumSolverIterations));
 
             if (input.World.NumDynamicBodies == 0)
             {
@@ -321,10 +320,8 @@ namespace Unity.Physics
         // Behavior doesn't change regardless of the threadCountHint provided.
         public unsafe SimulationJobHandles ScheduleStepJobs(SimulationStepInput input, SimulationCallbacks callbacksIn, JobHandle inputDeps, int threadCountHint = 0)
         {
-            if (input.TimeStep < 0)
-                throw new ArgumentOutOfRangeException();
-            if (input.NumSolverIterations <= 0)
-                throw new ArgumentOutOfRangeException();
+            SafetyChecks.CheckFiniteAndPositiveAndThrow(input.TimeStep, nameof(input.TimeStep));
+            SafetyChecks.CheckInRangeAndThrow(input.NumSolverIterations, new int2(1, int.MaxValue), nameof(input.NumSolverIterations));
 
             bool singleThreadedSim = (threadCountHint <= 0);
 

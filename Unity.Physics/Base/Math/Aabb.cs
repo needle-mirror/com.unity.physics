@@ -83,6 +83,16 @@ namespace Unity.Physics
         {
             return math.all(Max >= other.Min & Min <= other.Max);
         }
+
+
+        /// <summary>
+        /// Returns the closest point on the bounds of the AABB to the specified position.
+        /// <param name="position">A target point in space.</param>
+        /// </summary>
+        public float3 ClosestPoint(float3 position)
+        {
+            return math.min(Max,math.max(Min, position));
+        }
     }
 
     // Helper functions
@@ -92,6 +102,12 @@ namespace Unity.Physics
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Aabb TransformAabb(RigidTransform transform, Aabb aabb)
         {
+            // Transforming an empty AABB results in NaNs!
+            if (!aabb.IsValid)
+            {
+                return aabb;
+            }
+
             float3 halfExtentsInA = aabb.Extents * 0.5f;
             float3 x = math.rotate(transform.rot, new float3(halfExtentsInA.x, 0, 0));
             float3 y = math.rotate(transform.rot, new float3(0, halfExtentsInA.y, 0));
@@ -111,6 +127,12 @@ namespace Unity.Physics
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Aabb TransformAabb(MTransform transform, Aabb aabb)
         {
+            // Transforming an empty AABB results in NaNs!
+            if (!aabb.IsValid)
+            {
+                return aabb;
+            }
+
             float3 halfExtentsInA = aabb.Extents * 0.5f;
             float3 transformedX = math.abs(transform.Rotation.c0 * halfExtentsInA.x);
             float3 transformedY = math.abs(transform.Rotation.c1 * halfExtentsInA.y);

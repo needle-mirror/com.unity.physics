@@ -616,7 +616,10 @@ namespace Unity.Physics
             public void Advance()
             {
                 Index++;
-                update();
+                if (Valid())
+                {
+                    update();
+                }
             }
 
             private void update()

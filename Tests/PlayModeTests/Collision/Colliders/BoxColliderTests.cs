@@ -4,7 +4,6 @@ using Unity.Burst;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Mathematics;
-using Assert = UnityEngine.Assertions.Assert;
 using TestUtils = Unity.Physics.Tests.Utils.TestUtils;
 
 namespace Unity.Physics.Tests.Collision.Colliders
@@ -55,98 +54,51 @@ namespace Unity.Physics.Tests.Collision.Colliders
             Assert.AreEqual(ColliderType.Box, boxCollider.Type);
         }
 
-        /// <summary>
-        /// Create <see cref="BoxCollider"/> with invalid center/orientation/size/convexRadius and
-        /// check that exceptions are being thrown for invalid values
-        /// </summary>
+#if ENABLE_UNITY_COLLECTIONS_CHECKS
         [Test]
-        public void TestBoxColliderCreateInvalid()
+        public void BoxCollider_Create_WhenCenterInvalid_Throws(
+            [Values(float.PositiveInfinity, float.NegativeInfinity, float.NaN)] float errantValue
+        )
         {
-            var geometry = new BoxGeometry
-            {
-                Center = new float3(1.0f, 0.0f, 0.0f),
-                Orientation = quaternion.AxisAngle(math.normalize(new float3(4.3f, 1.2f, 0.1f)), 1085.0f),
-                Size = new float3(1.0f, 2.0f, 3.0f),
-                BevelRadius = 0.45f
-            };
+            var geometry = new BoxGeometry { Center = new float3(errantValue), Size = new float3(1f), Orientation = quaternion.identity };
 
-            // Invalid center, positive infinity
-            {
-                var invalidGeometry = geometry;
-                invalidGeometry.Center = new float3(float.PositiveInfinity, 1.0f, 1.0f);
-                TestUtils.ThrowsException<ArgumentException>(() => BoxCollider.Create(invalidGeometry));
-            }
-
-            // Invalid center, positive infinity
-            {
-                var invalidGeometry = geometry;
-                invalidGeometry.Center = new float3(float.NegativeInfinity, 1.0f, 1.0f);
-                TestUtils.ThrowsException<ArgumentException>(() => BoxCollider.Create(invalidGeometry));
-            }
-
-            // Invalid center, nan
-            {
-                var invalidGeometry = geometry;
-                invalidGeometry.Center = new float3(float.NaN, 1.0f, 1.0f);
-                TestUtils.ThrowsException<ArgumentException>(() => BoxCollider.Create(invalidGeometry));
-            }
-
-            // Negative size
-            {
-                var invalidGeometry = geometry;
-                invalidGeometry.Size = new float3(-1.0f, 1.0f, 1.0f);
-                TestUtils.ThrowsException<ArgumentException>(() => BoxCollider.Create(invalidGeometry));
-            }
-
-            // Invalid size, positive inf
-            {
-                var invalidGeometry = geometry;
-                invalidGeometry.Size = new float3(float.PositiveInfinity, 1.0f, 1.0f);
-                TestUtils.ThrowsException<ArgumentException>(() => BoxCollider.Create(invalidGeometry));
-            }
-
-            // Invalid size, negative inf
-            {
-                var invalidGeometry = geometry;
-                invalidGeometry.Size = new float3(float.NegativeInfinity, 1.0f, 1.0f);
-                TestUtils.ThrowsException<ArgumentException>(() => BoxCollider.Create(invalidGeometry));
-            }
-
-            // Invalid size, nan
-            {
-                var invalidGeometry = geometry;
-                invalidGeometry.Size = new float3(float.NaN, 1.0f, 1.0f);
-                TestUtils.ThrowsException<ArgumentException>(() => BoxCollider.Create(invalidGeometry));
-            }
-
-            // Negative bevel radius
-            {
-                var invalidGeometry = geometry;
-                invalidGeometry.BevelRadius = -0.0001f;
-                TestUtils.ThrowsException<ArgumentException>(() => BoxCollider.Create(invalidGeometry));
-            }
-
-            // Invalid bevel radius, +inf
-            {
-                var invalidGeometry = geometry;
-                invalidGeometry.BevelRadius = float.PositiveInfinity;
-                TestUtils.ThrowsException<ArgumentException>(() => BoxCollider.Create(invalidGeometry));
-            }
-
-            // Invalid bevel radius, -inf
-            {
-                var invalidGeometry = geometry;
-                invalidGeometry.BevelRadius = float.NegativeInfinity;
-                TestUtils.ThrowsException<ArgumentException>(() => BoxCollider.Create(invalidGeometry));
-            }
-
-            // Invalid bevel radius, nan
-            {
-                var invalidGeometry = geometry;
-                invalidGeometry.BevelRadius = float.NaN;
-                TestUtils.ThrowsException<ArgumentException>(() => BoxCollider.Create(invalidGeometry));
-            }
+            var ex = Assert.Throws<ArgumentException>(() => BoxCollider.Create(geometry));
+            Assert.That(ex.Message, Does.Match(nameof(BoxGeometry.Center)));
         }
+
+        [Test]
+        public void BoxCollider_Create_WhenOrientationInvalid_Throws(
+            [Values(float.PositiveInfinity, float.NegativeInfinity, float.NaN, 0f)] float errantValue
+        )
+        {
+            var geometry = new BoxGeometry { Size = new float3(1f), Orientation = new quaternion(0f, 0f, 0f, errantValue) };
+
+            var ex = Assert.Throws<ArgumentException>(() => BoxCollider.Create(geometry));
+            Assert.That(ex.Message, Does.Match(nameof(BoxGeometry.Orientation)));
+        }
+
+        [Test]
+        public void BoxCollider_Create_WhenSizeInvalid_Throws(
+            [Values(float.PositiveInfinity, float.NegativeInfinity, float.NaN, -1f)] float errantValue
+        )
+        {
+            var geometry = new BoxGeometry { Size = new float3(errantValue), Orientation = quaternion.identity };
+
+            var ex = Assert.Throws<ArgumentException>(() => BoxCollider.Create(geometry));
+            Assert.That(ex.Message, Does.Match(nameof(BoxGeometry.Size)));
+        }
+
+        [Test]
+        public void BoxCollider_Create_WhenBevelRadiusInvalid_Throws(
+            [Values(float.PositiveInfinity, float.NegativeInfinity, float.NaN, -1f, 0.55f)] float errantValue
+        )
+        {
+            var geometry = new BoxGeometry { Size = new float3(1f), Orientation = quaternion.identity, BevelRadius = errantValue};
+
+            var ex = Assert.Throws<ArgumentException>(() => BoxCollider.Create(geometry));
+            Assert.That(ex.Message, Does.Match(nameof(BoxGeometry.BevelRadius)));
+        }
+#endif
 
         #endregion
 

@@ -1,4 +1,3 @@
-using System;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -65,8 +64,7 @@ namespace Unity.Physics
         // The source colliders are copied into the compound, so that it becomes one blob.
         public static unsafe BlobAssetReference<Collider> Create(NativeArray<ColliderBlobInstance> children)
         {
-            if (children.Length == 0)
-                throw new ArgumentException();
+            SafetyChecks.CheckNotEmptyAndThrow(children, nameof(children));
 
             // Get the total required memory size for the compound plus all its children,
             // and the combined filter of all children
@@ -102,6 +100,8 @@ namespace Unity.Physics
             byte* end = (byte*)childrenPtr + UnsafeUtility.SizeOf<Child>() * children.Length;
             end = (byte*)Math.NextMultipleOf16((ulong)end);
 
+            uint maxTotalNumColliderKeyBits = 0;
+
             // Copy children
             for (int i = 0; i < children.Length; i++)
             {
@@ -117,6 +117,8 @@ namespace Unity.Physics
                 }
                 childrenPtr[i].m_ColliderOffset = (int)((byte*)dstAddr - (byte*)(&childrenPtr[i].m_ColliderOffset));
                 childrenPtr[i].CompoundFromChild = children[i].CompoundFromChild;
+
+                maxTotalNumColliderKeyBits = math.max(maxTotalNumColliderKeyBits, collider->TotalNumColliderKeyBits);
             }
 
             // Build mass properties
@@ -129,6 +131,16 @@ namespace Unity.Physics
             compoundCollider->m_BvhNodesBlob.Length = numNodes;
             UnsafeUtility.MemCpy(end, nodes.GetUnsafeReadOnlyPtr(), bvhSize);
             end += bvhSize;
+
+            // Validate nesting level of composite colliders.
+            compoundCollider->TotalNumColliderKeyBits = maxTotalNumColliderKeyBits + compoundCollider->NumColliderKeyBits;
+
+            // If TotalNumColliderKeyBits is greater than 32, it means maximum nesting level of composite colliders has been breached.
+            // ColliderKey has 32 bits so it can't handle infinite nesting of composite colliders.
+            if (compoundCollider->TotalNumColliderKeyBits > 32)
+            {
+                SafetyChecks.ThrowArgumentException(nameof(children), "Composite collider exceeded maximum level of nesting!");
+            }
 
             // Copy to blob asset
             int usedSize = (int)(end - (byte*)compoundCollider);
@@ -351,6 +363,8 @@ namespace Unity.Physics
         }
 
         public uint NumColliderKeyBits => (uint)(32 - math.lzcnt(NumChildren));
+
+        internal uint TotalNumColliderKeyBits { get; private set; }
 
         public unsafe bool GetChild(ref ColliderKey key, out ChildCollider child)
         {

@@ -38,8 +38,7 @@ namespace Unity.Physics
 
         public static PhysicsMass CreateDynamic(MassProperties massProperties, float mass)
         {
-            if (mass <= 0)
-                throw new System.ArgumentOutOfRangeException();
+            SafetyChecks.CheckFiniteAndPositiveAndThrow(mass, nameof(mass));
 
             return new PhysicsMass
             {

@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using Unity.Burst;
 using Unity.Collections;
@@ -6,7 +5,6 @@ using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
-using UnityEngine;
 using Hash128 = Unity.Entities.Hash128;
 
 namespace Unity.Physics.Authoring
@@ -55,7 +53,7 @@ namespace Unity.Physics.Authoring
         }
 
         [BurstCompile(CompileSynchronously = true)]
-        unsafe struct ProduceConvexCollidersJob : IJobParallelFor
+        struct ProduceConvexCollidersJob : IJobParallelFor
         {
             [DeallocateOnJobCompletion]
             [ReadOnly] public NativeArray<Hash128> InputKeys;

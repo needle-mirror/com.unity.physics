@@ -686,7 +686,7 @@ namespace Unity.Physics
         }
 
         // Set the face index for each triangle. Triangles lying in the same plane will have the same face index.
-        public unsafe void BuildFaceIndices(NativeArray<Plane>? planes = null)
+        public void BuildFaceIndices(NativeArray<Plane> planes = default)
         {
             const float convexEps = 1e-5f; // Maximum error allowed in face convexity
 
@@ -694,9 +694,9 @@ namespace Unity.Physics
             NumFaceVertices = 0;
 
             NativeArray<bool> planesUsed = new NativeArray<bool>();
-            if (planes != null)
+            if (planes.IsCreated)
             {
-                planesUsed = new NativeArray<bool>(planes.Value.Length, Allocator.Temp, NativeArrayOptions.ClearMemory);
+                planesUsed = new NativeArray<bool>(planes.Length, Allocator.Temp, NativeArrayOptions.ClearMemory);
             }
 
             switch (Dimension)
@@ -757,10 +757,10 @@ namespace Unity.Physics
                             float3 a = Vertices[t.Vertex0].Position;
                             float3 b = Vertices[t.Vertex1].Position;
                             float3 c = Vertices[t.Vertex2].Position;
-                            for (int i = 0; i < planes.Value.Length; i++)
+                            for (int i = 0; i < planes.Length; i++)
                             {
                                 if (planesUsed[i]) continue;
-                                Plane currentPlane = planes.Value[i];
+                                Plane currentPlane = planes[i];
                                 float3 errors = new float3(currentPlane.SignedDistanceToPoint(a), currentPlane.SignedDistanceToPoint(b), currentPlane.SignedDistanceToPoint(c));
                                 float error = math.cmax(math.abs(errors));
                                 if (error < bestError)
@@ -780,7 +780,7 @@ namespace Unity.Physics
                         else
                         {
                             planesUsed[bestPlane] = true;
-                            plane = planes.Value[bestPlane];
+                            plane = planes[bestPlane];
                         }
                         Planes[newFaceIndex] = plane;
 

@@ -396,6 +396,7 @@ namespace Unity.Physics
 
             internal Edge Links(int edge)
             {
+                SafetyChecks.CheckIndexAndThrow(edge, 3);
                 switch (edge)
                 {
                     case 0:
@@ -405,12 +406,13 @@ namespace Unity.Physics
                     case 2:
                         return Edge2;
                     default:
-                        throw new IndexOutOfRangeException();
+                        return default;
                 }
             }
 
             internal void SetLinks(int edge, Edge newEdge)
             {
+                SafetyChecks.CheckIndexAndThrow(edge, 3);
                 switch (edge)
                 {
                     case 0:
@@ -422,8 +424,6 @@ namespace Unity.Physics
                     case 2:
                         Edge2 = newEdge;
                         break;
-                    default:
-                        throw new IndexOutOfRangeException();
                 }
             }
             
@@ -769,7 +769,7 @@ namespace Unity.Physics
                     int thisEdgeIndex = Vertices[vertexI].FirstEdge + counters[vertexI]++;
                     Edges[thisEdgeIndex] = new Edge { Triangle = triangleIndex, Start = i, IsValid = true };
 
-                    int vertexJ = triangles[triangleIndex][j]; ;
+                    int vertexJ = triangles[triangleIndex][j];
                     Vertex other = Vertices[vertexJ];
                     int count = counters[vertexJ];
 

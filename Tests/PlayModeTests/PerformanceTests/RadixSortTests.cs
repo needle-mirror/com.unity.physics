@@ -1,5 +1,4 @@
-﻿using System;
-using NUnit.Framework;
+﻿using NUnit.Framework;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
@@ -50,13 +49,7 @@ namespace Unity.Physics.Tests.PerformanceTests
             }
         }
 
-
-
-#if UNITY_2019_2_OR_NEWER
         [Test, Performance]
-#else
-        [PerformanceTest]
-#endif
         [TestCase(1, TestName = "PerfRadixPassOnBodyA 1")]
         [TestCase(10, TestName = "PerfRadixPassOnBodyA 10")]
         [TestCase(100, TestName = "PerfRadixPassOnBodyA 100")]
@@ -111,18 +104,14 @@ namespace Unity.Physics.Tests.PerformanceTests
             tempCount.Dispose();
         }
 
-#if UNITY_2019_2_OR_NEWER
         [Test, Performance]
-#else
-        [PerformanceTest]
-#endif
         [TestCase(1, TestName = "PerfDefaultSortOnSubarrays 1")]
         [TestCase(10, TestName = "PerfDefaultSortOnSubarrays 10")]
         [TestCase(100, TestName = "PerfDefaultSortOnSubarrays 100")]
         [TestCase(1000, TestName = "PerfDefaultSortOnSubarrays 1000")]
         [TestCase(10000, TestName = "PerfDefaultSortOnSubarrays 10 000")]
         [TestCase(100000, TestName = "PerfDefaultSortOnSubarrays 100 000")]
-        unsafe public void PerfDefaultSortOnSubarrays(int count)
+        public unsafe void PerfDefaultSortOnSubarrays(int count)
         {
             int maxBodyIndex = (int)math.pow(count, 0.7f);
             int numDigits = 0;

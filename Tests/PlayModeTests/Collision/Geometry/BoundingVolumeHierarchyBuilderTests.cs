@@ -1,5 +1,5 @@
-﻿using NUnit.Framework;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
+using NUnit.Framework;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -484,11 +484,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
             }
         }
 
-#if UNITY_2019_2_OR_NEWER
         [Test, Performance]
-#else
-        [PerformanceTest]
-#endif
         [TestCase(100, true, TestName = "TreeOverlapPerfTest 200")]
         [TestCase(1000, true, TestName = "TreeOverlapPerfTest 2000")]
         public void TreeOverlapPerfTest(int elementCount, bool newOverlap)

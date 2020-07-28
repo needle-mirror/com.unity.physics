@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
@@ -213,8 +212,6 @@ namespace Unity.Physics.Authoring
     [ConverterVersion("adamm", 4)]
     public sealed class LegacyMeshColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacyMesh>
     {
-        List<Vector3> m_Vertices = new List<Vector3>(65535 / 2);
-
         internal override ShapeComputationData GenerateComputationData(
             LegacyMesh shape, ColliderInstance colliderInstance,
             NativeList<float3> allConvexHullPoints, NativeList<float3> allMeshVertices, NativeList<int3> allMeshTriangles,
@@ -285,10 +282,15 @@ namespace Unity.Physics.Authoring
                 }
                 else
                 {
-                    shape.sharedMesh.GetVertices(m_Vertices);
-                    var pointCloud = new NativeArray<float3>(shape.sharedMesh.vertexCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-                    for (int i = 0, count = m_Vertices.Count; i < count; ++i)
-                        pointCloud[i] = math.mul(bakeFromShape, new float4(m_Vertices[i], 1f)).xyz;
+                    var pointCloud = new NativeList<float3>(shape.sharedMesh.vertexCount, Allocator.Temp);
+                    var triangles = new NativeList<int3>(shape.sharedMesh.triangles.Length / 3, Allocator.Temp);
+                    PhysicsShapeAuthoring.AppendMeshPropertiesToNativeBuffers(
+                        float4x4.identity, shape.sharedMesh,
+                        pointCloud, triangles,
+                        default, default
+                    );
+                    for (int i = 0, count = pointCloud.Length; i < count; ++i)
+                        pointCloud[i] = math.mul(bakeFromShape, new float4(pointCloud[i], 1f)).xyz;
 
                     if (shape.convex)
                     {
@@ -298,8 +300,6 @@ namespace Unity.Physics.Authoring
                     }
                     else
                     {
-                        var indices = new NativeArray<int>(shape.sharedMesh.triangles, Allocator.Temp);
-                        var triangles = indices.Reinterpret<int3>(UnsafeUtility.SizeOf<int>());
                         if (pointCloud.Length == 0 || triangles.Length == 0)
                         {
                             throw new InvalidOperationException(

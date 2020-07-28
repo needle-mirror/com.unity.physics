@@ -1,9 +1,9 @@
+using System;
 using NUnit.Framework;
 using Unity.Burst;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Mathematics;
-using Assert = UnityEngine.Assertions.Assert;
 using TestUtils = Unity.Physics.Tests.Utils.TestUtils;
 
 namespace Unity.Physics.Tests.Collision.Colliders
@@ -49,89 +49,32 @@ namespace Unity.Physics.Tests.Collision.Colliders
             TestUtils.AreEqual(geometry.Radius, capsuleCollider.Geometry.Radius);
         }
 
-        /// <summary>
-        /// Test if <see cref="CapsuleCollider"/> throws expected exceptions when created with invalid arguments
-        /// </summary>
+#if ENABLE_UNITY_COLLECTIONS_CHECKS
         [Test]
-        public void TestCapsuleColliderCreateInvalid()
+        public void CapsuleCollider_Create_WhenVertexInvalid_Throws(
+            [Values(0, 1)] int errantArg,
+            [Values(float.PositiveInfinity, float.NegativeInfinity, float.NaN)] float errantValue
+        )
         {
-            var geometry = new CapsuleGeometry
-            {
-                Vertex0 = new float3(5.66f, -6.72f, 0.12f),
-                Vertex1 = new float3(0.98f, 8.88f, 9.54f),
-                Radius = 0.65f
-            };
+            var v0 = math.select(default, new float3(errantValue), errantArg == 0);
+            var v1 = math.select(default, new float3(errantValue), errantArg == 1);
+            var geometry = new CapsuleGeometry { Vertex0 = v0, Vertex1 = v1 };
 
-            // v0, +inf
-            {
-                var invalidGeometry = geometry;
-                invalidGeometry.Vertex0 = new float3(float.PositiveInfinity, 0.0f, 0.0f);
-                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(invalidGeometry));
-            }
-
-            // v0, -inf
-            {
-                var invalidGeometry = geometry;
-                invalidGeometry.Vertex0 = new float3(float.NegativeInfinity, 0.0f, 0.0f);
-                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(invalidGeometry));
-            }
-
-            // v0, nan
-            {
-                var invalidGeometry = geometry;
-                invalidGeometry.Vertex0 = new float3(float.NaN, 0.0f, 0.0f);
-                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(invalidGeometry));
-            }
-
-            // v1, +inf
-            {
-                var invalidGeometry = geometry;
-                invalidGeometry.Vertex1 = new float3(float.PositiveInfinity, 0.0f, 0.0f);
-                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(invalidGeometry));
-            }
-
-            // v1, -inf
-            {
-                var invalidGeometry = geometry;
-                invalidGeometry.Vertex1 = new float3(float.NegativeInfinity, 0.0f, 0.0f);
-                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(invalidGeometry));
-            }
-
-            // v1, nan
-            {
-                var invalidGeometry = geometry;
-                invalidGeometry.Vertex1 = new float3(float.NaN, 0.0f, 0.0f);
-                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(invalidGeometry));
-            }
-
-            // negative radius
-            {
-                var invalidGeometry = geometry;
-                invalidGeometry.Radius = -0.54f;
-                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(invalidGeometry));
-            }
-
-            // radius, +inf
-            {
-                var invalidGeometry = geometry;
-                invalidGeometry.Radius = float.PositiveInfinity;
-                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(invalidGeometry));
-            }
-
-            // radius, -inf
-            {
-                var invalidGeometry = geometry;
-                invalidGeometry.Radius = float.NegativeInfinity;
-                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(invalidGeometry));
-            }
-
-            // radius, nan
-            {
-                var invalidGeometry = geometry;
-                invalidGeometry.Radius = float.NaN;
-                TestUtils.ThrowsException<System.ArgumentException>(() => CapsuleCollider.Create(invalidGeometry));
-            }
+            var ex = Assert.Throws<ArgumentException>(() => CapsuleCollider.Create(geometry));
+            Assert.That(ex.Message, Does.Match($"Vertex{errantArg}"));
         }
+
+        [Test]
+        public void CapsuleCollider_Create_WhenRadiusInvalid_Throws(
+            [Values(float.PositiveInfinity, float.NegativeInfinity, float.NaN, -1f)] float errantValue
+        )
+        {
+            var geometry = new CapsuleGeometry { Radius = errantValue };
+
+            var ex = Assert.Throws<ArgumentException>(() => CapsuleCollider.Create(geometry));
+            Assert.That(ex.Message, Does.Match(nameof(CapsuleGeometry.Radius)));
+        }
+#endif
 
         #endregion
 

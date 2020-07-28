@@ -108,5 +108,51 @@ namespace Unity.Physics.Tests.Collision.Colliders
                     compoundBlob.Dispose();
             }
         }
+
+#if ENABLE_UNITY_COLLECTIONS_CHECKS
+        [Test]
+        public void CompoundCollider_Create_WhenChildrenNotCreated_Throws() =>
+            Assert.Throws<ArgumentException>(() => CompoundCollider.Create(default));
+
+        [Test]
+        public void CompoundCollider_Create_WhenChildrenEmpty_Throws() =>
+            Assert.Throws<ArgumentException>(() => CompoundCollider.Create(new NativeArray<CompoundCollider.ColliderBlobInstance>(0, Allocator.Temp)));
+
+        [Test]
+        public void CompoundCollider_Create_WhenNestingLevelBreached_Throws()
+        {
+            Assert.Throws<ArgumentException>(
+                () =>
+                {
+                    int numSpheres = 17;
+                    float sphereRadius = 0.5f;
+                    float ringRadius = 2f;
+                    BlobAssetReference<Collider> compound = default;
+                    for (int i = 0; i < numSpheres; ++i)
+                    {
+                        var t = i / (float)numSpheres * 2f * math.PI;
+                        var p = ringRadius * new float3(math.cos(t), 0f, math.sin(t));
+                        var sphere = SphereCollider.Create(new SphereGeometry { Center = p, Radius = sphereRadius });
+                        if (compound.IsCreated)
+                        {
+                            compound = CompoundCollider.Create(
+                                new NativeArray<CompoundCollider.ColliderBlobInstance>(2, Allocator.Temp)
+                                {
+                                    [0] = new CompoundCollider.ColliderBlobInstance { Collider = sphere, CompoundFromChild = RigidTransform.identity },
+                                    [1] = new CompoundCollider.ColliderBlobInstance { Collider = compound, CompoundFromChild = RigidTransform.identity }
+                                });
+                        }
+                        else
+                        {
+                            compound = CompoundCollider.Create(
+                                new NativeArray<CompoundCollider.ColliderBlobInstance>(1, Allocator.Temp)
+                                {
+                                    [0] = new CompoundCollider.ColliderBlobInstance { Collider = sphere, CompoundFromChild = RigidTransform.identity }
+                                });
+                        }
+                    }
+                });
+        }
+#endif
     }
 }

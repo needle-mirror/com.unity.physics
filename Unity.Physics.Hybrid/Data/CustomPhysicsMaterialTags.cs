@@ -1,4 +1,5 @@
 using System;
+using Unity.Mathematics;
 
 namespace Unity.Physics.Authoring
 {
@@ -21,6 +22,7 @@ namespace Unity.Physics.Authoring
         {
             get
             {
+                SafetyChecks.CheckInRangeAndThrow(i, new int2(0, 7), nameof(i));
                 switch (i)
                 {
                     case 0: return Tag00;
@@ -31,11 +33,12 @@ namespace Unity.Physics.Authoring
                     case 5: return Tag05;
                     case 6: return Tag06;
                     case 7: return Tag07;
-                    default: throw new ArgumentOutOfRangeException();
+                    default: return default;
                 }
             }
             set
             {
+                SafetyChecks.CheckInRangeAndThrow(i, new int2(0, 7), nameof(i));
                 switch (i)
                 {
                     case 0: Tag00 = value; break;
@@ -46,7 +49,6 @@ namespace Unity.Physics.Authoring
                     case 5: Tag05 = value; break;
                     case 6: Tag06 = value; break;
                     case 7: Tag07 = value; break;
-                    default: throw new ArgumentOutOfRangeException();
                 }
             }
         }

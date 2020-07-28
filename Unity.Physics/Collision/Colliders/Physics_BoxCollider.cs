@@ -1,5 +1,4 @@
 ﻿using System;
-using System.ComponentModel;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -42,30 +41,6 @@ namespace Unity.Physics
                 math.hash(m_Orientation),
                 math.hash(new float4(m_Size, m_BevelRadius))
             )));
-        }
-
-        internal void Validate()
-        {
-            if (math.any(!math.isfinite(m_Center)))
-            {
-                throw new ArgumentException("Invalid box center");
-            }
-            if (m_Orientation.value.Equals(float4.zero) || math.any(!math.isfinite(m_Orientation.value)))
-            {
-                throw new ArgumentException("Invalid box orientation");
-            }
-            if (math.any(m_Size <= 0) || math.any(!math.isfinite(m_Size)))
-            {
-                throw new ArgumentOutOfRangeException("Invalid box size");
-            }
-            if (m_BevelRadius < 0 || !math.isfinite(m_BevelRadius))
-            {
-                throw new ArgumentOutOfRangeException("Invalid box bevel radius");
-            }
-            if (math.any(m_BevelRadius + m_BevelRadius > m_Size))
-            {
-                throw new ArgumentException("Box bevel radius cannot be greater than half extent");
-            }
         }
     }
 
@@ -204,9 +179,9 @@ namespace Unity.Physics
             SetGeometry(geometry);
         }
 
-        private unsafe void SetGeometry(BoxGeometry geometry)
+        unsafe void SetGeometry(BoxGeometry geometry)
         {
-            geometry.Validate();
+            SafetyChecks.CheckValidAndThrow(geometry, nameof(geometry));
 
             m_Header.Version += 1;
             ConvexHull.ConvexRadius = geometry.BevelRadius;

@@ -33,7 +33,7 @@ namespace Unity.Physics
             m_MotionVelocities = new NativeArray<MotionVelocity>(numMotions, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
             m_NumMotions = numMotions;
 
-            m_Joints = new NativeArray<Joint>(numMotions, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+            m_Joints = new NativeArray<Joint>(numJoints, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
             m_NumJoints = numJoints;
         }
 

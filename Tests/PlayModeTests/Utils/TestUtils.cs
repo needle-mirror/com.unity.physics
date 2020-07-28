@@ -849,20 +849,6 @@ namespace Unity.Physics.Tests.Utils
             AreEqual(a.pos, b.pos, delta);
         }
 
-        public delegate void FuncDelegate();
-        public static void ThrowsException<T>(FuncDelegate func) where T : System.Exception
-        {
-            try
-            {
-                func();
-            }
-            catch (T)
-            {
-                return;
-            }
-            Assert.IsTrue(false, "Expected exception to be thrown");
-        }
-
         //
         // Random generation
         //

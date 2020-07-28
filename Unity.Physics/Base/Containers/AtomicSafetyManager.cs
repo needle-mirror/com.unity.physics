@@ -1,18 +1,14 @@
 using System;
 using System.Diagnostics;
-using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
-using Unity.Entities;
-using Unity.Jobs;
-using Unity.Jobs.LowLevel.Unsafe;
 
 namespace Unity.Physics
 {
     struct AtomicSafetyManager : IDisposable
     {
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
-        private AtomicSafetyHandle m_TemporaryHandle;
+        AtomicSafetyHandle m_TemporaryHandle;
 #endif
         int m_IsCreated;
        
@@ -24,7 +20,7 @@ namespace Unity.Physics
             return ret;
         }
         
-        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+        [Conditional(SafetyChecks.ConditionalSymbol)]
         void CreateTemporaryHandle()
         {
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
@@ -34,7 +30,7 @@ namespace Unity.Physics
 #endif
         }
 
-        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+        [Conditional(SafetyChecks.ConditionalSymbol)]
         void ReleaseTemporaryHandle()
         {
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
@@ -43,7 +39,7 @@ namespace Unity.Physics
 #endif
         }
 
-        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+        [Conditional(SafetyChecks.ConditionalSymbol)]
         public void BumpTemporaryHandleVersions()
         {
             // TODO: There should be a better way to invalidate older versions...
@@ -51,7 +47,7 @@ namespace Unity.Physics
             CreateTemporaryHandle();
         }
         
-        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+        [Conditional(SafetyChecks.ConditionalSymbol)]
         public void MarkNativeArrayAsReadOnly<T>(ref NativeArray<T> array)
             where T : struct
         {
@@ -59,11 +55,17 @@ namespace Unity.Physics
             NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref array, m_TemporaryHandle);
 #endif
         }
+
+        [Conditional(SafetyChecks.ConditionalSymbol)]
+        static void CheckCreatedAndThrow(int isCreated)
+        {
+            if (isCreated == 0)
+                throw new InvalidOperationException("Atomic Safety Manager already disposed");
+        }
         
         public void Dispose()
         {
-            if (m_IsCreated == 0)
-                throw new InvalidOperationException("Atomic Safety Manager already disposed");
+            CheckCreatedAndThrow(m_IsCreated);
 
             ReleaseTemporaryHandle();
 

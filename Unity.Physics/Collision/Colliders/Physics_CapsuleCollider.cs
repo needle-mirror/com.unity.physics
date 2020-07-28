@@ -1,5 +1,4 @@
 using System;
-using System.ComponentModel;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -34,22 +33,6 @@ namespace Unity.Physics
                 math.hash(m_Vertex0),
                 math.hash(new float4(m_Vertex1, m_Radius))
             )));
-        }
-
-        internal void Validate()
-        {
-            if (math.any(!math.isfinite(m_Vertex0)))
-            {
-                throw new ArgumentException("Invalid capsule vertex 0");
-            }
-            if (math.any(!math.isfinite(m_Vertex1)))
-            {
-                throw new ArgumentException("Invalid capsule vertex 1");
-            }
-            if (!math.isfinite(m_Radius) || m_Radius < 0.0f)
-            {
-                throw new ArgumentException("Invalid capsule radius");
-            }
         }
     }
 
@@ -115,9 +98,9 @@ namespace Unity.Physics
             SetGeometry(geometry);
         }
 
-        private void SetGeometry(CapsuleGeometry geometry)
+        void SetGeometry(CapsuleGeometry geometry)
         {
-            geometry.Validate();
+            SafetyChecks.CheckValidAndThrow(geometry, nameof(geometry));
 
             m_Header.Version += 1;
             m_Vertex0 = geometry.Vertex0;

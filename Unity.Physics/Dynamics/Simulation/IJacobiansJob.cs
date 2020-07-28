@@ -54,7 +54,8 @@ namespace Unity.Physics
 
                 if ((notPermitted & (userFlags ^ alreadySet)) != 0)
                 {
-                    throw new NotSupportedException("Cannot change flags which alter jacobian size");
+                    SafetyChecks.ThrowNotSupportedException("Cannot change flags which alter jacobian size");
+                    return;
                 }
 
                 m_Header->Flags = value;
@@ -206,10 +207,7 @@ namespace Unity.Physics
         internal static unsafe JobHandle ScheduleUnityPhysicsJacobiansJob<T>(T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)
             where T : struct, IJacobiansJobBase
         {
-            if (simulation.Type != SimulationType.UnityPhysics)
-            {
-                throw new ArgumentException($"Simulation type {simulation.Type} is not supported! Should be called only for SimulationType.UnityPhysics.");
-            }
+            SafetyChecks.CheckAreEqualAndThrow(SimulationType.UnityPhysics, simulation.Type);
 
             var data = new JacobiansJobData<T>
             {

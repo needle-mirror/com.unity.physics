@@ -63,7 +63,7 @@ namespace Unity.Physics
                 if (HasContactManifold)
                     AccessColliderKeys() = value;
                 else
-                    throw new NotSupportedException("Jacobian does not have collision events enabled");
+                    SafetyChecks.ThrowNotSupportedException("Jacobian does not have collision events enabled");
             }
         }
 
@@ -77,7 +77,7 @@ namespace Unity.Physics
                 if (HasMassFactors)
                     AccessMassFactors() = value;
                 else
-                    throw new NotSupportedException("Jacobian does not have mass factors enabled");
+                    SafetyChecks.ThrowNotSupportedException("Jacobian does not have mass factors enabled");
             }
         }
 
@@ -91,7 +91,7 @@ namespace Unity.Physics
                 if (HasSurfaceVelocity)
                     AccessSurfaceVelocity() = value;
                 else
-                    throw new NotSupportedException("Jacobian does not have surface velocity enabled");
+                    SafetyChecks.ThrowNotSupportedException("Jacobian does not have surface velocity enabled");
             }
         }
 
@@ -124,7 +124,8 @@ namespace Unity.Physics
                         AccessBaseJacobian<AngularLimit3DJacobian>().Solve(ref velocityA, ref velocityB, stepInput.Timestep, stepInput.InvTimestep);
                         break;
                     default:
-                        throw new NotImplementedException();
+                        SafetyChecks.ThrowNotImplementedException();
+                        return;
                 }
             }
         }
@@ -192,7 +193,8 @@ namespace Unity.Physics
                 case JacobianType.AngularLimit3D:
                     return UnsafeUtility.SizeOf<AngularLimit3DJacobian>();
                 default:
-                    throw new NotImplementedException();
+                    SafetyChecks.ThrowNotImplementedException();
+                    return default;
             }
         }
 

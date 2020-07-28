@@ -86,18 +86,7 @@ namespace Unity.Physics
             int maxVertices, int maxFaces, int maxFaceVertices
         )
         {
-            if (generationParameters.BevelRadius < 0.0f || !math.isfinite(generationParameters.BevelRadius))
-            {
-                throw new ArgumentException("Tried to create ConvexCollider with invalid bevel radius");
-            }
-
-            for (int i = 0, count = points.Length; i < count; ++i)
-            {
-                if (math.any(!math.isfinite(points[i])))
-                {
-                    throw new ArgumentException("Tried to create ConvexCollider with invalid points");
-                }
-            }
+            SafetyChecks.CheckValidAndThrow(points, nameof(points), generationParameters, nameof(generationParameters));
 
             // Build convex hull
             var builder = new ConvexHullBuilder(

@@ -95,7 +95,8 @@ namespace Unity.Physics.Authoring
                                         rangeDirection = math.select(diff / rangeDistance, float3.zero, rangeDistance < 1e-5);
                                         break;
                                     default:
-                                        throw new NotImplementedException();
+                                        SafetyChecks.ThrowNotImplementedException();
+                                        return;
                                 }
 
                                 // Draw the pivot on A
@@ -177,11 +178,13 @@ namespace Unity.Physics.Authoring
                                         // TODO - no idea how to visualize this if the limits are nonzero :)
                                         break;
                                     default:
-                                        throw new NotImplementedException();
+                                        SafetyChecks.ThrowNotImplementedException();
+                                        return;
                                 }
                                 break;
                             default:
-                                throw new NotImplementedException();
+                                SafetyChecks.ThrowNotImplementedException();
+                                return;
                         }
                     }
                 }

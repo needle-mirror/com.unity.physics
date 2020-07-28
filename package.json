@@ -20,13 +20,13 @@
   "name": "com.unity.physics",
   "unity": "2019.4",
   "unityRelease": "0f1",
-  "version": "0.4.0-preview.5",
+  "version": "0.4.1-preview",
   "upmCi": {
-    "footprint": "124798d5660eca4c4a1793904df6b6d734f74500"
+    "footprint": "2f8fb56eb4ad4246a7dc659443a1aae6d8c33a39"
   },
   "repository": {
     "url": "https://github.com/Unity-Technologies/Unity.Physics.git",
     "type": "git",
-    "revision": "5ed6018ecef38639223ba6953aa064228dbbc514"
+    "revision": "a9f6d48a2d6e299db9ca86bea622c89d5949ded3"
   }
 }

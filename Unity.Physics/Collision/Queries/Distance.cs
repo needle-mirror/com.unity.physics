@@ -538,7 +538,8 @@ namespace Unity.Physics
                             result = ConvexConvex(ref sphereA->ConvexHull, ref ((ConvexCollider*)convexB)->ConvexHull, aFromB);
                             break;
                         default:
-                            throw new NotImplementedException();
+                            SafetyChecks.ThrowNotImplementedException();
+                            return default;
                     }
                     break;
                 case ColliderType.Capsule:
@@ -562,7 +563,8 @@ namespace Unity.Physics
                             result = ConvexConvex(ref capsuleA->ConvexHull, ref ((ConvexCollider*)convexB)->ConvexHull, aFromB);
                             break;
                         default:
-                            throw new NotImplementedException();
+                            SafetyChecks.ThrowNotImplementedException();
+                            return default;
                     }
                     break;
                 case ColliderType.Triangle:
@@ -587,7 +589,8 @@ namespace Unity.Physics
                             result = ConvexConvex(ref triangleA->ConvexHull, ref ((ConvexCollider*)convexB)->ConvexHull, aFromB);
                             break;
                         default:
-                            throw new NotImplementedException();
+                            SafetyChecks.ThrowNotImplementedException();
+                            return default;
                     }
                     break;
                 case ColliderType.Box:
@@ -606,7 +609,8 @@ namespace Unity.Physics
                             result = ConvexConvex(ref boxA->ConvexHull, ref ((ConvexCollider*)convexB)->ConvexHull, aFromB);
                             break;
                         default:
-                            throw new NotImplementedException();
+                            SafetyChecks.ThrowNotImplementedException();
+                            return default;
                     }
                     break;
                 case ColliderType.Quad:
@@ -615,7 +619,8 @@ namespace Unity.Physics
                     result = ConvexConvex(ref ((ConvexCollider*)convexA)->ConvexHull, ref ((ConvexCollider*)convexB)->ConvexHull, aFromB);
                     break;
                 default:
-                    throw new NotImplementedException();
+                    SafetyChecks.ThrowNotImplementedException();
+                    return default;
             }
 
             if (flip)
@@ -675,7 +680,8 @@ namespace Unity.Physics
                 case ColliderType.Terrain:
                     return PointTerrain(input, (TerrainCollider*)target, ref collector);
                 default:
-                    throw new NotImplementedException();
+                    SafetyChecks.ThrowNotImplementedException();
+                    return default;
             }
 
             if (result.Distance < collector.MaxFraction)
@@ -743,14 +749,17 @@ namespace Unity.Physics
                         case ColliderType.Terrain:
                             return ConvexTerrain(input, (TerrainCollider*)target, ref collector);
                         default:
-                            throw new NotImplementedException();
+                            SafetyChecks.ThrowNotImplementedException();
+                            return default;
                     }
                 case CollisionType.Composite:
                 case CollisionType.Terrain:
                     // no support for composite query shapes
-                    throw new NotImplementedException();
+                    SafetyChecks.ThrowNotImplementedException();
+                    return default;
                 default:
-                    throw new NotImplementedException();
+                    SafetyChecks.ThrowNotImplementedException();
+                    return default;
             }
         }
 
@@ -776,7 +785,7 @@ namespace Unity.Physics
                 }
 
                 int numPolygons = Mesh.GetNumPolygonsInPrimitive(flags);
-                bool isQuad = Mesh.IsPrimitveFlagSet(flags, Mesh.PrimitiveFlags.IsQuad);
+                bool isQuad = Mesh.IsPrimitiveFlagSet(flags, Mesh.PrimitiveFlags.IsQuad);
 
                 float3 triangleNormal = math.normalize(math.cross(vertices[1] - vertices[0], vertices[2] - vertices[0]));
                 bool acceptHit = false;
@@ -827,7 +836,7 @@ namespace Unity.Physics
                 }
 
                 int numPolygons = Mesh.GetNumPolygonsInPrimitive(flags);
-                bool isQuad = Mesh.IsPrimitveFlagSet(flags, Mesh.PrimitiveFlags.IsQuad);
+                bool isQuad = Mesh.IsPrimitiveFlagSet(flags, Mesh.PrimitiveFlags.IsQuad);
 
                 float3* v = stackalloc float3[4];
                 bool acceptHit = false;

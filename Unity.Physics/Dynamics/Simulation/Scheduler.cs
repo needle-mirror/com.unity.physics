@@ -357,7 +357,7 @@ namespace Unity.Physics
             }.Schedule(sortHandle);
 
             // Dispose
-            var disposePhasedDispatchPairs = NativeListUtilityTemp.DisposeHotFix(ref sortedPairs, dispatchPairHandle);
+            var disposePhasedDispatchPairs = sortedPairs.Dispose(dispatchPairHandle);
             returnHandles.FinalDisposeHandle = JobHandle.CombineDependencies(returnHandles.FinalDisposeHandle, disposePhasedDispatchPairs);
 
             returnHandles.FinalExecutionHandle = dispatchPairHandle;
@@ -402,7 +402,10 @@ namespace Unity.Physics
 
             public void Dispose()
             {
-                Table.Dispose();
+                if (Table.IsCreated)
+                {
+                    Table.Dispose();
+                }
             }
         }
 
@@ -443,7 +446,10 @@ namespace Unity.Physics
 
             public void Dispose()
             {
-                Table.Dispose();
+                if (Table.IsCreated)
+                {
+                    Table.Dispose();
+                }
             }
         }
 

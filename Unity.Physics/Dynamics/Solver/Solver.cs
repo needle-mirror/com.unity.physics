@@ -840,8 +840,7 @@ namespace Unity.Physics
                         byte* jacobianPtr = jacobianWriter.Allocate(jacobianSize);
 
 #if DEVELOPMENT_BUILD
-                if (((long)jacobianPtr & 0x3) != 0)
-                    throw new InvalidOperationException("Jacobians must be 4 byte aligned");
+                        SafetyChecks.Check4ByteAlignmentAndThrow(jacobianPtr, nameof(jacobianPtr));
 #endif
                         ref JacobianHeader jacobianHeader = ref UnsafeUtility.AsRef<JacobianHeader>(jacobianPtr);
                         jacobianHeader.BodyPair = contactHeader.BodyPair;
@@ -1080,11 +1079,13 @@ namespace Unity.Physics
                                 jacType = JacobianType.AngularLimit3D;
                                 break;
                             default:
-                                throw new NotImplementedException();
+                                SafetyChecks.ThrowNotImplementedException();
+                                return;
                         }
                         break;
                     default:
-                        throw new NotImplementedException();
+                        SafetyChecks.ThrowNotImplementedException();
+                        return;
                 }
 
                 // Write size before every jacobian
@@ -1095,8 +1096,7 @@ namespace Unity.Physics
                 // Allocate all necessary data for this jacobian
                 byte* jacobianPtr = jacobianWriter.Allocate(jacobianSize);
 #if DEVELOPMENT_BUILD
-                if (((long)jacobianPtr & 0x3) != 0)
-                    throw new InvalidOperationException("Jacobians must be 4 byte aligned");
+                SafetyChecks.Check4ByteAlignmentAndThrow(jacobianPtr, nameof(jacobianPtr));
 #endif
                 ref JacobianHeader header = ref UnsafeUtility.AsRef<JacobianHeader>(jacobianPtr);
                 header.BodyPair = joint.BodyPair;
@@ -1132,11 +1132,13 @@ namespace Unity.Physics
                                     velocityA, velocityB, motionA, motionB, constraint, tau, damping);
                                 break;
                             default:
-                                throw new NotImplementedException();
+                                SafetyChecks.ThrowNotImplementedException();
+                                return;
                         }
                         break;
                     default:
-                        throw new NotImplementedException();
+                        SafetyChecks.ThrowNotImplementedException();
+                        return;
                 }
             }
         }

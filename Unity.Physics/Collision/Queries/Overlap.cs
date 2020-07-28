@@ -1,4 +1,3 @@
-using System;
 using Unity.Burst;
 using Unity.Mathematics;
 
@@ -52,7 +51,8 @@ namespace Unity.Physics
                     AabbTerrain(input, (TerrainCollider*)collider, ref collector);
                     break;
                 default:
-                    throw new NotImplementedException();
+                    SafetyChecks.ThrowNotImplementedException();
+                    return;
             }
         }
 
@@ -80,8 +80,8 @@ namespace Unity.Physics
                     keys[m_NumKeys++] = new ColliderKey(m_NumColliderKeyBits, (uint)(primitiveKey << 1)).Value;
 
                     Mesh.PrimitiveFlags flags = m_Mesh->GetPrimitiveFlags(primitiveKey);
-                    if (Mesh.IsPrimitveFlagSet(flags, Mesh.PrimitiveFlags.IsTrianglePair) &&
-                        !Mesh.IsPrimitveFlagSet(flags, Mesh.PrimitiveFlags.IsQuad))
+                    if (Mesh.IsPrimitiveFlagSet(flags, Mesh.PrimitiveFlags.IsTrianglePair) &&
+                        !Mesh.IsPrimitiveFlagSet(flags, Mesh.PrimitiveFlags.IsQuad))
                     {
                         keys[m_NumKeys++] = new ColliderKey(m_NumColliderKeyBits, (uint)(primitiveKey << 1) | 1).Value;
                     }

@@ -25,7 +25,7 @@ namespace Unity.Physics
     // A contact point in a manifold. All contacts share the same normal.
     public struct ContactPoint
     {
-        public float3 Position; // world space position on object A
+        public float3 Position; // world space position on object B
         public float Distance;  // separating distance along the manifold normal
     }
 
@@ -268,7 +268,8 @@ namespace Unity.Physics
                                 worldFromA, aFromB, maxDistance, out contactManifold);
                             break;
                         default:
-                            throw new NotImplementedException();
+                            SafetyChecks.ThrowNotImplementedException();
+                            return;
                     }
                     break;
                 case ColliderType.Box:
@@ -298,7 +299,8 @@ namespace Unity.Physics
                                 worldFromA, aFromB, maxDistance, out contactManifold);
                             break;
                         default:
-                            throw new NotImplementedException();
+                            SafetyChecks.ThrowNotImplementedException();
+                            return;
                     }
                     break;
                 case ColliderType.Capsule:
@@ -328,7 +330,8 @@ namespace Unity.Physics
                                 worldFromA, aFromB, maxDistance, out contactManifold);
                             break;
                         default:
-                            throw new NotImplementedException();
+                            SafetyChecks.ThrowNotImplementedException();
+                            return;
                     }
                     break;
                 case ColliderType.Triangle:
@@ -360,7 +363,8 @@ namespace Unity.Physics
                                 worldFromA, aFromB, maxDistance, out contactManifold);
                             break;
                         default:
-                            throw new NotImplementedException();
+                            SafetyChecks.ThrowNotImplementedException();
+                            return;
                     }
                     break;
                 case ColliderType.Quad:
@@ -371,7 +375,8 @@ namespace Unity.Physics
                         worldFromA, aFromB, maxDistance, out contactManifold);
                     break;
                 default:
-                    throw new NotImplementedException();
+                    SafetyChecks.ThrowNotImplementedException();
+                    return;
             }
 
             WriteManifold(contactManifold, context, colliderKeys, materialA, materialB, flipped);
@@ -446,10 +451,7 @@ namespace Unity.Physics
                 m_Flipped = flipped;
             }
 
-            public void AddRigidBodyIndices(int* indices, int count)
-            {
-                throw new NotSupportedException();
-            }
+            public void AddRigidBodyIndices(int* indices, int count) => SafetyChecks.ThrowNotSupportedException();
 
             public void AddColliderKeys([NoAlias] ColliderKey* keys, int count)
             {
@@ -495,7 +497,8 @@ namespace Unity.Physics
                                             m_WorldFromA, m_WorldFromB, m_CollisionTolerance, m_Flipped);
                                         break;
                                     default: // GetLeaf() may not return a composite collider
-                                        throw new NotImplementedException();
+                                        SafetyChecks.ThrowNotImplementedException();
+                                        return;
                                 }
                             }
                         }
@@ -534,7 +537,8 @@ namespace Unity.Physics
                                             m_WorldFromA, worldFromLeafB, m_CollisionTolerance, m_Flipped);
                                         break;
                                     default: // GetLeaf() may not return a composite collider
-                                        throw new NotImplementedException();
+                                        SafetyChecks.ThrowNotImplementedException();
+                                        return;
                                 }
                             }
                         }

@@ -878,7 +878,8 @@ namespace Unity.Physics
 
                 if (validData != validAabb)
                 {
-                    throw new Exception("Invalid node should have empty AABB.");
+                    SafetyChecks.ThrowInvalidOperationException("Invalid node should have empty AABB.");
+                    return;
                 }
 
                 if (validData)
@@ -887,7 +888,8 @@ namespace Unity.Physics
                     {
                         if (!parentAabb.Contains(aabb))
                         {
-                            throw new Exception("Parent AABB do not contains child AABB");
+                            SafetyChecks.ThrowInvalidOperationException("Parent AABB do not contains child AABB");
+                            return;
                         }
                     }
 

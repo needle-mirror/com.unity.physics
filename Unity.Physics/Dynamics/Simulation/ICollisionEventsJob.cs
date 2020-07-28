@@ -1,9 +1,7 @@
 using System;
-using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Jobs.LowLevel.Unsafe;
-using Unity.Mathematics;
 
 namespace Unity.Physics
 {
@@ -61,10 +59,7 @@ namespace Unity.Physics
         internal static unsafe JobHandle ScheduleUnityPhysicsCollisionEventsJob<T>(T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)
             where T : struct, ICollisionEventsJobBase
         {
-            if (simulation.Type != SimulationType.UnityPhysics)
-            {
-                throw new ArgumentException($"Simulation type {simulation.Type} is not supported! Should be called only for SimulationType.UnityPhysics.");
-            }
+            SafetyChecks.CheckAreEqualAndThrow(SimulationType.UnityPhysics, simulation.Type);
 
             var data = new CollisionEventJobData<T>
             {

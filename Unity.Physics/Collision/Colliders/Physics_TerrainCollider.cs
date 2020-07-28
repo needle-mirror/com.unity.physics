@@ -1,5 +1,3 @@
-using System;
-using System.ComponentModel;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -53,15 +51,10 @@ namespace Unity.Physics
             NativeArray<float> heights, int2 size, float3 scale, CollisionMethod collisionMethod, CollisionFilter filter, Material material
         )
         {
-            if (math.any(size < 2))
-            {
-                throw new ArgumentOutOfRangeException("Tried to create TerrainCollider with size < 2");
-            }
-            if (math.any(scale <= float3.zero))
-            {
-                throw new ArgumentOutOfRangeException("Tried to create TerrainCollider with scale <= 0");
-            }
-            
+            SafetyChecks.CheckInRangeAndThrow(size.x, new int2(2, int.MaxValue), nameof(size));
+            SafetyChecks.CheckInRangeAndThrow(size.y, new int2(2, int.MaxValue), nameof(size));
+            SafetyChecks.CheckFiniteAndPositiveAndThrow(scale, nameof(scale));
+
             // Allocate memory for the collider
             int totalSize = sizeof(TerrainCollider) + Terrain.CalculateDataSize(size);
             var collider = (TerrainCollider*)UnsafeUtility.Malloc(totalSize, 16, Allocator.Temp);
@@ -92,6 +85,7 @@ namespace Unity.Physics
         public CollisionType CollisionType => m_Header.CollisionType;
         public CollisionFilter Filter => m_Header.Filter;
         public uint NumColliderKeyBits => Terrain.NumColliderKeyBits;
+        internal uint TotalNumColliderKeyBits => NumColliderKeyBits;
 
         public MassProperties MassProperties
         {
@@ -423,8 +417,7 @@ namespace Unity.Physics
                     level -= levelSize.x * levelSize.y; // pointer to the beginning of the current level's nodes
 
 #if DEVELOPMENT_BUILD
-                    if (((long)levelData & 0x3) != 0)
-                        throw new InvalidOperationException("levelData must be 4 byte aligned");
+                    SafetyChecks.Check4ByteAlignmentAndThrow(levelData, nameof(levelData));
 #endif
                     // Save the current level description for lookup in queries
                     levelData->Base = (int)(level - root);

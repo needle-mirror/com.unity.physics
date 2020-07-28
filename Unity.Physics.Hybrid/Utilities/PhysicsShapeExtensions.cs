@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -120,23 +121,19 @@ namespace Unity.Physics.Authoring
                 math.abs(math.dot(rs1, rs2)) > k_Zero;
         }
 
-        // TODO: revisit readable requirement when conversion is offline-only
+        // TODO: revisit readable requirement when conversion is editor-only
         internal static bool IsValidForConversion(this UnityEngine.Mesh mesh, GameObject host)
         {
-            if (mesh.isReadable)
-                return true;
-            // non-readable meshes are readable at edit time
-            if (Application.isPlaying)
-                return false;
+#if UNITY_EDITOR
             // anything in a sub-scene is fine because it is converted at edit time, but run-time ConvertToEntity will fail
-            if (host.gameObject.scene.isSubScene)
+            if (
+                host.gameObject.scene.isSubScene
+                // isSubScene is false in AssetImportWorker during sub-scene import
+                || UnityEditor.Experimental.AssetDatabaseExperimental.IsAssetImportWorkerProcess()
+            )
                 return true;
-            // TODO: isSubScene is currently false in AssetImportWorker during sub-scene import (dots issue 3629)
-            #if UNITY_EDITOR
-            return UnityEditor.Experimental.AssetDatabaseExperimental.IsAssetImportWorkerProcess();
-            #else
-            return false;
-            #endif
+#endif
+            return mesh.isReadable;
         }
 
 #if LEGACY_PHYSICS
@@ -233,10 +230,8 @@ namespace Unity.Physics.Authoring
         ) =>
             math.mul(localToWorld, float4x4.TRS(center, orientation, size));
 
-        // matrix to transform point on a primitive from bake space into space of the shape
-        static float4x4 GetPrimitiveBakeToShapeMatrix(
-            float4x4 localToWorld, float4x4 shapeToWorld, ref float3 center, ref EulerAngles orientation, float3 scale, int3 basisPriority
-        )
+        [Conditional(SafetyChecks.ConditionalSymbol)]
+        static void CheckBasisPriorityAndThrow(int3 basisPriority)
         {
             if (
                 basisPriority.x == basisPriority.y
@@ -244,6 +239,14 @@ namespace Unity.Physics.Authoring
                 || basisPriority.y == basisPriority.z
             )
                 throw new ArgumentException(nameof(basisPriority));
+        }
+
+        // matrix to transform point on a primitive from bake space into space of the shape
+        static float4x4 GetPrimitiveBakeToShapeMatrix(
+            float4x4 localToWorld, float4x4 shapeToWorld, ref float3 center, ref EulerAngles orientation, float3 scale, int3 basisPriority
+        )
+        {
+            CheckBasisPriorityAndThrow(basisPriority);
 
             var localToBasis = float4x4.TRS(center, orientation, scale);
             // correct for imprecision in cases of no scale to prevent e.g., convex radius from being altered

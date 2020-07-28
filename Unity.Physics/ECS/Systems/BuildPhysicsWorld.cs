@@ -317,7 +317,8 @@ namespace Unity.Physics.Systems
                         chunk.DidChange(LocalToWorldType, m_LastSystemVersion) ||
                         chunk.DidChange(PositionType, m_LastSystemVersion) ||
                         chunk.DidChange(RotationType, m_LastSystemVersion) ||
-                        chunk.DidChange(PhysicsColliderType, m_LastSystemVersion);
+                        chunk.DidChange(PhysicsColliderType, m_LastSystemVersion) ||
+                        chunk.DidOrderChange(m_LastSystemVersion);
                     ChunkHasChangesOutput[chunkIndex] = didChunkChange ? 1 : 0;
                 }
             }

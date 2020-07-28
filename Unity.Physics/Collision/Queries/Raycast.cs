@@ -1,4 +1,3 @@
-using System;
 using Unity.Entities;
 using Unity.Mathematics;
 using static Unity.Physics.Math;
@@ -433,7 +432,8 @@ namespace Unity.Physics
                 case ColliderType.Terrain:
                     return RayTerrain(input, (TerrainCollider*)collider, ref collector);
                 default:
-                    throw new NotImplementedException();
+                    SafetyChecks.ThrowNotImplementedException();
+                    return default;
             }
 
             if (hadHit)
@@ -475,7 +475,7 @@ namespace Unity.Physics
                 }
 
                 int numPolygons = Mesh.GetNumPolygonsInPrimitive(flags);
-                bool isQuad = Mesh.IsPrimitveFlagSet(flags, Mesh.PrimitiveFlags.IsQuad);
+                bool isQuad = Mesh.IsPrimitiveFlagSet(flags, Mesh.PrimitiveFlags.IsQuad);
 
                 bool acceptHit = false;
                 float3 unnormalizedNormal;

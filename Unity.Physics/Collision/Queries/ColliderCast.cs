@@ -120,14 +120,17 @@ namespace Unity.Physics
                         case ColliderType.Terrain:
                             return ConvexTerrain(input, (TerrainCollider*)target, ref collector);
                         default:
-                            throw new NotImplementedException();
+                            SafetyChecks.ThrowNotImplementedException();
+                            return default;
                     }
                 case CollisionType.Composite:
                 case CollisionType.Terrain:
                     // no support for casting composite shapes
-                    throw new NotImplementedException();
+                    SafetyChecks.ThrowNotImplementedException();
+                    return default;
                 default:
-                    throw new NotImplementedException();
+                    SafetyChecks.ThrowNotImplementedException();
+                    return default;
             }
         }
 
@@ -211,7 +214,7 @@ namespace Unity.Physics
                 }
 
                 int numPolygons = Mesh.GetNumPolygonsInPrimitive(flags);
-                bool isQuad = Mesh.IsPrimitveFlagSet(flags, Mesh.PrimitiveFlags.IsQuad);
+                bool isQuad = Mesh.IsPrimitiveFlagSet(flags, Mesh.PrimitiveFlags.IsQuad);
 
                 bool acceptHit = false;
 

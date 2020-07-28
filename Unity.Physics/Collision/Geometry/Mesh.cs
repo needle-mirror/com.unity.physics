@@ -80,7 +80,7 @@ namespace Unity.Physics
 
         // Burst friendly HasFlag
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool IsPrimitveFlagSet(PrimitiveFlags flags, PrimitiveFlags testFlag) => (flags & testFlag) != 0;
+        public static bool IsPrimitiveFlagSet(PrimitiveFlags flags, PrimitiveFlags testFlag) => (flags & testFlag) != 0;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int GetNumPolygonsInPrimitive(PrimitiveFlags primitiveFlags) => primitiveFlags == PrimitiveFlags.IsTrianglePair ? 2 : 1;
@@ -169,7 +169,7 @@ namespace Unity.Physics
                 section.Vertices[vertexIndices.D]);
 
             PrimitiveFlags flags = section.PrimitiveFlags[sectionPrimitiveIndex];
-            if (IsPrimitveFlagSet(flags, PrimitiveFlags.IsQuad))
+            if (IsPrimitiveFlagSet(flags, PrimitiveFlags.IsQuad))
             {
                 polygon.SetAsQuad(vertices[0], vertices[1], vertices[2], vertices[3]);
             }
@@ -203,7 +203,7 @@ namespace Unity.Physics
                 section.Vertices[vertexIndices.D]);
 
             PrimitiveFlags flags = section.PrimitiveFlags[0];
-            if (IsPrimitveFlagSet(flags, PrimitiveFlags.IsQuad))
+            if (IsPrimitiveFlagSet(flags, PrimitiveFlags.IsQuad))
             {
                 polygon.SetAsQuad(vertices[0], vertices[1], vertices[2], vertices[3]);
             }
@@ -233,7 +233,7 @@ namespace Unity.Physics
             {
                 ref Section section = ref Sections[sectionIndex];
 
-                if (polygonIndex == 0 && IsPrimitveFlagSet(section.PrimitiveFlags[sectionPrimitiveIndex], PrimitiveFlags.IsTrianglePair))
+                if (polygonIndex == 0 && IsPrimitiveFlagSet(section.PrimitiveFlags[sectionPrimitiveIndex], PrimitiveFlags.IsTrianglePair))
                 {
                     // Move to next triangle
                     polygonIndex = 1;
@@ -272,7 +272,7 @@ namespace Unity.Physics
                     section.Vertices[vertexIndices.D]);
 
                 PrimitiveFlags flags = section.PrimitiveFlags[sectionPrimitiveIndex];
-                if (IsPrimitveFlagSet(flags, PrimitiveFlags.IsQuad))
+                if (IsPrimitiveFlagSet(flags, PrimitiveFlags.IsQuad))
                 {
                     polygon.SetAsQuad(vertices[0], vertices[1], vertices[2], vertices[3]);
                 }

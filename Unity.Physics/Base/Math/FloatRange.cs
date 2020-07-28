@@ -19,6 +19,8 @@ namespace Unity.Physics
                 Max = max;
             }
 
+            public float Mid => math.lerp(Min, Max, 0.5f);
+
             public bool Equals(FloatRange other) => Min.Equals(other.Min) && Max.Equals(other.Max);
 
             public override bool Equals(object obj) => obj is FloatRange other && Equals(other);

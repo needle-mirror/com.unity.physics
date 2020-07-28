@@ -1,5 +1,4 @@
 using System;
-using System.ComponentModel;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -56,42 +55,6 @@ namespace Unity.Physics
                 math.hash(new float3(m_Height, m_Radius, m_BevelRadius)),
                 unchecked((uint)m_SideCount)
             )));
-        }
-
-        internal void Validate()
-        {
-            if (math.any(!math.isfinite(m_Center)))
-            {
-                throw new ArgumentException("Invalid cylinder center");
-            }
-            if (m_Orientation.value.Equals(float4.zero) || math.any(!math.isfinite(m_Orientation.value)))
-            {
-                throw new ArgumentException("Invalid cylinder orientation");
-            }
-            if (m_Height < 0 || !math.isfinite(m_Height))
-            {
-                throw new ArgumentOutOfRangeException("Invalid cylinder height");
-            }
-            if (m_Radius < 0 || !math.isfinite(m_Radius))
-            {
-                throw new ArgumentOutOfRangeException("Invalid cylinder radius");
-            }
-            if (m_BevelRadius < 0 || !math.isfinite(m_BevelRadius))
-            {
-                throw new ArgumentOutOfRangeException("Invalid cylinder bevel radius");
-            }
-            if (m_BevelRadius > m_Radius || m_BevelRadius * 2 > m_Height)
-            {
-                throw new ArgumentOutOfRangeException("Cylinder bevel radius cannot be larger than the cylinder");
-            }
-            if (m_SideCount < MinSideCount)
-            {
-                throw new ArgumentOutOfRangeException("Cylinder must have at least " + MinSideCount + " sides");
-            }
-            if (m_SideCount > MaxSideCount)
-            {
-                throw new ArgumentOutOfRangeException("Cylinder cannot have more than " + MaxSideCount + " sides");
-            }
         }
     }
 
@@ -194,9 +157,9 @@ namespace Unity.Physics
             SetGeometry(geometry);
         }
 
-        private unsafe void SetGeometry(CylinderGeometry geometry)
+        unsafe void SetGeometry(CylinderGeometry geometry)
         {
-            geometry.Validate();
+            SafetyChecks.CheckValidAndThrow(geometry, nameof(geometry));
 
             m_Header.Version += 1;
             m_Center = geometry.Center;
@@ -214,8 +177,6 @@ namespace Unity.Physics
             var transform = new RigidTransform(m_Orientation, m_Center);
             var radius = math.max(m_Radius - ConvexHull.ConvexRadius, 0);
             var halfHeight = math.max(m_Height * 0.5f - ConvexHull.ConvexRadius, 0);
-            if (m_SideCount > CylinderGeometry.MaxSideCount)
-                throw new ArgumentOutOfRangeException();
 
             fixed (CylinderCollider* collider = &this)
             {

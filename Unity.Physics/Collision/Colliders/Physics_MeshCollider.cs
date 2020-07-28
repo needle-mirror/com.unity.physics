@@ -1,4 +1,3 @@
-using System;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -29,27 +28,13 @@ namespace Unity.Physics
 
         public static unsafe BlobAssetReference<Collider> Create(NativeArray<float3> vertices, NativeArray<int3> triangles, CollisionFilter filter, Material material)
         {
+            SafetyChecks.CheckTriangleIndicesInRangeAndThrow(triangles, vertices.Length, nameof(triangles));
+
             // Copy vertices
             var tempVertices = new NativeArray<float3>(vertices, Allocator.Temp);
 
             // Triangle indices - needed for WeldVertices
-            var tempIndices = new NativeArray<int>(triangles.Length * 3, Allocator.Temp);
-
-            for (int iTriangle = 0; iTriangle < triangles.Length; iTriangle++)
-            {
-                if (triangles[iTriangle][0]>= 0 && triangles[iTriangle][0] < vertices.Length
-                    && triangles[iTriangle][1] >= 0 && triangles[iTriangle][1] < vertices.Length
-                    && triangles[iTriangle][2] >= 0 && triangles[iTriangle][2] < vertices.Length)
-                {
-                    tempIndices[iTriangle * 3] = triangles[iTriangle][0];
-                    tempIndices[iTriangle * 3 + 1] = triangles[iTriangle][1];
-                    tempIndices[iTriangle * 3 + 2] = triangles[iTriangle][2];
-                }
-                else
-                {
-                    throw new ArgumentException("Tried to create a MeshCollider with indices referencing outside vertex array");
-                }
-            }
+            var tempIndices = new NativeArray<int>(triangles.Reinterpret<int>(UnsafeUtility.SizeOf<int3>()), Allocator.Temp);
 
             // Build connectivity and primitives
 
@@ -236,6 +221,8 @@ namespace Unity.Physics
 
         public uint NumColliderKeyBits { get; private set; }
 
+        internal uint TotalNumColliderKeyBits => NumColliderKeyBits;
+
         public bool GetChild(ref ColliderKey key, out ChildCollider child)
         {
             if (key.PopSubKey(NumColliderKeyBits, out uint subKey))
@@ -245,7 +232,7 @@ namespace Unity.Physics
 
                 Mesh.GetPrimitive(primitiveKey, out float3x4 vertices, out Mesh.PrimitiveFlags flags, out CollisionFilter filter, out Material material);
 
-                if (Mesh.IsPrimitveFlagSet(flags, Mesh.PrimitiveFlags.IsQuad))
+                if (Mesh.IsPrimitiveFlagSet(flags, Mesh.PrimitiveFlags.IsQuad))
                 {
                     child = new ChildCollider(vertices[0], vertices[1], vertices[2], vertices[3], filter, material);
                 }

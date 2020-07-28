@@ -162,10 +162,7 @@ namespace Unity.Physics
         internal static unsafe JobHandle ScheduleUnityPhysicsContactsJob<T>(this T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)
             where T : struct, IContactsJobBase
         {
-            if (simulation.Type != SimulationType.UnityPhysics)
-            {
-                throw new ArgumentException($"Simulation type {simulation.Type} is not supported! Should be called only for SimulationType.UnityPhysics.");
-            }
+            SafetyChecks.CheckAreEqualAndThrow(SimulationType.UnityPhysics, simulation.Type);
 
             var data = new ContactsJobData<T>
             {

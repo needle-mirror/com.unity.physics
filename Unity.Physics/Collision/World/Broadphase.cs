@@ -3,7 +3,6 @@ using System.Runtime.CompilerServices;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
-using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine.Assertions;
@@ -337,8 +336,8 @@ namespace Unity.Physics
             }.Schedule(staticVsDynamicNodePairIndices, 1, JobHandle.CombineDependencies(staticVsDynamicPairs, staticConstruct));
 
             // Dispose node pair lists
-            var disposeOverlapPairs0 = NativeListUtilityTemp.DisposeHotFix(ref dynamicVsDynamicNodePairIndices, dynamicVsDynamicHandle);
-            var disposeOverlapPairs1 = NativeListUtilityTemp.DisposeHotFix(ref staticVsDynamicNodePairIndices, staticVsDynamicHandle);
+            var disposeOverlapPairs0 = dynamicVsDynamicNodePairIndices.Dispose(dynamicVsDynamicHandle);
+            var disposeOverlapPairs1 = staticVsDynamicNodePairIndices.Dispose(staticVsDynamicHandle);
             returnHandles.FinalDisposeHandle = JobHandle.CombineDependencies(disposeOverlapPairs0, disposeOverlapPairs1);
             returnHandles.FinalExecutionHandle = JobHandle.CombineDependencies(dynamicVsDynamicHandle, staticVsDynamicHandle);
 
@@ -470,20 +469,11 @@ namespace Unity.Physics
                 RigidBodyIndices.AddRange(indices, count);
             }
 
-            public unsafe void AddColliderKeys(ColliderKey* keys, int count)
-            {
-                throw new NotSupportedException();
-            }
+            public unsafe void AddColliderKeys(ColliderKey* keys, int count) => SafetyChecks.ThrowNotSupportedException();
 
-            public void PushCompositeCollider(ColliderKeyPath compositeKey)
-            {
-                throw new NotSupportedException();
-            }
+            public void PushCompositeCollider(ColliderKeyPath compositeKey) => SafetyChecks.ThrowNotSupportedException();
 
-            public void PopCompositeCollider(uint numCompositeKeyBits)
-            {
-                throw new NotSupportedException();
-            }
+            public void PopCompositeCollider(uint numCompositeKeyBits) => SafetyChecks.ThrowNotSupportedException();
         }
 
         // Test broadphase nodes against the aabb in input. For any overlapping

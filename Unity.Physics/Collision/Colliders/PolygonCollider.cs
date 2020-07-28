@@ -1,5 +1,6 @@
 ﻿using System;
 using System.ComponentModel;
+using System.Diagnostics;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -37,10 +38,9 @@ namespace Unity.Physics
 
         public static unsafe BlobAssetReference<Collider> CreateTriangle(float3 vertex0, float3 vertex1, float3 vertex2, CollisionFilter filter, Material material)
         {
-            if (math.any(!math.isfinite(vertex0)) || math.any(!math.isfinite(vertex1)) || math.any(!math.isfinite(vertex2)))
-            {
-                throw new ArgumentException("Tried to create triangle collider with nan/inf vertex");
-            }
+            SafetyChecks.CheckFiniteAndThrow(vertex0, nameof(vertex0));
+            SafetyChecks.CheckFiniteAndThrow(vertex1, nameof(vertex1));
+            SafetyChecks.CheckFiniteAndThrow(vertex2, nameof(vertex2));
 
             var collider = new PolygonCollider();
             collider.InitAsTriangle(vertex0, vertex1, vertex2, filter, material);
@@ -57,17 +57,11 @@ namespace Unity.Physics
 
         public static unsafe BlobAssetReference<Collider> CreateQuad(float3 vertex0, float3 vertex1, float3 vertex2, float3 vertex3, CollisionFilter filter, Material material)
         {
-            if (math.any(!math.isfinite(vertex0)) || math.any(!math.isfinite(vertex1)) || math.any(!math.isfinite(vertex2)) || math.any(!math.isfinite(vertex3)))
-            {
-                throw new ArgumentException("Tried to create triangle collider with nan/inf vertex");
-            }
-
-            // check if vertices are co-planar
-            float3 normal = math.normalize(math.cross(vertex1 - vertex0, vertex2 - vertex0));
-            if (math.abs(math.dot(normal, vertex3 - vertex0)) > 1e-3f)
-            {
-                throw new ArgumentException("Vertices for quad creation are not co-planar");
-            }
+            SafetyChecks.CheckFiniteAndThrow(vertex0, nameof(vertex0));
+            SafetyChecks.CheckFiniteAndThrow(vertex1, nameof(vertex1));
+            SafetyChecks.CheckFiniteAndThrow(vertex2, nameof(vertex2));
+            SafetyChecks.CheckFiniteAndThrow(vertex3, nameof(vertex3));
+            SafetyChecks.CheckCoplanarAndThrow(vertex0, vertex1, vertex2, vertex3, nameof(vertex3));
 
             PolygonCollider collider = default;
             collider.InitAsQuad(vertex0, vertex1, vertex2, vertex3, filter, material);

@@ -8,7 +8,7 @@ using UnityEditor;
 using UnityEngine;
 
 [UpdateBefore(typeof(BuildPhysicsWorld))]
-public class DebugStream : ComponentSystem
+public class DebugStream : SystemBase
 {
     readonly List<NativeStream> m_DebugStreams = new List<NativeStream>();
     DrawComponent m_DrawComponent;
@@ -368,11 +368,10 @@ public class DebugStream : ComponentSystem
 
         public void OnDrawGizmos()
         {
-            // Make sure all potential debug display jobs are finished
-            DebugDraw.m_EndFramePhysicsSystem.GetOutputDependency().Complete();
-
             if (DebugDraw != null)
             {
+                // Make sure all potential debug display jobs are finished
+                DebugDraw.m_EndFramePhysicsSystem.GetOutputDependency().Complete();
                 DebugDraw.Draw();
             }
         }

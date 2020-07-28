@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using Unity.Burst;
 using Unity.Collections;
@@ -58,7 +57,7 @@ namespace Unity.Physics.Authoring
         }
 
         [BurstCompile(CompileSynchronously = true)]
-        unsafe struct ProduceMeshCollidersJob : IJobParallelFor
+        struct ProduceMeshCollidersJob : IJobParallelFor
         {
             [DeallocateOnJobCompletion]
             [ReadOnly] public NativeArray<Hash128> InputKeys;

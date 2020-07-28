@@ -80,8 +80,8 @@ namespace Unity.Physics.Editor
 
             static readonly string[] k_NonReadableGeometryWarning =
             {
-                L10n.Tr($"{k_Singular} has a non-readable mesh in its hierarchy. Assign a custom mesh with Read/Write enabled in its import settings if it needs to be converted at run-time."),
-                L10n.Tr($"{k_Plural} has a non-readable mesh in its hierarchy. Assign a custom mesh with Read/Write enabled in its import settings if it needs to be converted at run-time.")
+                L10n.Tr($"{k_Singular} has a non-readable mesh in its hierarchy. Move it into a sub-scene or assign a custom mesh with Read/Write enabled in its import settings if it needs to be converted at run-time."),
+                L10n.Tr($"{k_Plural} has a non-readable mesh in its hierarchy. Move it into a sub-scene or assign a custom mesh with Read/Write enabled in its import settings if it needs to be converted at run-time.")
             };
 
             public static string GetNonReadableGeometryWarning(int numTargets) =>
@@ -415,9 +415,10 @@ namespace Unity.Physics.Editor
                         EditorApplication.delayCall += SceneViewUtility.ClearNotificationInSceneView;
                     }
 
-                    if (output[0].IsCreated)
+                    if (output.IsCreated)
                     {
-                        output[0].Dispose();
+                        if (output[0].IsCreated)
+                            output[0].Dispose();
                         output.Dispose();
                     }
                 }
@@ -999,7 +1000,6 @@ namespace Unity.Physics.Editor
                     m_DraggingControlID = 0;
                     break;
             }
-
 
             var shape = target as PhysicsShapeAuthoring;
 

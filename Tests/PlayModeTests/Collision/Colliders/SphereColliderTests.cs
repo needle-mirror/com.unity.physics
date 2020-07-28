@@ -1,10 +1,10 @@
+using System;
 using NUnit.Framework;
 using Unity.Burst;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Mathematics;
-using Assert = UnityEngine.Assertions.Assert;
 using TestUtils = Unity.Physics.Tests.Utils.TestUtils;
-using Unity.Collections.LowLevel.Unsafe;
 
 namespace Unity.Physics.Tests.Collision.Colliders
 {
@@ -47,67 +47,29 @@ namespace Unity.Physics.Tests.Collision.Colliders
             Assert.AreEqual(CollisionType.Convex, sphereCollider.CollisionType);
         }
 
-        /// <summary>
-        /// Create invalid <see cref="SphereCollider"/>s and check that appropriate exceptions are being thrown
-        /// </summary>
+#if ENABLE_UNITY_COLLECTIONS_CHECKS
         [Test]
-        public void TestSphereColliderCreateInvalid()
+        public void SphereCollider_Create_WhenCenterInvalid_Throws(
+            [Values(float.PositiveInfinity, float.NegativeInfinity, float.NaN)] float value
+        )
         {
-            var sphere = new SphereGeometry
-            {
-                Center = new float3(-10.34f, 0.0f, -1.54f),
-                Radius = 1.25f
-            };
+            var geometry = new SphereGeometry { Center = new float3(value) };
 
-            // positive inf center
-            {
-                var invalidSphere = sphere;
-                invalidSphere.Center = new float3(float.PositiveInfinity, 0.0f, 0.0f);
-                TestUtils.ThrowsException<System.ArgumentException>(() => SphereCollider.Create(invalidSphere));
-            }
-
-            // negative inf center
-            {
-                var invalidSphere = sphere;
-                invalidSphere.Center = new float3(float.NegativeInfinity, 0.0f, 0.0f);
-                TestUtils.ThrowsException<System.ArgumentException>(() => SphereCollider.Create(invalidSphere));
-            }
-
-            // nan center
-            {
-                var invalidSphere = sphere;
-                invalidSphere.Center = new float3(float.NaN, 0.0f, 0.0f);
-                TestUtils.ThrowsException<System.ArgumentException>(() => SphereCollider.Create(invalidSphere));
-            }
-
-            // negative radius
-            {
-                var invalidSphere = sphere;
-                invalidSphere.Radius = -0.5f;
-                TestUtils.ThrowsException<System.ArgumentException>(() => SphereCollider.Create(invalidSphere));
-            }
-
-            // positive inf radius
-            {
-                var invalidSphere = sphere;
-                invalidSphere.Radius = float.PositiveInfinity;
-                TestUtils.ThrowsException<System.ArgumentException>(() => SphereCollider.Create(invalidSphere));
-            }
-
-            // negative inf radius
-            {
-                var invalidSphere = sphere;
-                invalidSphere.Radius = float.NegativeInfinity;
-                TestUtils.ThrowsException<System.ArgumentException>(() => SphereCollider.Create(invalidSphere));
-            }
-
-            // nan radius
-            {
-                var invalidSphere = sphere;
-                invalidSphere.Radius = float.NaN;
-                TestUtils.ThrowsException<System.ArgumentException>(() => SphereCollider.Create(invalidSphere));
-            }
+            var ex = Assert.Throws<ArgumentException>(() => SphereCollider.Create(geometry));
+            Assert.That(ex.Message, Does.Match(nameof(SphereGeometry.Center)));
         }
+
+        [Test]
+        public void SphereCollider_Create_WhenRadiusInvalid_Throws(
+            [Values(float.PositiveInfinity, float.NegativeInfinity, float.NaN, -1f)] float value
+        )
+        {
+            var geometry = new SphereGeometry { Radius = value };
+
+            var ex = Assert.Throws<ArgumentException>(() => SphereCollider.Create(geometry));
+            Assert.That(ex.Message, Does.Match(nameof(SphereGeometry.Radius)));
+        }
+#endif
 
         #endregion
 
