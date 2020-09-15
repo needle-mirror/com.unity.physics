@@ -11,6 +11,7 @@ using Unity.Physics.Systems;
 namespace Unity.Physics.Authoring
 {
     // A system which draws all contact points produced by the physics step system
+    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateBefore(typeof(StepPhysicsWorld))]
     public class DisplayContactsSystem : SystemBase
     {
@@ -76,7 +77,7 @@ namespace Unity.Physics.Authoring
             {
                 float3 x0 = point.Position;
                 float3 x1 = header.Normal * point.Distance;
-                OutputStreamContext->Arrow(x0, x1, UnityEngine.Color.green);
+                OutputStreamContext->Arrow(x0, x1, Unity.DebugDisplay.ColorIndex.Green);
                 if (DisplayContactIndices)
                 {
                     // The following line is not Burst-compatible

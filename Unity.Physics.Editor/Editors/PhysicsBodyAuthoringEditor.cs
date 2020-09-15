@@ -26,6 +26,7 @@ namespace Unity.Physics.Editor
 
         #pragma warning disable 649
         [AutoPopulate] SerializedProperty m_MotionType;
+        [AutoPopulate] SerializedProperty m_Smoothing;
         [AutoPopulate] SerializedProperty m_Mass;
         [AutoPopulate] SerializedProperty m_GravityFactor;
         [AutoPopulate] SerializedProperty m_LinearDamping;
@@ -46,6 +47,9 @@ namespace Unity.Physics.Editor
             EditorGUI.BeginChangeCheck();
 
             EditorGUILayout.PropertyField(m_MotionType);
+
+            if (m_MotionType.intValue != (int)BodyMotionType.Static)
+                EditorGUILayout.PropertyField(m_Smoothing);
 
             var dynamic = m_MotionType.intValue == (int)BodyMotionType.Dynamic;
 

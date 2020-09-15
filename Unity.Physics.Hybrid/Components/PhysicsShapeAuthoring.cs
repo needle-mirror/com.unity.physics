@@ -5,7 +5,6 @@ using System.Diagnostics;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
-using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
@@ -35,8 +34,8 @@ namespace Unity.Physics.Authoring
     }
 
     [AddComponentMenu("DOTS/Physics/Physics Shape")]
-    [RequiresEntityConversion]
-    public sealed partial class PhysicsShapeAuthoring : MonoBehaviour, IInheritPhysicsMaterialProperties, ISerializationCallbackReceiver
+    [HelpURL(HelpURLs.PhysicsShapeAuthoring)]
+    public sealed class PhysicsShapeAuthoring : MonoBehaviour, IInheritPhysicsMaterialProperties, ISerializationCallbackReceiver
     {
         PhysicsShapeAuthoring() { }
 
@@ -113,7 +112,7 @@ namespace Unity.Physics.Authoring
 
         public bool OverrideCollisionResponse { get => m_Material.OverrideCollisionResponse; set => m_Material.OverrideCollisionResponse = value; }
         public CollisionResponsePolicy CollisionResponse { get => m_Material.CollisionResponse; set => m_Material.CollisionResponse = value; }
-        
+
         public bool OverrideFriction { get => m_Material.OverrideFriction; set => m_Material.OverrideFriction = value; }
         public PhysicsMaterialCoefficient Friction { get => m_Material.Friction; set => m_Material.Friction = value; }
 
@@ -451,12 +450,12 @@ namespace Unity.Physics.Authoring
             if (inputs.IsCreated)
                 inputs.Clear();
             meshAssets?.Clear();
-            
+
             if (m_CustomMesh != null)
             {
                 if (validate && !m_CustomMesh.IsValidForConversion(gameObject))
                     return;
-                
+
                 AppendMeshPropertiesToNativeBuffers(
                     transform.localToWorldMatrix, m_CustomMesh, vertices, triangles, validate, inputs, meshAssets
                 );
@@ -496,7 +495,6 @@ namespace Unity.Physics.Authoring
             NativeList<HashableShapeInputs> inputs, HashSet<UnityMesh> meshAssets
         )
         {
-#if UNITY_2020_1_OR_NEWER
             var offset = 0u;
 #if UNITY_EDITOR
             // TODO: when min spec is 2020.1, collect all meshes and their data via single Burst job rather than one at a time
@@ -504,21 +502,12 @@ namespace Unity.Physics.Authoring
 #else
             using (var meshData = UnityMesh.AcquireReadOnlyMeshData(mesh))
 #endif
-#else
-            var offset = 0;
-#endif
             {
                 if (vertices.IsCreated)
                 {
-#if UNITY_2020_1_OR_NEWER
                     offset = (uint)vertices.Length;
                     var tmpVertices = new NativeArray<Vector3>(meshData[0].vertexCount, Allocator.Temp);
                     meshData[0].GetVertices(tmpVertices);
-#else
-                    offset = vertices.Length;
-                    mesh.GetVertices(s_Vertices);
-                    var tmpVertices = s_Vertices.ToNativeArray(Allocator.Temp);
-#endif
                     if (vertices.Capacity < vertices.Length + tmpVertices.Length)
                         vertices.Capacity = vertices.Length + tmpVertices.Length;
                     foreach (var v in tmpVertices)
@@ -527,7 +516,6 @@ namespace Unity.Physics.Authoring
 
                 if (triangles.IsCreated)
                 {
-#if UNITY_2020_1_OR_NEWER
                     switch (meshData[0].indexFormat)
                     {
                         case IndexFormat.UInt16:
@@ -538,7 +526,7 @@ namespace Unity.Physics.Authoring
                             for (var sm = 0; sm < meshData[0].subMeshCount; ++sm)
                             {
                                 var subMesh = meshData[0].GetSubMesh(sm);
-                                for (var i = 0; i < subMesh.indexCount; i += 3)
+                                for (int i = subMesh.indexStart, count = 0; count < subMesh.indexCount; i += 3, count += 3)
                                     triangles.Add((int3)new uint3(offset + indices16[i], offset + indices16[i + 1], offset + indices16[i + 2]));
                             }
                             break;
@@ -550,22 +538,11 @@ namespace Unity.Physics.Authoring
                             for (var sm = 0; sm < meshData[0].subMeshCount; ++sm)
                             {
                                 var subMesh = meshData[0].GetSubMesh(sm);
-                                for (var i = 0; i < subMesh.indexCount; i += 3)
+                                for (int i = subMesh.indexStart, count = 0; count < subMesh.indexCount; i += 3, count += 3)
                                     triangles.Add((int3)new uint3(offset + indices32[i], offset + indices32[i + 1], offset + indices32[i + 2]));
                             }
                             break;
                     }
-#else
-                    for (var subMesh = 0; subMesh < mesh.subMeshCount; ++subMesh)
-                    {
-                        mesh.GetIndices(s_Indices, subMesh);
-                        var numTriangles = s_Indices.Count / 3;
-                        if (triangles.Capacity < triangles.Length + numTriangles)
-                            triangles.Capacity = triangles.Length + numTriangles;
-                        for (var i = 0; i < numTriangles; i++)
-                            triangles.Add(new int3(offset + s_Indices[i * 3], offset + s_Indices[i * 3 + 1], offset + s_Indices[i * 3 + 2]));
-                    }
-#endif
                 }
             }
 
@@ -642,7 +619,7 @@ namespace Unity.Physics.Authoring
         {
             m_ShapeType = ShapeType.Capsule;
             m_PrimitiveCenter = geometry.Center;
-            m_PrimitiveOrientation.SetValue(geometry.Orientation);
+            m_PrimitiveOrientation = geometry.OrientationEuler;
 
             var radius = math.max(0f, geometry.Radius);
             var height = math.max(0f, geometry.Height);
@@ -764,19 +741,10 @@ namespace Unity.Physics.Authoring
         {
             if (m_SerializedVersion < k_LatestVersion)
             {
+                // old data from version < 1 have been removed
                 if (m_SerializedVersion < 1)
-                {
-                    // migrate existing serialized data from old m_ConvexRadius field
-                    if (m_ConvexRadius_Deprecated >= 0f)
-                        m_ConvexHullGenerationParameters.BevelRadius = m_ConvexRadius_Deprecated;
-                    m_ConvexRadius_Deprecated = -1f;
-
                     m_SerializedVersion = 1;
-                }
             }
-
-            // Prevent user from setting values for deprecated fields
-            m_ConvexRadius_Deprecated = -1f;
         }
 #pragma warning restore 618
 

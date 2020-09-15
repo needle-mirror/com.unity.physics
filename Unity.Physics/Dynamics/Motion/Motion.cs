@@ -1,4 +1,3 @@
-using System;
 using System.Runtime.CompilerServices;
 using Unity.Mathematics;
 
@@ -65,13 +64,6 @@ namespace Unity.Physics
         // Damping applied to the motion during each simulation step
         public float LinearDamping;
         public float AngularDamping;
-
-        [Obsolete("GravityFactor has been moved to MotionVelocity. (RemovedAfter 2020-09-04)")]
-        public float GravityFactor
-        {
-            get { return 1.0f; }
-            set { }
-        }
 
         public static readonly MotionData Zero = new MotionData
         {

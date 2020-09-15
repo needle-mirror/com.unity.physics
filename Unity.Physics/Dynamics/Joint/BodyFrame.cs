@@ -91,9 +91,4 @@ namespace Unity.Physics
 
         public static implicit operator BodyFrame (RigidTransform transform) => new BodyFrame(transform);
     }
-
-    #region Obsolete
-    [Obsolete("JointFrame has been renamed to BodyFrame. (RemovedAfter 2020-07-27) (UnityUpgradable) -> BodyFrame")]
-    public struct JointFrame { }
-    #endregion
 }

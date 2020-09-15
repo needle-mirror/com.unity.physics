@@ -1,4 +1,4 @@
-﻿using Unity.Collections;
+using Unity.Collections;
 using NUnit.Framework;
 using Unity.Mathematics;
 using Random = Unity.Mathematics.Random;
@@ -78,11 +78,11 @@ namespace Unity.Physics.Tests.Joints
             switch (rnd.NextInt(3))
             {
                 case 0: // all values random
-                break;
+                    break;
                 case 1: // two values the same
                     int index = rnd.NextInt(3);
                     inertia[(index + 1) % 2] = inertia[index];
-                break;
+                    break;
                 case 2: // all values the same
                     inertia = inertia.zzz;
                     break;
@@ -218,7 +218,7 @@ namespace Unity.Physics.Tests.Joints
                 MotionData motionA, motionB;
                 generateRandomMotion(ref rnd, out velocityA, out motionA, true);
                 generateRandomMotion(ref rnd, out velocityB, out motionB, !velocityA.HasInfiniteInertiaAndMass);
-                
+
                 // Simulate the joint
                 {
                     // Build input
@@ -312,7 +312,7 @@ namespace Unity.Physics.Tests.Joints
                 return CreateTestJoint(PhysicsJoint.CreateBallAndSocket(pivotA, pivotB));
             });
         }
-        
+
         [Test]
         public unsafe void StiffSpringTest()
         {
@@ -323,7 +323,7 @@ namespace Unity.Physics.Tests.Joints
                 return CreateTestJoint(PhysicsJoint.CreateLimitedDistance(pivotA, pivotB, new FloatRange(minDistance, maxDistance)));
             });
         }
-        
+
         [Test]
         public unsafe void PrismaticTest()
         {
@@ -340,7 +340,7 @@ namespace Unity.Physics.Tests.Joints
                 return CreateTestJoint(PhysicsJoint.CreatePrismatic(jointFrameA, jointFrameB, distance));
             });
         }
-        
+
         [Test]
         public unsafe void HingeTest()
         {
@@ -350,6 +350,8 @@ namespace Unity.Physics.Tests.Joints
                 var jointFrameB = new BodyFrame();
                 generateRandomPivots(ref rnd, out jointFrameA.Position, out jointFrameB.Position);
                 generateRandomAxes(ref rnd, out jointFrameA.Axis, out jointFrameB.Axis);
+                Math.CalculatePerpendicularNormalized(jointFrameA.Axis, out jointFrameA.PerpendicularAxis, out _);
+                Math.CalculatePerpendicularNormalized(jointFrameB.Axis, out jointFrameB.PerpendicularAxis, out _);
                 return CreateTestJoint(PhysicsJoint.CreateHinge(jointFrameA, jointFrameB));
             });
         }
@@ -372,7 +374,7 @@ namespace Unity.Physics.Tests.Joints
         }
 
         // TODO - test CreateRagdoll(), if it stays.  Doesn't fit nicely because it produces two JointDatas.
-        
+
         [Test]
         public unsafe void FixedTest()
         {
@@ -386,7 +388,20 @@ namespace Unity.Physics.Tests.Joints
                 return CreateTestJoint(PhysicsJoint.CreateFixed(jointFrameA, jointFrameB));
             });
         }
-        
+
+        [Test]
+        public unsafe void LimitedDOFTest()
+        {
+            RunJointTest("LimitedDOFTest", (ref Random rnd) =>
+            {
+                var linearAxes = new bool3(false);
+                var angularAxes = new bool3(false);
+                for (int i = 0; i < 3; i++) linearAxes[rnd.NextInt(0, 2)] = !linearAxes[rnd.NextInt(0, 2)];
+                for (int i = 0; i < 3; i++) angularAxes[rnd.NextInt(0, 2)] = !angularAxes[rnd.NextInt(0, 2)];
+                return CreateTestJoint(PhysicsJoint.CreateLimitedDOF(generateRandomTransform(ref rnd), linearAxes, angularAxes));
+            });
+        }
+
         [Test]
         public unsafe void TwistTest()
         {
@@ -441,6 +456,17 @@ namespace Unity.Physics.Tests.Joints
                     jacobians.Dispose();
                 }
             }
+        }
+
+        [Test]
+        public unsafe void ZeroDimensionTest()
+        {
+            RunJointTest("LimitedDOFTestZeroDimension", (ref Random rnd) =>
+            {
+                // Create a joint with 2 constraints that have 0 dimensions
+                var noAxes = new bool3(false);
+                return CreateTestJoint(PhysicsJoint.CreateLimitedDOF(generateRandomTransform(ref rnd), noAxes, noAxes));
+            });
         }
     }
 }

@@ -7,9 +7,12 @@ namespace Unity.Physics
     /// <summary>
     /// DataFlowGraph node that performs a Collider Cast query on a CollisionWorld.
     /// </summary>
-    public class ColliderCastNode
-        : NodeDefinition<ColliderCastNode.Data, ColliderCastNode.SimPorts, ColliderCastNode.KernelData, ColliderCastNode.KernelDefs,
-                ColliderCastNode.Kernel>
+    public class ColliderCastNode :
+#if UNITY_DATAFLOWGRAPH_0_17_OR_NEWER
+        KernelNodeDefinition<ColliderCastNode.KernelDefs>
+#else
+        NodeDefinition<ColliderCastNode.Data, ColliderCastNode.SimPorts, ColliderCastNode.KernelData, ColliderCastNode.KernelDefs, ColliderCastNode.Kernel>
+#endif
     {
         public struct SimPorts : ISimulationPortDefinition
         {
@@ -31,7 +34,7 @@ namespace Unity.Physics
         public struct KernelData : IKernelData
         {
         }
-    
+
         [BurstCompile]
         public struct Kernel : IGraphKernel<KernelData, KernelDefs>
         {
@@ -43,7 +46,7 @@ namespace Unity.Physics
                     ctx.Resolve(ref ports.HitSuccess) = false;
                     return;
                 }
-                
+
                 var collisionWorld = collisionWorldProxy.ToCollisionWorld();
 
                 if (collisionWorld.NumBodies > 0)

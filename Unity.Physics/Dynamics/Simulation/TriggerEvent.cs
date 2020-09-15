@@ -1,4 +1,3 @@
-using System;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -16,15 +15,6 @@ namespace Unity.Physics
         public int BodyIndexA => EventData.BodyIndices.BodyIndexA;
         public ColliderKey ColliderKeyB => EventData.ColliderKeys.ColliderKeyB;
         public ColliderKey ColliderKeyA => EventData.ColliderKeys.ColliderKeyA;
-
-        [Obsolete("Entities has been deprecated. Use EntityA and EntityB directly. (RemovedAfter 2020-08-01)")]
-        public EntityPair Entities => EventData.Entities;
-
-        [Obsolete("BodyIndices has been deprecated. Use BodyIndexA and BodyIndexB directly. (RemovedAfter 2020-08-01)")]
-        public BodyIndexPair BodyIndices => EventData.BodyIndices;
-
-        [Obsolete("ColliderKeys has been deprecated. Use ColliderKeyA and ColliderKeyB directly. (RemovedAfter 2020-08-01)")]
-        public ColliderKeyPair ColliderKeys => EventData.ColliderKeys;
     }
 
     // A stream of trigger events.

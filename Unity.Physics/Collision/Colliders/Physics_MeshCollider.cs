@@ -102,6 +102,7 @@ namespace Unity.Physics
                 ref var mesh = ref meshCollider->Mesh;
 
                 mesh.Init(nodesPtr, numNodes, sections, filter, material);
+                mesh.UpdateCachedBoundingRadius();
 
                 // Calculate combined filter
                 meshCollider->m_Header.Filter = mesh.Sections.Length > 0 ? mesh.Sections[0].Filters[0] : CollisionFilter.Default;
@@ -160,15 +161,28 @@ namespace Unity.Physics
             }
         }
 
+        internal float CalculateBoundingRadius(float3 pivot)
+        {
+            return math.distance(pivot, Mesh.BoundingVolumeHierarchy.Domain.Center) + Mesh.m_BoundingRadius;
+        }
+
         public Aabb CalculateAabb()
         {
-            return m_Aabb;
+            return CalculateAabb(RigidTransform.identity);
         }
 
         public Aabb CalculateAabb(RigidTransform transform)
         {
-            // TODO: Store a convex hull wrapping the mesh, and use that to calculate tighter AABBs?
-            return Math.TransformAabb(transform, m_Aabb);
+            var outAabb = Math.TransformAabb(transform, m_Aabb);
+            float3 center = outAabb.Center;
+            Aabb sphereAabb = new Aabb
+            {
+                Min = new float3(center - Mesh.m_BoundingRadius),
+                Max = new float3(center + Mesh.m_BoundingRadius)
+            };
+            outAabb.Intersect(sphereAabb);
+
+            return outAabb;
         }
 
         // Cast a ray against this collider.

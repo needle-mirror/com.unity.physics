@@ -31,14 +31,19 @@ namespace Unity.Physics
             }
         }
 
+        internal float m_BoundingRadius;
+
         // The array of child colliders
         private BlobArray m_ChildrenBlob;
+
         public int NumChildren => m_ChildrenBlob.Length;
         public BlobArray.Accessor<Child> Children => new BlobArray.Accessor<Child>(ref m_ChildrenBlob);
 
         // The bounding volume hierarchy
         // TODO: Store node filters array too, for filtering queries within the BVH
         private BlobArray m_BvhNodesBlob;
+
+        internal BlobArray.Accessor<BoundingVolumeHierarchy.Node> BvhNodes => new BlobArray.Accessor<BoundingVolumeHierarchy.Node>(ref m_BvhNodesBlob);
         internal unsafe BoundingVolumeHierarchy BoundingVolumeHierarchy
         {
             get
@@ -130,6 +135,7 @@ namespace Unity.Physics
             compoundCollider->m_BvhNodesBlob.Offset = (int)(end - (byte*)(&compoundCollider->m_BvhNodesBlob.Offset));
             compoundCollider->m_BvhNodesBlob.Length = numNodes;
             UnsafeUtility.MemCpy(end, nodes.GetUnsafeReadOnlyPtr(), bvhSize);
+            compoundCollider->UpdateCachedBoundingRadius();
             end += bvhSize;
 
             // Validate nesting level of composite colliders.
@@ -175,6 +181,47 @@ namespace Unity.Physics
             bvh.Build(points, aabbs, out int numNodes);
 
             return numNodes;
+        }
+
+        private unsafe void UpdateCachedBoundingRadius()
+        {
+            m_BoundingRadius = 0;
+            float3 center = BoundingVolumeHierarchy.Domain.Center;
+
+            for (int i = 0; i < NumChildren; i++)
+            {
+                ref Child child = ref Children[i];
+
+                float3 childFromCenter = math.transform(math.inverse(child.CompoundFromChild), center);
+                float radius = 0;
+
+                switch (child.Collider->Type)
+                {
+                    case ColliderType.Sphere:
+                    case ColliderType.Box:
+                    case ColliderType.Capsule:
+                    case ColliderType.Quad:
+                    case ColliderType.Triangle:
+                    case ColliderType.Cylinder:
+                    case ColliderType.Convex:
+                        radius = ((ConvexCollider*)child.Collider)->CalculateBoundingRadius(childFromCenter);
+                        break;
+                    case ColliderType.Compound:
+                        radius = ((CompoundCollider*)child.Collider)->CalculateBoundingRadius(childFromCenter);
+                        break;
+                    case ColliderType.Mesh:
+                        radius = ((MeshCollider*)child.Collider)->CalculateBoundingRadius(childFromCenter);
+                        break;
+                    case ColliderType.Terrain:
+                        Aabb terrainAabb = ((TerrainCollider*)child.Collider)->CalculateAabb();
+                        math.length(math.max(math.abs(terrainAabb.Max - childFromCenter), math.abs(terrainAabb.Min - childFromCenter)));
+                        break;
+                    default:
+                        SafetyChecks.ThrowNotImplementedException();
+                        break;
+                }
+                m_BoundingRadius = math.max(m_BoundingRadius, radius);
+            }
         }
 
         // Build mass properties representing a union of all the child collider mass properties.
@@ -303,6 +350,11 @@ namespace Unity.Physics
         public CollisionFilter Filter { get => m_Header.Filter; set { if (!m_Header.Filter.Equals(value)) { m_Header.Version += 1; m_Header.Filter = value; } } }
         public MassProperties MassProperties { get; private set; }
 
+        internal float CalculateBoundingRadius(float3 pivot)
+        {
+            return math.distance(pivot, BoundingVolumeHierarchy.Domain.Center) + m_BoundingRadius;
+        }
+
         public Aabb CalculateAabb()
         {
             return CalculateAabb(RigidTransform.identity);
@@ -310,8 +362,16 @@ namespace Unity.Physics
 
         public unsafe Aabb CalculateAabb(RigidTransform transform)
         {
-            // TODO: Store a convex hull wrapping all the children, and use that to calculate tighter AABBs?
-            return Math.TransformAabb(transform, BoundingVolumeHierarchy.Domain);
+            Aabb outAabb = Math.TransformAabb(transform, BoundingVolumeHierarchy.Domain);
+            float3 center = outAabb.Center;
+            Aabb sphereAabb = new Aabb
+            {
+                Min = new float3(center - m_BoundingRadius),
+                Max = new float3(center + m_BoundingRadius)
+            };
+            outAabb.Intersect(sphereAabb);
+
+            return outAabb;
         }
 
         // Cast a ray against this collider.

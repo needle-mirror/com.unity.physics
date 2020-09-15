@@ -83,18 +83,6 @@ namespace Unity.Physics
                 Modified = true;
             }
         }
-
-        [Obsolete("Entities has been deprecated. Use EntityA and EntityB directly. (RemovedAfter 2020-08-01)")]
-        public EntityPair Entities => EntityPair;
-
-        [Obsolete("BodyIndexPair has been deprecated. Use BodyIndexA and BodyIndexB directly. (RemovedAfter 2020-08-01)")]
-        public BodyIndexPair BodyIndexPair => ContactHeader.BodyPair;
-
-        [Obsolete("ColliderKeys has been deprecated. Use ColliderKeyA and ColliderKeyB directly. (RemovedAfter 2020-08-01)")]
-        public ColliderKeyPair ColliderKeys => ContactHeader.ColliderKeys;
-
-        [Obsolete("BodyCustomTags has been deprecated. Use CustomTagsA and CustomTagsB directly. (RemovedAfter 2020-08-01)")]
-        public CustomTagsPair BodyCustomTags => ContactHeader.BodyCustomTags;
     }
 
     public struct ModifiableContactPoint

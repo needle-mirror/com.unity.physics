@@ -1,4 +1,3 @@
-using System;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -124,13 +123,6 @@ namespace Unity.Physics
             public float InvTimestep;
         }
 
-        [Obsolete("ApplyGravityAndCopyInputVelocities() has been deprecated. Use the new method that doesn't take NativeArray<MotionData> instead. (RemovedAfter 2020-09-04)")]
-        public static void ApplyGravityAndCopyInputVelocities(NativeArray<MotionData> motionDatas, NativeArray<MotionVelocity> motionVelocities,
-            NativeArray<Velocity> inputVelocities, float3 gravityAcceleration)
-        {
-            ApplyGravityAndCopyInputVelocities(motionVelocities, inputVelocities, gravityAcceleration);
-        }
-
         // Apply gravity to all dynamic bodies and copy input velocities
         public static void ApplyGravityAndCopyInputVelocities(NativeArray<MotionVelocity> motionVelocities,
             NativeArray<Velocity> inputVelocities, float3 gravityAcceleration)
@@ -227,14 +219,6 @@ namespace Unity.Physics
             }
 
             return returnHandles;
-        }
-
-        [Obsolete("SolveJacobians() has been deprecated. Use the new method that takes solver stabilization parameters instead. (RemovedAfter 2020-09-04)")]
-        public static void SolveJacobians(ref NativeStream.Reader jacobiansReader, NativeArray<MotionVelocity> motionVelocities, float timeStep, int numIterations,
-            ref NativeStream.Writer collisionEventsWriter, ref NativeStream.Writer triggerEventsWriter)
-        {
-            SolveJacobians(ref jacobiansReader, motionVelocities, timeStep, numIterations,
-                ref collisionEventsWriter, ref triggerEventsWriter, new StabilizationData());
         }
 
         // Solve the Jacobians stored in the simulation context
@@ -345,8 +329,8 @@ namespace Unity.Physics
                             job.TriggerEventsWriter = triggerEvents.AsWriter();
                         }
 
-                        // NOTE: The last phase must be executed on a single job since it  
-                        // int.MaxValue can't be used as batchSize since 19.1 overflows in that case... 
+                        // NOTE: The last phase must be executed on a single job since it
+                        // int.MaxValue can't be used as batchSize since 19.1 overflows in that case...
                         bool isLastPhase = phaseId == numPhases - 1;
                         int batchSize = isLastPhase ? (int.MaxValue / 2) : 1;
 
@@ -625,7 +609,7 @@ namespace Unity.Physics
         #region Implementation
 
         private static void BuildJacobian(MTransform worldFromA, MTransform worldFromB, float3 normal, float3 armA, float3 armB,
-        float3 invInertiaA, float3 invInertiaB, float sumInvMass, out float3 angularA, out float3 angularB, out float invEffectiveMass)
+            float3 invInertiaA, float3 invInertiaB, float sumInvMass, out float3 angularA, out float3 angularB, out float invEffectiveMass)
         {
             float3 crossA = math.cross(armA, normal);
             angularA = math.mul(worldFromA.InverseRotation, crossA).xyz;
@@ -759,7 +743,7 @@ namespace Unity.Physics
                 {
                     WorldFromMotion = world.Bodies[bodyIndex].WorldFromBody,
                     BodyFromMotion = RigidTransform.identity
-                    // remaining fields all zero
+                        // remaining fields all zero
                 };
             }
             else
@@ -897,7 +881,7 @@ namespace Unity.Physics
                                         // However, it can (and will) be slightly away from contact plane at the moment restitution is applied.
                                         // So we have to apply vertical shot equation to make sure we don't gain energy:
                                         // effectiveRestitutionVelocity^2 = restitutionVelocity^2 - 2.0f * gravityAcceleration * distanceToGround
-                                        // From this formula we calculate the effective restitution velocity, which is the velocity 
+                                        // From this formula we calculate the effective restitution velocity, which is the velocity
                                         // that the contact point needs to reach the same height from current position
                                         // as if it was shot with the restitutionVelocity from the contact plane.
                                         // ------------------------------------------------------------
@@ -969,11 +953,11 @@ namespace Unity.Physics
                                     var invEffectiveMassDiag = new float3(invEffectiveMass0, invEffectiveMass1, invEffectiveMassAngular);
                                     var invEffectiveMassOffDiag = new float3( // (0, 1), (0, 2), (1, 2)
                                         JacobianUtilities.CalculateInvEffectiveMassOffDiag(contactJacobian.Friction0.AngularA, contactJacobian.Friction1.AngularA, velocityA.InverseInertia,
-                                        contactJacobian.Friction0.AngularB, contactJacobian.Friction1.AngularB, velocityB.InverseInertia),
+                                            contactJacobian.Friction0.AngularB, contactJacobian.Friction1.AngularB, velocityB.InverseInertia),
                                         JacobianUtilities.CalculateInvEffectiveMassOffDiag(contactJacobian.Friction0.AngularA, contactJacobian.AngularFriction.AngularA, velocityA.InverseInertia,
-                                        contactJacobian.Friction0.AngularB, contactJacobian.AngularFriction.AngularB, velocityB.InverseInertia),
+                                            contactJacobian.Friction0.AngularB, contactJacobian.AngularFriction.AngularB, velocityB.InverseInertia),
                                         JacobianUtilities.CalculateInvEffectiveMassOffDiag(contactJacobian.Friction1.AngularA, contactJacobian.AngularFriction.AngularA, velocityA.InverseInertia,
-                                        contactJacobian.Friction1.AngularB, contactJacobian.AngularFriction.AngularB, velocityB.InverseInertia));
+                                            contactJacobian.Friction1.AngularB, contactJacobian.AngularFriction.AngularB, velocityB.InverseInertia));
 
                                     // Invert the matrix and store it to the jacobians
                                     if (!JacobianUtilities.InvertSymmetricMatrix(invEffectiveMassDiag, invEffectiveMassOffDiag, out float3 effectiveMassDiag, out float3 effectiveMassOffDiag))
@@ -1060,6 +1044,13 @@ namespace Unity.Physics
             for (var i = 0; i < joint.Constraints.Length; i++)
             {
                 Constraint constraint = joint.Constraints[i];
+                int constraintDimension = constraint.Dimension;
+                if (0 == constraintDimension)
+                {
+                    // Unconstrained, so no need to create a header.
+                    continue;
+                }
+
                 JacobianType jacType;
                 switch (constraint.Type)
                 {
@@ -1067,7 +1058,7 @@ namespace Unity.Physics
                         jacType = JacobianType.LinearLimit;
                         break;
                     case ConstraintType.Angular:
-                        switch (constraint.Dimension)
+                        switch (constraintDimension)
                         {
                             case 1:
                                 jacType = JacobianType.AngularLimit1D;
@@ -1114,7 +1105,7 @@ namespace Unity.Physics
                             velocityA, velocityB, motionA, motionB, constraint, tau, damping);
                         break;
                     case ConstraintType.Angular:
-                        switch (constraint.Dimension)
+                        switch (constraintDimension)
                         {
                             case 1:
                                 header.AccessBaseJacobian<AngularLimit1DJacobian>().Build(

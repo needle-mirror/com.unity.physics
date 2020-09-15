@@ -2,18 +2,20 @@ using System;
 using System.Collections.Generic;
 using Unity.Burst;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
-using UnityEngine;
 using Hash128 = Unity.Entities.Hash128;
 
 namespace Unity.Physics.Authoring
 {
     public partial class BaseShapeConversionSystem<T>
     {
-//        [BurstCompile] // TODO: re-enable when SpookyHashBuilder is Burstable
-        struct GeneratePhysicsShapeHashesJob : IJobParallelFor
+#if UNITY_COLLECTIONS_0_13_OR_NEWER
+        [BurstCompile]
+#endif
+        unsafe struct GeneratePhysicsShapeHashesJob : IJobParallelFor
         {
             [ReadOnly] public NativeArray<ShapeComputationData> ComputationData;
 
@@ -52,62 +54,62 @@ namespace Unity.Physics.Authoring
                 var collisionFilter = shapeData.CollisionFilter;
                 var shapeType = shapeData.ShapeType;
 
-                var builder = new SpookyHashBuilder(Allocator.Temp);
-                builder.Append(ref shapeType);
-                builder.Append(ref shapeData.ForceUniqueIdentifier);
-                builder.Append(ref collisionFilter);
-                builder.Append(ref material);
+                var bytes = new NativeList<byte>(Allocator.Temp);
+                bytes.Append(ref shapeType);
+                bytes.Append(ref shapeData.ForceUniqueIdentifier);
+                bytes.Append(ref collisionFilter);
+                bytes.Append(ref material);
 
                 switch (shapeType)
                 {
                     case ShapeType.Box:
                     {
                         var p = shapeData.BoxProperties;
-                        builder.Append(ref p);
+                        bytes.Append(ref p);
                         var aabb = RotatedBoxAabb(p.Center, p.Size, shapeData.BoxProperties.Orientation);
                         HashableShapeInputs.GetQuantizedTransformations(shapeData.BodyFromShape, aabb, out var transformations);
-                        builder.Append(ref transformations);
+                        bytes.Append(ref transformations);
                         break;
                     }
                     case ShapeType.Capsule:
                     {
                         var p = shapeData.CapsuleProperties;
-                        builder.Append(ref p);
+                        bytes.Append(ref p);
                         var v0 = p.Vertex0;
                         var v1 = p.Vertex1;
                         var r = p.Radius;
                         var aabb = RotatedCylinderAabb(p.GetCenter(), p.GetHeight(), r, quaternion.LookRotationSafe(v0 - v1, math.up()));
                         HashableShapeInputs.GetQuantizedTransformations(shapeData.BodyFromShape, aabb, out var transformations);
-                        builder.Append(ref transformations);
+                        bytes.Append(ref transformations);
                         break;
                     }
                     case ShapeType.Cylinder:
                     {
                         var p = shapeData.CylinderProperties;
-                        builder.Append(ref p);
+                        bytes.Append(ref p);
                         var aabb = RotatedCylinderAabb(p.Center, p.Height, p.Radius, shapeData.CylinderProperties.Orientation);
                         HashableShapeInputs.GetQuantizedTransformations(shapeData.BodyFromShape, aabb, out var transformations);
-                        builder.Append(ref transformations);
+                        bytes.Append(ref transformations);
                         break;
                     }
                     case ShapeType.Plane:
                     {
                         var v = shapeData.PlaneVertices;
-                        builder.Append(ref v);
+                        bytes.Append(ref v);
                         var planeCenter = math.lerp(v.c0, v.c2, 0.5f);
                         var planeSize = math.abs(v.c0 - v.c2);
                         var aabb = RotatedBoxAabb(planeCenter, planeSize, quaternion.LookRotationSafe(v.c1 - v.c2, math.cross(v.c1 - v.c0, v.c2 - v.c1)));
                         HashableShapeInputs.GetQuantizedTransformations(shapeData.BodyFromShape, aabb, out var transformations);
-                        builder.Append(ref transformations);
+                        bytes.Append(ref transformations);
                         break;
                     }
                     case ShapeType.Sphere:
                     {
                         var p = shapeData.SphereProperties;
-                        builder.Append(ref p);
+                        bytes.Append(ref p);
                         var aabb = new Aabb { Min = p.Center - new float3(p.Radius), Max = p.Center + new float3(p.Radius) };
                         HashableShapeInputs.GetQuantizedTransformations(shapeData.BodyFromShape, aabb, out var transformations);
-                        builder.Append(ref transformations);
+                        bytes.Append(ref transformations);
                         break;
                     }
                     case ShapeType.ConvexHull:
@@ -122,7 +124,7 @@ namespace Unity.Physics.Authoring
                     }
                 }
 
-                Hashes[index] = builder.Finish();
+                Hashes[index] = HashUtility.Hash128(bytes.GetUnsafeReadOnlyPtr(), bytes.Length);
             }
         }
 

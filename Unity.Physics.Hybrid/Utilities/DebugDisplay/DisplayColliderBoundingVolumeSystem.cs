@@ -29,7 +29,7 @@ namespace Unity.Physics.Authoring
                     Aabb aabb = Bodies[b].Collider.Value.CalculateAabb(Bodies[b].WorldFromBody);
 
                     float3 center = aabb.Center;
-                    OutputStream.Box(aabb.Extents, center, Quaternion.identity, new Color(0.7f, 0.125f, 0.125f));
+                    OutputStream.Box(aabb.Extents, center, Quaternion.identity, DebugDisplay.ColorIndex.BrightRed);
                 }
             }
             OutputStream.End();
@@ -37,6 +37,7 @@ namespace Unity.Physics.Authoring
     }
 
     /// Create a DisplayColliderAabbsJob
+    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateAfter(typeof(BuildPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
     public class DisplayColliderAabbsSystem : SystemBase
     {

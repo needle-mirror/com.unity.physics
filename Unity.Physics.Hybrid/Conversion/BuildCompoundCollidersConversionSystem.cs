@@ -1,6 +1,7 @@
 using System;
 using Unity.Burst;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -221,8 +222,10 @@ namespace Unity.Physics.Authoring
             Profiler.EndSample();
         }
 
-//        [BurstCompile] // TODO: re-enable when SpookyHashBuilder is Burstable
-        struct HashChildrenJob : IJob
+#if UNITY_COLLECTIONS_0_13_OR_NEWER
+        [BurstCompile]
+#endif
+        unsafe struct HashChildrenJob : IJob
         {
             [DeallocateOnJobCompletion]
             [ReadOnly] public NativeArray<Hash128> ChildHashes;
@@ -233,10 +236,10 @@ namespace Unity.Physics.Authoring
 
             public void Execute()
             {
-                var builder = new SpookyHashBuilder(Allocator.Temp);
-                builder.Append(ChildHashes);
-                builder.Append(ChildOffsets);
-                Output[0] = builder.Finish();
+                var bytes = new NativeList<byte>(Allocator.Temp);
+                bytes.Append(ChildHashes);
+                bytes.Append(ChildOffsets);
+                Output[0] = HashUtility.Hash128(bytes.GetUnsafeReadOnlyPtr(), bytes.Length);
             }
         }
 

@@ -26,6 +26,11 @@
             "name": "com.unity.modules.physics",
             "expression": "",
             "define": "LEGACY_PHYSICS"
+        },
+        {
+            "name": "com.unity.collections",
+            "expression": "0.13.0-preview.9",
+            "define": "UNITY_COLLECTIONS_0_13_OR_NEWER"
         }
     ],
     "noEngineReferences": false

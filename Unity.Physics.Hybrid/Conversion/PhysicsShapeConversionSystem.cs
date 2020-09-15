@@ -9,7 +9,7 @@ namespace Unity.Physics.Authoring
 {
     [UpdateAfter(typeof(BeginColliderConversionSystem))]
     [UpdateBefore(typeof(BuildCompoundCollidersConversionSystem))]
-    [ConverterVersion("adamm", 4)]
+    [ConverterVersion("adamm", 5)]
     public sealed class PhysicsShapeConversionSystem : BaseShapeConversionSystem<PhysicsShapeAuthoring>
     {
         Material ProduceMaterial(PhysicsShapeAuthoring shape)

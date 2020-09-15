@@ -3,13 +3,15 @@ using UnityEngine;
 namespace Unity.Physics.Authoring
 {
     [CreateAssetMenu(menuName = "DOTS/Physics/Physics Material Template")]
-    public sealed partial class PhysicsMaterialTemplate : ScriptableObject, IPhysicsMaterialProperties
+    [HelpURL(HelpURLs.PhysicsMaterialTemplate)]
+    public sealed class PhysicsMaterialTemplate : ScriptableObject, IPhysicsMaterialProperties
     {
         PhysicsMaterialTemplate() { }
 
         public CollisionResponsePolicy CollisionResponse { get => m_Value.CollisionResponse; set => m_Value.CollisionResponse = value; }
 
         public PhysicsMaterialCoefficient Friction { get => m_Value.Friction; set => m_Value.Friction = value; }
+
         public PhysicsMaterialCoefficient Restitution { get => m_Value.Restitution; set => m_Value.Restitution = value; }
 
         public PhysicsCategoryTags BelongsTo { get => m_Value.BelongsTo; set => m_Value.BelongsTo = value; }

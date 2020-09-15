@@ -161,7 +161,7 @@ namespace Unity.Physics
 #region Throw Exceptions
 
         [Conditional(ConditionalSymbol)]
-        public static void ThrowInvalidOperationException(FixedString64 message = default) => throw new InvalidOperationException($"{message}");
+        public static void ThrowInvalidOperationException(FixedString128 message = default) => throw new InvalidOperationException($"{message}");
 
         [Conditional(ConditionalSymbol)]
         public static void ThrowNotImplementedException() => throw new NotImplementedException();

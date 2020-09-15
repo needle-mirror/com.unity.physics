@@ -56,6 +56,8 @@ namespace Unity.Physics
             public BlobArray.Accessor<Material> Materials => new BlobArray.Accessor<Material>(ref MaterialsBlob);
         }
 
+        internal float m_BoundingRadius;
+
         // The bounding volume
         private BlobArray m_BvhNodesBlob;
         public unsafe BoundingVolumeHierarchy BoundingVolumeHierarchy
@@ -74,6 +76,22 @@ namespace Unity.Physics
         private BlobArray m_SectionsBlob;
         public BlobArray.Accessor<Section> Sections => new BlobArray.Accessor<Section>(ref m_SectionsBlob);
 
+        internal void UpdateCachedBoundingRadius()
+        {
+            float3 center = BoundingVolumeHierarchy.Domain.Center;
+            float boundingRadiusSq = 0;
+
+            for (int i = 0; i < Sections.Length; ++i)
+            {
+                var vertices = Sections[i].Vertices;
+                for (int j = 0; j < vertices.Length; ++j)
+                {
+                    boundingRadiusSq = math.max(math.distancesq(center, vertices[j]), boundingRadiusSq);
+                }
+            }
+
+            m_BoundingRadius = math.sqrt(boundingRadiusSq);
+        }
 
         // Get the number of bits required to store a key to any of the leaf colliders
         public uint NumColliderKeyBits => (uint)((32 - math.lzcnt(Sections.Length - 1)) + 8 + 1);

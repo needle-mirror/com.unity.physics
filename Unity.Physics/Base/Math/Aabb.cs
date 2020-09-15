@@ -36,6 +36,13 @@ namespace Unity.Physics
         }
 
         [DebuggerStepThrough]
+        public void Intersect(Aabb aabb)
+        {
+            Min = math.max(Min, aabb.Min);
+            Max = math.min(Max, aabb.Max);
+        }
+
+        [DebuggerStepThrough]
         public void Include(float3 point)
         {
             Min = math.min(Min, point);

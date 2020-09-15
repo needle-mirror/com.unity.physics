@@ -1,4 +1,5 @@
-﻿using Unity.Burst;
+﻿using System.Runtime.CompilerServices;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -61,7 +62,7 @@ namespace Unity.Physics
                 // Update motion space
                 {
                     // center of mass
-                    motionData.WorldFromMotion.pos += motionVelocity.LinearVelocity * timeStep;
+                    IntegratePosition(ref motionData.WorldFromMotion.pos, motionVelocity.LinearVelocity, timeStep);
 
                     // orientation
                     IntegrateOrientation(ref motionData.WorldFromMotion.rot, motionVelocity.AngularVelocity, timeStep);
@@ -91,6 +92,12 @@ namespace Unity.Physics
             {
                 Integrate(MotionDatas, MotionVelocities, TimeStep);
             }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static void IntegratePosition(ref float3 position, float3 linearVelocity, float timestep)
+        {
+            position += linearVelocity * timestep;
         }
 
         internal static void IntegrateOrientation(ref quaternion orientation, float3 angularVelocity, float timestep)

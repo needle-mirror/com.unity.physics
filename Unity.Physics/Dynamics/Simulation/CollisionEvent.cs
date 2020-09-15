@@ -1,4 +1,3 @@
-using System;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -36,15 +35,6 @@ namespace Unity.Physics
 
             return EventData.Value.CalculateDetails(ref physicsWorld, TimeStep, InputVelocityA, InputVelocityB, contactPoints);
         }
-
-        [Obsolete("Entities has been deprecated. Use EntityA and EntityB directly. (RemovedAfter 2020-08-01)")]
-        public EntityPair Entities => EventData.Value.Entities;
-
-        [Obsolete("BodyIndices has been deprecated. Use BodyIndexA and BodyIndexB directly. (RemovedAfter 2020-08-01)")]
-        public BodyIndexPair BodyIndices => EventData.Value.BodyIndices;
-
-        [Obsolete("ColliderKeys has been deprecated. Use ColliderKeyA and ColliderKeyB directly. (RemovedAfter 2020-08-01)")]
-        public ColliderKeyPair ColliderKeys => EventData.Value.ColliderKeys;
 
         // Extra details about a collision
         public struct Details

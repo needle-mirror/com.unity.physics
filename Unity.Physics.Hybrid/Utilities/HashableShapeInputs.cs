@@ -1,6 +1,6 @@
-using System;
 using Unity.Burst;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
@@ -241,7 +241,7 @@ namespace Unity.Physics.Authoring
             return value;
         }
 
-        public static Hash128 GetHash128(
+        public static unsafe Hash128 GetHash128(
             uint uniqueIdentifier,
             ConvexHullGenerationParameters hullGenerationParameters,
             Material material,
@@ -268,16 +268,16 @@ namespace Unity.Physics.Authoring
             // bakeFromShape only contains scale/shear information, so only the inner 3x3 needs to contribute to the hash
             var scaleShear = new float3x3(bakeMatrix.c0.xyz, bakeMatrix.c1.xyz, bakeMatrix.c2.xyz);
 
-            var builder = new SpookyHashBuilder(Allocator.Temp);
-            builder.Append(ref uniqueIdentifier);
-            builder.Append(ref hullGenerationParameters);
-            builder.Append(ref material);
-            builder.Append(ref filter);
-            builder.Append(ref scaleShear);
-            builder.Append(inputs);
-            builder.Append(allIncludedIndices);
-            builder.Append(allBlendShapeWeights);
-            return builder.Finish();
+            var bytes = new NativeList<byte>(Allocator.Temp);
+            bytes.Append(ref uniqueIdentifier);
+            bytes.Append(ref hullGenerationParameters);
+            bytes.Append(ref material);
+            bytes.Append(ref filter);
+            bytes.Append(ref scaleShear);
+            bytes.Append(inputs);
+            bytes.Append(allIncludedIndices);
+            bytes.Append(allBlendShapeWeights);
+            return HashUtility.Hash128(bytes.GetUnsafeReadOnlyPtr(), bytes.Length);
         }
     }
 }

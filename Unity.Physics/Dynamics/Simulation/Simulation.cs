@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
@@ -30,21 +30,6 @@ namespace Unity.Physics
         public TriggerEvents TriggerEvents => new TriggerEvents(TriggerEventDataStream);
 
         private NativeArray<int> WorkItemCount;
-
-        [Obsolete("Reset() has been deprecated. Use the new method that takes SimulationStepInput instead. (RemovedAfter 2020-09-04)")]
-        public void Reset(ref PhysicsWorld world)
-        {
-            var stepInput = new SimulationStepInput
-            {
-                Gravity = PhysicsStep.Default.Gravity,
-                NumSolverIterations = PhysicsStep.Default.SolverIterationCount,
-                SolverStabilizationHeuristicSettings = PhysicsStep.Default.SolverStabilizationHeuristicSettings,
-                SynchronizeCollisionWorld = PhysicsStep.Default.SynchronizeCollisionWorld > 0,
-                TimeStep = 0.02f,
-                World = world
-            };
-            Reset(stepInput);
-        }
 
         // Resets the simulation storage
         // - Reallocates input velocities storage if necessary

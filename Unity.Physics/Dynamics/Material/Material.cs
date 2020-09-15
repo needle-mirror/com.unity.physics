@@ -221,15 +221,5 @@ namespace Unity.Physics
                 math.hash(new float2(Friction, Restitution))
             )));
         }
-
-        #region Obsolete
-
-        [Obsolete("IsTrigger has been deprecated. Use CollisionResponse instead. (RemovedAfter 2020-09-02)")]
-        public bool IsTrigger => (Flags & MaterialFlags.IsTrigger) != 0;
-
-        [Obsolete("EnableCollisionEvents has been deprecated. Use CollisionResponse instead. (RemovedAfter 2020-09-02)")]
-        public bool EnableCollisionEvents => (Flags & MaterialFlags.EnableCollisionEvents) != 0;
-
-        #endregion
     }
 }

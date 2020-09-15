@@ -10,6 +10,7 @@ using Unity.Physics.Systems;
 namespace Unity.Physics.Authoring
 {
     // A system which draws any collision events produced by the physics step system
+    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateAfter(typeof(StepPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
     public class DisplayCollisionEventsSystem : SystemBase
     {
@@ -77,17 +78,17 @@ namespace Unity.Physics.Authoring
                 // vertex - blue
                 // edge - cyan
                 // face - magenta
-                UnityEngine.Color color;
+                Unity.DebugDisplay.ColorIndex color;
                 switch (details.EstimatedContactPointPositions.Length)
                 {
                     case 1:
-                        color = UnityEngine.Color.blue;
+                        color = Unity.DebugDisplay.ColorIndex.Blue;
                         break;
                     case 2:
-                        color = UnityEngine.Color.cyan;
+                        color = Unity.DebugDisplay.ColorIndex.Cyan;
                         break;
                     default:
-                        color = UnityEngine.Color.magenta;
+                        color = Unity.DebugDisplay.ColorIndex.Magenta;
                         break;
                 }
 

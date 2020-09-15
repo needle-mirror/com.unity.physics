@@ -10,6 +10,7 @@ using Unity.Physics.Systems;
 namespace Unity.Physics.Authoring
 {
     // A system which draws any trigger events produced by the physics step system
+    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateAfter(typeof(StepPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
     public class DisplayTriggerEventsSystem : SystemBase
     {
@@ -80,7 +81,7 @@ namespace Unity.Physics.Authoring
 
                 Aabb aabbA = bodyA.Collider.Value.CalculateAabb(bodyA.WorldFromBody);
                 Aabb aabbB = bodyB.Collider.Value.CalculateAabb(bodyB.WorldFromBody);
-                OutputStreamContext->Line(aabbA.Center, aabbB.Center, UnityEngine.Color.yellow);
+                OutputStreamContext->Line(aabbA.Center, aabbB.Center, Unity.DebugDisplay.ColorIndex.Yellow);
             }
         }
 

@@ -1,6 +1,5 @@
-﻿using Unity.Collections;
+using Unity.Collections;
 using Unity.Entities;
-using UnityEngine;
 
 namespace Unity.Physics.Authoring
 {
@@ -13,7 +12,7 @@ namespace Unity.Physics.Authoring
         protected override void OnCreate()
         {
             base.OnCreate();
-            SpookyHashBuilder.Initialize();
+            HashUtility.Initialize();
         }
 
         protected override void OnUpdate() =>

@@ -21,7 +21,7 @@ namespace Unity.Physics.Authoring
         [ReadOnly]
         public NativeArray<BoundingVolumeHierarchy.Node> DynamicNodes;
 
-        public void DrawLeavesRecursive(NativeArray<BoundingVolumeHierarchy.Node> nodes, UnityEngine.Color color, int nodeIndex)
+        internal void DrawLeavesRecursive(NativeArray<BoundingVolumeHierarchy.Node> nodes, Unity.DebugDisplay.ColorIndex color, int nodeIndex)
         {
             if (nodes[nodeIndex].IsLeaf)
             {
@@ -47,17 +47,19 @@ namespace Unity.Physics.Authoring
                 }
             }
         }
+
         public void Execute()
         {
             OutputStream.Begin(0);
-            DrawLeavesRecursive(StaticNodes, UnityEngine.Color.yellow, 1);
-            DrawLeavesRecursive(DynamicNodes, UnityEngine.Color.red, 1);
+            DrawLeavesRecursive(StaticNodes, Unity.DebugDisplay.ColorIndex.Yellow, 1);
+            DrawLeavesRecursive(DynamicNodes, Unity.DebugDisplay.ColorIndex.Red, 1);
             OutputStream.End();
         }
     }
 
     // Creates DisplayBroadphaseJobs
     // Update before end frame system as well as some test systems might have disabled the step system
+    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateAfter(typeof(BuildPhysicsWorld)), UpdateBefore(typeof(StepPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
     public class DisplayBroadphaseAabbsSystem : SystemBase
     {

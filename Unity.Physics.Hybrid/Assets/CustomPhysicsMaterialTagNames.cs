@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -12,6 +12,7 @@ namespace Unity.Physics.Authoring
     }
     
     [CreateAssetMenu(menuName = "DOTS/Physics/Custom Physics Material Tag Names", fileName = "Custom Material Tag Names")]
+    [HelpURL(HelpURLs.CustomPhysicsMaterialTagNames)]
     public sealed partial class CustomPhysicsMaterialTagNames : ScriptableObject, ITagNames
     {
         CustomPhysicsMaterialTagNames() { }

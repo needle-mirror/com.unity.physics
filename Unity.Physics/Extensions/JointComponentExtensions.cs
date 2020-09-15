@@ -146,6 +146,30 @@ namespace Unity.Physics.Extensions
             joint.SetConstraints(constraints);
         }
 
+        /// <summary>
+        /// Gets the constrained degrees of freedom of a <see cref="PhysicsJoint"/> created using <see cref="PhysicsJoint.CreateLimitedDOF"/>.
+        /// </summary>
+        /// <param name="linearAxes">The linear axes constrained by the joint.</param>
+        /// <param name="angularAxes">The angular axes constrained by the joint.</param>
+        public static void GetLimitedDOFAxes(in this PhysicsJoint joint, out bool3 linearAxes, out bool3 angularAxes)
+        {
+            linearAxes = joint[PhysicsJoint.k_LimitedDOFLinearIndex].ConstrainedAxes;
+            angularAxes = joint[PhysicsJoint.k_LimitedDOFAngularIndex].ConstrainedAxes;
+        }
+
+        /// <summary>
+        /// Applies the constrained degrees of freedom to a <see cref="PhysicsJoint"/> created using <see cref="PhysicsJoint.CreateLimitedDOF"/>.
+        /// </summary>
+        /// <param name="linearAxes">The linear axes constrained by the joint.</param>
+        /// <param name="angularAxes">The angular axes constrained by the joint.</param>
+        public static void setLimitedDOFAxes(ref this PhysicsJoint joint, bool3 linearAxes, bool3 angularAxes)
+        {
+            var constraints = joint.GetConstraints();
+            constraints.ElementAt(PhysicsJoint.k_LimitedDOFLinearIndex).ConstrainedAxes = linearAxes;
+            constraints.ElementAt(PhysicsJoint.k_LimitedDOFAngularIndex).ConstrainedAxes = angularAxes;
+            joint.SetConstraints(constraints);
+        }
+
         #endregion
     }
 }

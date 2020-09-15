@@ -10,6 +10,7 @@ using Unity.Burst;
 namespace Unity.Physics.Authoring
 {
     /// Create and dispatch a DisplayMassPropertiesJob
+    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateAfter(typeof(StepPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
     public class DisplayMassPropertiesSystem : SystemBase
     {
@@ -88,7 +89,7 @@ namespace Unity.Physics.Authoring
                     float d = math.sqrt(k.y - h * h);
 
                     float3 boxSize = new float3(h, w, d);
-                    OutputStream.Box(boxSize, com, o, Color.magenta);
+                    OutputStream.Box(boxSize, com, o, DebugDisplay.ColorIndex.Magenta);
                 }
                 OutputStream.End();
             }

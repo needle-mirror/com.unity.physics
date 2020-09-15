@@ -390,6 +390,11 @@ namespace Unity.Physics
         public Material Material { get => m_Header.Material; set { if (!m_Header.Material.Equals(value)) { m_Header.Version += 1; m_Header.Material = value; } } }
         public MassProperties MassProperties { get; private set; }
 
+        internal float CalculateBoundingRadius(float3 pivot)
+        {
+            return ConvexHull.CalculateBoundingRadius(pivot);
+        }
+
         public Aabb CalculateAabb()
         {
             return CalculateAabb(RigidTransform.identity);

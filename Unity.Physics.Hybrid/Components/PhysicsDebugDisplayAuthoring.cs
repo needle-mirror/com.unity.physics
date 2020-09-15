@@ -18,7 +18,7 @@ namespace Unity.Physics.Authoring
 
     [AddComponentMenu("DOTS/Physics/Physics Debug Display")]
     [DisallowMultipleComponent]
-    [RequiresEntityConversion]
+    [HelpURL(HelpURLs.PhysicsDebugDisplayAuthoring)]
     public sealed class PhysicsDebugDisplayAuthoring : MonoBehaviour, IConvertGameObjectToEntity
     {
         PhysicsDebugDisplayAuthoring() { }

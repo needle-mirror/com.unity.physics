@@ -1,9 +1,9 @@
 using System;
 using NUnit.Framework;
 using Unity.Collections;
+using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Physics.Authoring;
-using UnityEngine;
 using UnityMesh = UnityEngine.Mesh;
 
 namespace Unity.Physics.Tests.Authoring
@@ -11,10 +11,10 @@ namespace Unity.Physics.Tests.Authoring
     class HashableShapeInputs_UnitTests
     {
         [OneTimeSetUp]
-        public void OneTimeSetUp() => SpookyHashBuilder.Initialize();
+        public void OneTimeSetUp() => HashUtility.Initialize();
 
-        static UnityMesh MeshA => Resources.GetBuiltinResource<UnityMesh>("New-Plane.fbx");
-        static UnityMesh MeshB => Resources.GetBuiltinResource<UnityMesh>("New-Cylinder.fbx");
+        static UnityMesh MeshA => UnityEngine.Resources.GetBuiltinResource<UnityMesh>("New-Plane.fbx");
+        static UnityMesh MeshB => UnityEngine.Resources.GetBuiltinResource<UnityMesh>("New-Cylinder.fbx");
 
         static Hash128 GetHash128_FromMesh(
             UnityMesh mesh, float4x4 leafToBody,
@@ -27,11 +27,10 @@ namespace Unity.Physics.Tests.Authoring
             float[] blendShapeWeights = default
         )
         {
-            // BUG: use TempJob to avoid InvalidOperationException triggered by NativeList.AddRange() inside SpookyHashBuilder
             using (var allIncludedIndices = new NativeList<int>(0, Allocator.TempJob))
             using (var allBlendShapeWeights = new NativeList<float>(0, Allocator.TempJob))
             using (var indices = new NativeArray<int>(includedIndices ?? Array.Empty<int>(), Allocator.TempJob))
-            using (var blendWeights = new NativeArray<float>( blendShapeWeights ?? Array.Empty<float>(), Allocator.TempJob))
+            using (var blendWeights = new NativeArray<float>(blendShapeWeights ?? Array.Empty<float>(), Allocator.TempJob))
             return HashableShapeInputs.GetHash128(
                 uniqueIdentifier, convexHullGenerationParameters, material, filter, shapeFromBody,
                 new NativeArray<HashableShapeInputs>(1, Allocator.Temp)
@@ -101,8 +100,8 @@ namespace Unity.Physics.Tests.Authoring
 
         [TestCaseSource(nameof(k_GetHash128TestCases))]
         public bool GetHash128_WhenDifferentInputs_CheckEquality(
-            uint ida, Mesh ma, ConvexHullGenerationParameters ha, Material mta, CollisionFilter fa,
-            uint idb, Mesh mb, ConvexHullGenerationParameters hb, Material mtb, CollisionFilter fb
+            uint ida, UnityMesh ma, ConvexHullGenerationParameters ha, Material mta, CollisionFilter fa,
+            uint idb, UnityMesh mb, ConvexHullGenerationParameters hb, Material mtb, CollisionFilter fb
         )
         {
             var a = GetHash128_FromMesh(ma, float4x4.identity, ha, mta, fa, float4x4.identity, uniqueIdentifier: ida);
@@ -204,11 +203,10 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void GetHash128_WhenMultipleInputs_WithDifferentIncludedIndices_NotEqual()
         {
-            // BUG: use TempJob to avoid InvalidOperationException triggered by NativeList.AddRange() inside SpookyHashBuilder
             using (var allIndices = new NativeList<int>(0, Allocator.TempJob))
             using (var allWeights = new NativeList<float>(0, Allocator.TempJob))
             {
-                Entities.Hash128 a, b;
+                Hash128 a, b;
 
                 using (var inputs = new NativeList<HashableShapeInputs>(2, Allocator.TempJob)
                 {
@@ -243,11 +241,10 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void GetHash128_WhenMultipleInputs_WithDifferentBlendShapeWeights_NotEqual()
         {
-            // BUG: use TempJob to avoid InvalidOperationException triggered by NativeList.AddRange() inside SpookyHashBuilder
             using (var allIndices = new NativeList<int>(0, Allocator.TempJob))
             using (var allWeights = new NativeList<float>(0, Allocator.TempJob))
             {
-                Entities.Hash128 a, b;
+                Hash128 a, b;
 
                 using (var inputs = new NativeList<HashableShapeInputs>(2, Allocator.TempJob)
                 {

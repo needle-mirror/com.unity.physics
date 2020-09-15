@@ -7,7 +7,7 @@ namespace Unity.Physics.Authoring
 {
     [AddComponentMenu("DOTS/Physics/Physics Step")]
     [DisallowMultipleComponent]
-    [RequiresEntityConversion]
+    [HelpURL(HelpURLs.PhysicsStepAuthoring)]
     public sealed class PhysicsStepAuthoring : MonoBehaviour, IConvertGameObjectToEntity
     {
         PhysicsStepAuthoring() { }

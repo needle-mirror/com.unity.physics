@@ -129,5 +129,18 @@ namespace Unity.Physics
             float3 normal1 = Planes[faceIndex1].Normal;
             return math.select(faceIndex0, faceIndex1, math.dot(direction, normal1) > math.dot(direction, normal0));
         }
+
+        internal float CalculateBoundingRadius(float3 pivot)
+        {
+            // Find the furthest point from the pivot
+            float maxDistanceSq = 0;
+            for (int i = 0; i < NumVertices; i++)
+            {
+                float3 vertex = Vertices[i].xyz;
+                float distanceSq = math.lengthsq(vertex - pivot);
+                maxDistanceSq = math.max(maxDistanceSq, distanceSq);
+            }
+            return math.sqrt(maxDistanceSq) + ConvexRadius;
+        }
     }
 }

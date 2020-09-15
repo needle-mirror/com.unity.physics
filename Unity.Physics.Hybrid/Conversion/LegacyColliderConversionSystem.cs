@@ -170,7 +170,7 @@ namespace Unity.Physics.Authoring
             var v1 = math.mul(orientationFixup, offset + ((float3)shape.center - vertex) * math.abs(linearScale) + ax * radius);
 
             res.CapsuleProperties = new CapsuleGeometry { Vertex0 = v0, Vertex1 = v1, Radius = radius };
-            
+
             return res;
         }
     }
@@ -202,14 +202,14 @@ namespace Unity.Physics.Authoring
             var radius = shape.radius * math.cmax(math.abs(linearScale));
 
             res.SphereProperties = new SphereGeometry { Center = center, Radius = radius };
-            
+
             return res;
         }
     }
 
     [UpdateAfter(typeof(BeginColliderConversionSystem))]
     [UpdateBefore(typeof(BuildCompoundCollidersConversionSystem))]
-    [ConverterVersion("adamm", 4)]
+    [ConverterVersion("adamm", 5)]
     public sealed class LegacyMeshColliderConversionSystem : BaseLegacyColliderConversionSystem<LegacyMesh>
     {
         internal override ShapeComputationData GenerateComputationData(
@@ -233,7 +233,7 @@ namespace Unity.Physics.Authoring
             }
 
             meshAssets.Add(shape.sharedMesh);
-            
+
             var res = base.GenerateComputationData(shape, colliderInstance, allConvexHullPoints, allMeshVertices, allMeshTriangles, meshAssets);
 
             if (shape.convex)

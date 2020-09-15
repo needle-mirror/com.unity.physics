@@ -20,13 +20,7 @@ namespace Unity.Physics.Authoring
     [AlwaysUpdateSystem]
     [UpdateAfter(typeof(BeginJointConversionSystem))]
     [UpdateBefore(typeof(EndJointConversionSystem))]
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    [Obsolete("This class will be made internal in a future version. Please use "
-              + nameof(BeginJointConversionSystem)
-              + " and "
-              + nameof(EndJointConversionSystem)
-              + " as needed to express dependencies on built-in joint conversion. (RemovedAfter 2020-08-18)")]
-    public sealed class LegacyJointConversionSystem : GameObjectConversionSystem
+    sealed class LegacyJointConversionSystem : GameObjectConversionSystem
     {
         PhysicsJoint CreateConfigurableJoint(
             quaternion jointFrameOrientation,
@@ -39,7 +33,7 @@ namespace Unity.Physics.Authoring
             // TODO: investigate mapping PhysX spring and damping to Unity Physics SpringFrequency and SpringDamping
             var springFrequency = Constraint.DefaultSpringFrequency;
             var springDamping = Constraint.DefaultSpringDamping;
-            
+
             if (angularLimited[0])
             {
                 constraints.Add(Constraint.Twist(0, math.radians(new FloatRange(-highAngularXLimit.limit, -lowAngularXLimit.limit).Sorted()), springFrequency, springDamping));
@@ -105,11 +99,11 @@ namespace Unity.Physics.Authoring
                 new RigidTransform(jointFrameOrientation, joint.anchor)
             );
             var bodyAFromJoint = new BodyFrame(math.mul(math.inverse(worldFromBodyA), legacyWorldFromJointA));
-            
+
             var connectedEntity = GetPrimaryEntity(joint.connectedBody);
             var isConnectedBodyConverted =
                 joint.connectedBody == null || connectedEntity != Entity.Null;
-           
+
             RigidTransform bFromA = isConnectedBodyConverted ? math.mul(math.inverse(worldFromBodyB), worldFromBodyA) : worldFromBodyA;
             RigidTransform bFromBSource =
                 isConnectedBodyConverted ? RigidTransform.identity : worldFromBodyB;
@@ -159,7 +153,7 @@ namespace Unity.Physics.Authoring
             var jointFrameOrientation = GetJointFrameOrientation(joint.axis, joint.secondaryAxis);
             var jointData = CreateConfigurableJoint(jointFrameOrientation, joint, linearLocks, linearLimited, joint.linearLimit, joint.linearLimitSpring, angularFree, angularLocks, angularLimited,
                 joint.lowAngularXLimit, joint.highAngularXLimit, joint.angularXLimitSpring, joint.angularYLimit, joint.angularZLimit, joint.angularYZLimitSpring);
-            
+
             m_EndJointConversionSystem.CreateJointEntity(joint, GetConstrainedBodyPair(joint), jointData);
         }
 
@@ -206,7 +200,7 @@ namespace Unity.Physics.Authoring
             jointFrameA.Position = joint.anchor;
 
             var connectedEntity = GetPrimaryEntity(joint.connectedBody);
-            
+
             var isConnectedBodyConverted =
                 joint.connectedBody == null || connectedEntity != Entity.Null;
 
@@ -269,7 +263,7 @@ namespace Unity.Physics.Authoring
             var connectedEntity = GetPrimaryEntity(joint.connectedBody);
             var isConnectedBodyConverted =
                 joint.connectedBody == null || connectedEntity != Entity.Null;
-           
+
             RigidTransform bFromA = isConnectedBodyConverted ? math.mul(math.inverse(worldFromBodyB), worldFromBodyA) : worldFromBodyA;
             RigidTransform bFromBSource =
                 isConnectedBodyConverted ? RigidTransform.identity : worldFromBodyB;

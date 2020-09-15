@@ -123,4 +123,7 @@ Dynamic bodies (i.e., those with `PhysicsVelocity`) require `Translation` and `R
 
 Static bodies (i.e., those with `PhysicsCollider` but without `PhysicsVelocity`) require at least one of either `Translation`, `Rotation`, and/or `LocalToWorld`. For static bodies without a `Parent`, physics can read their `Translation` and `Rotation` values directly, as they are presumed to be in world space. World space transformations are decomposed from `LocalToWorld` if the body has a `Parent`, using whatever the current value is (which may be based on the results of the transform systems at the end of the previous frame). For best performance and up-to-date results, it is recommended that static bodies do not have a `Parent`.
 
+`BuildPhysicsWorld` and `ExportPhysicsWorld` systems expect the chunk layouts for rigid bodies to be the same at both ends of the physics pipeline in order to write the simulation results to component data. Making structural changes (adding/removing entities with physics components, or adding/removing new components to them) between these two systems is not safe.
+Modifying `PhysicsCollider` between these two systems is also not safe. Modifying `Translation`, `Rotation` and `PhysicsVelocity` of dynamic rigid bodies between these two systems serves no purpose, since `ExportPhysicsWorld` will write back to ECS data at the end of the simulation.
+
 The [Interacting with bodies](interacting_with_bodies.md) section provides more info on how to interact with Physics Bodies and their data.

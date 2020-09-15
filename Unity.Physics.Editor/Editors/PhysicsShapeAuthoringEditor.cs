@@ -162,7 +162,7 @@ namespace Unity.Physics.Editor
         {
             base.OnEnable();
 
-            SpookyHashBuilder.Initialize();
+            HashUtility.Initialize();
 
             m_NumImplicitStatic = targets.Cast<PhysicsShapeAuthoring>().Count(
                 shape => shape.GetPrimaryBody() == shape.gameObject
@@ -1117,13 +1117,13 @@ namespace Unity.Physics.Editor
                 }
             }
         }
-        
+
         // ReSharper disable once UnusedMember.Global - magic method called by unity inspector
         public bool HasFrameBounds()
         {
             return true;
         }
-        
+
         static Bounds TransformBounds(Bounds localBounds, float4x4 matrix)
         {
             var center = new float4(localBounds.center, 1);
@@ -1139,7 +1139,6 @@ namespace Unity.Physics.Editor
             }
             return bounds;
         }
-        
 
         // ReSharper disable once UnusedMember.Global - magic method called by unity inspector
         public Bounds OnGetFrameBounds()
@@ -1186,7 +1185,7 @@ namespace Unity.Physics.Editor
                 default:
                     throw new UnimplementedShapeException(shape.ShapeType);
             }
-            
+
             return TransformBounds(bounds, shapeMatrix);
         }
     }

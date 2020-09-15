@@ -80,7 +80,7 @@ namespace Unity.Physics.Authoring
     class OverridableCustomMaterialTags : OverridableValue<CustomPhysicsMaterialTags> { }
 
     [Serializable]
-    partial class PhysicsMaterialProperties : IInheritPhysicsMaterialProperties, ISerializationCallbackReceiver
+    class PhysicsMaterialProperties : IInheritPhysicsMaterialProperties, ISerializationCallbackReceiver
     {
         public PhysicsMaterialProperties(bool supportsTemplate) => m_SupportsTemplate = supportsTemplate;
 
@@ -201,84 +201,10 @@ namespace Unity.Physics.Authoring
         {
             if (m_SerializedVersion < k_LatestVersion)
             {
+                // old data from version < 1 have been removed
                 if (m_SerializedVersion < 1)
-                {
-                    // keep track of whether anything was actually updated
-                    // otherwise new objects created from editor scripts emit warnings by default
-                    var upgradedSomething = false;
-
-                    if (m_BelongsTo_Deprecated.HasData)
-                    {
-                        m_BelongsToCategories.Value = new PhysicsCategoryTags { Value = m_BelongsTo_Deprecated.Value };
-                        m_BelongsToCategories.Override = m_BelongsTo_Deprecated.Override;
-                        m_BelongsTo_Deprecated = new OverridableTags_Deprecated(0);
-                        upgradedSomething = true;
-                    }
-
-                    if (m_CollidesWith_Deprecated.HasData)
-                    {
-                        m_CollidesWithCategories.Value = new PhysicsCategoryTags { Value = m_CollidesWith_Deprecated.Value };
-                        m_CollidesWithCategories.Override = m_CollidesWith_Deprecated.Override;
-                        m_CollidesWith_Deprecated = new OverridableTags_Deprecated(0);
-                        upgradedSomething = true;
-                    }
-
-                    if (m_CustomTags_Deprecated.HasData)
-                    {
-                        m_CustomMaterialTags.Value = new CustomPhysicsMaterialTags { Value = (byte)m_CustomTags_Deprecated.Value };
-                        m_CustomMaterialTags.Override = m_CustomTags_Deprecated.Override;
-                        m_CustomTags_Deprecated = new OverridableTags_Deprecated(0);
-                        upgradedSomething = true;
-                    }
-
-                    if (m_IsTrigger_Deprecated.Value)
-                    {
-                        CollisionResponse = CollisionResponsePolicy.RaiseTriggerEvents;
-                        OverrideCollisionResponse = m_IsTrigger_Deprecated.Override;
-                        upgradedSomething = true;
-                    }
-                    else if (m_SupportsTemplate && m_IsTrigger_Deprecated.Override)
-                    {
-                        CollisionResponse = CollisionResponsePolicy.Collide;
-                        OverrideCollisionResponse = m_IsTrigger_Deprecated.Override;
-                        upgradedSomething = true;
-                    }
-                    else if (m_RaisesCollisionEvents_Deprecated.Value)
-                    {
-                        CollisionResponse = CollisionResponsePolicy.CollideRaiseCollisionEvents;
-                        OverrideCollisionResponse = m_RaisesCollisionEvents_Deprecated.Override;
-                        upgradedSomething = true;
-                    }
-                    else if (m_SupportsTemplate && m_RaisesCollisionEvents_Deprecated.Override)
-                    {
-                        CollisionResponse = CollisionResponsePolicy.Collide;
-                        OverrideCollisionResponse = m_RaisesCollisionEvents_Deprecated.Override;
-                        upgradedSomething = true;
-                    }
-
                     m_SerializedVersion = 1;
-
-                    if (upgradedSomething && !s_SuppressUpgradeWarnings)
-                    {
-                        Debug.LogWarning(
-                            "Physics material properties were implicitly upgraded on an object. " +
-                            "To ensure proper upgrading when moving to Unity Physics 0.4.0, it is recommended you use the tool in the main menu at Window -> DOTS -> Physics -> Upgrade Data."
-                        );
-                    }
-                }
             }
-
-            // Prevent user from setting values for deprecated fields
-            m_BelongsTo_Deprecated.Value = 0;
-            m_BelongsTo_Deprecated.Override = false;
-            m_CollidesWith_Deprecated.Value = 0;
-            m_CollidesWith_Deprecated.Override = false;
-            m_CustomTags_Deprecated.Value = 0;
-            m_CustomTags_Deprecated.Override = false;
-            m_IsTrigger_Deprecated.Value = false;
-            m_IsTrigger_Deprecated.Override = false;
-            m_RaisesCollisionEvents_Deprecated.Value = false;
-            m_RaisesCollisionEvents_Deprecated.Override = false;
         }
 #pragma warning restore 618
     }

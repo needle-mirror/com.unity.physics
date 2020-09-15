@@ -129,7 +129,11 @@ namespace Unity.Physics.Authoring
             if (
                 host.gameObject.scene.isSubScene
                 // isSubScene is false in AssetImportWorker during sub-scene import
+#if UNITY_2020_2_OR_NEWER
+                || UnityEditor.AssetDatabase.IsAssetImportWorkerProcess()
+#else
                 || UnityEditor.Experimental.AssetDatabaseExperimental.IsAssetImportWorkerProcess()
+#endif
             )
                 return true;
 #endif
@@ -519,7 +523,7 @@ namespace Unity.Physics.Authoring
 
                 radius *= math.cmax(scale.xy);
                 height = math.max(0, height * scale.z);
-                                
+
                 Capsule[0] = new CapsuleGeometryAuthoring
                 {
                     OrientationEuler = orientationEuler,
@@ -843,11 +847,13 @@ namespace Unity.Physics.Authoring
             shape.BakePoints(pointCloud);
         }
 
-//        [BurstCompile] // TODO: re-enable when SpookyHashBuilder is Burstable
+#if UNITY_COLLECTIONS_0_13_OR_NEWER
+        [BurstCompile]
+#endif
         struct GetShapeInputsHashJob : IJob
         {
             public NativeArray<Hash128> Result;
-            
+
             public uint ForceUniqueIdentifier;
             public ConvexHullGenerationParameters GenerationParameters;
             public Material Material;
@@ -857,7 +863,7 @@ namespace Unity.Physics.Authoring
             [ReadOnly] public NativeArray<HashableShapeInputs> Inputs;
             [ReadOnly] public NativeArray<int> AllSkinIndices;
             [ReadOnly] public NativeArray<float> AllBlendShapeWeights;
-            
+
             public void Execute()
             {
                 Result[0] = HashableShapeInputs.GetHash128(

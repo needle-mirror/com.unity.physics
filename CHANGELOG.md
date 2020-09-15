@@ -1,3 +1,104 @@
+## [0.5.0-preview.1] - 2020-09-15
+
+### Upgrade guide
+
+* Physics systems now update in the `FixedStepSimulationSystemGroup`, using a fixed timestep provided by the group. This ensures that the results of the physics simulation do not depend on the application's display frame rate. Important consequences for applications:
+    * Application systems that need to run at the same rate as the physics systems should also be moved into `FixedStepSimulationSystemGroup` (e.g., systems that handle collision or trigger events).
+    * Application systems that should continue to run once per display frame should remove any `[UpdateAfter]` attributes targeting the physics systems. Any update order constraints for such systems should instead be expressed with respected to `FixedStepSimulationSystemGroup`.
+    * The DOTS fixed timestep is get/set using the `Timestep` property on the `FixedStepSimulationSystemGroup`. The group's default timestep value is 1/60 second. The group's timestep is not affected by changes to the fixed timestep specified in the Project Settings. If this behavior is desired, applications can set `FixedStepSimulationSystemGroup.Timestep` to `UnityEngine.Time.fixedDeltaTime` every frame.
+    * Care must be taken when processing input events during the FixedStepSimulationSystemGroup's update. The group may update zero, or one, or many times per display frame. If input events are polled once per display frame, naive input processing may lead to input events being skipped or processed multiple times.
+    * If your application's frame rate is faster than the fixed timestep, rigid bodies may appear to move in stop motion by default (as with classic GameObject-base physics). You can enable smoothing options for their graphics representations as needed.
+        * Application systems that must update once per display frame, yet which query the `Translation` or `Rotation` of dynamic rigid bodies, should instead query `LocalToWorld` when smoothed graphical transformations are required.
+* It is possible to see integrity failures when updating to this release. `BuildPhysicsWorld` and `ExportPhysicsWorld` expect the chunk layouts for rigid bodies to be the same at both ends of the physics pipeline in order to write the simulation results to component data. These messages indicate that you are making some structural change or modifying rigid bodies' component data (e.g., `Translation`, `Rotation`, `PhysicsCollider`) between these systems.
+* Old, unused serialized data have been removed from `PhysicsShapeAuthoring` and `PhysicsMaterialTemplate`. Ensure you have run the upgrade utility in your project before updating to this version of the package (Window -> DOTS -> Physics -> Upgrade Data).
+
+### Changes
+
+* Dependencies
+    * Updated minimum Unity Editor version from `2019.4.0f1` to `2020.1.0f1`
+    * Updated Burst from `1.3.0` to `1.3.2`
+    * Updated Collections from `0.9.0-preview.6` to `0.11.0-preview.17`
+    * Updated Entities from `0.11.1-preview.4` to `0.13.0-preview.24`
+    * Updated Jobs from `0.2.10-preview.12` to `0.4.0-preview.18`
+    * Updated Performance Testing API from `2.0.8-preview` to `2.2.0-preview`
+
+* Run-Time API
+    * Added the following new types:
+        * `PhysicsGraphicsIntegration` namespace
+            * `PhysicsGraphicalSmoothing` and `PhysicsGraphicalInterpolationBuffer` components, which can be used to smooth a rigid body's graphical motion when rendering and physics are out of sync
+            * `RecordMostRecentFixedTime`, which stores time values from the most recent tick of `FixedStepSimulationSystemGroup`
+            * `BufferInterpolatedRigidBodiesMotion`, which stores dynamic rigid bodies' motion properties at the start of the frame when when smoothed bodies use interpolation
+            * `CopyPhysicsVelocityToSmoothing`, which stores dynamic rigid bodies' velocities after physics has finished in the current frame
+            * `SmoothRigidBodiesGraphicalMotion`, which writes dynamic rigid bodies' `LocalToWorld` when smoothing is enabled
+            * `GraphicalSmoothingUtility` class, which contains various methods for smoothing the motion of rigid bodies
+    * Renamed `ComponentExtensions` to `PhysicsComponentExtensions`
+    * Changed the following members/types:
+        * `PhysicsComponentExtensions.GetCenterOfMassWorldSpace()` now passes `PhysicsMass` as `in` rather than `ref`.
+        * `PhysicsComponentExtensions.GetLinearVelocity()` now passes `PhysicsVelocity` as `in`.
+        * `PhysicsWorldExtensions.CalculateVelocityToTarget()` is now implemented and passes a `RigidTransform` for the target rather than a separate `float3` and `quaternion`.
+    * Removed the following expired members/types:
+        * `BodyIndexPair.BodyAIndex`
+        * `BodyIndexPair.BodyBIndex`
+        * Body pair interfaces on events and modifiers (`CollisionEvent`, `TriggerEvent`, `ModifiableContactHeader`, `ModifiableBodyPair` and `ModifiableJacobianHeader`)
+            * `BodyCustomTags`
+            * `BodyIndices`
+            * `ColliderKeys`
+            * `Entities`
+        * `ComponentExtensions.GetCenterOfMass()`
+        * `ComponentExtensions.SetCenterOfMass()`
+        * `ComponentExtensions.GetAngularVelocity()`
+        * `ComponentExtensions.SetAngularVelocity()`
+        * `EndFramePhysicsSystem.HandlesToWaitFor`
+        * `FinalJobHandle` on all core physics systems (`BuildPhysicsWorld`, `StepPhysicsWorld`, `ExportPhysicsWorld` and `EndFramePhysicsSystem`)
+        * `Joint.JointData`
+        * `JointData`
+        * `JointFrame`
+        * `Material.IsTrigger`
+        * `Material.EnableCollisionEvents`
+        * `MotionData.GravityFactor`
+        * `PhysicsJoint.JointData`
+        * `PhysicsJoint.EntityA`
+        * `PhysicsJoint.EntityB`
+        * `PhysicsJoint.EnableCollision`
+        * `SimulationContext.Reset()` passing `PhysicsWorld`
+        * `Solver.ApplyGravityAndCopyInputVelocities()` passing `NativeArray<MotionData>`
+        * `Solver.SolveJacobians()` not passing explicit `StabilizationData`
+    * Added `JointType.LimitedDegreeOfFreedom` and associated creation and control functions
+	* Added `Aabb.Intersect()` function
+	* Added `PhysicsComponentExtensions.GetEffectiveMass()`
+
+* Authoring/Conversion API
+    * Removed the following expired members/types:
+        * `LegacyJointConversionSystem` (now internal)
+        * `PhysicsMaterialTemplate.IsTrigger`
+        * `PhysicsMaterialTemplate.RaisesCollisionEvents`
+        * `PhysicsShapeAuthoring.IsTrigger` and `OverrideIsTrigger`
+        * `PhysicsShapeAuthoring.RaisesCollisionEvents` and `OverrideRaisesCollisionEvents`
+    * Added the following new types:
+        * `BodySmoothing` enum
+    * Added the following new members:
+        * `PhysicsBodyAuthoring.Smoothing`, to enable motion smoothing
+    * `PhysicsBodyAuthoring.LinearDamping` and `AngularDamping` setters now clamp incoming values to be at least 0.
+
+* Run-Time Behavior
+    * Debug rendering is now significantly faster, in the case of 3D lines.
+    * Physics systems now update in the `FixedStepSimulationSystemGroup`.
+
+* Authoring/Conversion Behavior
+    * Classic `Rigidbody` interpolation mode is now supported during conversion.
+    * Inspector help button for built-in authoring components and assets now opens the corresponding page in the API reference.
+
+### Fixes
+* Fixed issue where orientation in Physics Shape component would get dirtied when nothing changed
+* Fixed issue with `PhysicsJoint.CreateHinge()` only working on a single axes.
+* Fixed `Constraint.Dimension` not returning 0 when it should.
+* Reduced size of compound collider/mesh collider AABB in cases where their bodies are rotated by some angle.
+* Added optional integrity checks for physics ECS data consistency between BuildPhysicsWorld and ExportPhysicsWorld. Checks can be run in editor only.
+* Fixed regression that caused additional sub-meshes to be ignored when converting mesh colliders.
+
+### Known Issues
+* Physics debug display may not work properly while stepping frame by frame in Editor.
+
 ## [0.4.1-preview] - 2020-07-28
 
 ### Changes
@@ -77,16 +178,16 @@
         * `JointFrame` is now `BodyFrame`
     * Changed the following members/types:
         * Replaced all usages of `NativeSlice` with `NativeArray`.
-        * Replaced pair interfaces on events and modifiers (`CollisionEvent`, `TriggerEvent`, `ModifiableContactHeader`, `ModifiableBodyPair` and `ModifiableJacobianHeader`) with direct accessors: 
+        * Replaced pair interfaces on events and modifiers (`CollisionEvent`, `TriggerEvent`, `ModifiableContactHeader`, `ModifiableBodyPair` and `ModifiableJacobianHeader`) with direct accessors:
             * `EntityPair` is now `EntityA` and `EntityB`
             * `BodyIndexPair` is now `BodyAIndex` and `BodyBIndex`
             * `ColliderKeyPair` is now `ColliderKeyA` and `ColliderKeyB`
-            * `CustomTagsPair` is now `CustomTagsA` and `CustomTagsB` 
+            * `CustomTagsPair` is now `CustomTagsA` and `CustomTagsB`
         * `Material.MaterialFlags` is now internal. Access flags through individual properties (`CollisionResponse`, `EnableMassFactors` and `EnableSurfaceVelocity`).
         * `Joint` is now a fixed size.
             * `Joint.EnableCollision` is now `byte` instead of `int`.
             * `Joint.JointData` has been deprecated. Use `AFromJoint`, `BFromJoint`, `Constraints`, and `Version` instead.
-        * `PhysicsJoint` is now mutable. 
+        * `PhysicsJoint` is now mutable.
         * `PhysicsJoint.CreatePrismatic()` factory does not take a `distanceFromAxis` parameter (in contrast to `JointData` factory)
         * `PhysicsJoint.CreateRagdoll()` factory now takes perpendicular angular limits in the range (-pi/2, pi/2) instead of (0, pi) in old `JointData` factory.
     * Deprecated the following members/types:

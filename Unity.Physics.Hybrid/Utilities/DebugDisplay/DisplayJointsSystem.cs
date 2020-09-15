@@ -12,6 +12,7 @@ namespace Unity.Physics.Authoring
 {
     // Creates DisplayJointsJobs
     // Update before end frame system as well as some test systems might have disabled the step system
+    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateAfter(typeof(BuildPhysicsWorld)), UpdateBefore(typeof(StepPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
     public class DisplayJointsSystem : SystemBase
     {
@@ -28,10 +29,10 @@ namespace Unity.Physics.Authoring
             public unsafe void Execute()
             {
                 // Color palette
-                Color colorA = Color.cyan;
-                Color colorB = Color.magenta;
-                Color colorError = Color.red;
-                Color colorRange = Color.yellow;
+                var colorA = Unity.DebugDisplay.ColorIndex.Cyan;
+                var colorB = Unity.DebugDisplay.ColorIndex.Magenta;
+                var colorError = Unity.DebugDisplay.ColorIndex.Red;
+                var colorRange = Unity.DebugDisplay.ColorIndex.Yellow;
 
                 OutputStream.Begin(0);
 
@@ -72,6 +73,8 @@ namespace Unity.Physics.Authoring
                                 float rangeDistance;
                                 switch (constraint.Dimension)
                                 {
+                                    case 0:
+                                        continue;
                                     case 1:
                                         float3 normal = worldFromJointB.Rotation[constraint.ConstrainedAxis1D];
                                         OutputStream.Plane(pivotB, normal * k_Scale, colorB);
@@ -129,6 +132,8 @@ namespace Unity.Physics.Authoring
                             case ConstraintType.Angular:
                                 switch (constraint.Dimension)
                                 {
+                                    case 0:
+                                        continue;
                                     case 1:
                                         // Get the limited axis and perpendicular in joint space
                                         int constrainedAxis = constraint.ConstrainedAxis1D;

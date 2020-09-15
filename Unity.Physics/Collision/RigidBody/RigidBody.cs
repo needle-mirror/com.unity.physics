@@ -156,20 +156,6 @@ namespace Unity.Physics
         public bool IsValid => BodyIndexB != -1 && BodyIndexA != -1;
 
         public static BodyIndexPair Invalid => new BodyIndexPair { BodyIndexB = -1, BodyIndexA = -1 };
-
-        [Obsolete("BodyBIndex has been deprecated. Use BodyIndexB. (RemovedAfter 2020-08-01)")]
-        public int BodyBIndex
-        {
-            get { return BodyIndexB; }
-            set { BodyIndexB = value; }
-        }
-
-        [Obsolete("BodyAIndex has been deprecated. Use BodyIndexA. (RemovedAfter 2020-08-01)")]
-        public int BodyAIndex
-        {
-            get { return BodyIndexA; }
-            set { BodyIndexA = value; }
-        }
     }
 
     // A pair of entities

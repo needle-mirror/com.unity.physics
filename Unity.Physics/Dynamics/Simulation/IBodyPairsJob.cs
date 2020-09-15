@@ -38,12 +38,6 @@ namespace Unity.Physics
         {
             BodyIndexPair = BodyIndexPair.Invalid;
         }
-
-        [Obsolete("Entities has been deprecated. Use EntityA and EntityB directly. (RemovedAfter 2020-08-01)")]
-        public EntityPair Entities => EntityPair;
-
-        [Obsolete("BodyIndices has been deprecated. Use BodyIndexA and BodyIndexB directly. (RemovedAfter 2020-08-01)")]
-        public BodyIndexPair BodyIndices => BodyIndexPair;
     }
 
     public static class IBodyPairsJobExtensions

@@ -1,4 +1,3 @@
-#if UNITY_2020_1_OR_NEWER
 using System;
 using System.IO;
 using System.Text.RegularExpressions;
@@ -10,6 +9,7 @@ using Unity.Scenes;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.LowLevel;
 using UnityEngine.SceneManagement;
 using UnityMesh = UnityEngine.Mesh;
 #if LEGACY_PHYSICS
@@ -26,6 +26,8 @@ namespace Unity.Physics.Tests.Authoring
         UnityMesh NonReadableMesh { get; set; }
 
         World PreviousGameObjectInjectionWorld { get; set; }
+        
+        PlayerLoopSystem PreviousPlayerLoop { get; set; }
 
         static readonly Regex k_NonWords = new Regex(@"\W");
 
@@ -34,6 +36,7 @@ namespace Unity.Physics.Tests.Authoring
         {
             // set up temporary GameObject injection world
             PreviousGameObjectInjectionWorld = World.DefaultGameObjectInjectionWorld;
+            PreviousPlayerLoop = PlayerLoop.GetCurrentPlayerLoop();
             World.DefaultGameObjectInjectionWorld = default;
             DefaultWorldInitialization.DefaultLazyEditModeInitialize();
 
@@ -59,7 +62,7 @@ namespace Unity.Physics.Tests.Authoring
             if (PreviousGameObjectInjectionWorld != default && !PreviousGameObjectInjectionWorld.IsCreated)
                 PreviousGameObjectInjectionWorld = default;
             World.DefaultGameObjectInjectionWorld = PreviousGameObjectInjectionWorld;
-            ScriptBehaviourUpdateOrder.UpdatePlayerLoop(PreviousGameObjectInjectionWorld);
+            PlayerLoop.SetPlayerLoop(PreviousPlayerLoop);
 
             // open an empty scene
             EditorSceneManager.SetActiveScene(EditorSceneManager.NewScene(NewSceneSetup.EmptyScene));
@@ -177,4 +180,3 @@ namespace Unity.Physics.Tests.Authoring
 #endif
     }
 }
-#endif

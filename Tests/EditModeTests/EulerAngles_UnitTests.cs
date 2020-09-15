@@ -51,5 +51,25 @@ namespace Unity.Physics.Tests.Authoring
 
 			Assert.That(eulerAngles.Value, Is.PrettyCloseTo(expectedEulerAngles));
 		}
-    }
+
+		[Test]
+		public void EulerToQuaternion_QuaternionToEuler_ResultingOrientationIsCloseToOriginal(
+			[Values] math.RotationOrder rotationOrder,
+			[Values(-90f, -45, 0f, 45, 90f)] float x,
+			[Values(-90f, -45, 0f, 45, 90f)] float y,
+			[Values(-90f, -45, 0f, 45, 90f)] float z
+		)
+		{
+			var inputEulerAngles = new EulerAngles { RotationOrder = rotationOrder, Value = new float3(x, y, z) };
+			var inputQuaternion = (quaternion)inputEulerAngles;
+			Assume.That(math.abs(math.length(inputQuaternion.value)), Is.EqualTo(1.0f).Within(1e-05));
+
+			EulerAngles outputEulerAngles = new EulerAngles { RotationOrder = inputEulerAngles.RotationOrder };
+			outputEulerAngles.SetValue(inputQuaternion);
+			quaternion outputQuaternion = (quaternion)outputEulerAngles;
+			Assume.That(math.abs(math.length(outputQuaternion.value)), Is.EqualTo(1.0f).Within(1e-05));
+
+			Assert.That(outputQuaternion, Is.OrientedEquivalentTo(inputQuaternion));
+		}
+	}
 }

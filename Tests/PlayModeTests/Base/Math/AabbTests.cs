@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using NUnit.Framework;
 using static Unity.Mathematics.math;
 using Assert = UnityEngine.Assertions.Assert;
@@ -37,6 +37,27 @@ namespace Unity.Physics.Tests.Base.Math
             Assert.IsFalse(a2.Contains(a1));
             Assert.IsFalse(a0.Contains(a2));
             Assert.IsFalse(a2.Contains(a0));
+
+            // Test Union / Intersect
+            {
+                Aabb unionAabb = a0;
+                unionAabb.Include(a1);
+                Assert.IsTrue(unionAabb.Min.x == 0);
+                Assert.IsTrue(unionAabb.Min.y == 0);
+                Assert.IsTrue(unionAabb.Min.z == 0);
+                Assert.IsTrue(unionAabb.Max.x == a1.Max.x);
+                Assert.IsTrue(unionAabb.Max.y == a1.Max.y);
+                Assert.IsTrue(unionAabb.Max.z == a1.Max.z);
+
+                Aabb intersectAabb = a2;
+                intersectAabb.Intersect(a3);
+                Assert.IsTrue(intersectAabb.Min.x == 50);
+                Assert.IsTrue(intersectAabb.Min.y == 100);
+                Assert.IsTrue(intersectAabb.Min.z == 350);
+                Assert.IsTrue(intersectAabb.Max.x == a3.Max.x);
+                Assert.IsTrue(intersectAabb.Max.y == a3.Max.y);
+                Assert.IsTrue(intersectAabb.Max.z == a3.Max.z);
+            }
 
             // Test Expand / Contains
             {

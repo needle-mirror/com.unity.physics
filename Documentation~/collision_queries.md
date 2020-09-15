@@ -201,6 +201,9 @@ Collider casts are very similar to the ray casts, however you need to make a Col
             Entity e = physicsWorldSystem.PhysicsWorld.Bodies[hit.RigidBodyIndex].Entity;
             return e;
         }
+
+        sphereCollider.Dispose();
+
         return Entity.Null;
     }
 ```

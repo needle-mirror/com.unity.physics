@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using NUnit.Framework;
 using Unity.Mathematics;
 using Unity.Physics.Authoring;
+using UnityEditor;
 using UnityEngine;
 #if !UNITY_EDITOR
 using UnityEngine.TestTools;
@@ -28,9 +29,33 @@ namespace Unity.Physics.Tests.Authoring
         {
             ReadableMesh = Resources.GetBuiltinResource<UnityMesh>("New-Cylinder.fbx");
             Assume.That(ReadableMesh.isReadable, Is.True, $"{ReadableMesh} was not readable.");
+
             NonReadableMesh = UnityMesh.Instantiate(ReadableMesh);
             NonReadableMesh.UploadMeshData(true);
             Assume.That(NonReadableMesh.isReadable, Is.False, $"{NonReadableMesh} was readable.");
+
+            MeshWithMultipleSubMeshes = new UnityMesh
+            {
+                name = nameof(MeshWithMultipleSubMeshes),
+                vertices = new[]
+                {
+                    new Vector3(0f, 1f, 0f),
+                    new Vector3(1f, 1f, 0f),
+                    new Vector3(1f, 0f, 0f),
+                    new Vector3(0f, 0f, 0f)
+                },
+                normals = new[]
+                {
+                    Vector3.back,
+                    Vector3.back,
+                    Vector3.back,
+                    Vector3.back
+                },
+                subMeshCount = 2
+            };
+            MeshWithMultipleSubMeshes.SetTriangles(new[] { 0, 1, 2 }, 0);
+            MeshWithMultipleSubMeshes.SetTriangles(new[] { 2, 3, 0 }, 1);
+            Assume.That(MeshWithMultipleSubMeshes.isReadable, Is.True, $"{MeshWithMultipleSubMeshes} was not readable.");
         }
 
         [OneTimeTearDown]
@@ -38,10 +63,13 @@ namespace Unity.Physics.Tests.Authoring
         {
             if (NonReadableMesh != null)
                 UnityMesh.DestroyImmediate(NonReadableMesh);
+            if (MeshWithMultipleSubMeshes != null)
+                UnityMesh.DestroyImmediate(MeshWithMultipleSubMeshes);
         }
 
         UnityMesh NonReadableMesh { get; set; }
         UnityMesh ReadableMesh { get; set; }
+        UnityMesh MeshWithMultipleSubMeshes { get; set; }
 
         [Test]
         public void PhysicsShapeConversionSystem_WhenBodyHasOneSiblingShape_CreatesPrimitive()
@@ -163,6 +191,35 @@ namespace Unity.Physics.Tests.Authoring
         }
 
         [Test]
+        public unsafe void ConversionSystems_WhenMeshCollider_MultipleSubMeshes_AllSubMeshesIncluded(
+            [Values(
+#if LEGACY_PHYSICS
+            typeof(LegacyMesh),
+#endif
+            typeof(PhysicsShapeAuthoring)
+            )]
+            Type shapeType
+        )
+        {
+            CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { shapeType });
+#if LEGACY_PHYSICS
+            if (Child.GetComponent(shapeType) is LegacyMesh meshCollider)
+                meshCollider.sharedMesh = MeshWithMultipleSubMeshes;
+            else
+                Child.GetComponent<PhysicsShapeAuthoring>().SetMesh(MeshWithMultipleSubMeshes);
+#endif
+
+            TestConvertedData<PhysicsCollider>(c =>
+            {
+                ref var mesh = ref ((MeshCollider*)c.ColliderPtr)->Mesh;
+                Assume.That(mesh.Sections.Length, Is.EqualTo(1), "Expected a single section on mesh collider.");
+                ref var section = ref mesh.Sections[0];
+                Assume.That(section.PrimitiveFlags.Length, Is.EqualTo(1), "Expected a single primitive on mesh collider.");
+                Assert.That(section.PrimitiveFlags[0] & Mesh.PrimitiveFlags.IsQuad, Is.EqualTo(Mesh.PrimitiveFlags.IsQuad), "Expected single quad primitive on mesh collider.");
+            });
+        }
+
+        [Test]
         public void ConversionSystems_WhenGOHasShape_GOIsActive_AuthoringComponentEnabled_AuthoringDataConverted(
             [Values(
 #if LEGACY_PHYSICS
@@ -176,7 +233,7 @@ namespace Unity.Physics.Tests.Authoring
             CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { shapeType });
 #if LEGACY_PHYSICS
             if (Child.GetComponent(shapeType) is LegacyMesh meshCollider)
-                meshCollider.sharedMesh = Resources.GetBuiltinResource<UnityEngine.Mesh>("New-Cylinder.fbx");
+                meshCollider.sharedMesh = ReadableMesh;
 #endif
 
             // conversion presumed to create valid PhysicsCollider under default conditions
@@ -197,7 +254,7 @@ namespace Unity.Physics.Tests.Authoring
             CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { shapeType });
 #if LEGACY_PHYSICS
             if (Child.GetComponent(shapeType) is LegacyMesh meshCollider)
-                meshCollider.sharedMesh = Resources.GetBuiltinResource<UnityEngine.Mesh>("New-Cylinder.fbx");
+                meshCollider.sharedMesh = ReadableMesh;
 #endif
             var c = Child.GetComponent(shapeType);
 #if LEGACY_PHYSICS
@@ -227,7 +284,7 @@ namespace Unity.Physics.Tests.Authoring
             CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { shapeType });
 #if LEGACY_PHYSICS
             if (Child.GetComponent(shapeType) is LegacyMesh meshCollider)
-                meshCollider.sharedMesh = Resources.GetBuiltinResource<UnityEngine.Mesh>("New-Cylinder.fbx");
+                meshCollider.sharedMesh = ReadableMesh;
 #endif
             GetNode(inactiveNode).SetActive(false);
             var numInactiveNodes = Root.GetComponentsInChildren<Transform>(true).Count(t => t.gameObject.activeSelf);

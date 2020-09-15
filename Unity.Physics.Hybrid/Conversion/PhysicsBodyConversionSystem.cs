@@ -1,6 +1,6 @@
-using System;
 using Unity.Entities;
 using Unity.Mathematics;
+using Unity.Physics.GraphicsIntegration;
 
 namespace Unity.Physics.Authoring
 {
@@ -46,12 +46,13 @@ namespace Unity.Physics.Authoring
                     DstEntityManager.AddOrSetComponent(entity, body.MotionType == BodyMotionType.Dynamic ?
                         PhysicsMass.CreateDynamic(massProperties, body.Mass) :
                         PhysicsMass.CreateKinematic(massProperties));
-                    
-                    DstEntityManager.AddOrSetComponent(entity, new PhysicsVelocity
+
+                    var physicsVelocity = new PhysicsVelocity
                     {
                         Linear = body.InitialLinearVelocity,
                         Angular = body.InitialAngularVelocity
-                    });
+                    };
+                    DstEntityManager.AddOrSetComponent(entity, physicsVelocity);
 
                     if (body.MotionType == BodyMotionType.Dynamic)
                     {
@@ -75,6 +76,19 @@ namespace Unity.Physics.Authoring
                         {
                             Value = 0
                         });
+                    }
+
+                    if (body.Smoothing != BodySmoothing.None)
+                    {
+                        DstEntityManager.AddOrSetComponent(entity, new PhysicsGraphicalSmoothing());
+                        if (body.Smoothing == BodySmoothing.Interpolation)
+                        {
+                            DstEntityManager.AddComponentData(entity, new PhysicsGraphicalInterpolationBuffer
+                            {
+                                PreviousTransform = Math.DecomposeRigidBodyTransform(body.transform.localToWorldMatrix),
+                                PreviousVelocity = physicsVelocity,
+                            });
+                        }
                     }
                 }
             );

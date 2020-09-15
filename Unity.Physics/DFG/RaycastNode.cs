@@ -1,5 +1,4 @@
 ﻿#if UNITY_DATAFLOWGRAPH_EXISTS
-using Unity.Assertions;
 using Unity.DataFlowGraph;
 using Unity.Burst;
 
@@ -8,9 +7,12 @@ namespace Unity.Physics
     /// <summary>
     /// DataFlowGraph node that performs a Ray Cast query on a CollisionWorld.
     /// </summary>
-    public class RaycastNode
-        : NodeDefinition<RaycastNode.Data, RaycastNode.SimPorts, RaycastNode.KernelData, RaycastNode.KernelDefs,
-                RaycastNode.Kernel>
+    public class RaycastNode :
+#if UNITY_DATAFLOWGRAPH_0_17_OR_NEWER
+        KernelNodeDefinition<RaycastNode.KernelDefs>
+#else
+        NodeDefinition<RaycastNode.Data, RaycastNode.SimPorts, RaycastNode.KernelData, RaycastNode.KernelDefs, RaycastNode.Kernel>
+#endif
     {
         public struct SimPorts : ISimulationPortDefinition
         {
@@ -32,7 +34,7 @@ namespace Unity.Physics
         public struct KernelData : IKernelData
         {
         }
-    
+
         [BurstCompile]
         public struct Kernel : IGraphKernel<KernelData, KernelDefs>
         {
@@ -44,7 +46,7 @@ namespace Unity.Physics
                     ctx.Resolve(ref ports.HitSuccess) = false;
                     return;
                 }
-                
+
                 var collisionWorld = collisionWorldProxy.ToCollisionWorld();
 
                 if (collisionWorld.NumBodies > 0)
