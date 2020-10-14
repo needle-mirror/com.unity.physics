@@ -228,7 +228,6 @@ namespace Unity.Physics.Tests.Utils
             }
         }
 
-
         // bool
         public static void AreEqual(bool2 a, bool2 b)
         {
@@ -251,7 +250,6 @@ namespace Unity.Physics.Tests.Utils
             AreEqual(a.w, b.w);
         }
 
-
         public static void AreEqual(bool2x2 a, bool2x2 b)
         {
             AreEqual(a.c0, b.c0);
@@ -269,7 +267,6 @@ namespace Unity.Physics.Tests.Utils
             AreEqual(a.c0, b.c0);
             AreEqual(a.c1, b.c1);
         }
-
 
         public static void AreEqual(bool2x3 a, bool2x3 b)
         {
@@ -291,7 +288,6 @@ namespace Unity.Physics.Tests.Utils
             AreEqual(a.c1, b.c1);
             AreEqual(a.c2, b.c2);
         }
-
 
         public static void AreEqual(bool2x4 a, bool2x4 b)
         {
@@ -339,7 +335,6 @@ namespace Unity.Physics.Tests.Utils
             AreEqual(a.w, b.w);
         }
 
-
         public static void AreEqual(int2x2 a, int2x2 b)
         {
             AreEqual(a.c0, b.c0);
@@ -357,7 +352,6 @@ namespace Unity.Physics.Tests.Utils
             AreEqual(a.c0, b.c0);
             AreEqual(a.c1, b.c1);
         }
-
 
         public static void AreEqual(int2x3 a, int2x3 b)
         {
@@ -379,8 +373,6 @@ namespace Unity.Physics.Tests.Utils
             AreEqual(a.c1, b.c1);
             AreEqual(a.c2, b.c2);
         }
-
-
 
         public static void AreEqual(int2x4 a, int2x4 b)
         {
@@ -406,7 +398,6 @@ namespace Unity.Physics.Tests.Utils
             AreEqual(a.c3, b.c3);
         }
 
-
         // uint
         public static void AreEqual(uint2 a, uint2 b)
         {
@@ -429,7 +420,6 @@ namespace Unity.Physics.Tests.Utils
             AreEqual(a.w, b.w);
         }
 
-
         public static void AreEqual(uint2x2 a, uint2x2 b)
         {
             AreEqual(a.c0, b.c0);
@@ -447,7 +437,6 @@ namespace Unity.Physics.Tests.Utils
             AreEqual(a.c0, b.c0);
             AreEqual(a.c1, b.c1);
         }
-
 
         public static void AreEqual(uint2x3 a, uint2x3 b)
         {
@@ -469,7 +458,6 @@ namespace Unity.Physics.Tests.Utils
             AreEqual(a.c1, b.c1);
             AreEqual(a.c2, b.c2);
         }
-
 
         public static void AreEqual(uint2x4 a, uint2x4 b)
         {
@@ -538,7 +526,6 @@ namespace Unity.Physics.Tests.Utils
             AreEqual(a.w, b.w, maxUlp, signedZeroEqual);
         }
 
-
         public static void AreEqual(float2x2 a, float2x2 b, float delta = 0.0f)
         {
             AreEqual(a.c0, b.c0, delta);
@@ -574,7 +561,6 @@ namespace Unity.Physics.Tests.Utils
             AreEqual(a.c0, b.c0, maxUlp, signedZeroEqual);
             AreEqual(a.c1, b.c1, maxUlp, signedZeroEqual);
         }
-
 
         public static void AreEqual(float2x3 a, float2x3 b, float delta = 0.0f)
         {
@@ -617,7 +603,6 @@ namespace Unity.Physics.Tests.Utils
             AreEqual(a.c1, b.c1, maxUlp, signedZeroEqual);
             AreEqual(a.c2, b.c2, maxUlp, signedZeroEqual);
         }
-
 
         public static void AreEqual(float2x4 a, float2x4 b, float delta = 0.0f)
         {
@@ -710,7 +695,6 @@ namespace Unity.Physics.Tests.Utils
             AreEqual(a.w, b.w, maxUlp, signedZeroEqual);
         }
 
-
         public static void AreEqual(double2x2 a, double2x2 b, double delta = 0.0)
         {
             AreEqual(a.c0, b.c0, delta);
@@ -788,7 +772,6 @@ namespace Unity.Physics.Tests.Utils
             AreEqual(a.c1, b.c1, maxUlp, signedZeroEqual);
             AreEqual(a.c2, b.c2, maxUlp, signedZeroEqual);
         }
-
 
         public static void AreEqual(double2x4 a, double2x4 b, double delta = 0.0)
         {
@@ -979,7 +962,7 @@ namespace Unity.Physics.Tests.Utils
             }
 
             var ret = MeshCollider.Create(vertices, triangles);
-            
+
             vertices.Dispose();
             triangles.Dispose();
             return ret;
@@ -1002,7 +985,7 @@ namespace Unity.Physics.Tests.Utils
             return TerrainCollider.Create(heights, size, scale, TerrainCollider.CollisionMethod.Triangles);
         }
 
-        public static unsafe BlobAssetReference<Collider> GenerateRandomCompound(ref Random rnd)
+        public static BlobAssetReference<Collider> GenerateRandomCompound(ref Random rnd)
         {
             int numChildren = rnd.NextInt(1, 10);
             var children = new NativeArray<CompoundCollider.ColliderBlobInstance>(numChildren, Allocator.Temp);
@@ -1022,7 +1005,7 @@ namespace Unity.Physics.Tests.Utils
             return CompoundCollider.Create(children);
         }
 
-        public static unsafe BlobAssetReference<Collider> GenerateRandomConvex(ref Random rnd)
+        public static BlobAssetReference<Collider> GenerateRandomConvex(ref Random rnd)
         {
             ColliderType colliderType = (ColliderType)rnd.NextInt((int)ColliderType.Cylinder + 1);
             float convexRadius = (rnd.NextInt(4) > 0) ? rnd.NextFloat(0.5f) : 0.0f;

@@ -1,3 +1,39 @@
+## [0.5.1-preview.2] - 2020-10-14
+
+### Upgrade guide
+
+### Changes
+
+* Dependencies
+    * Updated Burst from `1.3.2` to `1.3.7`
+    * Updated Mathematics from `1.1.0` to `1.2.1`
+    * Updated Collections from `0.11.0-preview.17` to `0.14.0-preview.16`
+    * Updated Entities from `0.13.0-preview.24` to `0.16.0-preview.21`
+    * Updated Jobs from `0.4.0-preview.18` to `0.7.0-preview.17`
+
+* Run-Time API
+    * Added the `TerrainCollider.Filter` setter
+    * Removed the `CompoundCollider.Filter` setter as it was doing the wrong thing (composite collider filters should be the union of their children)
+    * Added `BuildPhysicsWorld.AddDependencyToComplete()` which takes a job dependency that the `BuildPhysicsWorld` system should complete immediately in its `OnUpdate()` call (before scheduling new jobs). The reason is that this system does reallocations in the `OnUpdate()` immediately (not in jobs), and any previous jobs that are being run before this system could rely on that data being reallocated. This way, these jobs can provide their dependency to `BuildPhysicsWorld` and make sure it will wait until they are finished before doing the reallocations.
+	* Added the option to provide a custom explosion filter in 'PhysicsVelocity.ApplyExplosionForce'.
+
+* Authoring/Conversion API
+
+* Run-Time Behavior
+    * Changed Graphical Interpolation default to simpler implementation that doesn't try and consider velocities
+    * `BuildPhysicsWorld.CreateMotions` now gives Kinematic bodies a zero Gravity Factor (i.e. they will not be affected by gravity)
+    * Setting the `Collider.Filter` is now allowed for Terrain colliders as well, as opposed to previously only working for Convex colliders
+
+* Authoring/Conversion Behavior
+
+### Fixes
+* Fixed the potential issues if more than one job implements IBodyPairsJob.
+* DebugStream.DrawComponent now cleans up its associated GameObject
+* Fixed a bug in 'PhysicsVelocity.ApplyExplosionForce' where the provided collider's collision filter could prevent the explosion from happening.
+* Fixed a memory leak in the Collider debug display gizmo
+
+### Known Issues
+
 ## [0.5.0-preview.1] - 2020-09-15
 
 ### Upgrade guide

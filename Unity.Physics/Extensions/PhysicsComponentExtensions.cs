@@ -167,21 +167,22 @@ namespace Unity.Physics.Extensions
         /// <param name="explosionRadius">The radius of the sphere within which the explosion has its effect.</param>
         /// <param name="timestep">The change in time from the current to the next frame.</param>
         /// <param name="up">A vector defining the up direction, generally a unit vector in the opposite direction to <see cref="PhysicsStep"/>.Gravity.</param>
+        /// <param name="explosionFilter">Filter determining whether an explosion should be applied to the body.</param>
         /// <param name="upwardsModifier">Adjustment to the apparent position of the explosion to make it seem to lift objects.</param>
         /// <param name="mode">The method used to apply the force to its targets.</param>
         public static void ApplyExplosionForce(
-            ref this PhysicsVelocity bodyVelocity, in PhysicsMass bodyMass, in PhysicsCollider bodyCollider, 
+            ref this PhysicsVelocity bodyVelocity, in PhysicsMass bodyMass, in PhysicsCollider bodyCollider,
             in Translation bodyPosition, in Rotation bodyOrientation,
             float explosionForce, in float3 explosionPosition, in float explosionRadius,
-            in float timestep, in float3 up,
+            in float timestep, in float3 up, in CollisionFilter explosionFilter,
             in float upwardsModifier = 0, ForceMode mode = ForceMode.Force)
         {
             var worldFromBody = new RigidTransform(bodyOrientation.Value, bodyPosition.Value);
 
-            // The explosion is modelled as a sphere with a certain centre position and radius in world space; 
-            // normally, anything outside the sphere is not affected by the explosion and the force decreases 
-            // in proportion to distance from the centre. 
-            // However, if a value of zero is passed for the radius then the full force will be applied 
+            // The explosion is modelled as a sphere with a certain centre position and radius in world space;
+            // normally, anything outside the sphere is not affected by the explosion and the force decreases
+            // in proportion to distance from the centre.
+            // However, if a value of zero is passed for the radius then the full force will be applied
             // regardless of how far the centre is from the rigidbody.
             bool bExplosionProportionalToDistance = explosionRadius != 0.0f;
 
@@ -189,13 +190,13 @@ namespace Unity.Physics.Extensions
             {
                 Position = math.transform(math.inverse(worldFromBody), explosionPosition),
                 MaxDistance = math.select(float.MaxValue, explosionRadius, bExplosionProportionalToDistance),
-                Filter = bodyCollider.Value.Value.Filter,
+                Filter = explosionFilter
             };
 
-            // This function applies a force to the object at the point on the surface of the rigidbody 
-            // that is closest to explosionPosition. The force acts along the direction from explosionPosition 
-            // to the surface point on the rigidbody. 
-            // If explosionPosition is inside the rigidbody, or the rigidbody has no active colliders, 
+            // This function applies a force to the object at the point on the surface of the rigidbody
+            // that is closest to explosionPosition. The force acts along the direction from explosionPosition
+            // to the surface point on the rigidbody.
+            // If explosionPosition is inside the rigidbody, or the rigidbody has no active colliders,
             // then the center of mass is used instead of the closest point on the surface.
             if (!bodyCollider.Value.Value.CalculateDistance(pointDistanceInput, out DistanceHit closestHit))
             {
@@ -203,8 +204,8 @@ namespace Unity.Physics.Extensions
                 return;
             }
 
-            // The magnitude of the force depends on the distance between explosionPosition 
-            // and the point where the force was applied. As the distance between 
+            // The magnitude of the force depends on the distance between explosionPosition
+            // and the point where the force was applied. As the distance between
             // explosionPosition and the force point increases, the actual applied force decreases.
             if (bExplosionProportionalToDistance)
             {
@@ -217,11 +218,11 @@ namespace Unity.Physics.Extensions
             var force = explosionForce * forceDirection;
 
             // The vertical direction of the force can be modified using upwardsModifier.
-            // If this parameter is greater than zero, the force is applied at the point 
-            // on the surface of the Rigidbody that is closest to explosionPosition but 
-            // shifted along the y-axis by negative upwardsModifier.Using this parameter, 
-            // you can make the explosion appear to throw objects up into the air, 
-            // which can give a more dramatic effect rather than a simple outward force. 
+            // If this parameter is greater than zero, the force is applied at the point
+            // on the surface of the Rigidbody that is closest to explosionPosition but
+            // shifted along the y-axis by negative upwardsModifier.Using this parameter,
+            // you can make the explosion appear to throw objects up into the air,
+            // which can give a more dramatic effect rather than a simple outward force.
             // Force can be applied only to an active rigidbody.
             if (0.0f != upwardsModifier)
             {
@@ -230,6 +231,23 @@ namespace Unity.Physics.Extensions
 
             bodyMass.GetImpulseFromForce(force, mode, timestep, out float3 impulse, out PhysicsMass impulseMass);
             bodyVelocity.ApplyImpulse(impulseMass, bodyPosition, bodyOrientation, impulse, closestHitPositionWorld);
+        }
+
+        /// <summary>
+        /// Converts a force into an impulse based on the force mode and the bodies mass and inertia properties.
+        /// Equivalent to UnityEngine.Rigidbody.AddExplosionForce.
+        /// ExplosionFilter is set to CollisionFIlter.Default
+        /// <see cref="ApplyExplosionForce(ref PhysicsVelocity, in PhysicsMass, in PhysicsCollider, in Translation, in Rotation, float, in float3, in float, in float, in float3, in CollisionFilter, in float, ForceMode)"></see>
+        /// </summary>
+        public static void ApplyExplosionForce(
+            ref this PhysicsVelocity bodyVelocity, in PhysicsMass bodyMass, in PhysicsCollider bodyCollider,
+            in Translation bodyPosition, in Rotation bodyOrientation,
+            float explosionForce, in float3 explosionPosition, in float explosionRadius,
+            in float timestep, in float3 up,
+            in float upwardsModifier = 0, ForceMode mode = ForceMode.Force)
+        {
+            bodyVelocity.ApplyExplosionForce(bodyMass, bodyCollider, bodyPosition, bodyOrientation, explosionForce,
+                explosionPosition, explosionRadius, timestep, up, CollisionFilter.Default, upwardsModifier, mode);
         }
 
         public static void ApplyImpulse(ref this PhysicsVelocity pv, in PhysicsMass pm, in Translation t, in Rotation r, in float3 impulse, in float3 point)

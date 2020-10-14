@@ -1,4 +1,4 @@
-﻿using Unity.Entities;
+using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
 using Unity.Physics;
@@ -470,7 +470,8 @@ class HullGenerationTest : MonoBehaviour
 
         for (int i = 0; i < hullA.NumVertices; i++)
         {
-            PointDistanceInput distanceQuery = new PointDistanceInput {
+            PointDistanceInput distanceQuery = new PointDistanceInput
+            {
                 Filter = CollisionFilter.Default,
                 MaxDistance = float.MaxValue,
                 Position = hullA.Vertices[i]
@@ -538,6 +539,9 @@ class HullGenerationTest : MonoBehaviour
                         float cosMinAngle = GetCosMinAngleBetweenFaces(ref simplifiedHull);
                         Assert.IsTrue(cosMinAngle < math.cos(minAngle));
                     }
+
+                    colliderRef.Dispose();
+                    simplifiedColliderRef.Dispose();
                 }
 
                 // Build the collider again with reduced output size limits to make sure it obeys the limits and doesn't fall over
@@ -549,6 +553,8 @@ class HullGenerationTest : MonoBehaviour
                     ConvexCollider* reducedCollider = (ConvexCollider*)reducedColliderRef.GetUnsafePtr();
                     Assert.IsTrue(reducedCollider->ConvexHull.Vertices.Length <= maxVertices);
                     Assert.IsTrue(reducedCollider->ConvexHull.Faces.Length <= maxFaces);
+
+                    reducedColliderRef.Dispose();
                 }
 
                 points.Dispose();
@@ -664,7 +670,6 @@ class HullGenerationTest : MonoBehaviour
             maxDistance = float.MinValue;
             CalcHullDistanceStats(ref originalHull, simplifiedCollider, 0.0f, ref minDistance, ref maxDistance);
             CalcHullDistanceStats(ref simplifiedHull, originalCollider, radius, ref minDistance, ref maxDistance);
-
         }
 
         // Hull has two representations, vertices and planes, which are not perfectly identical.  Find the maximum distance from any vertex to a plane that it should be on.
@@ -682,6 +687,9 @@ class HullGenerationTest : MonoBehaviour
 
         // Find the minimum angle between adjacent faces in the simplified shape
         float cosMinAngle = GetCosMinAngleBetweenFaces(ref simplifiedHull);
+
+        originalColliderRef.Dispose();
+        simplifiedColliderRef.Dispose();
 
         return new HullStats
         {
@@ -947,6 +955,7 @@ class HullGenerationTest : MonoBehaviour
         // Draw the simplified hull
         drawHull(ref m_SimplifiedHull.Builder, float3.zero, Color.cyan, DrawFaceIds, DrawVertexIds);
     }
+
 #endif
 }
 

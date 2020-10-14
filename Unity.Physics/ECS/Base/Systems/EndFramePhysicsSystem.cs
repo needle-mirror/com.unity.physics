@@ -1,4 +1,4 @@
-﻿using Unity.Entities;
+using Unity.Entities;
 using Unity.Jobs;
 
 namespace Unity.Physics.Systems
@@ -12,9 +12,13 @@ namespace Unity.Physics.Systems
         private JobHandle m_InputDependency;
         private JobHandle m_OutputDependency;
 
+        private BuildPhysicsWorld m_BuildPhysicsWorldSystem;
+
         protected override void OnCreate()
         {
             m_OutputDependency = Dependency;
+
+            m_BuildPhysicsWorldSystem = World.GetOrCreateSystem<BuildPhysicsWorld>();
         }
 
         protected override void OnDestroy()
@@ -28,6 +32,9 @@ namespace Unity.Physics.Systems
             Dependency = JobHandle.CombineDependencies(Dependency, m_InputDependency);
 
             m_OutputDependency = Dependency;
+
+            // Inform the BuildPhysicsWorld of the dependency to complete before scheduling new jobs
+            m_BuildPhysicsWorldSystem.AddInputDependencyToComplete(m_OutputDependency);
 
             // Invalidate input dependency since it's been used now
             m_InputDependency = default;

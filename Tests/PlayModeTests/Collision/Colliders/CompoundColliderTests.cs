@@ -37,14 +37,14 @@ namespace Unity.Physics.Tests.Collision.Colliders
                 });
                 var children = new NativeArray<CompoundCollider.ColliderBlobInstance>(8, Allocator.Temp)
                 {
-                    [0] = new CompoundCollider.ColliderBlobInstance { Collider = miniBox, CompoundFromChild = math.mul(transform, new RigidTransform(quaternion.identity, new float3(+0.25f,+0.25f,+0.25f))) },
-                    [1] = new CompoundCollider.ColliderBlobInstance { Collider = miniBox, CompoundFromChild = math.mul(transform, new RigidTransform(quaternion.identity, new float3(-0.25f,+0.25f,+0.25f))) },
-                    [2] = new CompoundCollider.ColliderBlobInstance { Collider = miniBox, CompoundFromChild = math.mul(transform, new RigidTransform(quaternion.identity, new float3(+0.25f,-0.25f,+0.25f))) },
-                    [3] = new CompoundCollider.ColliderBlobInstance { Collider = miniBox, CompoundFromChild = math.mul(transform, new RigidTransform(quaternion.identity, new float3(+0.25f,+0.25f,-0.25f))) },
-                    [4] = new CompoundCollider.ColliderBlobInstance { Collider = miniBox, CompoundFromChild = math.mul(transform, new RigidTransform(quaternion.identity, new float3(-0.25f,-0.25f,+0.25f))) },
-                    [5] = new CompoundCollider.ColliderBlobInstance { Collider = miniBox, CompoundFromChild = math.mul(transform, new RigidTransform(quaternion.identity, new float3(+0.25f,-0.25f,-0.25f))) },
-                    [6] = new CompoundCollider.ColliderBlobInstance { Collider = miniBox, CompoundFromChild = math.mul(transform, new RigidTransform(quaternion.identity, new float3(-0.25f,+0.25f,-0.25f))) },
-                    [7] = new CompoundCollider.ColliderBlobInstance { Collider = miniBox, CompoundFromChild = math.mul(transform, new RigidTransform(quaternion.identity, new float3(-0.25f,-0.25f,-0.25f))) }
+                    [0] = new CompoundCollider.ColliderBlobInstance { Collider = miniBox, CompoundFromChild = math.mul(transform, new RigidTransform(quaternion.identity, new float3(+0.25f, +0.25f, +0.25f))) },
+                    [1] = new CompoundCollider.ColliderBlobInstance { Collider = miniBox, CompoundFromChild = math.mul(transform, new RigidTransform(quaternion.identity, new float3(-0.25f, +0.25f, +0.25f))) },
+                    [2] = new CompoundCollider.ColliderBlobInstance { Collider = miniBox, CompoundFromChild = math.mul(transform, new RigidTransform(quaternion.identity, new float3(+0.25f, -0.25f, +0.25f))) },
+                    [3] = new CompoundCollider.ColliderBlobInstance { Collider = miniBox, CompoundFromChild = math.mul(transform, new RigidTransform(quaternion.identity, new float3(+0.25f, +0.25f, -0.25f))) },
+                    [4] = new CompoundCollider.ColliderBlobInstance { Collider = miniBox, CompoundFromChild = math.mul(transform, new RigidTransform(quaternion.identity, new float3(-0.25f, -0.25f, +0.25f))) },
+                    [5] = new CompoundCollider.ColliderBlobInstance { Collider = miniBox, CompoundFromChild = math.mul(transform, new RigidTransform(quaternion.identity, new float3(+0.25f, -0.25f, -0.25f))) },
+                    [6] = new CompoundCollider.ColliderBlobInstance { Collider = miniBox, CompoundFromChild = math.mul(transform, new RigidTransform(quaternion.identity, new float3(-0.25f, +0.25f, -0.25f))) },
+                    [7] = new CompoundCollider.ColliderBlobInstance { Collider = miniBox, CompoundFromChild = math.mul(transform, new RigidTransform(quaternion.identity, new float3(-0.25f, -0.25f, -0.25f))) }
                 };
                 var compound = CompoundCollider.Create(children);
                 children.Dispose();
@@ -121,6 +121,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         [Test]
         public void CompoundCollider_Create_WhenNestingLevelBreached_Throws()
         {
+            var CreatedColliders = new NativeList<BlobAssetReference<Collider>>(Allocator.Temp);
             Assert.Throws<ArgumentException>(
                 () =>
                 {
@@ -133,6 +134,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
                         var t = i / (float)numSpheres * 2f * math.PI;
                         var p = ringRadius * new float3(math.cos(t), 0f, math.sin(t));
                         var sphere = SphereCollider.Create(new SphereGeometry { Center = p, Radius = sphereRadius });
+                        CreatedColliders.Add(sphere);
                         if (compound.IsCreated)
                         {
                             compound = CompoundCollider.Create(
@@ -150,9 +152,18 @@ namespace Unity.Physics.Tests.Collision.Colliders
                                     [0] = new CompoundCollider.ColliderBlobInstance { Collider = sphere, CompoundFromChild = RigidTransform.identity }
                                 });
                         }
+                        CreatedColliders.Add(compound);
                     }
                 });
+
+            for (int i = CreatedColliders.Length - 1; i >= 0; i--)
+            {
+                CreatedColliders[i].Dispose();
+            }
+
+            CreatedColliders.Dispose();
         }
+
 #endif
     }
 }

@@ -64,6 +64,8 @@ namespace Unity.Physics
     /// <summary>
     /// Add this component to a dynamic body if it needs to sometimes switch to being kinematic.
     /// This allows you to retain its dynamic mass properties on its <see cref="PhysicsMass"/> component, but have the physics solver temporarily treat it as if it were kinematic.
+    /// Kinematic bodies will have infinite mass and inertia. They should also not be affected by gravity.
+    /// Hence, if IsKinematic is non-zero the value in an associated <see cref="PhysicsGravityFactor"/> component is also ignored.
     /// </summary>
     public struct PhysicsMassOverride : IComponentData
     {

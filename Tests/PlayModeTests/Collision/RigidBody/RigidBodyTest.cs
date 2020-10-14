@@ -224,6 +224,9 @@ namespace Unity.Physics.Tests.Collision.RigidBody
             Assert.IsFalse(rigidBody.CalculateDistance(colliderDistanceInput));
             Assert.IsFalse(rigidBody.CalculateDistance(colliderDistanceInput, out closestHit));
             Assert.IsFalse(rigidBody.CalculateDistance(colliderDistanceInput, ref allHits));
+
+            boxCollider.Dispose();
+            sphereCollider.Dispose();
         }
     }
 }

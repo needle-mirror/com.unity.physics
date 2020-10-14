@@ -8,6 +8,7 @@ namespace Unity.Physics
     // A container of user callbacks, to run during scheduling of the simulation jobs
     public class SimulationCallbacks
     {
+        // Callbacks that are invoked after each simulation phase (no callback needed after last phase)
         public enum Phase
         {
             PostCreateDispatchPairs,
@@ -17,7 +18,7 @@ namespace Unity.Physics
         }
 
         // this needs to match the number of phase values above
-        private static readonly int k_NumPhases = 4;
+        private static readonly int k_NumCallbacks = 4;
 
         public delegate JobHandle Callback(ref ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps);
 
@@ -28,15 +29,15 @@ namespace Unity.Physics
             public JobHandle Dependency;
         }
 
-        private readonly List<CallbackAndDependency>[] m_Callbacks = new List<CallbackAndDependency>[k_NumPhases];
+        private readonly List<CallbackAndDependency>[] m_Callbacks = new List<CallbackAndDependency>[k_NumCallbacks];
 
         public SimulationCallbacks()
         {
 #if !NET_DOTS
-            Assert.AreEqual(Enum.GetValues(typeof(Phase)).Length, k_NumPhases);
+            Assert.AreEqual(Enum.GetValues(typeof(Phase)).Length, k_NumCallbacks);
 #endif
 
-            for (int i = 0; i < k_NumPhases; ++i)
+            for (int i = 0; i < k_NumCallbacks; ++i)
             {
                 m_Callbacks[i] = new List<CallbackAndDependency>(8);
             }
@@ -67,7 +68,7 @@ namespace Unity.Physics
 
         public void Clear()
         {
-            for (int i = 0; i < k_NumPhases; i++)
+            for (int i = 0; i < k_NumCallbacks; i++)
             {
                 m_Callbacks[i].Clear();
             }

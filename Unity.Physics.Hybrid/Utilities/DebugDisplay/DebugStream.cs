@@ -429,9 +429,8 @@ public class DebugStream : SystemBase
         // Set up component to draw
         if (m_DrawComponent == null)
         {
-            GameObject drawObject = new GameObject();
-            m_DrawComponent = drawObject.AddComponent<DrawComponent>();
-            m_DrawComponent.name = "DebugStream.DrawComponent";
+            m_DrawComponent = new GameObject("DebugStream.DrawComponent", typeof(DrawComponent)){ 
+hideFlags = HideFlags.DontSave }.GetComponent<DrawComponent>();
             m_DrawComponent.DebugDraw = this;
             Unity.DebugDisplay.DebugDisplay.Instantiate();
         }
@@ -439,6 +438,17 @@ public class DebugStream : SystemBase
 
     protected override void OnDestroy()
     {
+        // Clean up the DrawComponent GameObject.
+        // If we're running the systems outside of PlayMode, we should destroy with DestroyImmediate.
+        if (m_DrawComponent != null)
+        {
+            if (Application.isPlaying)
+                Object.Destroy(m_DrawComponent.gameObject);
+            else
+                Object.DestroyImmediate(m_DrawComponent.gameObject);
+            m_DrawComponent = null;
+        }
+
         for (int i = 0; i < m_DebugStreams.Count; i++)
             m_DebugStreams[i].Dispose();
         m_DebugStreams.Clear();

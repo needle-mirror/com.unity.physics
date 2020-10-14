@@ -384,7 +384,7 @@ namespace Unity.Physics.Authoring
                             for (int f = 0; f < hull.Faces.Length; f++)
                             {
                                 var face = hull.Faces[f];
-                                for (int v = 0; v < face.NumVertices-1; v++)
+                                for (int v = 0; v < face.NumVertices - 1; v++)
                                 {
                                     byte i = hull.FaceVertexIndices[face.FirstIndex + v];
                                     byte j = hull.FaceVertexIndices[face.FirstIndex + v + 1];
@@ -594,11 +594,11 @@ namespace Unity.Physics.Authoring
                                 Vector3 position = math.transform(body.WorldFromBody, dr.Position);
                                 Quaternion orientation = math.mul(body.WorldFromBody.rot, dr.Orientation);
                                 Gizmos.DrawMesh(dr.Mesh, position, orientation, dr.Scale);
-                                if (dr.Mesh != CachedReferenceCylinder && dr.Mesh != CachedReferenceSphere)
-                                {
-                                    // Cleanup any meshes that are not our cached ones
-                                    Destroy(dr.Mesh);
-                                }
+                            }
+                            if (dr.Mesh != CachedReferenceCylinder && dr.Mesh != CachedReferenceSphere)
+                            {
+                                // Cleanup any meshes that are not our cached ones
+                                Destroy(dr.Mesh);
                             }
 
                             if (EnableEdges != 0)

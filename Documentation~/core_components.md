@@ -46,6 +46,42 @@ Each Collider also has a `CollisionFilter` which allows you to control what obje
 
 The default values for collision filter ensure that every object collides with every other object. By configuring the filter in particular ways, you are able to opt-out of select collisions, depending on what you want from gamecode.
 
+## Modifying PhysicsCollider
+
+It is possible to modify PhysicsCollider's `BlobAssetReference<Collider>` value. While it is completely safe to do so in jobs that declare write access to `PhysicsCollider` component, you need to be extra careful while modifying it otherwise. For example, you could access the collider using `EntityManager.GetComponentData<PhysicsCollider>(entity)` and change the collision filter of the blob. In order for this change to be picked up by the engine, you also need to write back to original `PhysicsCollider` of that entity. Below is a code snippet demonstrating how to properly change physics collider using both approaches.
+
+```csharp
+
+			// Change the filter to CollisionFilter.Zero using Burst-compiled job
+            // This is the recommended way of changing the PhysicsCollider, as it is Burst compatible.
+            // As long as components are accessed by reference instead of by value, the change will
+            // be picked up by the physics engine, and will work as intended.
+            Entities
+                .WithName("ChangeColliderFilterJob")
+				.WithBurst()
+                .ForEach((ref PhysicsCollider collider) =>
+                {
+                    collider.Value.Value.Filter = CollisionFilter.Zero;
+                }).Schedule();
+
+
+			// Changing the PhysicsCollider using EntityManager.Get/SetComponentData.
+            // This is not the recommended way, since it isn't Burst friendly, but if needed
+            // this is how it needs to happen
+            for (int i = 0; i < entities.Length; i++)
+            {
+                var entity = entities[i];
+                var collider = EntityManager.GetComponentData<PhysicsCollider>(entity);
+
+                collider.Value.Value.Filter = CollisionFilter.Zero;
+
+                // IMPORTANT: collider has been changed, but the PhysicsCollider component data hasn't
+                // been written back to, and if left at this state, the change might not get caught by
+                // the physics engine, so it is necessary to proceed with the write back using SetComponentData
+                EntityManager.SetComponentData(entity, collider);
+			}
+```
+
 # Dynamic bodies
 
 By itself, a world containing entities with `PhysicsCollider` components won't actually _do_ anything. This is because the bodies you declare are all treated as static – they cannot move, and from the perspective of collision, they have infinite mass. In order to make our simulations more interesting, you need to add the ability for body transforms to change.

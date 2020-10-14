@@ -15,6 +15,7 @@ namespace Unity.Physics.Systems
     [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     public class BuildPhysicsWorld : SystemBase, IPhysicsSystem
     {
+        private JobHandle m_InputDependencyToComplete;
         private JobHandle m_InputDependency;
         private JobHandle m_OutputDependency;
 
@@ -30,7 +31,6 @@ namespace Unity.Physics.Systems
         internal NativeArray<int> HaveStaticBodiesChanged = new NativeArray<int>(1, Allocator.Persistent);
 
         StepPhysicsWorld m_StepPhysicsWorldSystem;
-        EndFramePhysicsSystem m_EndFramePhysicsSystem;
 
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
         internal NativeHashMap<uint, long> IntegrityCheckMap = new NativeHashMap<uint, long>(4, Allocator.Persistent);
@@ -89,7 +89,6 @@ namespace Unity.Physics.Systems
             CollisionWorldProxyGroup = GetEntityQuery(ComponentType.ReadWrite<CollisionWorldProxy>());
 
             m_StepPhysicsWorldSystem = World.GetOrCreateSystem<StepPhysicsWorld>();
-            m_EndFramePhysicsSystem = World.GetOrCreateSystem<EndFramePhysicsSystem>();
         }
 
         protected override void OnDestroy()
@@ -107,7 +106,7 @@ namespace Unity.Physics.Systems
         protected override void OnUpdate()
         {
             // Make sure last frame's physics jobs are complete before any new ones start
-            m_EndFramePhysicsSystem.GetOutputDependency().Complete();
+            m_InputDependencyToComplete.Complete();
 
             // Combine implicit input dependency with the user one
             Dependency = JobHandle.CombineDependencies(Dependency, m_InputDependency);
@@ -225,7 +224,7 @@ namespace Unity.Physics.Systems
                     }.Schedule(DynamicEntityGroup, Dependency));
                 }
 
-                // Now, schedule creation of static bodies, with FirstBodyIndex pointing after 
+                // Now, schedule creation of static bodies, with FirstBodyIndex pointing after
                 // the dynamic and kinematic bodies
                 if (numStaticBodies > 0)
                 {
@@ -290,8 +289,14 @@ namespace Unity.Physics.Systems
             // Inform next system in the pipeline of its dependency
             m_StepPhysicsWorldSystem.AddInputDependency(Dependency);
 
-            // Invalidate input dependency since it's been used by now
+            // Invalidate input dependencies since they've been used by now
             m_InputDependency = default;
+            m_InputDependencyToComplete = default;
+        }
+
+        public void AddInputDependencyToComplete(JobHandle dependencyToComplete)
+        {
+            m_InputDependencyToComplete = JobHandle.CombineDependencies(m_InputDependencyToComplete, dependencyToComplete);
         }
 
         public void AddInputDependency(JobHandle inputDep)
@@ -335,7 +340,7 @@ namespace Unity.Physics.Systems
             [BurstCompile]
             internal struct CheckStaticBodyChangesReduceJob : IJob
             {
-                [ReadOnly] [DeallocateOnJobCompletion] public NativeArray<int> ChunkHasChangesOutput;
+                [ReadOnly][DeallocateOnJobCompletion] public NativeArray<int> ChunkHasChangesOutput;
                 public NativeArray<int> Result;
 
                 public void Execute()
@@ -508,12 +513,11 @@ namespace Unity.Physics.Systems
                             InverseInertia = isKinematic ? defaultPhysicsMass.InverseInertia : chunkMasses[i].InverseInertia,
                             InverseMass = isKinematic ? defaultPhysicsMass.InverseMass : chunkMasses[i].InverseMass,
                             AngularExpansionFactor = hasChunkPhysicsMassType ? chunkMasses[i].AngularExpansionFactor : defaultPhysicsMass.AngularExpansionFactor,
-                            GravityFactor = hasChunkPhysicsGravityFactorType ? chunkGravityFactors[i].Value : defaultGravityFactor
+                            GravityFactor = isKinematic ? 0 : hasChunkPhysicsGravityFactorType ? chunkGravityFactors[i].Value : defaultGravityFactor
                         };
-
                     }
 
-                    // Note: these defaults assume a dynamic body with infinite mass, hence no damping 
+                    // Note: these defaults assume a dynamic body with infinite mass, hence no damping
                     var defaultPhysicsDamping = new PhysicsDamping
                     {
                         Linear = 0.0f,
@@ -531,7 +535,7 @@ namespace Unity.Physics.Systems
                             WorldFromMotion = new RigidTransform(
                                 math.mul(chunkRotations[i].Value, mass.InertiaOrientation),
                                 math.rotate(chunkRotations[i].Value, mass.CenterOfMass) + chunkPositions[i].Value
-                            ),
+                                ),
                             BodyFromMotion = new RigidTransform(mass.InertiaOrientation, mass.CenterOfMass),
                             LinearDamping = damping.Linear,
                             AngularDamping = damping.Angular
@@ -673,6 +677,7 @@ namespace Unity.Physics.Systems
                 }
             }
 
+            [BurstCompile]
             internal struct RecordColliderIntegrity : IJobChunk
             {
                 [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
@@ -685,7 +690,6 @@ namespace Unity.Physics.Systems
             }
 
             #endregion
-
         }
 
         #endregion
@@ -724,10 +728,8 @@ namespace Unity.Physics.Systems
                     typeof(PhysicsCollider)
                 }
             }), m_OutputDependency);
-
         }
 
         #endregion
-
     }
 }

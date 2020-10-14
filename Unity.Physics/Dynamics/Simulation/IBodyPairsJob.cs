@@ -120,13 +120,14 @@ namespace Unity.Physics
             {
                 for (int currentIdx = 0; currentIdx < jobData.PhasedDispatchPairs.Length; currentIdx++)
                 {
-                    // Skip joint pairs
-                    if (jobData.PhasedDispatchPairs[currentIdx].IsJoint)
+                    DispatchPairSequencer.DispatchPair dispatchPair = jobData.PhasedDispatchPairs[currentIdx];
+
+                    // Skip joint pairs and invalid pairs
+                    if (dispatchPair.IsJoint || !dispatchPair.IsValid)
                     {
                         continue;
                     }
 
-                    DispatchPairSequencer.DispatchPair dispatchPair = jobData.PhasedDispatchPairs[currentIdx];
                     var pair = new ModifiableBodyPair
                     {
                         BodyIndexPair = new BodyIndexPair { BodyIndexA = dispatchPair.BodyIndexA, BodyIndexB = dispatchPair.BodyIndexB },

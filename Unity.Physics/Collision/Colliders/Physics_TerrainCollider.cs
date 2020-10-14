@@ -83,7 +83,7 @@ namespace Unity.Physics
 
         public ColliderType Type => m_Header.Type;
         public CollisionType CollisionType => m_Header.CollisionType;
-        public CollisionFilter Filter => m_Header.Filter;
+        public CollisionFilter Filter { get => m_Header.Filter; set { if (!m_Header.Filter.Equals(value)) { m_Header.Version += 1; m_Header.Filter = value; } } }
         public uint NumColliderKeyBits => Terrain.NumColliderKeyBits;
         internal uint TotalNumColliderKeyBits => NumColliderKeyBits;
 

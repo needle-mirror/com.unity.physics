@@ -146,10 +146,8 @@ namespace Unity.Physics.GraphicsIntegration
                     {
                         if (hasInterpolationBuffer)
                         {
-                            smoothedTransform = GraphicalSmoothingUtility.InterpolateUsingVelocity(
-                                interpolationBuffers[i].PreviousTransform,
-                                interpolationBuffers[i].PreviousVelocity, currentVelocity,
-                                physicsMass, TimeAhead, NormalizedTimeAhead);
+                            smoothedTransform = GraphicalSmoothingUtility.Interpolate(
+                                interpolationBuffers[i].PreviousTransform, currentTransform, NormalizedTimeAhead);
                         }
                         else
                         {
