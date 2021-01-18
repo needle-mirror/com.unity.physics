@@ -21,7 +21,7 @@ namespace Unity.Physics.Tests.DFG
         [SetUp]
         public void SetUp()
         {
-            m_World = TestUtils.GenerateRandomWorld(ref m_Rnd, 10, 10.0f, 0, true);
+            m_World = TestUtils.GenerateRandomWorld(ref m_Rnd, 10, 10.0f, -1);
         }
 
         [TearDown]

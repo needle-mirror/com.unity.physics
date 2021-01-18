@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using Unity.Entities;
 using Unity.Mathematics;
 using static Unity.Physics.PhysicsStep;
@@ -46,15 +46,15 @@ namespace Unity.Physics.Authoring
         [SerializeField]
         bool m_EnableSolverStabilizationHeuristic = Default.SolverStabilizationHeuristicSettings.EnableSolverStabilization;
 
-        public int ThreadCountHint
+        public bool MultiThreaded
         {
-            get => m_ThreadCountHint;
-            set => m_ThreadCountHint = value;
+            get => m_MultiThreaded;
+            set => m_MultiThreaded = value;
         }
         [SerializeField]
-        [Tooltip("Specifies the hint to the physics engine about the number of threads the simulation will be executed on. " +
-            "Invalid values (<=0) will result in a simulation with very small number of single threaded jobs.")]
-        int m_ThreadCountHint = Default.ThreadCountHint;
+        [Tooltip("True will go wide with the number of threads and jobs. " +
+            "False will result in a simulation with very small number of single threaded jobs.")]
+        bool m_MultiThreaded = Default.MultiThreaded > 0 ? true : false;
 
         public bool SynchronizeCollisionWorld
         {
@@ -79,7 +79,7 @@ namespace Unity.Physics.Authoring
                     InertiaScalingFactor = Default.SolverStabilizationHeuristicSettings.InertiaScalingFactor
                 } :
                 Solver.StabilizationHeuristicSettings.Default,
-            ThreadCountHint = ThreadCountHint,
+            MultiThreaded = (byte)(MultiThreaded ? 1 : 0),
             SynchronizeCollisionWorld = (byte)(SynchronizeCollisionWorld ? 1 : 0)
         };
 

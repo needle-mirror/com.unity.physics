@@ -24,7 +24,7 @@ namespace Unity.Physics.Authoring
 
         BeginColliderConversionSystem m_BeginColliderConversionSystem;
         EndColliderConversionSystem m_EndColliderConversionSystem;
-        
+
         BlobAssetComputationContext<int, Collider> BlobComputationContext =>
             m_BeginColliderConversionSystem.BlobComputationContext;
 
@@ -91,7 +91,8 @@ namespace Unity.Physics.Authoring
                                         replaced = true;
                                         break;
                                     }
-                                } while (m_AllLeafCollidersByBody.TryGetNextValue(out existingShape, ref existingIterator));
+                                }
+                                while (m_AllLeafCollidersByBody.TryGetNextValue(out existingShape, ref existingIterator));
                             }
 
                             // Add the shape if it did not exist already
@@ -119,7 +120,8 @@ namespace Unity.Physics.Authoring
                                 var gameObject = m_EndColliderConversionSystem.GetConvertedAuthoringComponent(shape.ConvertedAuthoringComponentIndex).gameObject;
                                 Debug.LogWarning($"Couldn't convert Collider for GameObject '{gameObject.name}'.");
                             }
-                        } while (m_ChangedLeavesByBody.TryGetNextValue(out shape, ref iterator));
+                        }
+                        while (m_ChangedLeavesByBody.TryGetNextValue(out shape, ref iterator));
                     }
 
                     // Add all children that did not change
@@ -142,7 +144,8 @@ namespace Unity.Physics.Authoring
                                 };
                                 children.TryAdd(shape.ToColliderInstanceId(), child);
                             }
-                        } while (m_AllLeafCollidersByBody.TryGetNextValue(out shape, ref it));
+                        }
+                        while (m_AllLeafCollidersByBody.TryGetNextValue(out shape, ref it));
                     }
 
                     // Get the list of colliders to (re)build
@@ -222,7 +225,8 @@ namespace Unity.Physics.Authoring
             Profiler.EndSample();
         }
 
-#if UNITY_COLLECTIONS_0_13_OR_NEWER
+#if !(UNITY_ANDROID && !UNITY_64) // !Android32
+        // Getting memory alignment errors from HashUtility.Hash128 on Android32
         [BurstCompile]
 #endif
         unsafe struct HashChildrenJob : IJob

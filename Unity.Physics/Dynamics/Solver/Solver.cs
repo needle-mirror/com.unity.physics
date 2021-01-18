@@ -136,9 +136,9 @@ namespace Unity.Physics
         // Schedule the job to apply gravity to all dynamic bodies and copy input velocities
         internal static JobHandle ScheduleApplyGravityAndCopyInputVelocitiesJob(
             NativeArray<MotionVelocity> motionVelocities, NativeArray<Velocity> inputVelocities,
-            float3 gravityAcceleration, JobHandle inputDeps, int threadCountHint = 0)
+            float3 gravityAcceleration, JobHandle inputDeps, bool multiThreaded = true)
         {
-            if (threadCountHint <= 0)
+            if (!multiThreaded)
             {
                 var job = new ApplyGravityAndCopyInputVelocitiesJob
                 {
@@ -178,11 +178,11 @@ namespace Unity.Physics
         internal static SimulationJobHandles ScheduleBuildJacobiansJobs(ref PhysicsWorld world, float timeStep, float3 gravity,
             int numSolverIterations, JobHandle inputDeps, ref NativeList<DispatchPairSequencer.DispatchPair> dispatchPairs,
             ref DispatchPairSequencer.SolverSchedulerInfo solverSchedulerInfo,
-            ref NativeStream contacts, ref NativeStream jacobians, int threadCountHint = 0)
+            ref NativeStream contacts, ref NativeStream jacobians, bool multiThreaded = true)
         {
             SimulationJobHandles returnHandles = default;
 
-            if (threadCountHint <= 0)
+            if (!multiThreaded)
             {
                 returnHandles.FinalExecutionHandle = new BuildJacobiansJob
                 {
@@ -253,11 +253,11 @@ namespace Unity.Physics
             ref DynamicsWorld dynamicsWorld, float timestep, int numIterations,
             ref NativeStream jacobians, ref NativeStream collisionEvents, ref NativeStream triggerEvents,
             ref DispatchPairSequencer.SolverSchedulerInfo solverSchedulerInfo,
-            StabilizationData solverStabilizationData, JobHandle inputDeps, int threadCountHint = 0)
+            StabilizationData solverStabilizationData, JobHandle inputDeps, bool multiThreaded = true)
         {
             SimulationJobHandles returnHandles = default;
 
-            if (threadCountHint <= 0)
+            if (!multiThreaded)
             {
                 collisionEvents = new NativeStream(1, Allocator.Persistent);
                 triggerEvents = new NativeStream(1, Allocator.Persistent);

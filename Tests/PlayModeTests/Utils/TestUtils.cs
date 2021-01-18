@@ -1131,7 +1131,7 @@ namespace Unity.Physics.Tests.Utils
             return GenerateRandomCompound(ref rnd); // 2.5% compound
         }
 
-        public static unsafe PhysicsWorld GenerateRandomWorld(ref Random rnd, int numBodies, float size, int numThreadsHint, bool direct)
+        public static unsafe PhysicsWorld GenerateRandomWorld(ref Random rnd, int numBodies, float size, int numThreadsHint)
         {
             // Create the world
             PhysicsWorld world = new PhysicsWorld(numBodies, 0, 0);
@@ -1154,7 +1154,7 @@ namespace Unity.Physics.Tests.Utils
             }
 
             // Build the broadphase
-            if (direct)
+            if (numThreadsHint == -1)
             {
                 world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
                     world.CollisionWorld.CollisionTolerance, 1.0f, -9.81f * math.up());
@@ -1164,7 +1164,7 @@ namespace Unity.Physics.Tests.Utils
                 var buildStaticTree = new NativeArray<int>(1, Allocator.TempJob);
                 buildStaticTree[0] = 1;
                 world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, timeStep: 1.0f, gravity: -9.81f * math.up(),
-                    buildStaticTree, inputDeps: new JobHandle(), numThreadsHint).Complete();
+                    buildStaticTree, inputDeps: new JobHandle(), numThreadsHint > 0).Complete();
                 buildStaticTree.Dispose();
             }
 

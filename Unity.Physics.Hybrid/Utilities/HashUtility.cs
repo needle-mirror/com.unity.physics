@@ -15,7 +15,7 @@ namespace Unity.Physics.Authoring
             if (s_Initialized)
                 return;
             byte data = 0;
-#if UNITY_COLLECTIONS_0_13_OR_NEWER
+#if !(UNITY_ANDROID && !UNITY_64) // !Android32
             // ensure xxHash3 Burst delegate has been compiled on the main thread before it is used anywhere
             xxHash3.Hash128(UnsafeUtility.AddressOf(ref data), 1);
 #else
@@ -44,7 +44,8 @@ namespace Unity.Physics.Authoring
         public static unsafe Hash128 Hash128(void* ptr, int length)
         {
             UnityEngine.Assertions.Assert.IsTrue(s_Initialized, k_InitializedMessage);
-#if UNITY_COLLECTIONS_0_13_OR_NEWER
+#if !(UNITY_ANDROID && !UNITY_64) // !Android32
+            // Getting memory alignment errors from HashUtility.Hash128 on Android32
             return new Hash128(xxHash3.Hash128(ptr, length));
 #else
             var result = new UnityEngine.Hash128();
@@ -53,7 +54,7 @@ namespace Unity.Physics.Authoring
 #endif
         }
 
-#if !UNITY_COLLECTIONS_0_13_OR_NEWER
+#if (UNITY_ANDROID && !UNITY_64) // Android32
         [StructLayout(LayoutKind.Explicit)]
         struct HashUnion
         {

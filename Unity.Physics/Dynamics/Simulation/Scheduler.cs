@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using Unity.Burst;
 using Unity.Collections;
@@ -292,11 +292,11 @@ namespace Unity.Physics
         internal unsafe SimulationJobHandles ScheduleCreatePhasedDispatchPairsJob(
             ref PhysicsWorld world, ref NativeStream dynamicVsDynamicBroadphasePairsStream, ref NativeStream staticVsDynamicBroadphasePairStream,
             JobHandle inputDeps, ref NativeList<DispatchPair> dispatchPairs, out SolverSchedulerInfo solverSchedulerInfo,
-            int threadCountHint = 0)
+            bool multiThreaded = true)
         {
             SimulationJobHandles returnHandles = default;
 
-            if (threadCountHint <= 0)
+            if (!multiThreaded)
             {
                 dispatchPairs = new NativeList<DispatchPair>(Allocator.TempJob);
 

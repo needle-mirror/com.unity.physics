@@ -146,9 +146,7 @@ namespace Unity.Physics
         public int SolverIterationCount;
         public Solver.StabilizationHeuristicSettings SolverStabilizationHeuristicSettings;
 
-        // DOTS doesn't yet expose the number of worker threads, which is needed for tuning the simulation.
-        // For optimal physics performance set this to the number of physical CPU cores on your target device.
-        public int ThreadCountHint;
+        public byte MultiThreaded;
 
         // Whether to synchronize collision world after physics step to enable precise query results.
         // Note that `BuildPhysicsWorld` will do this work on the following frame anyway, so only use this option when
@@ -163,7 +161,7 @@ namespace Unity.Physics
             Gravity = -9.81f * math.up(),
             SolverIterationCount = 4,
             SolverStabilizationHeuristicSettings = Solver.StabilizationHeuristicSettings.Default,
-            ThreadCountHint = 8, // This is a guess. Prefer to overestimate than underestimate.
+            MultiThreaded = 1,
             SynchronizeCollisionWorld = 0
         };
     }

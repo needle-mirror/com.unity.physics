@@ -22,7 +22,7 @@ namespace Unity.Physics.Editor
         [AutoPopulate] SerializedProperty m_Gravity;
         [AutoPopulate] SerializedProperty m_SolverIterationCount;
         [AutoPopulate] SerializedProperty m_EnableSolverStabilizationHeuristic;
-        [AutoPopulate] SerializedProperty m_ThreadCountHint;
+        [AutoPopulate] SerializedProperty m_MultiThreaded;
         [AutoPopulate] SerializedProperty m_SynchronizeCollisionWorld;
 #pragma warning restore 649
 
@@ -40,7 +40,7 @@ namespace Unity.Physics.Editor
 
                 EditorGUILayout.PropertyField(m_SolverIterationCount);
 
-                EditorGUILayout.PropertyField(m_ThreadCountHint);
+                EditorGUILayout.PropertyField(m_MultiThreaded);
 
                 EditorGUILayout.PropertyField(m_SynchronizeCollisionWorld);
 

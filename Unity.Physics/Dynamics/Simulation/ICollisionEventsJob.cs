@@ -37,6 +37,7 @@ namespace Unity.Physics
 
             return ScheduleUnityPhysicsCollisionEventsJob(jobData, simulation, ref world, inputDeps);
         }
+
 #else
         // In this case Schedule() implementation for ICollisionEventsJob is provided by the Havok.Physics assembly.
         // This is a stub to catch when that assembly is missing.
@@ -69,8 +70,11 @@ namespace Unity.Physics
 
             // Ensure the input dependencies include the end-of-simulation job, so events will have been generated
             inputDeps = JobHandle.CombineDependencies(inputDeps, simulation.FinalSimulationJobHandle);
-
+#if UNITY_2020_2_OR_NEWER
+            var parameters = new JobsUtility.JobScheduleParameters(UnsafeUtility.AddressOf(ref data), CollisionEventJobProcess<T>.Initialize(), inputDeps, ScheduleMode.Single);
+#else
             var parameters = new JobsUtility.JobScheduleParameters(UnsafeUtility.AddressOf(ref data), CollisionEventJobProcess<T>.Initialize(), inputDeps, ScheduleMode.Batched);
+#endif
             return JobsUtility.Schedule(ref parameters);
         }
 
@@ -88,8 +92,11 @@ namespace Unity.Physics
             {
                 if (jobReflectionData == IntPtr.Zero)
                 {
-                    jobReflectionData = JobsUtility.CreateJobReflectionData(typeof(CollisionEventJobData<T>),
-                        typeof(T), JobType.Single, (ExecuteJobFunction)Execute);
+#if UNITY_2020_2_OR_NEWER
+                    jobReflectionData = JobsUtility.CreateJobReflectionData(typeof(CollisionEventJobData<T>), typeof(T), (ExecuteJobFunction)Execute);
+#else
+                    jobReflectionData = JobsUtility.CreateJobReflectionData(typeof(CollisionEventJobData<T>), typeof(T), JobType.Single, (ExecuteJobFunction)Execute);
+#endif
                 }
                 return jobReflectionData;
             }

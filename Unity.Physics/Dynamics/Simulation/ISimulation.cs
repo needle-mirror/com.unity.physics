@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Unity.Jobs;
 using Unity.Mathematics;
 
@@ -45,8 +45,11 @@ namespace Unity.Physics
         // Step the simulation.
         void Step(SimulationStepInput input);
 
+        [Obsolete("ScheduleStepJobs() has been deprecated. Please use the new method taking a bool as the last parameter. (RemovedAfter 2021-02-15)", true)]
+        SimulationJobHandles ScheduleStepJobs(SimulationStepInput input, SimulationCallbacks callbacks, JobHandle inputDeps, int threadCountHint);
+
         // Schedule a set of jobs to step the simulation.
-        SimulationJobHandles ScheduleStepJobs(SimulationStepInput input, SimulationCallbacks callbacks, JobHandle inputDeps, int threadCountHint = 0);
+        SimulationJobHandles ScheduleStepJobs(SimulationStepInput input, SimulationCallbacks callbacks, JobHandle inputDeps, bool multiThreaded = true);
 
         // The final scheduled simulation job.
         // Jobs which use the simulation results should depend on this.

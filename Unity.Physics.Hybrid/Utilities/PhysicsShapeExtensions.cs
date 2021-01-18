@@ -379,11 +379,11 @@ namespace Unity.Physics.Authoring
                     }
 
                     rotationMatrix = new float4x4(
-                            new float4 { [basisPriority[2]] = 1 },
-                            new float4 { [basisPriority[1]] = 1 },
-                            new float4 { [basisPriority[0]] = 1 },
-                            new float4 { [3] = 1 }
-                        );
+                        new float4 { [basisPriority[2]] = 1 },
+                        new float4 { [basisPriority[1]] = 1 },
+                        new float4 { [basisPriority[0]] = 1 },
+                        new float4 { [3] = 1 }
+                    );
                 }
 
                 bakeToShape =
@@ -734,8 +734,8 @@ namespace Unity.Physics.Authoring
             var sizeYUp = math.float3(size.x, 0, size.y);
 
             vertex0 = center + math.mul(orientation, sizeYUp * math.float3(-0.5f, 0,  0.5f));
-            vertex1 = center + math.mul(orientation, sizeYUp * math.float3( 0.5f, 0,  0.5f));
-            vertex2 = center + math.mul(orientation, sizeYUp * math.float3( 0.5f, 0, -0.5f));
+            vertex1 = center + math.mul(orientation, sizeYUp * math.float3(0.5f, 0,  0.5f));
+            vertex2 = center + math.mul(orientation, sizeYUp * math.float3(0.5f, 0, -0.5f));
             vertex3 = center + math.mul(orientation, sizeYUp * math.float3(-0.5f, 0, -0.5f));
         }
 
@@ -847,7 +847,8 @@ namespace Unity.Physics.Authoring
             shape.BakePoints(pointCloud);
         }
 
-#if UNITY_COLLECTIONS_0_13_OR_NEWER
+#if !(UNITY_ANDROID && !UNITY_64) // !Android32
+        // Getting memory alignment errors from HashUtility.Hash128 on Android32
         [BurstCompile]
 #endif
         struct GetShapeInputsHashJob : IJob

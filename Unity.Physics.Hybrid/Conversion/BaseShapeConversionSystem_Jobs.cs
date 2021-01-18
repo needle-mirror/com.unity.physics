@@ -12,7 +12,8 @@ namespace Unity.Physics.Authoring
 {
     public partial class BaseShapeConversionSystem<T>
     {
-#if UNITY_COLLECTIONS_0_13_OR_NEWER
+#if !(UNITY_ANDROID && !UNITY_64) // !Android32
+        // Getting memory alignment errors from HashUtility.Hash128 on Android32
         [BurstCompile]
 #endif
         unsafe struct GeneratePhysicsShapeHashesJob : IJobParallelFor
@@ -29,10 +30,10 @@ namespace Unity.Physics.Authoring
                 aabb.Include(center + math.mul(orientation, math.mul(extents, new float3(-1f, -1f,  1f)))); // 001
                 aabb.Include(center + math.mul(orientation, math.mul(extents, new float3(-1f,  1f, -1f)))); // 010
                 aabb.Include(center + math.mul(orientation, math.mul(extents, new float3(-1f,  1f,  1f)))); // 011
-                aabb.Include(center + math.mul(orientation, math.mul(extents, new float3( 1f, -1f, -1f)))); // 100
-                aabb.Include(center + math.mul(orientation, math.mul(extents, new float3( 1f, -1f,  1f)))); // 101
-                aabb.Include(center + math.mul(orientation, math.mul(extents, new float3( 1f,  1f, -1f)))); // 110
-                aabb.Include(center + math.mul(orientation, math.mul(extents, new float3( 1f,  1f,  1f)))); // 111
+                aabb.Include(center + math.mul(orientation, math.mul(extents, new float3(1f, -1f, -1f))));  // 100
+                aabb.Include(center + math.mul(orientation, math.mul(extents, new float3(1f, -1f,  1f))));  // 101
+                aabb.Include(center + math.mul(orientation, math.mul(extents, new float3(1f,  1f, -1f))));  // 110
+                aabb.Include(center + math.mul(orientation, math.mul(extents, new float3(1f,  1f,  1f))));  // 111
                 return aabb;
             }
 
@@ -208,7 +209,7 @@ namespace Unity.Physics.Authoring
             [DeallocateOnJobCompletion]
             [ReadOnly] public NativeArray<TElement> Container;
 
-            public void Execute() { }
+            public void Execute() {}
         }
     }
 }

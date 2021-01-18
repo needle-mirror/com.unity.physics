@@ -20,12 +20,6 @@ namespace Unity.Physics.Extensions
         Acceleration = 5
     }
 
-    [Obsolete("Renamed to PhysicsComponentExtensions (RemovedAfter 2020-11-24) (UnityUpgradable) -> PhysicsComponentExtensions", true)]
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    public static class ComponentExtensions
-    {
-    }
-
     /// <summary>
     /// Utility functions acting on physics components.
     /// </summary>

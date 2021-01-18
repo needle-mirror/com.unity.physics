@@ -1,3 +1,80 @@
+# Change Log
+All notable changes to this package will be documented in this file.
+
+## [0.6.0-preview.3] - 2021-01-18
+
+### Upgrade guide
+* `PhysicsStep.ThreadCountHint` has now been removed, so if you had it set to a value less or equal to 0 (meaning you wanted single threaded simulation with small number of jobs), you now need to set the new field `PhysicsStep.MultiThreaded` to false. Otherwise, it will be set to true, meaning you'll get a default multi threaded simulation as if `PhysicsStep.ThreadCountHint` is a positive number.
+
+### Changes
+
+* Dependencies
+    * Updated minimum Unity Editor version from `2020.1.0f1` to `2020.1.9f1`
+    * Updated Burst from `1.3.7` to `1.4.1`
+    * Updated Collections from `0.14.0-preview.16` to `0.15.0-preview.21`
+    * Updated Entities from `0.16.0-preview.21` to `0.17.0-preview.41`
+    * Updated Jobs from `0.7.0-preview.17` to `0.8.0-preview.23`
+
+* Run-Time API
+    * Added a `Collider.Clone()` function.
+    * Added `Material` to `IQueryResult` interface and its implementations (`RaycastHit`,  `ColliderCastHit`, `DistanceHit`). All hits now have material information of the  primitive that was hit.
+    * Added the following interfaces to `ICollidable` and all its implementations:
+        * These API's represent the equivalent of the familiar GameObjects' query interface, with the addition of Custom version, which takes a collector and enables one to use custom filtering logic when accepting query hits.
+        * `bool CheckSphere(float3 position, float radius, CollisionFilter filter, QueryInteraction interaction)`
+        * `bool OverlapSphere(float3 position, float radius, ref NativeList<DistanceHit> outHits, CollisionFilter filter, QueryInteraction interaction)`
+        * `bool OverlapSphereCustom<T>(float3 position, float radius, ref T collector, CollisionFilter filter, QueryInteraction interaction) where T : struct, ICollector<DistanceHit>`
+        * `bool CheckCapsule(float3 point1, float3 point2, float radius, CollisionFilter filter, QueryInteraction queryInteraction)`
+        * `bool OverlapCapsule(float3 point1, float3 point2, float radius, ref NativeList<DistanceHit> outHits, CollisionFilter filter, QueryInteraction queryInteraction)`
+        * `bool OverlapCapsuleCustom<T>(float3 point1, float3 point2, float radius, ref T collector, CollisionFilter filter, QueryInteraction queryInteraction) where T : struct, ICollector<DistanceHit>`
+        * `bool CheckBox(float3 center, quaternion orientation, float3 halfExtents, CollisionFilter filter, QueryInteraction queryInteraction)`
+        * `bool OverlapBox(float3 center, quaternion orientation, float3 halfExtents, ref NativeList<DistanceHit> outHits, CollisionFilter filter, QueryInteraction queryInteraction)`
+        * `bool OverlapBoxCustom<T>(float3 center, quaternion orientation, float3 halfExtents, ref T collector, CollisionFilter filter, QueryInteraction queryInteraction  where T : struct, ICollector<DistanceHit>`
+        * `bool SphereCast(float3 origin, float radius, float3 direction, float maxDistance, CollisionFilter filter, QueryInteraction queryInteraction)`
+        * `bool SphereCast(float3 origin, float radius, float3 direction, float maxDistance, out ColliderCastHit hitInfo, CollisionFilter filter, QueryInteraction queryInteraction)`
+        * `bool SphereCastAll(float3 origin, float radius, float3 direction, float maxDistance, ref NativeList<ColliderCastHit> outHits, CollisionFilter filter, QueryInteraction queryInteraction)`
+        * `bool SphereCastCustom<T>(float3 origin, float radius, float3 direction, float maxDistance, ref T collector, CollisionFilter filter, QueryInteraction queryInteraction) where T : struct, ICollector<ColliderCastHit>`
+        * `bool BoxCast(float3 center, quaternion orientation, float3 halfExtents, float3 direction, float maxDistance, CollisionFilter filter, QueryInteraction queryInteraction)`
+        * `bool BoxCast(float3 center, quaternion orientation, float3 halfExtents, float3 direction, float maxDistance, out ColliderCastHit hitInfo, CollisionFilter filter, QueryInteraction queryInteraction)`
+        * `bool BoxCastAll(float3 center, quaternion orientation, float3 halfExtents, float3 direction, float maxDistance, ref NativeList<ColliderCastHit> outHits, CollisionFilter filter, QueryInteraction queryInteraction)`
+        * `bool BoxCastCustom<T>(float3 center, quaternion orientation, float3 halfExtents, float3 direction, float maxDistance, ref T collector, CollisionFilter filter, QueryInteraction queryInteraction) where T : struct, ICollector<ColliderCastHit>`
+        * `bool CapsuleCast(float3 point1, float3 point2, float radius, float3 direction, float maxDistance, CollisionFilter filter, QueryInteraction queryInteraction)`
+        * `bool CapsuleCast(float3 point1, float3 point2, float radius, float3 direction, float maxDistance, out ColliderCastHit hitInfo, CollisionFilter filter, QueryInteraction queryInteraction)`
+        * `bool CapsuleCastAll(float3 point1, float3 point2, float radius, float3 direction, float maxDistance, ref NativeList<ColliderCastHit> outHits, CollisionFilter filter, QueryInteraction queryInteraction)`
+        * `bool CapsuleCastCustom<T>(float3 point1, float3 point2, float radius, float3 direction, float maxDistance, ref T collector, CollisionFilter filter, QueryInteraction queryInteraction) where T : struct, ICollector<ColliderCastHit>`
+    * Exposed the following collider initialization functions:
+        * `SphereCollider.Initialize(SphereGeometry geometry, CollisionFilter filter, Material material)`
+        * `CapsuleCollider.Initialize(CapsuleGeometry geometry, CollisionFilter filter, Material material)`
+        * `BoxCollider.Initialize(BoxGeometry geometry, CollisionFilter filter, Material material)`
+        * `CylinderCollider.Initialize(CylinderGeometry geometry, CollisionFilter filter, Material material)`
+        * These functions enable the creation of colliders on stack, as opposed to only creating them using `BlobAssetReference<Collider>.Create()` methods.
+    * Replaced all instances of `IJobChunk` with `IJobEntityBatch` or `IJobEntityBatchWithIndex` for better performance.
+    * `CollisionWorld` and `DynamicsWorld` now store index maps linking Entity with RigidBody and Joint indices.
+        * Use `PhysicsWorld.GetRigidBodyIndex(Entity)` to get a RigidBody index for the Bodies array. This replaces the variant from `PhysicsWorldExtensions`.
+        * Use `PhysicsWorld.GetJointIndex(Entity)` to get a Joint index for the Joints array
+        * If map is invalid or Entity is not in map then an index of -1 is returned.
+        * `BuildPhysicsWorld` system updates the maps on update. If updating the world manually then call `PhysicsWorld.UpdateIndexMaps()` to refresh.
+    * Removed `PhysicsStep.ThreadCountHint` since the value is now retrieved from `JobsUtility.JobWorkerCount`.
+    * Added `PhysicsStep.SingleThreaded` to request the simulation with a very small number of single threaded jobs (previously `PhysicsStep.ThreadCountHint` <= 0).
+    * Added `MeshCollider.Filter` and `CompoundCollider.Filter` setters that set the collision filter on all triangles of the mesh and children of the compound. Furthermore, added the `CompoundCollider.RefreshCollisionFilter()` to be called when a child filter changes, so that the root level of the compound collider can be updated.
+    * `Collider` now has a `Filter` setter regardless of the type of the collider.
+    * `Collider` now has a `RespondsToCollision` getter that shows if it will participate in collision, or only move and intercept queries.
+
+* Authoring/Conversion API
+
+* Run-Time Behavior
+	* `ExportPhysicsWorld` system should now only get updated when there is at least one entity satisfying `BuildPhysicsWorld.DynamicEntityGroup` entity query.
+
+* Authoring/Conversion Behavior
+
+### Fixes
+* Fixed the issue of `BuildPhysicsWorld` system not being run when there are not entities in the scene, leading to `StepPhysicsWorld` system operating on stale data.
+* Fixed write-back in `ContactJacobian.SolveContact()` to only affect linear and angular velocity. This prevents `JacobianHeader`'s mass factors from affecting `MotionVelocity`'s mass factors, which used to have multiplicative effect on those mass factors over time.
+* Fixed the issue where `ExportPhysicsWorld` system would not get run if there wasn't at least one entity that has `PhysicsCollider` component.
+* Fixed a crash on Android 32 with Bursted calls to create a `Hash128`.
+* Fixed a bug that was causing AABB of the compound collider to be incorrectly calculated if one of the child colliders were a TerrainCollider.
+
+### Known Issues
+
 ## [0.5.1-preview.2] - 2020-10-14
 
 ### Upgrade guide
@@ -29,7 +106,7 @@
 ### Fixes
 * Fixed the potential issues if more than one job implements IBodyPairsJob.
 * DebugStream.DrawComponent now cleans up its associated GameObject
-* Fixed a bug in 'PhysicsVelocity.ApplyExplosionForce' where the provided collider's collision filter could prevent the explosion from happening.
+* Fixed a bug in `PhysicsVelocity.ApplyExplosionForce` where the provided collider's collision filter could prevent the explosion from happening.
 * Fixed a memory leak in the Collider debug display gizmo
 
 ### Known Issues

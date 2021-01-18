@@ -30,11 +30,11 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         [Test]
         public void SheduleUpdateJobsEmptyWorldTest()
         {
-            for (int numThreads = 0; numThreads <= 8; numThreads++)
+            for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
                 Physics.PhysicsWorld world = BroadPhaseTests.createTestWorld();
                 Unity.Jobs.JobHandle handle = new Unity.Jobs.JobHandle();
-                Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads);
+                Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads == 1);
                 worldJobHandle.Complete();
                 Assert.IsTrue(worldJobHandle.IsCompleted);
                 world.Dispose();
@@ -54,12 +54,12 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         [Test]
         public void SheduleUpdateJobsOneStaticBoxTest()
         {
-            for (int numThreads = 0; numThreads <= 8; numThreads++)
+            for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
                 Unity.Physics.PhysicsWorld world = BroadPhaseTests.createTestWorld(1);
                 BroadPhaseTests.addStaticBoxToWorld(world, 0, Vector3.zero, quaternion.identity, new Vector3(10, .1f, 10));
                 Unity.Jobs.JobHandle handle = new Unity.Jobs.JobHandle();
-                Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads);
+                Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads == 1);
                 worldJobHandle.Complete();
                 Assert.IsTrue(worldJobHandle.IsCompleted);
                 world.Dispose();
@@ -80,13 +80,13 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         [Test]
         public void SheduleUpdateJobsTenStaticBoxesTest()
         {
-            for (int numThreads = 0; numThreads <= 8; numThreads++)
+            for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
                 Physics.PhysicsWorld world = BroadPhaseTests.createTestWorld(10);
                 for (int i = 0; i < 10; ++i)
                     BroadPhaseTests.addStaticBoxToWorld(world, i, new Vector3(11 * i, 0, 0), quaternion.identity, new Vector3(10, .1f, 10));
                 Unity.Jobs.JobHandle handle = new Unity.Jobs.JobHandle();
-                Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads);
+                Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads == 1);
                 worldJobHandle.Complete();
                 Assert.IsTrue(worldJobHandle.IsCompleted);
                 world.Dispose();
@@ -108,13 +108,13 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         [Test]
         public void SheduleUpdateJobsOneHundredStaticBoxesTest()
         {
-            for (int numThreads = 0; numThreads <= 8; numThreads++)
+            for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
                 Physics.PhysicsWorld world = BroadPhaseTests.createTestWorld(100);
                 for (int i = 0; i < 100; ++i)
                     BroadPhaseTests.addStaticBoxToWorld(world, i, new Vector3(11 * i, 0, 0), quaternion.identity, new Vector3(10, .1f, 10));
                 Unity.Jobs.JobHandle handle = new Unity.Jobs.JobHandle();
-                Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads);
+                Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads == 1);
                 worldJobHandle.Complete();
                 Assert.IsTrue(worldJobHandle.IsCompleted);
                 world.Dispose();
@@ -136,12 +136,12 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         [Test]
         public void SheduleUpdateJobsOneDynamicBoxTest()
         {
-            for (int numThreads = 0; numThreads <= 8; numThreads++)
+            for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
                 Physics.PhysicsWorld world = BroadPhaseTests.createTestWorld(0, 1);
                 BroadPhaseTests.addDynamicBoxToWorld(world, 0, Vector3.zero, quaternion.identity, new Vector3(10, .1f, 10));
                 Unity.Jobs.JobHandle handle = new Unity.Jobs.JobHandle();
-                Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads);
+                Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads == 1);
                 worldJobHandle.Complete();
                 Assert.IsTrue(worldJobHandle.IsCompleted);
                 world.Dispose();
@@ -162,13 +162,13 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         [Test]
         public void SheduleUpdateJobsTenDynamicBoxesTest()
         {
-            for (int numThreads = 0; numThreads <= 8; numThreads++)
+            for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
                 Physics.PhysicsWorld world = BroadPhaseTests.createTestWorld(0, 10);
                 for (int i = 0; i < 10; ++i)
                     BroadPhaseTests.addDynamicBoxToWorld(world, i, new Vector3(11 * i, 0, 0), quaternion.identity, new Vector3(10, .1f, 10));
                 Unity.Jobs.JobHandle handle = new Unity.Jobs.JobHandle();
-                Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads);
+                Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads == 1);
                 worldJobHandle.Complete();
                 Assert.IsTrue(worldJobHandle.IsCompleted);
                 world.Dispose();
@@ -190,13 +190,13 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         [Test]
         public void SheduleUpdateJobsOneHundredDynamicBoxesTest()
         {
-            for (int numThreads = 0; numThreads <= 8; numThreads++)
+            for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
                 Physics.PhysicsWorld world = BroadPhaseTests.createTestWorld(0, 100);
                 for (int i = 0; i < 100; ++i)
                     BroadPhaseTests.addDynamicBoxToWorld(world, i, new Vector3(11 * i, 0, 0), quaternion.identity, new Vector3(10, .1f, 10));
                 Unity.Jobs.JobHandle handle = new Unity.Jobs.JobHandle();
-                Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads);
+                Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads == 1);
                 worldJobHandle.Complete();
                 Assert.IsTrue(worldJobHandle.IsCompleted);
                 world.Dispose();
@@ -218,7 +218,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         [Test]
         public void SheduleUpdateJobsStaticAndDynamicBoxesTest()
         {
-            for (int numThreads = 0; numThreads <= 8; numThreads++)
+            for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
                 Physics.PhysicsWorld world = BroadPhaseTests.createTestWorld(100, 100);
                 for (int i = 0; i < 100; ++i)
@@ -228,7 +228,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 }
 
                 Unity.Jobs.JobHandle handle = new Unity.Jobs.JobHandle();
-                Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads);
+                Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads == 1);
                 worldJobHandle.Complete();
                 Assert.IsTrue(worldJobHandle.IsCompleted);
                 world.Dispose();

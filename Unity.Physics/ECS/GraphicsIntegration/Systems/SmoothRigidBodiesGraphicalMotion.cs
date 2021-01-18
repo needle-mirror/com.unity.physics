@@ -83,7 +83,7 @@ namespace Unity.Physics.GraphicsIntegration
                 LocalToWorldType = GetComponentTypeHandle<LocalToWorld>(),
                 TimeAhead = timeAhead,
                 NormalizedTimeAhead = normalizedTimeAhead
-            }.ScheduleParallel(SmoothedDynamicBodiesGroup, Dependency);
+            }.ScheduleParallel(SmoothedDynamicBodiesGroup, 1, Dependency);
 
             // Combine implicit output dependency with user one
             m_OutputDependency = Dependency;
@@ -95,7 +95,7 @@ namespace Unity.Physics.GraphicsIntegration
         }
 
         [BurstCompile]
-        struct SmoothMotionJob : IJobChunk
+        struct SmoothMotionJob : IJobEntityBatch
         {
             [ReadOnly] public ComponentTypeHandle<Translation> TranslationType;
             [ReadOnly] public ComponentTypeHandle<Rotation> RotationType;
@@ -109,26 +109,26 @@ namespace Unity.Physics.GraphicsIntegration
             public float TimeAhead;
             public float NormalizedTimeAhead;
 
-            public void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
+            public void Execute(ArchetypeChunk batchInChunk, int batchIndex)
             {
-                var hasNonUniformScale = chunk.Has(NonUniformScaleType);
-                var hasScale = chunk.Has(ScaleType);
-                var hasAnyScale = hasNonUniformScale || hasScale || chunk.Has(CompositeScaleType);
-                var hasPhysicsMass = chunk.Has(PhysicsMassType);
-                var hasInterpolationBuffer = chunk.Has(InterpolationBufferType);
+                var hasNonUniformScale = batchInChunk.Has(NonUniformScaleType);
+                var hasScale = batchInChunk.Has(ScaleType);
+                var hasAnyScale = hasNonUniformScale || hasScale || batchInChunk.Has(CompositeScaleType);
+                var hasPhysicsMass = batchInChunk.Has(PhysicsMassType);
+                var hasInterpolationBuffer = batchInChunk.Has(InterpolationBufferType);
 
-                NativeArray<Translation> positions = chunk.GetNativeArray(TranslationType);
-                NativeArray<Rotation> orientations = chunk.GetNativeArray(RotationType);
-                NativeArray<NonUniformScale> nonUniformScales = chunk.GetNativeArray(NonUniformScaleType);
-                NativeArray<Scale> scales = chunk.GetNativeArray(ScaleType);
-                NativeArray<CompositeScale> compositeScales = chunk.GetNativeArray(CompositeScaleType);
-                NativeArray<PhysicsMass> physicsMasses = chunk.GetNativeArray(PhysicsMassType);
-                NativeArray<PhysicsGraphicalSmoothing> physicsGraphicalSmoothings = chunk.GetNativeArray(PhysicsGraphicalSmoothingType);
-                NativeArray<PhysicsGraphicalInterpolationBuffer> interpolationBuffers = chunk.GetNativeArray(InterpolationBufferType);
-                NativeArray<LocalToWorld> localToWorlds = chunk.GetNativeArray(LocalToWorldType);
+                NativeArray<Translation> positions = batchInChunk.GetNativeArray(TranslationType);
+                NativeArray<Rotation> orientations = batchInChunk.GetNativeArray(RotationType);
+                NativeArray<NonUniformScale> nonUniformScales = batchInChunk.GetNativeArray(NonUniformScaleType);
+                NativeArray<Scale> scales = batchInChunk.GetNativeArray(ScaleType);
+                NativeArray<CompositeScale> compositeScales = batchInChunk.GetNativeArray(CompositeScaleType);
+                NativeArray<PhysicsMass> physicsMasses = batchInChunk.GetNativeArray(PhysicsMassType);
+                NativeArray<PhysicsGraphicalSmoothing> physicsGraphicalSmoothings = batchInChunk.GetNativeArray(PhysicsGraphicalSmoothingType);
+                NativeArray<PhysicsGraphicalInterpolationBuffer> interpolationBuffers = batchInChunk.GetNativeArray(InterpolationBufferType);
+                NativeArray<LocalToWorld> localToWorlds = batchInChunk.GetNativeArray(LocalToWorldType);
 
                 var defaultPhysicsMass = PhysicsMass.CreateKinematic(MassProperties.UnitSphere);
-                for (int i = 0, count = chunk.Count; i < count; ++i)
+                for (int i = 0, count = batchInChunk.Count; i < count; ++i)
                 {
                     var physicsMass = hasPhysicsMass ? physicsMasses[i] : defaultPhysicsMass;
                     var smoothing = physicsGraphicalSmoothings[i];

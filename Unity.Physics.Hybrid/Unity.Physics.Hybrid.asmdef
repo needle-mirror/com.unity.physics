@@ -26,11 +26,6 @@
             "name": "com.havok.physics",
             "expression": "0.0.0",
             "define": "HAVOK_PHYSICS_EXISTS"
-        },
-        {
-            "name": "com.unity.collections",
-            "expression": "0.13.0-preview.9",
-            "define": "UNITY_COLLECTIONS_0_13_OR_NEWER"
         }
     ],
     "noEngineReferences": false

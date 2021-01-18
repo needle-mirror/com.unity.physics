@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using NUnit.Framework;
 using Unity.Mathematics;
 using Unity.Collections;
@@ -472,8 +472,6 @@ namespace Unity.Physics.Tests.Collision.Queries
             numThreadsHints.Add(-1);
             numThreadsHints.Add(0);
             numThreadsHints.Add(1);
-            numThreadsHints.Add(4);
-            numThreadsHints.Add(8);
             foreach (int numThreadsHint in numThreadsHints)
             {
                 for (int iWorld = 0; iWorld < numWorlds; iWorld++)
@@ -484,7 +482,7 @@ namespace Unity.Physics.Tests.Collision.Queries
                         rnd.state = dbgWorld;
                     }
                     uint worldState = rnd.state;
-                    Physics.PhysicsWorld world = TestUtils.GenerateRandomWorld(ref rnd, rnd.NextInt(1, 20), 10.0f, numThreadsHint, numThreadsHint == 0);
+                    Physics.PhysicsWorld world = TestUtils.GenerateRandomWorld(ref rnd, rnd.NextInt(1, 20), 10.0f, numThreadsHint);
 
                     for (int iTest = 0; iTest < (numTests / numWorlds); iTest++)
                     {
@@ -609,7 +607,7 @@ namespace Unity.Physics.Tests.Collision.Queries
                     rnd.state = dbgWorld;
                 }
                 uint worldState = rnd.state;
-                Physics.PhysicsWorld world = TestUtils.GenerateRandomWorld(ref rnd, rnd.NextInt(1, 20), 3.0f, 1, false);
+                Physics.PhysicsWorld world = TestUtils.GenerateRandomWorld(ref rnd, rnd.NextInt(1, 20), 3.0f, 1);
 
                 // Manifold test
                 // TODO would be nice if we could change the world collision tolerance

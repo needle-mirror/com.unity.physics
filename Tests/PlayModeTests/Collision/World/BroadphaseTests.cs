@@ -66,14 +66,14 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         [Test]
         public void ScheduleBuildJobsOneStaticBoxTest()
         {
-            for (int numThreads = 0; numThreads <= 8; numThreads++)
+            for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
                 Physics.PhysicsWorld world = createTestWorld(1);
                 addStaticBoxToWorld(world, 0, new Vector3(0, 0, 0), Quaternion.identity, new Vector3(10, 0.1f, 10));
                 var handle = new JobHandle();
                 var buildStaticTree = new NativeArray<int>(1, Allocator.TempJob);
                 buildStaticTree[0] = 1;
-                JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), buildStaticTree, handle, numThreads);
+                JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), buildStaticTree, handle, numThreads == 1);
                 result.Complete();
                 Assert.IsTrue(result.IsCompleted);
                 world.Dispose();
@@ -85,7 +85,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         [Test]
         public void ScheduleBuildJobsTenStaticBoxesTest()
         {
-            for (int numThreads = 0; numThreads <= 8; numThreads++)
+            for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
                 Physics.PhysicsWorld world = createTestWorld(10);
                 for (int i = 0; i < 10; ++i)
@@ -95,7 +95,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 var handle = new JobHandle();
                 var buildStaticTree = new NativeArray<int>(1, Allocator.TempJob);
                 buildStaticTree[0] = 1;
-                JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), buildStaticTree, handle, numThreads);
+                JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), buildStaticTree, handle, numThreads == 1);
 
                 result.Complete();
                 Assert.IsTrue(result.IsCompleted);
@@ -108,7 +108,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         [Test]
         public void ScheduleBuildJobsOneHundredStaticBoxesTest()
         {
-            for (int numThreads = 0; numThreads <= 8; numThreads++)
+            for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
                 Physics.PhysicsWorld world = createTestWorld(100);
                 for (int i = 0; i < 100; ++i)
@@ -118,7 +118,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 var handle = new JobHandle();
                 var buildStaticTree = new NativeArray<int>(1, Allocator.TempJob);
                 buildStaticTree[0] = 1;
-                JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), buildStaticTree, handle, numThreads);
+                JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), buildStaticTree, handle, numThreads == 1);
                 result.Complete();
                 Assert.IsTrue(result.IsCompleted);
                 world.Dispose();
@@ -169,14 +169,14 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         [Test]
         public void ScheduleBuildJobsOneDynamicBoxTest()
         {
-            for (int numThreads = 0; numThreads <= 8; numThreads++)
+            for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
                 Physics.PhysicsWorld world = createTestWorld(0, 1);
                 addDynamicBoxToWorld(world, 0, new Vector3(0, 0, 0), Quaternion.identity, new Vector3(10, 10, 10));
                 var handle = new JobHandle();
                 var buildStaticTree = new NativeArray<int>(1, Allocator.TempJob);
                 buildStaticTree[0] = 1;
-                JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), buildStaticTree, handle, numThreads);
+                JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), buildStaticTree, handle, numThreads == 1);
                 result.Complete();
                 Assert.IsTrue(result.IsCompleted);
                 world.Dispose();
@@ -188,7 +188,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         [Test]
         public void ScheduleBuildJobsTenDynamicBoxesTest()
         {
-            for (int numThreads = 0; numThreads <= 8; numThreads++)
+            for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
                 Physics.PhysicsWorld world = createTestWorld(0, 10);
                 for (int i = 0; i < 10; ++i)
@@ -198,7 +198,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 var handle = new JobHandle();
                 var buildStaticTree = new NativeArray<int>(1, Allocator.TempJob);
                 buildStaticTree[0] = 1;
-                JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), buildStaticTree, handle, numThreads);
+                JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), buildStaticTree, handle, numThreads == 1);
                 result.Complete();
                 Assert.IsTrue(result.IsCompleted);
                 world.Dispose();
@@ -210,7 +210,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         [Test]
         public void ScheduleBuildJobsOneHundredDynamicBoxesTest()
         {
-            for (int numThreads = 0; numThreads <= 8; numThreads++)
+            for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
                 Physics.PhysicsWorld world = createTestWorld(0, 100);
                 for (int i = 0; i < 100; ++i)
@@ -220,7 +220,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 var handle = new JobHandle();
                 var buildStaticTree = new NativeArray<int>(1, Allocator.TempJob);
                 buildStaticTree[0] = 1;
-                JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), buildStaticTree, handle, numThreads);
+                JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), buildStaticTree, handle, numThreads == 1);
                 result.Complete();
                 Assert.IsTrue(result.IsCompleted);
                 world.Dispose();
@@ -270,7 +270,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         [Test]
         public void ScheduleBuildJobsStaticAndDynamicBoxesTest()
         {
-            for (int numThreads = 0; numThreads <= 8; numThreads++)
+            for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
                 Physics.PhysicsWorld world = createTestWorld(100, 100);
                 for (int i = 0; i < 100; ++i)
@@ -281,7 +281,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 var handle = new JobHandle();
                 var buildStaticTree = new NativeArray<int>(1, Allocator.TempJob);
                 buildStaticTree[0] = 1;
-                JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), buildStaticTree, handle, numThreads);
+                JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), buildStaticTree, handle, numThreads == 1);
                 result.Complete();
                 Assert.IsTrue(result.IsCompleted);
                 world.Dispose();
@@ -307,13 +307,13 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         [Test]
         public void ScheduleBuildJobsEmptyWorldTest()
         {
-            for (int numThreads = 0; numThreads <= 8; numThreads++)
+            for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
                 Physics.PhysicsWorld world = createTestWorld();
                 var handle = new JobHandle();
                 var buildStaticTree = new NativeArray<int>(1, Allocator.TempJob);
                 buildStaticTree[0] = 1;
-                JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), buildStaticTree, handle, numThreads);
+                JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), buildStaticTree, handle, numThreads == 1);
                 result.Complete();
                 world.Dispose();
                 buildStaticTree.Dispose();
