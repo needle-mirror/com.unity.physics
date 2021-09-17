@@ -4,9 +4,9 @@
   "description": "Unity's C# stateless physics library.\n\nBuilt on top of the Unity C# DOTS framework, Unity Physics is network-ready, completely customizable, and built for performance out of the box. Whether you're building the next mobile hit or a new networked multiplayer console experience, Unity Physics leverages the Burst compiler and Job system to scale across a range of hardware.\n\nUnity Physics is currently in preview, and is compatible with Unity 2019.3 and newer.",
   "dependencies": {
     "com.unity.burst": "1.6.4",
-    "com.unity.collections": "1.2.3-pre.1",
-    "com.unity.entities": "0.50.0-preview.24",
-    "com.unity.jobs": "0.50.0-preview.8",
+    "com.unity.collections": "1.2.3",
+    "com.unity.entities": "0.50.1-preview.1",
+    "com.unity.jobs": "0.50.0-preview.9",
     "com.unity.mathematics": "1.2.1",
     "com.unity.test-framework": "1.1.31",
     "com.unity.test-framework.performance": "2.3.1-preview",
@@ -20,13 +20,16 @@
   "name": "com.unity.physics",
   "unity": "2020.3",
   "unityRelease": "0f1",
-  "version": "0.50.0-preview.24",
+  "version": "0.50.0-preview.43",
+  "upm": {
+    "changelog": "### Changed\n\n* Upgraded com.unity.burst to 1.5.5\n* Adjusted code to remove obsolete APIs across all jobs inheriting IJobEntityBatch\n* Resources/ (used by Debug Draw) has been renamed DebugDisplayResources/ and now loads assets differently\n\n### Removed\n\n* All usages of PhysicsExclude from Demo and Runtime code.\n\n### Fixed\n\n* An issue with the rendering pipeline used for the package samples, which caused none of the samples to render post conversion\n* An issue with the materials present in the samples as their colors were no longer correct"
+  },
   "upmCi": {
-    "footprint": "862d9036a651373ee3f93341d2a5ba582a3794c4"
+    "footprint": "a61be3c0979266857d1a6f305b9cd9887975b955"
   },
   "repository": {
     "url": "https://github.cds.internal.unity3d.com/unity/dots.git",
     "type": "git",
-    "revision": "8327688fcdee91448c8d4aa1ebbd5a4c1e665bef"
+    "revision": "5d835ee1e6a9eb3535465d21cf97e92c1d5164f7"
   }
 }

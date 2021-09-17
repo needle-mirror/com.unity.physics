@@ -6,14 +6,20 @@
 
 * Upgraded com.unity.burst to 1.5.5
 * Adjusted code to remove obsolete APIs across all jobs inheriting IJobEntityBatch
+* Resources/ (used by Debug Draw) has been renamed DebugDisplayResources/ and now loads assets differently
 
 ### Removed
 
 * All usages of PhysicsExclude from Demo and Runtime code.
 
+### Fixed
+
+* An issue with the rendering pipeline used for the package samples, which caused none of the samples to render post conversion
+* An issue with the materials present in the samples as their colors were no longer correct
 
 
-## [0.10.0-preview.1] - 9999-12-31
+
+## [0.10.0-preview.1] - 2021-06-25
 ### Upgrade guide
 * Added `PhysicsWorldIndex` shared component, which is required on every Entity that should be involved in physics simulation (body or joint). Its `Value` denotes the index of physics world that the Entity belongs to (0 for default `PhysicsWorld` processed by `BuildPhysicsWorld`, `StepPhysicsWorld` and `ExportPhysicsWorld` systems). Note that Entities for different physics worlds will be stored in separate chunks, due to different values of shared component.
 * `PhysicsExclude` component is obsolete, but will still work at least until 2021-10-01. Instead of adding `PhysicsExclude` when you want to exclude an Entity from physics simulation, you can achieve the same thing by removing the required `PhysicsWorldIndex` shared component.
