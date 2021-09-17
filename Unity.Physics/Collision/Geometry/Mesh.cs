@@ -64,7 +64,7 @@ namespace Unity.Physics
         {
             get
             {
-                fixed (BlobArray* blob = &m_BvhNodesBlob)
+                fixed(BlobArray* blob = &m_BvhNodesBlob)
                 {
                     var firstNode = (BoundingVolumeHierarchy.Node*)((byte*)&(blob->Offset) + blob->Offset);
                     return new BoundingVolumeHierarchy(firstNode, nodeFilters: null);
@@ -301,7 +301,7 @@ namespace Unity.Physics
 
                 short filterIndex = section.PrimitiveFilterIndices[sectionPrimitiveIndex];
                 polygon.Filter = section.Filters[filterIndex];
-                
+
                 short materialIndex = section.PrimitiveMaterialIndices[sectionPrimitiveIndex];
                 polygon.Material = section.Materials[materialIndex];
 
@@ -316,7 +316,7 @@ namespace Unity.Physics
         {
             int totalSize = 0;
 
-            for(var i = 0; i < tempSections.Length; ++i)
+            for (var i = 0; i < tempSections.Length; ++i)
             {
                 var section = tempSections[i];
                 int numPrimitives = section.PrimitivesLength;
@@ -340,7 +340,7 @@ namespace Unity.Physics
         internal unsafe void Init(BoundingVolumeHierarchy.Node* nodes, int nodeCount, MeshBuilder.TempSection tempSections, CollisionFilter filter, Material material)
         {
             byte* end = (byte*)UnsafeUtility.AddressOf(ref this) + sizeof(Mesh);
-            end = (byte*)Math.NextMultipleOf16((ulong)end);   
+            end = (byte*)Math.NextMultipleOf16((ulong)end);
 
             m_BvhNodesBlob.Offset = UnsafeEx.CalculateOffset(end, ref m_BvhNodesBlob);
             m_BvhNodesBlob.Length = nodeCount;

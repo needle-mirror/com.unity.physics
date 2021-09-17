@@ -16,10 +16,10 @@ namespace Unity.Physics.Extensions
         /// <returns>The minimum required distance and maximum possible distance between the two anchor points.</returns>
         public static FloatRange GetLimitedDistanceRange(in this PhysicsJoint joint) =>
             new FloatRange
-            {
-                Min = joint[PhysicsJoint.k_LimitedDistanceRangeIndex].Min,
-                Max = joint[PhysicsJoint.k_LimitedDistanceRangeIndex].Max
-            };
+        {
+            Min = joint[PhysicsJoint.k_LimitedDistanceRangeIndex].Min,
+            Max = joint[PhysicsJoint.k_LimitedDistanceRangeIndex].Max
+        };
 
         /// <summary>
         /// Applies the specified range of motion to a <see cref="PhysicsJoint"/> created using <see cref="PhysicsJoint.CreateLimitedDistance"/>.
@@ -43,10 +43,10 @@ namespace Unity.Physics.Extensions
         /// <returns>The minimum required and maximum possible angle of rotation about the aligned axes.</returns>
         public static FloatRange GetLimitedHingeRange(in this PhysicsJoint joint) =>
             new FloatRange
-            {
-                Min = joint[PhysicsJoint.k_LimitedHingeRangeIndex].Min,
-                Max = joint[PhysicsJoint.k_LimitedHingeRangeIndex].Max
-            };
+        {
+            Min = joint[PhysicsJoint.k_LimitedHingeRangeIndex].Min,
+            Max = joint[PhysicsJoint.k_LimitedHingeRangeIndex].Max
+        };
 
         /// <summary>
         /// Applies the specified range of motion to a <see cref="PhysicsJoint"/> created using <see cref="PhysicsJoint.CreateLimitedHinge"/>.
@@ -70,10 +70,10 @@ namespace Unity.Physics.Extensions
         /// <returns>The minimum required and maximum possible distance between the two anchor points along their aligned axes.</returns>
         public static FloatRange GetPrismaticRange(in this PhysicsJoint joint) =>
             new FloatRange
-            {
-                Min = joint[PhysicsJoint.k_PrismaticDistanceOnAxisIndex].Min,
-                Max = joint[PhysicsJoint.k_PrismaticDistanceOnAxisIndex].Max
-            };
+        {
+            Min = joint[PhysicsJoint.k_PrismaticDistanceOnAxisIndex].Min,
+            Max = joint[PhysicsJoint.k_PrismaticDistanceOnAxisIndex].Max
+        };
 
         /// <summary>
         /// Applies the specified range of motion to a <see cref="PhysicsJoint"/> created using <see cref="PhysicsJoint.CreatePrismatic"/>.
@@ -128,10 +128,12 @@ namespace Unity.Physics.Extensions
         /// <returns>The range of angular motion defining the cones perpendicular to the primary cone, between which the primary axis may swing. This range may be asymmetrical.</returns>
         public static FloatRange GetRagdollPerpendicularConeRange(in this PhysicsJoint joint) =>
             new FloatRange
-            {
-                Min = joint[PhysicsJoint.k_RagdollPerpendicularRangeIndex].Min,
-                Max = joint[PhysicsJoint.k_RagdollPerpendicularRangeIndex].Max
-            } - new float2(math.PI / 2);
+        {
+            Min = joint[PhysicsJoint.k_RagdollPerpendicularRangeIndex].Min,
+            Max = joint[PhysicsJoint.k_RagdollPerpendicularRangeIndex].Max
+        }
+
+        -new float2(math.PI / 2);
 
         /// <summary>
         /// Applies the specified range of motion to a ragdoll perpendicular cone <see cref="PhysicsJoint"/> created using <see cref="PhysicsJoint.CreateRagdoll"/>.

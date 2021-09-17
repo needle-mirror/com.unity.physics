@@ -2,7 +2,7 @@ using System;
 
 namespace Unity.Physics
 {
-    class PreserveAttribute : Attribute { }
+    class PreserveAttribute : Attribute {}
 
     [Obsolete("Do not access this type. It is only included to hint AOT compilation. (DoNotRemove)", true)]
     static unsafe class AOTHint
@@ -18,18 +18,29 @@ namespace Unity.Physics
             AabbOverlapLeafProcessor_BoundingVolumeHierarchy_OverlapQueries_OverlapCollectors<OverlapQueries.MeshLeafProcessor, ManifoldQueries.ConvexCompositeOverlapCollector>();
 
             ColliderCastLeafProcessor_ColliderCastHitCollectors<Broadphase.BvhLeafProcessor>();
-            ColliderCastLeafProcessor_ColliderCastHitCollectors<ColliderCastQueries.ConvexCompoundLeafProcessor>();
-            ColliderCastLeafProcessor_ColliderCastHitCollectors<ColliderCastQueries.ConvexMeshLeafProcessor>();
+            ColliderCastLeafProcessor_ColliderCastHitCollectors<ColliderCastQueries.ColliderCompoundLeafProcessor<ColliderCastQueries.DefaultCompoundDispatcher>>();
+            ColliderCastLeafProcessor_ColliderCastHitCollectors<ColliderCastQueries.ColliderCompoundLeafProcessor<ColliderCastQueries.ConvexCompoundDispatcher>>();
+            ColliderCastLeafProcessor_ColliderCastHitCollectors<ColliderCastQueries.ColliderMeshLeafProcessor<ColliderCastQueries.ConvexConvexDispatcher>>();
+            ColliderCastLeafProcessor_ColliderCastHitCollectors<ColliderCastQueries.ColliderMeshLeafProcessor<ColliderCastQueries.CompoundConvexDispatcher>>();
+            ColliderCastLeafProcessor_ColliderCastHitCollectors<ColliderCastQueries.ColliderMeshLeafProcessor<ColliderCastQueries.MeshConvexDispatcher>>();
+            ColliderCastLeafProcessor_ColliderCastHitCollectors<ColliderCastQueries.ColliderMeshLeafProcessor<ColliderCastQueries.TerrainConvexDispatcher>>();
 
             ColliderDistanceLeafProcessor_DistanceCollectors<Broadphase.BvhLeafProcessor>();
+            ColliderDistanceLeafProcessor_DistanceCollectors<DistanceQueries.ColliderCompoundLeafProcessor<DistanceQueries.DefaultCompoundDispatcher>>();
+            ColliderDistanceLeafProcessor_DistanceCollectors<DistanceQueries.ColliderCompoundLeafProcessor<DistanceQueries.ConvexCompoundDistanceDispatcher>>();
+            ColliderDistanceLeafProcessor_DistanceCollectors<DistanceQueries.ColliderMeshLeafProcessor<DistanceQueries.ConvexConvexDispatcher>>();
+            ColliderDistanceLeafProcessor_DistanceCollectors<DistanceQueries.ColliderMeshLeafProcessor<DistanceQueries.ConvexConvexDispatcher>>();
+            ColliderDistanceLeafProcessor_DistanceCollectors<DistanceQueries.ColliderMeshLeafProcessor<DistanceQueries.CompoundConvexDispatcher>>();
+            ColliderDistanceLeafProcessor_DistanceCollectors<DistanceQueries.ColliderMeshLeafProcessor<DistanceQueries.MeshConvexDispatcher>>();
+            ColliderDistanceLeafProcessor_DistanceCollectors<DistanceQueries.ColliderMeshLeafProcessor<DistanceQueries.TerrainConvexDispatcher>>();
 
             PointDistanceLeafProcessor_DistanceCollectors<Broadphase.BvhLeafProcessor>();
+            PointDistanceLeafProcessor_DistanceCollectors<DistanceQueries.ConvexMeshLeafProcessor>();
 
             RaycastLeafProcessor_RaycastHitCollectors<Broadphase.BvhLeafProcessor>();
         }
 
-        static void AabbOverlapLeafProcessor_BoundingVolumeHierarchy_OverlapQueries_OverlapCollectors<TProcessor,
-            TCollector>()
+        static void AabbOverlapLeafProcessor_BoundingVolumeHierarchy_OverlapQueries_OverlapCollectors<TProcessor, TCollector>()
             where TProcessor : struct, BoundingVolumeHierarchy.IAabbOverlapLeafProcessor
             where TCollector : struct, IOverlapCollector
         {

@@ -6,7 +6,7 @@ namespace Unity.Physics.Authoring
     [HelpURL(HelpURLs.PhysicsMaterialTemplate)]
     public sealed class PhysicsMaterialTemplate : ScriptableObject, IPhysicsMaterialProperties
     {
-        PhysicsMaterialTemplate() { }
+        PhysicsMaterialTemplate() {}
 
         public CollisionResponsePolicy CollisionResponse { get => m_Value.CollisionResponse; set => m_Value.CollisionResponse = value; }
 

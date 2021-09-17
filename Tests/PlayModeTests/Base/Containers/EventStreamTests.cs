@@ -1,4 +1,4 @@
-﻿using NUnit.Framework;
+using NUnit.Framework;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 
@@ -95,7 +95,7 @@ namespace Unity.Physics.Tests.Base.Containers
             // Iterate over written events and make sure they are all read
             CollisionEvents collisionEvents = new CollisionEvents(collisionEventStream, inputVelocities, timeStep);
             int readCount = 0;
-            foreach(var collisionEvent in collisionEvents)
+            foreach (var collisionEvent in collisionEvents)
             {
                 readCount++;
             }
@@ -170,4 +170,3 @@ namespace Unity.Physics.Tests.Base.Containers
         }
     }
 }
-

@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using Unity.Burst;
 using Unity.Mathematics;
 using static Unity.Physics.Math;
@@ -260,7 +260,7 @@ namespace Unity.Physics
             simplex.ScaledDistance = math.lengthsq(simplex.A.Xyz);
             float scaleSq = simplex.ScaledDistance;
 
-            // Iterate.        
+            // Iterate.
             int iteration = 0;
             bool penetration = false;
             const int maxIterations = 64;
@@ -473,14 +473,15 @@ namespace Unity.Physics
                         }
                         closestPlane = hull.ComputePlane(closestTriangleIndex);
 
-                        // Add supporting vertex or exit. 
+                        // Add supporting vertex or exit.
                         SupportVertex sv = GetSupportingVertex(closestPlane.Normal, verticesA, numVerticesA, verticesB, numVerticesB, aFromB);
                         float d2P = math.dot(closestPlane.Normal, sv.Xyz) + closestPlane.Distance;
                         if (math.abs(d2P) > stopThreshold && hull.AddPoint(sv.Xyz, sv.Id))
                             stopThreshold *= 1.3f;
                         else
                             break;
-                    } while (++iteration < maxIterations);
+                    }
+                    while (++iteration < maxIterations);
 
                     // There could be multiple triangles in the closest plane, pick the one that has the closest point to the origin on its face
                     foreach (int triangleIndex in hull.Triangles.Indices)

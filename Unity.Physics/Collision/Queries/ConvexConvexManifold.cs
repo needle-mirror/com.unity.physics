@@ -1,4 +1,4 @@
-﻿using System.Runtime.CompilerServices;
+using System.Runtime.CompilerServices;
 using Unity.Burst;
 using Unity.Mathematics;
 using UnityEngine.Assertions;
@@ -40,12 +40,12 @@ namespace Unity.Physics
                     int offset = contactIndex * 3;
                     var contact = new ContactPoint();
 
-                    fixed (float* positions = m_ContactPositions)
+                    fixed(float* positions = m_ContactPositions)
                     {
                         contact.Position = *(float3*)(positions + offset);
                     }
 
-                    fixed (float* distances = m_Distances)
+                    fixed(float* distances = m_Distances)
                     {
                         contact.Distance = distances[contactIndex];
                     }
@@ -57,12 +57,12 @@ namespace Unity.Physics
                     Assert.IsTrue(contactIndex >= 0 && contactIndex < k_MaxNumContacts);
 
                     int offset = contactIndex * 3;
-                    fixed (float* positions = m_ContactPositions)
+                    fixed(float* positions = m_ContactPositions)
                     {
                         *(float3*)(positions + offset) = value.Position;
                     }
 
-                    fixed (float* distances = m_Distances)
+                    fixed(float* distances = m_Distances)
                     {
                         distances[contactIndex] = value.Distance;
                     }
@@ -317,7 +317,7 @@ namespace Unity.Physics
                 // Box vertex vs triangle face
                 float4 planeVertexFace;
                 {
-                    // Calculate the triangle normal 
+                    // Calculate the triangle normal
                     float triangleOffset = math.dot(triangleNormal, t0);
                     float expansionOffset = math.dot(math.abs(triangleNormal), halfExtents);
                     planeVertexFace = SelectMaxW(

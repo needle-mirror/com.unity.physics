@@ -12,6 +12,7 @@ using UnityEditor;
 using UnityEditor.IMGUI.Controls;
 using UnityEngine;
 using UnityMesh = UnityEngine.Mesh;
+using Unity.Physics.Extensions;
 #if LEGACY_PHYSICS
 using LegacyRigidBody = UnityEngine.Rigidbody;
 #endif
@@ -66,8 +67,8 @@ namespace Unity.Physics.Editor
 
             public static GUIContent GetFitToRenderMeshesLabel(int numTargets, MessageType status) =>
                 status >= MessageType.Warning
-                    ? numTargets == 1 ? k_FitToRenderMeshesWarningLabelSg : k_FitToRenderMeshesWarningLabelPl
-                    : k_FitToRenderMeshesLabel;
+                ? numTargets == 1 ? k_FitToRenderMeshesWarningLabelSg : k_FitToRenderMeshesWarningLabelPl
+                : k_FitToRenderMeshesLabel;
 
             static readonly string[] k_NoGeometryWarning =
             {
@@ -166,9 +167,9 @@ namespace Unity.Physics.Editor
 
             m_NumImplicitStatic = targets.Cast<PhysicsShapeAuthoring>().Count(
                 shape => shape.GetPrimaryBody() == shape.gameObject
-                    && shape.GetComponent<PhysicsBodyAuthoring>() == null
+                && shape.GetComponent<PhysicsBodyAuthoring>() == null
 #if LEGACY_PHYSICS
-                    && shape.GetComponent<LegacyRigidBody>() == null
+                && shape.GetComponent<LegacyRigidBody>() == null
 #endif
             );
 
@@ -391,21 +392,21 @@ namespace Unity.Physics.Editor
                         }
                         else
                         {
-                            switch (((ConvexCollider*)output[0].GetUnsafePtr())->Type)
+                            switch (output[0].Value.Type)
                             {
                                 case ColliderType.Convex:
-                                    var convex = (ConvexCollider*) output[0].GetUnsafePtr();
+                                    ref var convex = ref output[0].As<ConvexCollider>();
                                     DrawingUtility.GetConvexHullEdges(
-                                        ref convex->ConvexHull, s_ReusableEdges
+                                        ref convex.ConvexHull, s_ReusableEdges
                                     );
-                                    Bounds = convex->CalculateAabb();
+                                    Bounds = convex.CalculateAabb();
                                     break;
                                 case ColliderType.Mesh:
-                                    var mesh = (MeshCollider*) output[0].GetUnsafePtr();
+                                    ref var mesh = ref output[0].As<MeshCollider>();
                                     DrawingUtility.GetMeshEdges(
-                                        ref mesh->Mesh, s_ReusableEdges
+                                        ref mesh.Mesh, s_ReusableEdges
                                     );
-                                    Bounds = mesh->CalculateAabb();
+                                    Bounds = mesh.CalculateAabb();
                                     break;
                             }
 
@@ -1163,7 +1164,7 @@ namespace Unity.Physics.Editor
                 case ShapeType.Sphere:
                     var sphereGeometry = shape.GetBakedSphereProperties(out var orientation);
                     var sd = sphereGeometry.Radius * 2;
-                    bounds = new Bounds(sphereGeometry.Center, new float3(sd,sd,sd));
+                    bounds = new Bounds(sphereGeometry.Center, new float3(sd, sd, sd));
                     break;
                 case ShapeType.Cylinder:
                     var cylinderGeometry = shape.GetBakedCylinderProperties();

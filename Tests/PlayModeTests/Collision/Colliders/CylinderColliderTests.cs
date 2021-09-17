@@ -25,7 +25,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
 
         [Test]
         public void CylinderCollider_Create_WhenCalledFromBurstJob_DoesNotThrow() => new CreateFromBurstJob().Run();
-        
+
         [Test]
         public unsafe void CylinderCollider_Create_ResultHasExpectedValues()
         {
@@ -41,7 +41,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
 
             var collider = CylinderCollider.Create(geometry);
             var cylinderCollider = UnsafeUtility.AsRef<CylinderCollider>(collider.GetUnsafePtr());
-            
+
             Assert.AreEqual(geometry.Center, cylinderCollider.Center);
             Assert.AreEqual(geometry.Center, cylinderCollider.Geometry.Center);
             Assert.AreEqual(geometry.Orientation, cylinderCollider.Orientation);
@@ -93,7 +93,8 @@ namespace Unity.Physics.Tests.Collision.Colliders
             [Values(float.PositiveInfinity, float.NegativeInfinity, float.NaN, -1f)] float errantValue
         )
         {
-            var geometry = new CylinderGeometry {
+            var geometry = new CylinderGeometry
+            {
                 Height = errantValue,
                 Orientation = quaternion.identity,
                 SideCount = CylinderGeometry.MaxSideCount
@@ -136,6 +137,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             var ex = Assert.Throws<ArgumentException>(() => CylinderCollider.Create(geometry));
             Assert.That(ex.Message, Does.Match(nameof(CylinderGeometry.BevelRadius)));
         }
+
 #endif
 
         #endregion

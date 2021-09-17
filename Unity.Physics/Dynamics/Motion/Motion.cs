@@ -86,7 +86,9 @@ namespace Unity.Physics
         // A multiplier applied to the simulation step's gravity vector
         public float GravityFactor;
 
-        internal bool HasInfiniteInertiaAndMass => !math.any(InverseInertia) && InverseMass == 0.0f;
+        public bool HasInfiniteMass => InverseMass == 0.0f;
+        public bool HasInfiniteInertia => !math.any(InverseInertia);
+        public bool IsKinematic => HasInfiniteMass && HasInfiniteInertia;
 
         public static readonly MotionVelocity Zero = new MotionVelocity
         {

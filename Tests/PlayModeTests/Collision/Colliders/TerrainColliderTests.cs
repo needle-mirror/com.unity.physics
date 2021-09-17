@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using NUnit.Framework;
 using Unity.Burst;
 using Unity.Collections;
@@ -27,7 +27,8 @@ namespace Unity.Physics.Tests.Collision.Colliders
         public void TerrainCollider_Create_WhenCalledFromBurstJob_DoesNotThrow(
             [Values] TerrainCollider.CollisionMethod collisionMethod
         ) =>
-            new CreateFromBurstJob { CollisionMethod = collisionMethod }.Run();
+            new CreateFromBurstJob { CollisionMethod = collisionMethod }
+            .Run();
 
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
         [Test]
@@ -48,6 +49,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             var ex = Assert.Throws<ArgumentOutOfRangeException>(() => TerrainCollider.Create(default, new int2(2), new float3(errantValue), default));
             Assert.That(ex.ParamName, Is.EqualTo("scale"));
         }
+
 #endif
 
         #endregion

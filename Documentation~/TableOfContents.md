@@ -4,5 +4,6 @@
 * [Interacting with bodies](interacting_with_bodies.md)
 * [Collision queries](collision_queries.md)
 * [Core components](core_components.md)
+* [Modifying simulation data](modifying_simulation_data.md)
 * [Modifying simulation behavior](simulation_modification.md)
 * [Glossary](glossary.md)

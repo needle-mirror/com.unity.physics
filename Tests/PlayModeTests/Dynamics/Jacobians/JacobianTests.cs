@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using NUnit.Framework;
 using Unity.Collections;
 using Unity.Mathematics;
@@ -16,7 +16,7 @@ namespace Unity.Physics.Tests.Dynamics.Jacobians
             float timestep = 1.0f;
             int iterations = 4;
 
-            JacobianUtilities.CalculateTauAndDamping(springFrequency, springDampingRatio, timestep, iterations, out float tau, out float damping);
+            JacobianUtilities.CalculateConstraintTauAndDamping(springFrequency, springDampingRatio, timestep, iterations, out float tau, out float damping);
 
             Assert.AreApproximatelyEqual(0.4774722f, tau);
             Assert.AreApproximatelyEqual(0.6294564f, damping);
@@ -31,7 +31,7 @@ namespace Unity.Physics.Tests.Dynamics.Jacobians
 
             float tau;
             float damping;
-            JacobianUtilities.CalculateTauAndDamping(constraint, timestep, iterations, out tau, out damping);
+            JacobianUtilities.CalculateConstraintTauAndDamping(constraint.SpringFrequency, constraint.SpringDamping, timestep, iterations, out tau, out damping);
 
             Assert.AreApproximatelyEqual(0.4774722f, tau);
             Assert.AreApproximatelyEqual(0.6294564f, damping);

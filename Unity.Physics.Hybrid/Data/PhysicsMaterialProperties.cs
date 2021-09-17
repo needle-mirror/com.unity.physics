@@ -64,7 +64,7 @@ namespace Unity.Physics.Authoring
     }
 
     [Serializable]
-    class OverridableCollisionResponse : OverridableValue<CollisionResponsePolicy> { }
+    class OverridableCollisionResponse : OverridableValue<CollisionResponsePolicy> {}
 
     [Serializable]
     class OverridableMaterialCoefficient : OverridableValue<PhysicsMaterialCoefficient>
@@ -74,10 +74,10 @@ namespace Unity.Physics.Authoring
     }
 
     [Serializable]
-    class OverridableCategoryTags : OverridableValue<PhysicsCategoryTags> { }
+    class OverridableCategoryTags : OverridableValue<PhysicsCategoryTags> {}
 
     [Serializable]
-    class OverridableCustomMaterialTags : OverridableValue<CustomPhysicsMaterialTags> { }
+    class OverridableCustomMaterialTags : OverridableValue<CustomPhysicsMaterialTags> {}
 
     [Serializable]
     class PhysicsMaterialProperties : IInheritPhysicsMaterialProperties, ISerializationCallbackReceiver
@@ -117,7 +117,7 @@ namespace Unity.Physics.Authoring
         public PhysicsMaterialCoefficient Friction
         {
             get => Get(m_Friction, m_Template == null ? null : m_Template?.Friction);
-            set => m_Friction.Value= value;
+            set => m_Friction.Value = value;
         }
         [SerializeField]
         OverridableMaterialCoefficient m_Friction = new OverridableMaterialCoefficient
@@ -190,7 +190,7 @@ namespace Unity.Physics.Authoring
         [SerializeField]
         int m_SerializedVersion = 0;
 
-        void ISerializationCallbackReceiver.OnBeforeSerialize() { }
+        void ISerializationCallbackReceiver.OnBeforeSerialize() {}
 
         void ISerializationCallbackReceiver.OnAfterDeserialize() => UpgradeVersionIfNecessary();
 
@@ -206,6 +206,7 @@ namespace Unity.Physics.Authoring
                     m_SerializedVersion = 1;
             }
         }
+
 #pragma warning restore 618
     }
 }

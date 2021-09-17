@@ -1,4 +1,4 @@
-﻿using Unity.Physics.Authoring;
+using Unity.Physics.Authoring;
 using UnityEditor;
 using UnityEngine;
 

@@ -126,7 +126,7 @@ namespace Unity.Physics.Authoring
                     AssetDatabase.StopAssetEditing();
                     PhysicsMaterialProperties.s_SuppressUpgradeWarnings = false;
                 }
-                
+
                 var upgradeReport = new ReportOutput
                 {
                     Successes = m_Successes.AssetPathsAndStatuses.Keys.ToArray(),
@@ -216,7 +216,7 @@ namespace Unity.Physics.Authoring
             // do not append to failures if it is a readonly package
             var packageInfo = UnityEditor.PackageManager.PackageInfo.FindForAssetPath(asset.assetPath);
             return packageInfo == null
-                   || packageInfo.source == PackageSource.Embedded || packageInfo.source == PackageSource.Local;
+                || packageInfo.source == PackageSource.Embedded || packageInfo.source == PackageSource.Local;
         }
 
         void UpgradeMaterials()
@@ -421,11 +421,11 @@ namespace Unity.Physics.Authoring
 
         static void UpgradePrefabInstance(GameObject prefab)
         {
-            var modifications = (PrefabUtility.GetPropertyModifications(prefab)??Array.Empty<PropertyModification>()).ToList();
+            var modifications = (PrefabUtility.GetPropertyModifications(prefab) ?? Array.Empty<PropertyModification>()).ToList();
             foreach (
                 var modification in modifications
-                .Where(m => m.target is PhysicsShapeAuthoring && k_MatchMaterial.IsMatch(m.propertyPath))
-                .ToArray()
+                    .Where(m => m.target is PhysicsShapeAuthoring && k_MatchMaterial.IsMatch(m.propertyPath))
+                    .ToArray()
             )
             {
                 foreach (var substitution in k_Substitutions)

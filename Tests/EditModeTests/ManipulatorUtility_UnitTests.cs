@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 using NUnit.Framework;
 using Unity.Mathematics;
 using Unity.Physics.Editor;
@@ -23,8 +23,8 @@ namespace Unity.Physics.Tests.Editor
         }
 
         static TestCaseData[] k_GetMatrixStatMutateTestCases => k_GetMatrixStateReturnValueTestCases
-            .Select(testCase => new TestCaseData(testCase.Arguments).SetName($"{testCase.TestName} does not mutate"))
-            .ToArray();
+        .Select(testCase => new TestCaseData(testCase.Arguments).SetName($"{testCase.TestName} does not mutate"))
+        .ToArray();
 
         [TestCaseSource(nameof(k_GetMatrixStatMutateTestCases))]
         public void GetMatrixState_DoesNotMutateLTWArgument(float4x4 localToWorld)

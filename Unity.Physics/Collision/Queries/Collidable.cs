@@ -321,18 +321,8 @@ namespace Unity.Physics
             }
             else
             {
-                unsafe
-                {
-                    var interactionCollector = new QueryInteractionCollector<DistanceHit, C>
-                    {
-                        Collector = collector
-                    };
-
-                    bool returnValue = target.CalculateDistance(input, ref interactionCollector);
-
-                    collector = interactionCollector.Collector;
-                    return returnValue;
-                }
+                var interactionCollector = new QueryInteractionCollector<DistanceHit, C>(ref collector);
+                return target.CalculateDistance(input, ref interactionCollector);
             }
         }
 
@@ -388,18 +378,8 @@ namespace Unity.Physics
             }
             else
             {
-                unsafe
-                {
-                    var interactionCollector = new QueryInteractionCollector<DistanceHit, C>
-                    {
-                        Collector = collector,
-                    };
-
-                    bool returnValue = target.CalculateDistance(input, ref interactionCollector);
-
-                    collector = interactionCollector.Collector;
-                    return returnValue;
-                }
+                var interactionCollector = new QueryInteractionCollector<DistanceHit, C>(ref collector);
+                return target.CalculateDistance(input, ref interactionCollector);
             }
         }
 
@@ -455,18 +435,8 @@ namespace Unity.Physics
             }
             else
             {
-                unsafe
-                {
-                    var interactionCollector = new QueryInteractionCollector<DistanceHit, C>
-                    {
-                        Collector = collector,
-                    };
-
-                    bool returnValue = target.CalculateDistance(input, ref interactionCollector);
-
-                    collector = interactionCollector.Collector;
-                    return returnValue;
-                }
+                var interactionCollector = new QueryInteractionCollector<DistanceHit, C>(ref collector);
+                return target.CalculateDistance(input, ref interactionCollector);
             }
         }
 
@@ -515,18 +485,8 @@ namespace Unity.Physics
             }
             else
             {
-                unsafe
-                {
-                    var interactionCollector = new QueryInteractionCollector<ColliderCastHit, C>
-                    {
-                        Collector = collector
-                    };
-
-                    bool returnValue =  target.CastCollider(input, ref interactionCollector);
-
-                    collector = interactionCollector.Collector;
-                    return returnValue;
-                }
+                var interactionCollector = new QueryInteractionCollector<ColliderCastHit, C>(ref collector);
+                return target.CastCollider(input, ref interactionCollector);
             }
         }
 
@@ -587,18 +547,8 @@ namespace Unity.Physics
             }
             else
             {
-                unsafe
-                {
-                    var interactionCollector = new QueryInteractionCollector<ColliderCastHit, C>
-                    {
-                        Collector = collector
-                    };
-
-                    bool returnValue = target.CastCollider(input, ref interactionCollector);
-
-                    collector = interactionCollector.Collector;
-                    return returnValue;
-                }
+                var interactionCollector = new QueryInteractionCollector<ColliderCastHit, C>(ref collector);
+                return target.CastCollider(input, ref interactionCollector);
             }
         }
 
@@ -660,18 +610,8 @@ namespace Unity.Physics
             }
             else
             {
-                unsafe
-                {
-                    var interactionCollector = new QueryInteractionCollector<ColliderCastHit, C>
-                    {
-                        Collector = collector
-                    };
-
-                    bool returnValue = target.CastCollider(input, ref interactionCollector);
-
-                    collector = interactionCollector.Collector;
-                    return returnValue;
-                }
+                var interactionCollector = new QueryInteractionCollector<ColliderCastHit, C>(ref collector);
+                return target.CastCollider(input, ref interactionCollector);
             }
         }
 

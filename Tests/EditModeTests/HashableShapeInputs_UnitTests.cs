@@ -31,19 +31,19 @@ namespace Unity.Physics.Tests.Authoring
             using (var allBlendShapeWeights = new NativeList<float>(0, Allocator.TempJob))
             using (var indices = new NativeArray<int>(includedIndices ?? Array.Empty<int>(), Allocator.TempJob))
             using (var blendWeights = new NativeArray<float>(blendShapeWeights ?? Array.Empty<float>(), Allocator.TempJob))
-            return HashableShapeInputs.GetHash128(
-                uniqueIdentifier, convexHullGenerationParameters, material, filter, shapeFromBody,
-                new NativeArray<HashableShapeInputs>(1, Allocator.Temp)
-                {
-                    [0] = HashableShapeInputs.FromSkinnedMesh(
-                        mesh, leafToBody,
-                        indices,
-                        allIncludedIndices,
-                        blendWeights,
-                        allBlendShapeWeights
-                    )
-                }, allIncludedIndices, allBlendShapeWeights
-            );
+                return HashableShapeInputs.GetHash128(
+                    uniqueIdentifier, convexHullGenerationParameters, material, filter, shapeFromBody,
+                    new NativeArray<HashableShapeInputs>(1, Allocator.Temp)
+                    {
+                        [0] = HashableShapeInputs.FromSkinnedMesh(
+                            mesh, leafToBody,
+                            indices,
+                            allIncludedIndices,
+                            blendWeights,
+                            allBlendShapeWeights
+                        )
+                    }, allIncludedIndices, allBlendShapeWeights
+                );
         }
 
         [Test]
@@ -209,11 +209,11 @@ namespace Unity.Physics.Tests.Authoring
                 Hash128 a, b;
 
                 using (var inputs = new NativeList<HashableShapeInputs>(2, Allocator.TempJob)
-                {
-                    Length = 2,
-                    [0] = InputsWithIndicesAndBlendShapeWeights(new[] { 0 }, Array.Empty<float>(), allIndices, allWeights),
-                    [1] = InputsWithIndicesAndBlendShapeWeights(new[] { 0, 0 }, Array.Empty<float>(), allIndices, allWeights)
-                })
+                   {
+                       Length = 2,
+                       [0] = InputsWithIndicesAndBlendShapeWeights(new[] { 0 }, Array.Empty<float>(), allIndices, allWeights),
+                       [1] = InputsWithIndicesAndBlendShapeWeights(new[] { 0, 0 }, Array.Empty<float>(), allIndices, allWeights)
+                   })
                 {
                     a = HashableShapeInputs.GetHash128(
                         default, default, default, default, float4x4.identity, inputs, allIndices, allWeights
@@ -223,11 +223,11 @@ namespace Unity.Physics.Tests.Authoring
                 allIndices.Clear();
                 allWeights.Clear();
                 using (var inputs = new NativeList<HashableShapeInputs>(2, Allocator.TempJob)
-                {
-                    Length = 2,
-                    [0] = InputsWithIndicesAndBlendShapeWeights(new[] { 0, 0 }, Array.Empty<float>(), allIndices, allWeights),
-                    [1] = InputsWithIndicesAndBlendShapeWeights(new[] { 0 }, Array.Empty<float>(), allIndices, allWeights)
-                })
+                   {
+                       Length = 2,
+                       [0] = InputsWithIndicesAndBlendShapeWeights(new[] { 0, 0 }, Array.Empty<float>(), allIndices, allWeights),
+                       [1] = InputsWithIndicesAndBlendShapeWeights(new[] { 0 }, Array.Empty<float>(), allIndices, allWeights)
+                   })
                 {
                     b = HashableShapeInputs.GetHash128(
                         default, default, default, default, float4x4.identity, inputs, allIndices, allWeights
@@ -247,11 +247,11 @@ namespace Unity.Physics.Tests.Authoring
                 Hash128 a, b;
 
                 using (var inputs = new NativeList<HashableShapeInputs>(2, Allocator.TempJob)
-                {
-                    Length = 2,
-                    [0] = InputsWithIndicesAndBlendShapeWeights(Array.Empty<int>(), new[] { 0f }, allIndices, allWeights),
-                    [1] = InputsWithIndicesAndBlendShapeWeights(Array.Empty<int>(), new[] { 0f, 0f }, allIndices, allWeights)
-                })
+                   {
+                       Length = 2,
+                       [0] = InputsWithIndicesAndBlendShapeWeights(Array.Empty<int>(), new[] { 0f }, allIndices, allWeights),
+                       [1] = InputsWithIndicesAndBlendShapeWeights(Array.Empty<int>(), new[] { 0f, 0f }, allIndices, allWeights)
+                   })
                 {
                     a = HashableShapeInputs.GetHash128(
                         default, default, default, default, float4x4.identity, inputs, allIndices, allWeights
@@ -261,11 +261,11 @@ namespace Unity.Physics.Tests.Authoring
                 allIndices.Clear();
                 allWeights.Clear();
                 using (var inputs = new NativeList<HashableShapeInputs>(2, Allocator.TempJob)
-                {
-                    Length = 2,
-                    [0] = InputsWithIndicesAndBlendShapeWeights(Array.Empty<int>(), new[] { 0f, 0f }, allIndices, allWeights),
-                    [1] = InputsWithIndicesAndBlendShapeWeights(Array.Empty<int>(), new[] { 0f }, allIndices, allWeights)
-                })
+                   {
+                       Length = 2,
+                       [0] = InputsWithIndicesAndBlendShapeWeights(Array.Empty<int>(), new[] { 0f, 0f }, allIndices, allWeights),
+                       [1] = InputsWithIndicesAndBlendShapeWeights(Array.Empty<int>(), new[] { 0f }, allIndices, allWeights)
+                   })
                 {
                     b = HashableShapeInputs.GetHash128(
                         default, default, default, default, float4x4.identity, inputs, allIndices, allWeights

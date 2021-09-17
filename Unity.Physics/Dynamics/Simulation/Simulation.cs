@@ -76,7 +76,7 @@ namespace Unity.Physics
             {
                 TriggerEventDataStream.Dispose();
             }
-            
+
             {
                 if (!WorkItemCount.IsCreated)
                 {
@@ -97,7 +97,7 @@ namespace Unity.Physics
         //             return ScheduleReset(ref world, inputDeps, true);
         //         }
         // However, to make that possible we need a why to allocate InputVelocities within a job.
-        // The core simulation does not chain jobs across multiple simulation steps and so 
+        // The core simulation does not chain jobs across multiple simulation steps and so
         // will not hit this issue.
         internal JobHandle ScheduleReset(SimulationStepInput stepInput, JobHandle inputDeps, bool allocateEventDataStreams)
         {
@@ -297,12 +297,6 @@ namespace Unity.Physics
             StepImmediate(input, ref SimulationContext);
         }
 
-        [Obsolete("ScheduleStepJobs() has been deprecated. Please use the new method taking a bool as the last parameter. (RemovedAfter 2021-02-15)", true)]
-        public unsafe SimulationJobHandles ScheduleStepJobs(SimulationStepInput input, SimulationCallbacks callbacksIn, JobHandle inputDeps, int threadCountHint = 0)
-        {
-            return ScheduleStepJobs(input, callbacksIn, inputDeps, threadCountHint > 0);
-        }
-
         // Schedule all the jobs for the simulation step.
         // Enqueued callbacks can choose to inject additional jobs at defined sync points.
         // multiThreaded defines which simulation type will be called:
@@ -315,7 +309,7 @@ namespace Unity.Physics
             SafetyChecks.CheckInRangeAndThrow(input.NumSolverIterations, new int2(1, int.MaxValue), nameof(input.NumSolverIterations));
 
             // Dispose and reallocate input velocity buffer, if dynamic body count has increased.
-            // Dispose previous collision and trigger event data streams. 
+            // Dispose previous collision and trigger event data streams.
             // New event streams are reallocated later when the work item count is known.
             JobHandle handle = SimulationContext.ScheduleReset(input, inputDeps, false);
             SimulationContext.TimeStep = input.TimeStep;
@@ -376,7 +370,6 @@ namespace Unity.Physics
                 ref StepContext.SolverSchedulerInfo, solverStabilizationData, handle, multiThreaded);
             handle = handles.FinalExecutionHandle;
             var disposeHandle5 = handles.FinalDisposeHandle;
-            handle = callbacks.Execute(SimulationCallbacks.Phase.PostSolveJacobians, this, ref input.World, handle);
 
             // Integrate motions
             handle = Integrator.ScheduleIntegrateJobs(ref input.World.DynamicsWorld, input.TimeStep, handle, multiThreaded);

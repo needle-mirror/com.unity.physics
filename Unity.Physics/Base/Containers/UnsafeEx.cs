@@ -8,13 +8,13 @@ namespace Unity.Physics
             where T : struct
             where U : struct
         {
-            return (int) ((byte*) UnsafeUtility.AddressOf(ref value) - (byte*) UnsafeUtility.AddressOf(ref baseValue));
+            return (int)((byte*)UnsafeUtility.AddressOf(ref value) - (byte*)UnsafeUtility.AddressOf(ref baseValue));
         }
-        
+
         internal unsafe static int CalculateOffset<T>(void* value, ref T baseValue)
             where T : struct
         {
-            return (int) ((byte*) value - (byte*)UnsafeUtility.AddressOf(ref baseValue));
+            return (int)((byte*)value - (byte*)UnsafeUtility.AddressOf(ref baseValue));
         }
     }
 }

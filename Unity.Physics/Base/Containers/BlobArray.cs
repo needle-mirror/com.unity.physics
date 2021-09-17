@@ -18,7 +18,7 @@ namespace Unity.Physics
 
             public Accessor(ref BlobArray blobArray)
             {
-                fixed (BlobArray* ptr = &blobArray)
+                fixed(BlobArray* ptr = &blobArray)
                 {
                     m_OffsetPtr = &ptr->Offset;
                     Length = ptr->Length;

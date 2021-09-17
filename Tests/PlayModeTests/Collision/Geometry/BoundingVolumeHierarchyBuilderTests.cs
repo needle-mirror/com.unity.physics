@@ -323,7 +323,8 @@ namespace Unity.Physics.Tests.Collision.Geometry
                     SeenPairs.Add(new BodyIndexPair { BodyIndexA = pairLeft[0], BodyIndexB = r[0] });
                 }
             }
-            public void FlushIfNeeded() { }
+
+            public void FlushIfNeeded() {}
             public HashSet<BodyIndexPair> SeenPairs;
         }
 
@@ -460,7 +461,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
             nodes.Dispose();
         }
 
-        [BurstCompile(CompileSynchronously=true)]
+        [BurstCompile(CompileSynchronously = true)]
         struct TestTreeOverlapJob : IJob
         {
             public NativeStream.Writer CollisionPairWriter;
@@ -558,7 +559,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
             {
                 job.Run();
             }).MeasurementCount(1)
-              .Run();
+                .Run();
 
             points.Dispose();
             aabbs.Dispose();

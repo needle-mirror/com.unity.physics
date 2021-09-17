@@ -74,6 +74,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             var ex = Assert.Throws<ArgumentException>(() => CapsuleCollider.Create(geometry));
             Assert.That(ex.Message, Does.Match(nameof(CapsuleGeometry.Radius)));
         }
+
 #endif
 
         #endregion

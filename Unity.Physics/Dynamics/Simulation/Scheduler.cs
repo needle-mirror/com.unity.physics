@@ -18,13 +18,13 @@ namespace Unity.Physics
         // A pair of interacting bodies (either potentially colliding, or constrained together using a Joint).
         // The indices are compressed into a single 64 bit value, for deterministic sorting, as follows:
         //
-        //        6         5         4         3         2         1         
+        //        6         5         4         3         2         1
         //    4321098765432109876543210987654321098765432109876543210987654321
         // 0b_1111111111111111111111111111111111111111111111111111111111111111
         //    [        BodyA-24      ][       BodyB-24       ]C[  Joint-15   ]
         //
         //
-        // This gives a limit of 
+        // This gives a limit of
         //    16,777,216 Rigid bodies
         //    32,767 Joints (1 bit used for Enable [C]ollisions flag)
         //
@@ -233,7 +233,7 @@ namespace Unity.Physics
                 [DeallocateOnJobCompletion]
                 public NativeArray<int> NumWorkItems;
 
-                public void Execute() { }
+                public void Execute() {}
             }
         }
 
@@ -513,7 +513,7 @@ namespace Unity.Physics
 
             // Joints from dynamics world
             [ReadOnly] public NativeArray<Joint> Joints;
-            
+
             // Outputs
             public NativeList<DispatchPair> UnsortedDispatchPairs;
             public NativeList<DispatchPair> DispatchPairsUninitialized;
@@ -525,7 +525,7 @@ namespace Unity.Physics
 
             internal static void ExecuteImpl(
                 NativeStream dynamicVsDynamicPairs, NativeStream staticVsDynamicPairs,
-                NativeArray<Joint> joints, 
+                NativeArray<Joint> joints,
                 NativeList<DispatchPair> unsortedDispatchPairs, NativeList<DispatchPair> dispatchPairsUninitialized)
             {
                 int numValidJoints = 0;
@@ -679,8 +679,8 @@ namespace Unity.Physics
             [NativeDisableParallelForRestriction]
             public NativeArray<DispatchPair> InOutArray;
 
-            // Typically lastDigitIndex is resulting in 
-            // RadixSortPerBodyAJob.digitCount.nextElementIndex[i] = index of first element 
+            // Typically lastDigitIndex is resulting in
+            // RadixSortPerBodyAJob.digitCount.nextElementIndex[i] = index of first element
             // with bodyA index == i + 1
             [NativeDisableParallelForRestriction]
             [DeallocateOnJobCompletion] public NativeArray<int> NextElementIndex;
@@ -703,7 +703,7 @@ namespace Unity.Physics
             // Sorts sub array using default sort
             unsafe public static void DefaultSortOfSubArrays(ulong* inOutArray, int startIndex, int length)
             {
-                // inOutArray[startIndex] to inOutArray[startIndex + length - 1] have the same bodyA index 
+                // inOutArray[startIndex] to inOutArray[startIndex + length - 1] have the same bodyA index
                 // so we can do a simple sorting.
                 if (length > 2)
                 {
@@ -983,9 +983,9 @@ namespace Unity.Physics
             {
                 internal void Add(NativeArray<ushort> rigidBodyMasks, int bodyIndexA, int bodyIndexB)
                 {
-                    int indexInBuffer = m_NumElements++ * 2;
+                    int indexInBuffer = m_NumElements++ *2;
 
-                    fixed (int* bodyIndices = m_BodyIndices)
+                    fixed(int* bodyIndices = m_BodyIndices)
                     {
                         bodyIndices[indexInBuffer++] = bodyIndexA;
                         bodyIndices[indexInBuffer] = bodyIndexB;
@@ -1009,7 +1009,7 @@ namespace Unity.Physics
                 {
                     // Flush
                     int indexInBuffer = 0;
-                    fixed (int* bodyIndices = m_BodyIndices)
+                    fixed(int* bodyIndices = m_BodyIndices)
                     {
                         for (int i = 0; i < m_NumElements; i++)
                         {

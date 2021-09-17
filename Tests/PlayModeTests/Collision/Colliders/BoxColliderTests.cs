@@ -98,6 +98,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             var ex = Assert.Throws<ArgumentException>(() => BoxCollider.Create(geometry));
             Assert.That(ex.Message, Does.Match(nameof(BoxGeometry.BevelRadius)));
         }
+
 #endif
 
         #endregion

@@ -25,8 +25,15 @@ namespace Unity.Physics
     public static class ICollisionEventJobExtensions
     {
 #if !HAVOK_PHYSICS_EXISTS
-        // Default Schedule() implementation for ICollisionEventsJob.
+        [Obsolete("Schedule() has been deprecated. Use the new method that doesn't take PhysicsWorld. (RemovedAfter 2021-05-01)", true)]
         public static unsafe JobHandle Schedule<T>(this T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)
+            where T : struct, ICollisionEventsJobBase
+        {
+            return Schedule(jobData, simulation, inputDeps);
+        }
+
+        // Default Schedule() implementation for ICollisionEventsJob.
+        public static unsafe JobHandle Schedule<T>(this T jobData, ISimulation simulation, JobHandle inputDeps)
             where T : struct, ICollisionEventsJobBase
         {
             // Should work only for UnityPhysics
@@ -35,7 +42,7 @@ namespace Unity.Physics
                 return inputDeps;
             }
 
-            return ScheduleUnityPhysicsCollisionEventsJob(jobData, simulation, ref world, inputDeps);
+            return ScheduleUnityPhysicsCollisionEventsJob(jobData, simulation, inputDeps);
         }
 
 #else
@@ -43,7 +50,7 @@ namespace Unity.Physics
         // This is a stub to catch when that assembly is missing.
         //<todo.eoin.modifier Put in a link to documentation for this:
         [Obsolete("This error occurs when HAVOK_PHYSICS_EXISTS is defined but Havok.Physics is missing from your package's asmdef references. (DoNotRemove)", true)]
-        public static unsafe JobHandle Schedule<T>(this T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps,
+        public static unsafe JobHandle Schedule<T>(this T jobData, ISimulation simulation, JobHandle inputDeps,
             HAVOK_PHYSICS_MISSING_FROM_ASMDEF _causeCompileError = HAVOK_PHYSICS_MISSING_FROM_ASMDEF.HAVOK_PHYSICS_MISSING_FROM_ASMDEF)
             where T : struct, ICollisionEventsJobBase
         {
@@ -57,7 +64,7 @@ namespace Unity.Physics
 #endif
 
         // Schedules a collision events job only for UnityPhysics simulation
-        internal static unsafe JobHandle ScheduleUnityPhysicsCollisionEventsJob<T>(T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)
+        internal static unsafe JobHandle ScheduleUnityPhysicsCollisionEventsJob<T>(T jobData, ISimulation simulation, JobHandle inputDeps)
             where T : struct, ICollisionEventsJobBase
         {
             SafetyChecks.CheckAreEqualAndThrow(SimulationType.UnityPhysics, simulation.Type);
@@ -68,8 +75,6 @@ namespace Unity.Physics
                 EventReader = ((Simulation)simulation).CollisionEvents
             };
 
-            // Ensure the input dependencies include the end-of-simulation job, so events will have been generated
-            inputDeps = JobHandle.CombineDependencies(inputDeps, simulation.FinalSimulationJobHandle);
 #if UNITY_2020_2_OR_NEWER
             var parameters = new JobsUtility.JobScheduleParameters(UnsafeUtility.AddressOf(ref data), CollisionEventJobProcess<T>.Initialize(), inputDeps, ScheduleMode.Single);
 #else
@@ -81,7 +86,7 @@ namespace Unity.Physics
         internal unsafe struct CollisionEventJobData<T> where T : struct
         {
             public T UserJobData;
-            [NativeDisableContainerSafetyRestriction] public CollisionEvents EventReader;
+            public CollisionEvents EventReader;
         }
 
         internal struct CollisionEventJobProcess<T> where T : struct, ICollisionEventsJobBase

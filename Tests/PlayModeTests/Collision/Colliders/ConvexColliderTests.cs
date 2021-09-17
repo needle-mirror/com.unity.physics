@@ -81,6 +81,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             var ex = Assert.Throws<ArgumentException>(() => ConvexCollider.Create(points, generationParameters));
             Assert.That(ex.ParamName, Is.EqualTo("generationParameters"));
         }
+
 #endif
 
         #endregion
@@ -139,7 +140,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             quaternion rotation = quaternion.AxisAngle(math.normalize(new float3(8.45f, -2.34f, 0.82f)), 43.21f);
 
             float3[] transformedPoints = new float3[points.Length];
-            for(int i = 0; i < points.Length; ++i)
+            for (int i = 0; i < points.Length; ++i)
             {
                 transformedPoints[i] = translation + math.mul(rotation, points[i]);
             }
@@ -164,4 +165,3 @@ namespace Unity.Physics.Tests.Collision.Colliders
         #endregion
     }
 }
-

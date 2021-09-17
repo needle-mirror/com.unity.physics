@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -9,7 +9,7 @@ namespace Unity.Physics.Authoring
     [HelpURL(HelpURLs.PhysicsCategoryNames)]
     public sealed class PhysicsCategoryNames : ScriptableObject, ITagNames
     {
-        PhysicsCategoryNames() { }
+        PhysicsCategoryNames() {}
 
         IReadOnlyList<string> ITagNames.TagNames => CategoryNames;
         public IReadOnlyList<string> CategoryNames => m_CategoryNames;

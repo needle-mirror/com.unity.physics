@@ -40,7 +40,7 @@ namespace Unity.Physics.Editor
                 var size = (float3)GetSize();
                 var diameter = 0f;
                 // only consider size values on enabled axes
-                if      (IsAxisEnabled(0)) diameter = math.max(diameter, math.abs(size.x));
+                if (IsAxisEnabled(0)) diameter = math.max(diameter, math.abs(size.x));
                 else if (IsAxisEnabled(1)) diameter = math.max(diameter, math.abs(size.y));
                 return diameter * 0.5f;
             }
@@ -48,7 +48,7 @@ namespace Unity.Physics.Editor
             {
                 var size = (float3)GetSize();
                 size.x = size.y = math.max(0f, value * 2.0f);
-                SetSize(size); 
+                SetSize(size);
             }
         }
 
@@ -179,12 +179,14 @@ namespace Unity.Physics.Editor
                             Handles.DrawLine(bottom2 + startOffset, bottom1 + startOffset);
                             Handles.DrawLine(bottom1 + startOffset, top1 + startOffset);
                             Handles.DrawLine(top1 + startOffset, top2 + startOffset);
-                        } else
+                        }
+                        else
                         {
                             // Square side of bevelled cylinder, when squashed to a single line
                             Handles.DrawLine(top2 + startOffset, bottom2 + startOffset);
                         }
-                    } else
+                    }
+                    else
                     {
                         var top0                = ctr + offset0 - (halfHeight - new float3 { z = bevelRadius });
                         var bottom0             = ctr + offset0 + (halfHeight - new float3 { z = bevelRadius });
@@ -216,17 +218,17 @@ namespace Unity.Physics.Editor
                             var orientation = quaternion.LookRotation(xyAngle2, up);
                             var cornerNormal = math.normalize(math.mul(orientation, new float3(0f, 1f, 1f)));
                             PhysicsBoundsHandleUtility.CalculateCornerHorizon(top2,
-                                                new float3x3(direction1, up, direction2),
-                                                cornerNormal, cameraCenter, cameraForward, cameraOrtho,
-                                                bevelRadius, out m_Corners[cornerIndex0]);
+                                new float3x3(direction1, up, direction2),
+                                cornerNormal, cameraCenter, cameraForward, cameraOrtho,
+                                bevelRadius, out m_Corners[cornerIndex0]);
                         }
                         {
                             var orientation = quaternion.LookRotation(xyAngle2, -up);
                             var cornerNormal = math.normalize(math.mul(orientation, new float3(0f, 1f, 1f)));
                             PhysicsBoundsHandleUtility.CalculateCornerHorizon(bottom2,
-                                                new float3x3(direction2, -up, direction1),
-                                                cornerNormal, cameraCenter, cameraForward, cameraOrtho,
-                                                bevelRadius, out m_Corners[cornerIndex1]);
+                                new float3x3(direction2, -up, direction1),
+                                cornerNormal, cameraCenter, cameraForward, cameraOrtho,
+                                bevelRadius, out m_Corners[cornerIndex1]);
                         }
                     }
 

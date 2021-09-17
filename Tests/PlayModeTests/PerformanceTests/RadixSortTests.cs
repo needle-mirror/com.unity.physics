@@ -1,4 +1,4 @@
-﻿using NUnit.Framework;
+using NUnit.Framework;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
@@ -17,7 +17,7 @@ namespace Unity.Physics.Tests.PerformanceTests
             where U : struct
         {
             Assert.AreEqual(UnsafeUtility.SizeOf<T>(), UnsafeUtility.SizeOf<U>());
-            
+
             var castedArray = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<U>((byte*)array.GetUnsafePtr(), array.Length, Allocator.Invalid);
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
             NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref castedArray, NativeArrayUnsafeUtility.GetAtomicSafetyHandle(array));
@@ -25,7 +25,6 @@ namespace Unity.Physics.Tests.PerformanceTests
             return castedArray;
         }
 
-        
         public static void InitPairs(int minIndex, int maxIndex, int count, NativeArray<ulong> pairs)
         {
             Random.InitState(1234);
@@ -86,8 +85,8 @@ namespace Unity.Physics.Tests.PerformanceTests
             {
                 job.Run();
             })
-            .MeasurementCount(1)
-            .Run();
+                .MeasurementCount(1)
+                .Run();
 
             // All bits associated with the BodyA index
             ulong mask = ~DispatchPairSequencer.DispatchPair.k_BodyAMask;
@@ -143,8 +142,8 @@ namespace Unity.Physics.Tests.PerformanceTests
             {
                 job.Run(tempCount.Length);
             })
-            .MeasurementCount(1)
-            .Run();
+                .MeasurementCount(1)
+                .Run();
 
             // Mask all bits NOT associated with the BodyA index
             ulong mask = DispatchPairSequencer.DispatchPair.k_BodyAMask;

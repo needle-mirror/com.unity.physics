@@ -5,7 +5,7 @@ using Unity.Entities;
 namespace Unity.Physics
 {
     // An event raised when a pair of bodies involving a trigger material have overlapped during solving.
-    public struct TriggerEvent
+    public struct TriggerEvent : ISimulationEvent<TriggerEvent>
     {
         internal TriggerEventData EventData;
 
@@ -15,6 +15,8 @@ namespace Unity.Physics
         public int BodyIndexA => EventData.BodyIndices.BodyIndexA;
         public ColliderKey ColliderKeyB => EventData.ColliderKeys.ColliderKeyB;
         public ColliderKey ColliderKeyA => EventData.ColliderKeys.ColliderKeyA;
+
+        public int CompareTo(TriggerEvent other) => ISimulationEventUtilities.CompareEvents(this, other);
     }
 
     // A stream of trigger events.

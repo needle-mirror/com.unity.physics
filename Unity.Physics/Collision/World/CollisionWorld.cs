@@ -112,12 +112,6 @@ namespace Unity.Physics
                 world.CollisionWorld.CollisionTolerance, timeStep, gravity, buildStaticTree);
         }
 
-        [Obsolete("ScheduleBuildBroadphaseJobs() has been deprecated. Please use the new method taking a bool as the last parameter. (RemovedAfter 2021-02-15)", true)]
-        public JobHandle ScheduleBuildBroadphaseJobs(ref PhysicsWorld world, float timeStep, float3 gravity, NativeArray<int> buildStaticTree, JobHandle inputDeps, int threadCountHint = 0)
-        {
-            return ScheduleBuildBroadphaseJobs(ref world, timeStep, gravity, buildStaticTree, inputDeps, threadCountHint > 0);
-        }
-
         // Schedule a set of jobs to build the broadphase based on the given world.
         public JobHandle ScheduleBuildBroadphaseJobs(ref PhysicsWorld world, float timeStep, float3 gravity, NativeArray<int> buildStaticTree, JobHandle inputDeps, bool multiThreaded = true)
         {
@@ -129,13 +123,6 @@ namespace Unity.Physics
         public void FindOverlaps(ref NativeStream.Writer dynamicVsDynamicPairsWriter, ref NativeStream.Writer staticVsDynamicPairsWriter)
         {
             Broadphase.FindOverlaps(ref dynamicVsDynamicPairsWriter, ref staticVsDynamicPairsWriter);
-        }
-
-        [Obsolete("ScheduleFindOverlapsJobs() has been deprecated. Please use the new method taking a bool as the last parameter. (RemovedAfter 2021-02-15)", true)]
-        public SimulationJobHandles ScheduleFindOverlapsJobs(out NativeStream dynamicVsDynamicPairsStream, out NativeStream staticVsDynamicPairsStream,
-            JobHandle inputDeps, int threadCountHint = 0)
-        {
-            return ScheduleFindOverlapsJobs(out dynamicVsDynamicPairsStream, out staticVsDynamicPairsStream, inputDeps, threadCountHint > 0);
         }
 
         // Schedule a set of jobs which will write all overlapping body pairs to the given steam,
@@ -158,12 +145,6 @@ namespace Unity.Physics
             // Update broadphase
             float aabbMargin = world.CollisionWorld.CollisionTolerance * 0.5f;
             Broadphase.BuildDynamicTree(world.DynamicBodies, world.MotionVelocities, gravity, timeStep, aabbMargin);
-        }
-
-        [Obsolete("ScheduleUpdateDynamicTree() has been deprecated. Please use the new method taking a bool as the last parameter. (RemovedAfter 2021-02-15)", true)]
-        public JobHandle ScheduleUpdateDynamicTree(ref PhysicsWorld world, float timeStep, float3 gravity, JobHandle inputDeps, int threadCountHint = 0)
-        {
-            return ScheduleUpdateDynamicTree(ref world, timeStep, gravity, inputDeps, threadCountHint > 0);
         }
 
         // Schedule a set of jobs to synchronize the collision world with the dynamics world.

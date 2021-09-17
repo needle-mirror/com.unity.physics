@@ -18,6 +18,7 @@ namespace Unity.Physics
             public static float4 Max4F => new float4(float.MaxValue);
             public static float3 Min3F => new float3(float.MinValue);
             public static float3 Max3F => new float3(float.MaxValue);
+            public static float3 MaxDisplacement3F => new float3(float.MaxValue * 0.5f);
 
             // Smallest float such that 1.0 + eps != 1.0
             // Different from float.Epsilon which is the smallest value greater than zero.
@@ -26,6 +27,10 @@ namespace Unity.Physics
             // These constants are identical to the ones in the Unity Mathf library, to ensure identical behaviour
             internal const float UnityEpsilonNormalSqrt = 1e-15F;
             internal const float UnityEpsilon = 0.00001F;
+
+            public const float Tau = 2.0f * math.PI;
+            public const float OneOverTau = 1.0f / Tau;
+
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -33,7 +38,7 @@ namespace Unity.Physics
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ulong NextMultipleOf16(ulong input) => ((input + 15) >> 4) << 4;
-		
+
         /// Note that alignment must be a power of two for this to work.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int NextMultipleOf(int input, int alignment) => (input + (alignment - 1)) & (~(alignment - 1));
@@ -76,6 +81,19 @@ namespace Unity.Physics
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float RSqrtSafe(float v) => math.select(math.rsqrt(v), 0.0f, math.abs(v) < 1e-10f);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void ClampToMaxLength(float maxLength, ref float3 vector)
+        {
+            float lengthSq = math.lengthsq(vector);
+            bool maxExceeded = lengthSq > maxLength * maxLength;
+            if (maxExceeded)
+            {
+                float invLen = math.rsqrt(lengthSq);
+                float3 rescaledVector = maxLength * invLen * vector;
+                vector = rescaledVector;
+            }
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float NormalizeWithLength(float3 v, out float3 n)
@@ -229,7 +247,6 @@ namespace Unity.Physics
             return new quaternion(new float4(axis * sinCosHalfAngle.x, sinCosHalfAngle.y));
         }
 
-        
         // Note: taken from Unity.Animation/Core/MathExtensions.cs, which will be moved to Unity.Mathematics at some point
         //       after that, this should be removed and the Mathematics version should be used
         #region toEuler
@@ -373,7 +390,8 @@ namespace Unity.Physics
                         var z1 = d2.x + d1.z;
                         var z2 = d3.x + d3.w - d3.y - d3.z;
                         euler = new float3(math.atan2(x1, x2), -math.asin(y1), math.atan2(z1, z2));
-                    } else //xzx
+                    }
+                    else   //xzx
                     {
                         y1 = math.clamp(y1, -1.0f, 1.0f);
                         var abcd = new float4(d2.z, d1.y, d2.x, d1.z);
@@ -408,6 +426,7 @@ namespace Unity.Physics
                     return euler;
             }
         }
+
         #endregion
 
         /// <summary>

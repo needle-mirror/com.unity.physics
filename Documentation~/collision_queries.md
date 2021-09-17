@@ -3,6 +3,9 @@ Collision queries
 
 *Collision queries* (also known as *spatial queries*) are one of the most important features of any physics engine and often drive a significant amount of game logic. Unity Physics has a powerful collision query system which supports queries like ray casting, linear casting and closest point estimation. These queries support options like efficient collision filtering and user data retrieval.
 
+Collision queries use physics simulation data (read-only access), more precisely an internal structure called broadphase, which is built by a job scheduled in `BuildPhysicsWorld`. Collision queries can be performed any time before or after `BuildPhysicsWorld`, but if you do it before make sure you provide your job handle to `BuildPhysicsWorld.AddInputDependencyToComplete()` (please read [Modifying simulation data](modifying_simulation_data.md) for details).
+By default, the broadphase will not get updated until the next physics step’s `BuildPhysicsWorld`, so all collision queries will return results according to that state (effectively the state after the previous simulation step). However, there is a way to make `StepPhysicsWorld` schedule a job that updates the broadphase after current simulation step, at some performance cost – you need to check the “Synchronize Collision World” box in Physics Step component or set `PhysicsStep.SynchronizeCollisionWorld` to a positive value. If you do that, it is advised to perform collision queries after `StepPhysicsWorld` or before next `BuildPhysicsWorld`. 
+
 # Local Vs Global
 
 Queries can be performed against individual colliders or against an entire collision world. When performed against an entire world, a query acceleration structure – a bounding volume tree in the case of Unity Physics – is used for efficiency.
@@ -212,7 +215,7 @@ Collider casts are very similar to the ray casts, however you need to make a Col
 
 The above code all calls into Unity Physics through normal C#. That is fine, will work, but is not necessarily the most optimal solution. To get really good performance from the casts and other queries you should do them from within a Burst compiled job. That way the code within the Unity Physics for the cast can also make use of Burst. If you are already in a Burst job, just call as normal, otherwise you will need to create a simple Job to do it for you. Since it is a threaded job, try to batch a few together too and wait some time later for results instead of straight away.
 
-Jobs can only be created in classes that inherit from `JobComponentSystem`. Here are the necessary namespaces for the following examples:
+Jobs can only be created in classes that inherit from `SystemBase`. Here are the necessary namespaces for the following examples:
 
 ```csharp
     using Unity.Burst;

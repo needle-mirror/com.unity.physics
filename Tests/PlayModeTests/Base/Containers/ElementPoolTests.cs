@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using NUnit.Framework;
 using Unity.Collections;
 using UnityEngine;
@@ -58,7 +58,7 @@ namespace Unity.Physics.Tests.Base.Containers
 
             for (var i = 0; i < count; ++i)
             {
-                pool.Allocate(new PoolTestElement{ TestIndex  = i});
+                pool.Allocate(new PoolTestElement { TestIndex  = i});
                 Assert.IsTrue(pool[i].IsAllocated);
             }
 
@@ -112,7 +112,7 @@ namespace Unity.Physics.Tests.Base.Containers
             for (var i = 0; i < count; ++i)
             {
                 Assert.IsTrue(pool[i].TestIndex == i);
-                Assert.IsTrue(anotherPool[i].TestIndex==i);
+                Assert.IsTrue(anotherPool[i].TestIndex == i);
                 Assert.IsTrue(anotherPool[i].IsAllocated);
             }
         }

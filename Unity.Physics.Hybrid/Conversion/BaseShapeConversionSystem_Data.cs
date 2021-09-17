@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
@@ -14,6 +14,7 @@ namespace Unity.Physics.Authoring
         public int ConvertedBodyTransformIndex;
         public Entity BodyEntity;
         public Entity ShapeEntity;
+        public Entity ChildEntity;
         public RigidTransform BodyFromShape;
         public Hash128 Hash;
 
@@ -72,9 +73,9 @@ namespace Unity.Physics.Authoring
         public override int GetHashCode() =>
             (int)math.hash(new uint2((uint)BlobDataHash.GetHashCode(), (uint)AuthoringComponentId));
 
-        public static bool operator ==(ColliderInstanceId left, ColliderInstanceId right) => left.Equals(right);
+        public static bool operator==(ColliderInstanceId left, ColliderInstanceId right) => left.Equals(right);
 
-        public static bool operator !=(ColliderInstanceId left, ColliderInstanceId right) => !left.Equals(right);
+        public static bool operator!=(ColliderInstanceId left, ColliderInstanceId right) => !left.Equals(right);
     }
 
     public partial class BaseShapeConversionSystem<T>

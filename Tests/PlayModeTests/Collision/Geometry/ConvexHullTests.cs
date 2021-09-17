@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using NUnit.Framework;
 using Unity.Mathematics;
 using Unity.Collections;
@@ -35,14 +35,14 @@ namespace Unity.Physics.Tests.Collision.Geometry
 
         private static void TestAdd128(ulong highA, ulong lowA, ulong highB, ulong lowB, ulong highExpected, ulong lowExpected)
         {
-            Int128 sum = new Int128 { High = highA, Low = lowA } + new Int128 { High = highB, Low = lowB };
+            Int128 sum = new Int128 { High = highA, Low = lowA } +new Int128 { High = highB, Low = lowB };
             Assert.AreEqual(highExpected, sum.High);
             Assert.AreEqual(lowExpected, sum.Low);
         }
 
         private static void TestSub128(ulong highA, ulong lowA, ulong highB, ulong lowB, ulong highExpected, ulong lowExpected)
         {
-            Int128 diff = new Int128 { High = highA, Low = lowA } - new Int128 { High = highB, Low = lowB };
+            Int128 diff = new Int128 { High = highA, Low = lowA } -new Int128 { High = highB, Low = lowB };
             Assert.AreEqual(highExpected, diff.High);
             Assert.AreEqual(lowExpected, diff.Low);
         }

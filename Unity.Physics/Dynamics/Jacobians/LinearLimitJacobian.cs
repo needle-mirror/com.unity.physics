@@ -1,4 +1,4 @@
-﻿using Unity.Burst;
+using Unity.Burst;
 using Unity.Mathematics;
 using static Unity.Physics.Math;
 

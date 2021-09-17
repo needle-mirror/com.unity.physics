@@ -11,7 +11,7 @@ namespace Unity.Physics
         AtomicSafetyHandle m_TemporaryHandle;
 #endif
         int m_IsCreated;
-       
+
         public static AtomicSafetyManager Create()
         {
             var ret = new AtomicSafetyManager();
@@ -19,8 +19,8 @@ namespace Unity.Physics
             ret.m_IsCreated = 1;
             return ret;
         }
-        
-        [Conditional(SafetyChecks.ConditionalSymbol)]
+
+        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
         void CreateTemporaryHandle()
         {
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
@@ -30,7 +30,7 @@ namespace Unity.Physics
 #endif
         }
 
-        [Conditional(SafetyChecks.ConditionalSymbol)]
+        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
         void ReleaseTemporaryHandle()
         {
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
@@ -39,15 +39,15 @@ namespace Unity.Physics
 #endif
         }
 
-        [Conditional(SafetyChecks.ConditionalSymbol)]
+        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
         public void BumpTemporaryHandleVersions()
         {
             // TODO: There should be a better way to invalidate older versions...
             ReleaseTemporaryHandle();
             CreateTemporaryHandle();
         }
-        
-        [Conditional(SafetyChecks.ConditionalSymbol)]
+
+        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
         public void MarkNativeArrayAsReadOnly<T>(ref NativeArray<T> array)
             where T : struct
         {
@@ -56,13 +56,13 @@ namespace Unity.Physics
 #endif
         }
 
-        [Conditional(SafetyChecks.ConditionalSymbol)]
+        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
         static void CheckCreatedAndThrow(int isCreated)
         {
             if (isCreated == 0)
                 throw new InvalidOperationException("Atomic Safety Manager already disposed");
         }
-        
+
         public void Dispose()
         {
             CheckCreatedAndThrow(m_IsCreated);

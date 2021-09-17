@@ -71,6 +71,8 @@ namespace Unity.Physics.Tests.Authoring
         UnityMesh ReadableMesh { get; set; }
         UnityMesh MeshWithMultipleSubMeshes { get; set; }
 
+        readonly PhysicsWorldIndex k_DefaultWorldIndex = new PhysicsWorldIndex();
+
         [Test]
         public void PhysicsShapeConversionSystem_WhenBodyHasOneSiblingShape_CreatesPrimitive()
         {
@@ -81,7 +83,7 @@ namespace Unity.Physics.Tests.Authoring
             );
             Root.GetComponent<PhysicsShapeAuthoring>().SetBox(new BoxGeometry { Size = 1f, Orientation = quaternion.identity });
 
-            TestConvertedData<PhysicsCollider>(c => Assert.That(c.Value.Value.Type, Is.EqualTo(ColliderType.Box)));
+            TestConvertedSharedData<PhysicsCollider, PhysicsWorldIndex>(c => Assert.That(c.Value.Value.Type, Is.EqualTo(ColliderType.Box)), k_DefaultWorldIndex);
         }
 
         [Test]
@@ -94,7 +96,7 @@ namespace Unity.Physics.Tests.Authoring
             );
             Parent.GetComponent<PhysicsShapeAuthoring>().SetBox(new BoxGeometry { Size = 1f, Orientation = quaternion.identity });
 
-            TestConvertedData<PhysicsCollider>(
+            TestConvertedSharedData<PhysicsCollider, PhysicsWorldIndex>(
                 c =>
                 {
                     Assert.That(c.Value.Value.Type, Is.EqualTo(ColliderType.Compound));
@@ -104,7 +106,8 @@ namespace Unity.Physics.Tests.Authoring
                         Assert.That(compoundCollider->Children, Has.Length.EqualTo(1));
                         Assert.That(compoundCollider->Children[0].Collider->Type, Is.EqualTo(ColliderType.Box));
                     }
-                }
+                },
+                k_DefaultWorldIndex
             );
         }
 
@@ -119,7 +122,7 @@ namespace Unity.Physics.Tests.Authoring
             Parent.GetComponent<PhysicsShapeAuthoring>().SetBox(new BoxGeometry { Size = 1f, Orientation = quaternion.identity });
             Parent.GetComponent<PhysicsShapeAuthoring>().CollisionResponse = CollisionResponsePolicy.RaiseTriggerEvents;
 
-            TestConvertedData<PhysicsCollider>(
+            TestConvertedSharedData<PhysicsCollider, PhysicsWorldIndex>(
                 c =>
                 {
                     Assert.That(c.Value.Value.Type, Is.EqualTo(ColliderType.Compound));
@@ -138,7 +141,8 @@ namespace Unity.Physics.Tests.Authoring
                         Assert.That(math.all(math.isfinite(compoundCollider->MassProperties.MassDistribution.InertiaMatrix.c1)));
                         Assert.That(math.all(math.isfinite(compoundCollider->MassProperties.MassDistribution.InertiaMatrix.c2)));
                     }
-                }
+                },
+                k_DefaultWorldIndex
             );
         }
 
@@ -153,7 +157,7 @@ namespace Unity.Physics.Tests.Authoring
             Parent.GetComponent<PhysicsShapeAuthoring>().SetBox(new BoxGeometry { Size = 1f, Orientation = quaternion.identity });
             Child.GetComponent<PhysicsShapeAuthoring>().SetSphere(new SphereGeometry { Radius = 1f }, quaternion.identity);
 
-            TestConvertedData<PhysicsCollider>(
+            TestConvertedSharedData<PhysicsCollider, PhysicsWorldIndex>(
                 c =>
                 {
                     Assert.That(c.Value.Value.Type, Is.EqualTo(ColliderType.Compound));
@@ -166,7 +170,8 @@ namespace Unity.Physics.Tests.Authoring
                             .ToArray();
                         Assert.That(childTypes, Is.EquivalentTo(new[] { ColliderType.Box, ColliderType.Sphere }));
                     }
-                }
+                },
+                k_DefaultWorldIndex
             );
         }
 
@@ -194,10 +199,10 @@ namespace Unity.Physics.Tests.Authoring
         public unsafe void ConversionSystems_WhenMeshCollider_MultipleSubMeshes_AllSubMeshesIncluded(
             [Values(
 #if LEGACY_PHYSICS
-            typeof(LegacyMesh),
+                typeof(LegacyMesh),
 #endif
-            typeof(PhysicsShapeAuthoring)
-            )]
+                typeof(PhysicsShapeAuthoring)
+             )]
             Type shapeType
         )
         {
@@ -209,14 +214,14 @@ namespace Unity.Physics.Tests.Authoring
                 Child.GetComponent<PhysicsShapeAuthoring>().SetMesh(MeshWithMultipleSubMeshes);
 #endif
 
-            TestConvertedData<PhysicsCollider>(c =>
+            TestConvertedSharedData<PhysicsCollider, PhysicsWorldIndex>(c =>
             {
                 ref var mesh = ref ((MeshCollider*)c.ColliderPtr)->Mesh;
                 Assume.That(mesh.Sections.Length, Is.EqualTo(1), "Expected a single section on mesh collider.");
                 ref var section = ref mesh.Sections[0];
                 Assume.That(section.PrimitiveFlags.Length, Is.EqualTo(1), "Expected a single primitive on mesh collider.");
                 Assert.That(section.PrimitiveFlags[0] & Mesh.PrimitiveFlags.IsQuad, Is.EqualTo(Mesh.PrimitiveFlags.IsQuad), "Expected single quad primitive on mesh collider.");
-            });
+            }, k_DefaultWorldIndex);
         }
 
         [Test]
@@ -226,7 +231,7 @@ namespace Unity.Physics.Tests.Authoring
                 typeof(LegacyBox), typeof(LegacyCapsule), typeof(LegacySphere), typeof(LegacyMesh),
 #endif
                 typeof(PhysicsShapeAuthoring)
-            )]
+             )]
             Type shapeType
         )
         {
@@ -237,7 +242,7 @@ namespace Unity.Physics.Tests.Authoring
 #endif
 
             // conversion presumed to create valid PhysicsCollider under default conditions
-            TestConvertedData<PhysicsCollider>(c => Assert.That(c.IsValid, Is.True));
+            TestConvertedSharedData<PhysicsCollider, PhysicsWorldIndex>(c => Assert.That(c.IsValid, Is.True), k_DefaultWorldIndex);
         }
 
         [Test]
@@ -247,7 +252,7 @@ namespace Unity.Physics.Tests.Authoring
                 typeof(LegacyBox), typeof(LegacyCapsule), typeof(LegacySphere), typeof(LegacyMesh),
 #endif
                 typeof(PhysicsShapeAuthoring)
-            )]
+             )]
             Type shapeType
         )
         {
@@ -262,7 +267,7 @@ namespace Unity.Physics.Tests.Authoring
                 collider.enabled = false;
             else
 #endif
-                (c as PhysicsShapeAuthoring).enabled = false;
+            (c as PhysicsShapeAuthoring).enabled = false;
 
             // conversion presumed to create valid PhysicsCollider under default conditions
             // covered by corresponding test ConversionSystems_WhenGOHasShape_GOIsActive_AuthoringComponentEnabled_AuthoringDataConverted
@@ -271,13 +276,13 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public void ConversionSystems_WhenGOHasShape_GOIsInactive_BodyIsNotConverted(
-            [Values]Node inactiveNode,
+            [Values] Node inactiveNode,
             [Values(
 #if LEGACY_PHYSICS
                 typeof(LegacyBox), typeof(LegacyCapsule), typeof(LegacySphere), typeof(LegacyMesh),
 #endif
                 typeof(PhysicsShapeAuthoring)
-            )]
+             )]
             Type shapeType
         )
         {
@@ -348,17 +353,18 @@ namespace Unity.Physics.Tests.Authoring
             Child.transform.localPosition = k_SharedDataChildTransformation.pos;
             Child.transform.localRotation = k_SharedDataChildTransformation.rot;
 
-            TestConvertedData<PhysicsCollider>(colliders =>
+            TestConvertedSharedData<PhysicsCollider, PhysicsWorldIndex>(colliders =>
             {
                 var uniqueColliders = new HashSet<int>();
                 foreach (var c in colliders)
                     uniqueColliders.Add((int)c.ColliderPtr);
                 var numUnique = uniqueColliders.Count;
                 Assert.That(numUnique, Is.EqualTo(1), $"Expected colliders to reference the same data, but found {numUnique} different colliders.");
-            }, 2);
+            }, 2, k_DefaultWorldIndex);
         }
 
-        static readonly TestCaseData[] k_MultipleAuthoringComponentsTestCases = {
+        static readonly TestCaseData[] k_MultipleAuthoringComponentsTestCases =
+        {
             new TestCaseData(
                 new[] { typeof(PhysicsBodyAuthoring), typeof(PhysicsShapeAuthoring), typeof(PhysicsShapeAuthoring) },
                 new[] { ColliderType.Box, ColliderType.Box }
@@ -379,7 +385,7 @@ namespace Unity.Physics.Tests.Authoring
             CreateHierarchy(componentTypes, Array.Empty<Type>(), Array.Empty<Type>());
             Root.GetComponent<PhysicsShapeAuthoring>().SetBox(new BoxGeometry { Size = 1f });
 
-            TestConvertedData<PhysicsCollider>(
+            TestConvertedSharedData<PhysicsCollider, PhysicsWorldIndex>(
                 c =>
                 {
                     Assert.That(c.Value.Value.Type, Is.EqualTo(ColliderType.Compound));
@@ -392,7 +398,8 @@ namespace Unity.Physics.Tests.Authoring
                             .ToArray();
                         Assert.That(childTypes, Is.EquivalentTo(expectedColliderTypes));
                     }
-                }
+                },
+                k_DefaultWorldIndex
             );
         }
 
@@ -400,7 +407,7 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         [Ignore("Behavior is inconsistent on some platforms.")]
         public void LegacyMeshColliderConversionSystem_WhenMeshColliderHasNonReadableMesh_ThrowsException(
-            [Values]bool convex
+            [Values] bool convex
         )
         {
             CreateHierarchy(Array.Empty<Type>(), Array.Empty<Type>(), new[] { typeof(LegacyMesh) });
@@ -417,7 +424,7 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public unsafe void LegacyMeshColliderConversionSystem_WhenMultipleShapesShareInputs_CollidersShareTheSameData(
-            [Values]bool convex
+            [Values] bool convex
         )
         {
             CreateHierarchy(
@@ -433,15 +440,16 @@ namespace Unity.Physics.Tests.Authoring
             Child.transform.localPosition = k_SharedDataChildTransformation.pos;
             Child.transform.localRotation = k_SharedDataChildTransformation.rot;
 
-            TestConvertedData<PhysicsCollider>(colliders =>
+            TestConvertedSharedData<PhysicsCollider, PhysicsWorldIndex>(colliders =>
             {
                 var uniqueColliders = new HashSet<int>();
                 foreach (var c in colliders)
                     uniqueColliders.Add((int)c.ColliderPtr);
                 var numUnique = uniqueColliders.Count;
                 Assert.That(numUnique, Is.EqualTo(1), $"Expected colliders to reference the same data, but found {numUnique} different colliders.");
-            }, 2);
+            }, 2, k_DefaultWorldIndex);
         }
+
 #endif
 
         [Test]
@@ -465,14 +473,14 @@ namespace Unity.Physics.Tests.Authoring
             Parent.transform.localPosition = k_SharedDataChildTransformation.pos;
             Parent.transform.localRotation = k_SharedDataChildTransformation.rot;
 
-            TestConvertedData<PhysicsCollider>(colliders =>
+            TestConvertedSharedData<PhysicsCollider, PhysicsWorldIndex>(colliders =>
             {
                 var uniqueColliders = new HashSet<int>();
                 foreach (var c in colliders)
                     uniqueColliders.Add((int)c.ColliderPtr);
                 var numUnique = uniqueColliders.Count;
                 Assert.That(numUnique, Is.EqualTo(2), $"Expected colliders to reference unique data, but found {numUnique} different colliders.");
-            }, 2);
+            }, 2, k_DefaultWorldIndex);
         }
 
         [Test]
@@ -495,14 +503,14 @@ namespace Unity.Physics.Tests.Authoring
             // affects Child scale
             Parent.transform.localScale = new Vector3(2f, 2f, 2f);
 
-            TestConvertedData<PhysicsCollider>(colliders =>
+            TestConvertedSharedData<PhysicsCollider, PhysicsWorldIndex>(colliders =>
             {
                 var uniqueColliders = new HashSet<int>();
                 foreach (var c in colliders)
                     uniqueColliders.Add((int)c.ColliderPtr);
                 var numUnique = uniqueColliders.Count;
                 Assert.That(numUnique, Is.EqualTo(2), $"Expected colliders to reference unique data, but found {numUnique} different colliders.");
-            }, 2);
+            }, 2, k_DefaultWorldIndex);
         }
 
         [Test]
@@ -523,7 +531,7 @@ namespace Unity.Physics.Tests.Authoring
                 shape.ForceUnique = true;
             }
 
-            TestConvertedData<PhysicsCollider>(colliders =>
+            TestConvertedSharedData<PhysicsCollider, PhysicsWorldIndex>(colliders =>
             {
                 var uniqueColliders = new HashSet<int>();
                 foreach (var c in colliders)
@@ -531,7 +539,7 @@ namespace Unity.Physics.Tests.Authoring
 
                 var numUnique = uniqueColliders.Count;
                 Assert.That(numUnique, Is.EqualTo(2), $"Expected colliders to reference unique data, but found {numUnique} different colliders.");
-            }, 2);
+            }, 2, k_DefaultWorldIndex);
         }
     }
 }

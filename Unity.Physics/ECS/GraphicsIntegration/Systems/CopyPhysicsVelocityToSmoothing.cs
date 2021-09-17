@@ -1,3 +1,4 @@
+using System;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -14,49 +15,30 @@ namespace Unity.Physics.GraphicsIntegration
     /// </summary>
     [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateAfter(typeof(ExportPhysicsWorld))]
-    public class CopyPhysicsVelocityToSmoothing : SystemBase, IPhysicsSystem
+    public partial class CopyPhysicsVelocityToSmoothing : SystemBase
     {
-        JobHandle m_InputDependency;
-        JobHandle m_OutputDependency;
-
-        ExportPhysicsWorld m_ExportPhysicsWorld;
-        SmoothRigidBodiesGraphicalMotion m_SmoothRigidBodiesGraphicalMotion;
-
         /// <summary>
         /// An entity query matching dynamic rigid bodies whose motion should be smoothed.
         /// </summary>
         public EntityQuery SmoothedDynamicBodiesGroup { get; private set; }
 
-        /// <summary>
-        /// Inject an input dependency into this system's job chain.
-        /// </summary>
-        /// <param name="inputDep">The JobHandle for the dependency.</param>
-        public void AddInputDependency(JobHandle inputDep) =>
-            m_InputDependency = JobHandle.CombineDependencies(m_InputDependency, inputDep);
+        [Obsolete("AddInputDependency() has been deprecated. Please call RegisterPhysicsRuntimeSystemReadWrite() or RegisterPhysicsRuntimeSystemReadOnly() in your system's OnStartRunning() to achieve the same effect. (RemovedAfter 2021-05-01)", true)]
+        public void AddInputDependency(JobHandle inputDep) {}
 
-        /// <summary>
-        /// Get the final job handle for this system;
-        /// </summary>
-        /// <returns></returns>
-        public JobHandle GetOutputDependency() => m_OutputDependency;
+        [Obsolete("GetOutputDependency() has been deprecated. Please call RegisterPhysicsRuntimeSystemReadWrite() or RegisterPhysicsRuntimeSystemReadOnly() in your system's OnStartRunning() to achieve the same effect. (RemovedAfter 2021-05-01)", true)]
+        public JobHandle GetOutputDependency() => default;
 
         protected override void OnCreate()
         {
             base.OnCreate();
-
-            m_ExportPhysicsWorld = World.GetOrCreateSystem<ExportPhysicsWorld>();
-            m_SmoothRigidBodiesGraphicalMotion = World.GetOrCreateSystem<SmoothRigidBodiesGraphicalMotion>();
 
             SmoothedDynamicBodiesGroup = GetEntityQuery(new EntityQueryDesc
             {
                 All = new ComponentType[]
                 {
                     typeof(PhysicsVelocity),
-                    typeof(PhysicsGraphicalSmoothing)
-                },
-                None = new ComponentType[]
-                {
-                    typeof(PhysicsExclude)
+                    typeof(PhysicsGraphicalSmoothing),
+                    typeof(PhysicsWorldIndex)
                 },
                 Options = EntityQueryOptions.FilterWriteGroup
             });
@@ -66,25 +48,11 @@ namespace Unity.Physics.GraphicsIntegration
 
         protected override void OnUpdate()
         {
-            Dependency = JobHandle.CombineDependencies(Dependency, m_ExportPhysicsWorld.GetOutputDependency());
-
-            // Combine implicit input dependency with the user one
-            Dependency = JobHandle.CombineDependencies(Dependency, m_InputDependency);
-
             Dependency = new CopyPhysicsVelocityJob
             {
                 PhysicsVelocityType = GetComponentTypeHandle<PhysicsVelocity>(true),
                 PhysicsGraphicalSmoothingType = GetComponentTypeHandle<PhysicsGraphicalSmoothing>()
-            }.ScheduleParallel(SmoothedDynamicBodiesGroup, 1, Dependency);
-
-            // Combine implicit output dependency with user one
-            m_OutputDependency = Dependency;
-
-            // Inform next system in the pipeline of its dependency
-            m_SmoothRigidBodiesGraphicalMotion.AddInputDependency(m_OutputDependency);
-
-            // Invalidate input dependency since it's been used by now
-            m_InputDependency = default;
+            }.ScheduleParallel(SmoothedDynamicBodiesGroup, ScheduleGranularity.Chunk, limitToEntityArray: default, Dependency);
         }
 
         [BurstCompile]

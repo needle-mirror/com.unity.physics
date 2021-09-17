@@ -13,7 +13,7 @@ namespace Unity.Physics.Authoring
     // A system which draws all contact points produced by the physics step system
     [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateBefore(typeof(StepPhysicsWorld))]
-    public class DisplayContactsSystem : SystemBase
+    public partial class DisplayContactsSystem : SystemBase
     {
         StepPhysicsWorld m_StepWorld;
         DebugStream m_DebugStreamSystem;

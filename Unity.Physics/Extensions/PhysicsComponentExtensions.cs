@@ -1,5 +1,3 @@
-using System;
-using System.ComponentModel;
 using Unity.Mathematics;
 using Unity.Transforms;
 
@@ -192,9 +190,9 @@ namespace Unity.Physics.Extensions
             // to the surface point on the rigidbody.
             // If explosionPosition is inside the rigidbody, or the rigidbody has no active colliders,
             // then the center of mass is used instead of the closest point on the surface.
-            if (!bodyCollider.Value.Value.CalculateDistance(pointDistanceInput, out DistanceHit closestHit))
+            if (!bodyCollider.IsValid || !bodyCollider.Value.Value.CalculateDistance(pointDistanceInput, out DistanceHit closestHit))
             {
-                // Return now if the collider is out of range.
+                // Return now if the collider is invalid or out of range.
                 return;
             }
 

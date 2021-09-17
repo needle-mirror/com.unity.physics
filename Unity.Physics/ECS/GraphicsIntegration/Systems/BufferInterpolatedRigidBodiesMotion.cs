@@ -1,3 +1,4 @@
+using System;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -22,35 +23,21 @@ namespace Unity.Physics.GraphicsIntegration
     /// </summary>
     [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateAfter(typeof(BuildPhysicsWorld)), UpdateBefore(typeof(ExportPhysicsWorld))]
-    public class BufferInterpolatedRigidBodiesMotion : SystemBase, IPhysicsSystem
+    public partial class BufferInterpolatedRigidBodiesMotion : SystemBase
     {
-        JobHandle m_InputDependency;
-        JobHandle m_OutputDependency;
-
-        ExportPhysicsWorld m_ExportPhysicsWorldSystem;
-
         /// <summary>
         /// An entity query matching dynamic rigid bodies whose graphical motion should be interpolated.
         /// </summary>
         public EntityQuery InterpolatedDynamicBodiesGroup { get; private set; }
 
-        /// <summary>
-        /// Inject an input dependency into this system's job chain.
-        /// </summary>
-        /// <param name="inputDep">The JobHandle for the dependency.</param>
-        public void AddInputDependency(JobHandle inputDep) =>
-            m_InputDependency = JobHandle.CombineDependencies(m_InputDependency, inputDep);
+        [Obsolete("AddInputDependency() has been deprecated. Please call RegisterPhysicsRuntimeSystemReadWrite() or RegisterPhysicsRuntimeSystemReadOnly() in your system's OnStartRunning() to achieve the same effect. (RemovedAfter 2021-05-01)", true)]
+        public void AddInputDependency(JobHandle inputDep) {}
 
-        /// <summary>
-        /// Get the final job handle for this system;
-        /// </summary>
-        /// <returns></returns>
-        public JobHandle GetOutputDependency() => m_OutputDependency;
+        [Obsolete("GetOutputDependency() has been deprecated. Please call RegisterPhysicsRuntimeSystemReadWrite() or RegisterPhysicsRuntimeSystemReadOnly() in your system's OnStartRunning() to achieve the same effect. (RemovedAfter 2021-05-01)", true)]
+        public JobHandle GetOutputDependency() => default;
 
         protected override void OnCreate()
         {
-            m_ExportPhysicsWorldSystem = World.GetOrCreateSystem<ExportPhysicsWorld>();
-
             InterpolatedDynamicBodiesGroup = GetEntityQuery(new EntityQueryDesc
             {
                 All = new ComponentType[]
@@ -58,11 +45,8 @@ namespace Unity.Physics.GraphicsIntegration
                     typeof(PhysicsVelocity),
                     typeof(Translation),
                     typeof(Rotation),
-                    typeof(PhysicsGraphicalInterpolationBuffer)
-                },
-                None = new ComponentType[]
-                {
-                    typeof(PhysicsExclude)
+                    typeof(PhysicsGraphicalInterpolationBuffer),
+                    typeof(PhysicsWorldIndex)
                 },
                 Options = EntityQueryOptions.FilterWriteGroup
             });
@@ -72,25 +56,13 @@ namespace Unity.Physics.GraphicsIntegration
 
         protected override void OnUpdate()
         {
-            // Combine implicit input dependency with the user one
-            Dependency = JobHandle.CombineDependencies(Dependency, m_InputDependency);
-
             Dependency = new UpdateInterpolationBuffersJob
             {
                 TranslationType = GetComponentTypeHandle<Translation>(true),
                 RotationType = GetComponentTypeHandle<Rotation>(true),
                 PhysicsVelocityType = GetComponentTypeHandle<PhysicsVelocity>(true),
                 InterpolationBufferType = GetComponentTypeHandle<PhysicsGraphicalInterpolationBuffer>()
-            }.ScheduleParallel(InterpolatedDynamicBodiesGroup, 1, Dependency);
-
-            // Combine implicit output dependency with user one
-            m_OutputDependency = Dependency;
-
-            // Inform next system in the pipeline of its dependency
-            m_ExportPhysicsWorldSystem.AddInputDependency(m_OutputDependency);
-
-            // Invalidate input dependency since it's been used by now
-            m_InputDependency = default;
+            }.ScheduleParallel(InterpolatedDynamicBodiesGroup, ScheduleGranularity.Chunk, limitToEntityArray: default, Dependency);
         }
 
         [BurstCompile]

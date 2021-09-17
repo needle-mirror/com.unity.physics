@@ -8,17 +8,16 @@ namespace Unity.Physics
     // A container of user callbacks, to run during scheduling of the simulation jobs
     public class SimulationCallbacks
     {
-        // Callbacks that are invoked after each simulation phase (no callback needed after last phase)
+        // Callbacks that are invoked after certain simulation phase (where user input can be useful)
         public enum Phase
         {
             PostCreateDispatchPairs,
             PostCreateContacts,
-            PostCreateContactJacobians,
-            PostSolveJacobians
+            PostCreateContactJacobians
         }
 
         // this needs to match the number of phase values above
-        private static readonly int k_NumCallbacks = 4;
+        private static readonly int k_NumCallbacks = 3;
 
         public delegate JobHandle Callback(ref ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps);
 

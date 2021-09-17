@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -57,7 +57,7 @@ namespace Unity.Physics
         // Collider keys for the collision events
         public ColliderKeyPair ColliderKeys
         {
-            get => HasContactManifold ? AccessColliderKeys() : ColliderKeyPair.Empty;
+            get => HasContactManifold? AccessColliderKeys() : ColliderKeyPair.Empty;
             set
             {
                 if (HasContactManifold)
@@ -71,7 +71,7 @@ namespace Unity.Physics
         public bool HasMassFactors => (Flags & JacobianFlags.EnableMassFactors) != 0;
         public MassFactors MassFactors
         {
-            get => HasMassFactors ? AccessMassFactors() : MassFactors.Default;
+            get => HasMassFactors? AccessMassFactors() : MassFactors.Default;
             set
             {
                 if (HasMassFactors)
@@ -85,7 +85,7 @@ namespace Unity.Physics
         public bool HasSurfaceVelocity => (Flags & JacobianFlags.EnableSurfaceVelocity) != 0;
         public SurfaceVelocity SurfaceVelocity
         {
-            get => HasSurfaceVelocity ? AccessSurfaceVelocity() : new SurfaceVelocity();
+            get => HasSurfaceVelocity? AccessSurfaceVelocity() : new SurfaceVelocity();
             set
             {
                 if (HasSurfaceVelocity)
@@ -267,7 +267,29 @@ namespace Unity.Physics
     // Helper functions for working with Jacobians
     static class JacobianUtilities
     {
-        public static void CalculateTauAndDamping(float springFrequency, float springDampingRatio, float timestep, int iterations, out float tau, out float damping)
+        // This is the inverse function to CalculateConstraintTauAndDamping
+        // Given a final Tau and Damping you can get the original Spring Frequency and Damping for a given solver step
+        // See Unity.Physics.Constraint struct for discussion about default Spring Frequency and Damping values.
+        public static void CalculateSpringFrequencyAndDamping(float constraintTau, float constraintDamping, float timestep, int iterations, out float springFrequency, out float springDamping)
+        {
+            int n = iterations;
+            float h = timestep;
+            float hh = h * h;
+            float a = 1.0f - constraintDamping;
+            float aSum = 1.0f;
+            for (int i = 1; i < n; i++)
+            {
+                aSum += math.pow(a, i);
+            }
+
+            float w = math.sqrt(constraintTau * aSum / math.pow(a, n)) / h;
+            float ww = w * w;
+            springFrequency = w / (2.0f * math.PI);
+            springDamping = (math.pow(a, -n) - 1 - hh * ww) / (2.0f * h * w);
+        }
+
+        // This is the inverse function to CalculateSpringFrequencyAndDamping
+        public static void CalculateConstraintTauAndDamping(float springFrequency, float springDamping, float timestep, int iterations, out float constraintTau, out float constraintDamping)
         {
             // TODO
             // - it's a significant amount of work to calculate tau and damping.  They depend on step length, so they have to be calculated each step.
@@ -276,7 +298,7 @@ namespace Unity.Physics
             //   with step length.  Can we estimate or bound that error and compensate for it?
 
             /*
-            
+
             How to derive these formulas for tau and damping:
 
             1) implicit euler integration of a damped spring
@@ -311,7 +333,7 @@ namespace Unity.Physics
 
             float h = timestep;
             float w = springFrequency * 2.0f * (float)math.PI; // convert oscillations/sec to radians/sec
-            float z = springDampingRatio;
+            float z = springDamping;
             float hw = h * w;
             float hhww = hw * hw;
 
@@ -336,13 +358,8 @@ namespace Unity.Physics
                 }
             }
 
-            damping = 1 - a;
-            tau = hhww * aExp / aSum;
-        }
-
-        public static void CalculateTauAndDamping(Constraint constraint, float timestep, int iterations, out float tau, out float damping)
-        {
-            CalculateTauAndDamping(constraint.SpringFrequency, constraint.SpringDamping, timestep, iterations, out tau, out damping);
+            constraintDamping = 1 - a;
+            constraintTau = hhww * aExp / aSum;
         }
 
         // Returns x - clamp(x, min, max)

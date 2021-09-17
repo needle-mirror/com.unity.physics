@@ -33,7 +33,7 @@ namespace Unity.Physics.Editor
                 "Restitution",
                 "Specifies how bouncy the object will be when colliding with other surfaces, " +
                 "as well as what value should be used when colliding with an object that has a different value."
-                );
+            );
             public static readonly GUIContent CollisionResponseLabel = EditorGUIUtility.TrTextContent(
                 "Collision Response",
                 "Specifies whether the shape should collide normally, raise trigger events when intersecting other shapes, " +

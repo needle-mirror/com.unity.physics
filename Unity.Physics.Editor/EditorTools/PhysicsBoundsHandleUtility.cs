@@ -32,11 +32,12 @@ namespace Unity.Physics.Editor
                 float3 cameraPos = currentCamera.transform.position;
                 float3 worldPos = Handles.matrix.MultiplyPoint(localPos);
                 cosV = math.dot(math.normalize(cameraPos - worldPos), worldDir);
-            } else
+            }
+            else
             {
                 float3 cameraForward = currentCamera == null ? Vector3.forward : currentCamera.transform.forward;
                 cosV = math.dot(-cameraForward, worldDir);
-            } 
+            }
 
             return cosV < -0.0001f;
         }
@@ -66,7 +67,7 @@ namespace Unity.Physics.Editor
             int a = normalAxis;
             int b = k_NextAxis[a];
             int c = k_NextAxis[b];
-            
+
             cornerRadius = math.abs(cornerRadius);
             size *= 0.5f;
             var normal = new float3 { [a] = size[a] };
@@ -97,8 +98,7 @@ namespace Unity.Physics.Editor
                 s_FacePoints[i++] = ctr + new float3 { [b] = size[b], [c] = size[c] };
                 points = s_FacePoints;
             }
-            else
-            if (math.abs(size[c]) >= kDistanceEpsilon)
+            else if (math.abs(size[c]) >= kDistanceEpsilon)
             {
                 var i = 0;
                 s_LinePoints[i++] = ctr + new float3 { [b] = size[b], [c] = size[c] };
@@ -177,7 +177,7 @@ namespace Unity.Physics.Editor
                 cameraForward = cameraToCenter;
 
             var normals = new float3x3
-            { 
+            {
                 c0 = math.normalize(math.cross(axes[1], axes[2])),
                 c1 = math.normalize(math.cross(axes[2], axes[0])),
                 c2 = math.normalize(math.cross(axes[0], axes[1]))
@@ -186,10 +186,10 @@ namespace Unity.Physics.Editor
             corner = new Corner
             {
                 angle           = new float3(
-                                        Math.Angle(axes[0], axes[1]),
-                                        Math.Angle(axes[1], axes[2]),
-                                        Math.Angle(axes[2], axes[0])
-                                    ),
+                    Math.Angle(axes[0], axes[1]),
+                    Math.Angle(axes[1], axes[2]),
+                    Math.Angle(axes[2], axes[0])
+                    ),
                 intersections   = default,
                 points          = default,
                 splitAxis       = default,
@@ -263,17 +263,18 @@ namespace Unity.Physics.Editor
             var normals         = corner.normals;
             var origin          = corner.position;
             var radius          = corner.radius;
-                
+
             if (corner.splitCount <= 1)
             {
                 AdjustMidpointHandleColor(corner.isBackFaced);
                 if (showAxis[0]) Handles.DrawWireArc(origin, normals[0], axes[1], corner.angle[1], radius);
                 if (showAxis[1]) Handles.DrawWireArc(origin, normals[1], axes[2], corner.angle[2], radius);
                 if (showAxis[2]) Handles.DrawWireArc(origin, normals[2], axes[0], corner.angle[0], radius);
-            } else
+            }
+            else
             {
                 var angleLength = Math.SignedAngle(Math.ProjectOnPlane(intersections[0], corner.cameraForward),
-                                                   Math.ProjectOnPlane(intersections[1], corner.cameraForward), corner.cameraForward);
+                    Math.ProjectOnPlane(intersections[1], corner.cameraForward), corner.cameraForward);
                 bool reversePolarity = angleLength < 0;
                 if (reversePolarity)
                     Handles.DrawWireArc(origin, corner.cameraForward, corner.points[1] - origin, -angleLength, radius);
@@ -284,8 +285,8 @@ namespace Unity.Physics.Editor
                 var backfacedColor = GetStateColor(true);
 
                 var axesBackfaced = new bool3(math.length(intersections[0] - axes[0]) < kDistanceEpsilon || math.length(intersections[1] - axes[0]) < kDistanceEpsilon,
-                                              math.length(intersections[0] - axes[1]) < kDistanceEpsilon || math.length(intersections[1] - axes[1]) < kDistanceEpsilon,
-                                              math.length(intersections[0] - axes[2]) < kDistanceEpsilon || math.length(intersections[1] - axes[2]) < kDistanceEpsilon);
+                    math.length(intersections[0] - axes[1]) < kDistanceEpsilon || math.length(intersections[1] - axes[1]) < kDistanceEpsilon,
+                    math.length(intersections[0] - axes[2]) < kDistanceEpsilon || math.length(intersections[1] - axes[2]) < kDistanceEpsilon);
 
                 var color1 = reversePolarity ? color : backfacedColor;
                 var color2 = reversePolarity ? backfacedColor : color;
@@ -294,16 +295,15 @@ namespace Unity.Physics.Editor
                 {
                     if (corner.splitAxis[0][C] == corner.splitAxis[1][C])
                     {
-                        if (!axesBackfaced[A]) { angleLength = Math.Angle(intersections[0], axes[A]); axesBackfaced[A] = (angleLength < kDegreeEpsilon || angleLength > corner.angle[C] - kDegreeEpsilon); }
-                        if (!axesBackfaced[B]) { angleLength = Math.Angle(intersections[1], axes[A]); axesBackfaced[B] = (angleLength < kDegreeEpsilon || angleLength > corner.angle[C] - kDegreeEpsilon); }
+                        if (!axesBackfaced[A]) { angleLength = Math.Angle(intersections[0], axes[A]); axesBackfaced[A] = (angleLength<kDegreeEpsilon || angleLength> corner.angle[C] - kDegreeEpsilon); }
+                        if (!axesBackfaced[B]) { angleLength = Math.Angle(intersections[1], axes[A]); axesBackfaced[B] = (angleLength<kDegreeEpsilon || angleLength> corner.angle[C] - kDegreeEpsilon); }
                     }
-                    else
-                    if (corner.splitAxis[0][C])
+                    else if (corner.splitAxis[0][C])
                     {
                         if (showAxis[C])
                         {
                             angleLength = Math.Angle(intersections[0], axes[A]);
-                            Handles.color = color1; Handles.DrawWireArc(origin, normals[C], intersections[0],                 - angleLength, radius);
+                            Handles.color = color1; Handles.DrawWireArc(origin, normals[C], intersections[0],                 -angleLength, radius);
                             Handles.color = color2; Handles.DrawWireArc(origin, normals[C], intersections[0], corner.angle[A] - angleLength, radius);
                         }
                         axesBackfaced[A] = true;
@@ -314,7 +314,7 @@ namespace Unity.Physics.Editor
                         if (showAxis[C])
                         {
                             angleLength = Math.Angle(intersections[1], axes[A]);
-                            Handles.color = color2; Handles.DrawWireArc(origin, normals[C], intersections[1],                 - angleLength, radius);
+                            Handles.color = color2; Handles.DrawWireArc(origin, normals[C], intersections[1],                 -angleLength, radius);
                             Handles.color = color1; Handles.DrawWireArc(origin, normals[C], intersections[1], corner.angle[A] - angleLength, radius);
                         }
                         axesBackfaced[B] = true;

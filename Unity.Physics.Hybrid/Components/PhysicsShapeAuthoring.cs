@@ -30,14 +30,14 @@ namespace Unity.Physics.Authoring
     sealed class UnimplementedShapeException : NotImplementedException
     {
         public UnimplementedShapeException(ShapeType shapeType)
-            : base($"Unknown shape type {shapeType} requires explicit implementation") { }
+            : base($"Unknown shape type {shapeType} requires explicit implementation") {}
     }
 
     [AddComponentMenu("DOTS/Physics/Physics Shape")]
     [HelpURL(HelpURLs.PhysicsShapeAuthoring)]
     public sealed class PhysicsShapeAuthoring : MonoBehaviour, IInheritPhysicsMaterialProperties, ISerializationCallbackReceiver
     {
-        PhysicsShapeAuthoring() { }
+        PhysicsShapeAuthoring() {}
 
         [Serializable]
         struct CylindricalProperties
@@ -85,7 +85,7 @@ namespace Unity.Physics.Authoring
         [Tooltip(
             "Specifies the minimum weight of a skinned vertex assigned to this shape and/or its transform children required for it to be included for automatic detection. " +
             "A value of 0 will include all points with any weight assigned to this shape's hierarchy."
-        )]
+         )]
         [Range(0f, 1f)]
         float m_MinimumSkinnedVertexWeight = 0.1f;
 
@@ -527,7 +527,7 @@ namespace Unity.Physics.Authoring
                             {
                                 var subMesh = meshData[0].GetSubMesh(sm);
                                 for (int i = subMesh.indexStart, count = 0; count < subMesh.indexCount; i += 3, count += 3)
-                                    triangles.Add((int3)new uint3(offset + indices16[i], offset + indices16[i + 1], offset + indices16[i + 2]));
+                                    triangles.Add((int3) new uint3(offset + indices16[i], offset + indices16[i + 1], offset + indices16[i + 2]));
                             }
                             break;
                         case IndexFormat.UInt32:
@@ -539,7 +539,7 @@ namespace Unity.Physics.Authoring
                             {
                                 var subMesh = meshData[0].GetSubMesh(sm);
                                 for (int i = subMesh.indexStart, count = 0; count < subMesh.indexCount; i += 3, count += 3)
-                                    triangles.Add((int3)new uint3(offset + indices32[i], offset + indices32[i + 1], offset + indices32[i + 2]));
+                                    triangles.Add((int3) new uint3(offset + indices32[i], offset + indices32[i + 1], offset + indices32[i + 2]));
                             }
                             break;
                     }
@@ -732,7 +732,7 @@ namespace Unity.Physics.Authoring
         [SerializeField]
         int m_SerializedVersion = 0;
 
-        void ISerializationCallbackReceiver.OnBeforeSerialize() { }
+        void ISerializationCallbackReceiver.OnBeforeSerialize() {}
 
         void ISerializationCallbackReceiver.OnAfterDeserialize() => UpgradeVersionIfNecessary();
 
@@ -746,6 +746,7 @@ namespace Unity.Physics.Authoring
                     m_SerializedVersion = 1;
             }
         }
+
 #pragma warning restore 618
 
         static void Validate(ref CylindricalProperties props)
@@ -797,7 +798,7 @@ namespace Unity.Physics.Authoring
 
         // matrix to transform point from shape space into world space
         internal float4x4 GetShapeToWorldMatrix() =>
-             new float4x4(Math.DecomposeRigidBodyTransform(transform.localToWorldMatrix));
+            new float4x4(Math.DecomposeRigidBodyTransform(transform.localToWorldMatrix));
 
         // matrix to transform point from object's local transform matrix into shape space
         internal float4x4 GetLocalToShapeMatrix() =>

@@ -12,19 +12,21 @@ namespace Unity.Physics.Authoring
     /// Create and dispatch a DisplayMassPropertiesJob
     [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateAfter(typeof(StepPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
-    public class DisplayMassPropertiesSystem : SystemBase
+    public partial class DisplayMassPropertiesSystem : SystemBase
     {
         BuildPhysicsWorld m_BuildPhysicsWorldSystem;
-        StepPhysicsWorld m_StepPhysicsWorld;
-        EndFramePhysicsSystem m_EndFramePhysicsSystem;
         DebugStream m_DebugStreamSystem;
 
         protected override void OnCreate()
         {
             m_BuildPhysicsWorldSystem = World.GetOrCreateSystem<BuildPhysicsWorld>();
-            m_StepPhysicsWorld = World.GetOrCreateSystem<StepPhysicsWorld>();
-            m_EndFramePhysicsSystem = World.GetOrCreateSystem<EndFramePhysicsSystem>();
             m_DebugStreamSystem = World.GetOrCreateSystem<DebugStream>();
+        }
+
+        protected override void OnStartRunning()
+        {
+            base.OnStartRunning();
+            this.RegisterPhysicsRuntimeSystemReadOnly();
         }
 
         protected override void OnUpdate()
@@ -34,17 +36,12 @@ namespace Unity.Physics.Authoring
                 return;
             }
 
-            var handle = JobHandle.CombineDependencies(Dependency, m_StepPhysicsWorld.FinalSimulationJobHandle);
-
-            handle = new DisplayMassPropertiesJob
+            Dependency = new DisplayMassPropertiesJob
             {
                 OutputStream = m_DebugStreamSystem.GetContext(1),
                 MotionDatas = m_BuildPhysicsWorldSystem.PhysicsWorld.MotionDatas,
                 MotionVelocities = m_BuildPhysicsWorldSystem.PhysicsWorld.MotionVelocities
-            }.Schedule(handle);
-
-            m_EndFramePhysicsSystem.AddInputDependency(handle);
-            Dependency = handle;
+            }.Schedule(Dependency);
         }
 
         // Job to write mass properties info to a DebugStream for any moving bodies

@@ -35,22 +35,22 @@ namespace Unity.Physics.Tests.Dynamics.CollisionEvents
             // Initialize 3 contact points
             collisionEventData.Value.AccessContactPoint(0) =
                 new ContactPoint
-                {
-                    Distance = 0.177905f,
-                    Position = new float3(-22.744950f, 2.585318f, -50.108990f)
-                };
+            {
+                Distance = 0.177905f,
+                Position = new float3(-22.744950f, 2.585318f, -50.108990f)
+            };
             collisionEventData.Value.AccessContactPoint(1) =
                 new ContactPoint
-                {
-                    Distance = 0.276652f,
-                    Position = new float3(-20.731140f, 2.486506f, -50.322240f)
-                };
+            {
+                Distance = 0.276652f,
+                Position = new float3(-20.731140f, 2.486506f, -50.322240f)
+            };
             collisionEventData.Value.AccessContactPoint(2) =
                 new ContactPoint
-                {
-                    Distance = 0.278534f,
-                    Position = new float3(-20.766140f, 2.484623f, -50.652630f)
-                };
+            {
+                Distance = 0.278534f,
+                Position = new float3(-20.766140f, 2.484623f, -50.652630f)
+            };
 
             // Wrapping collision event
             CollisionEvent collisionEvent = new CollisionEvent();

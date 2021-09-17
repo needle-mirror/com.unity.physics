@@ -159,7 +159,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             };
 
             var ex = Assert.Throws<ArgumentException>(() => PolygonCollider.CreateQuad(vertices[0], vertices[1], vertices[2],
-            vertices[3]));
+                vertices[3]));
             Assert.That(ex.ParamName, Is.EqualTo($"vertex{errantArg}"));
         }
 
@@ -169,14 +169,14 @@ namespace Unity.Physics.Tests.Collision.Colliders
             3.4f, 2.7f, 1.0f,
             -3.4f, 1.2f, 1.1f,
             TestName = "Sorted quad vertices"
-        )]
+         )]
         [TestCase(
             -4.5f, -0.30f, 1.0f,
             3.4f, 2.7f, 1.0f,
             3.4f, -0.7f, 1.0f,
             -3.4f, 1.2f, 1.1f,
             TestName = "Unsorted quad vertices"
-        )]
+         )]
         public void PolygonCollider_CreateQuad_WhenNotCoplanar_Throws(
             float v00, float v01, float v02,
             float v10, float v11, float v12,
@@ -194,6 +194,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
                 );
             });
         }
+
 #endif
 
         #endregion
@@ -288,7 +289,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         public void TestCalculateAabbTransformedQuad()
         {
             float3[] vertices =
-{
+            {
                 new float3(-4.5f, 0.0f, 1.0f),
                 new float3(3.4f, 0.7f, 1.0f),
                 new float3(3.4f, 2.7f, 1.0f),
@@ -334,7 +335,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         public void TestMassPropertiesQuad()
         {
             float3[] vertices =
-{
+            {
                 new float3(-1.1f, -0.4f, 0.0f),
                 new float3(0.8f, -0.1f, 0.0f),
                 new float3(1.2f, 1.3f, 0.0f),

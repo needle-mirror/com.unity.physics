@@ -69,6 +69,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             var ex = Assert.Throws<ArgumentException>(() => SphereCollider.Create(geometry));
             Assert.That(ex.Message, Does.Match(nameof(SphereGeometry.Radius)));
         }
+
 #endif
 
         #endregion
@@ -114,7 +115,6 @@ namespace Unity.Physics.Tests.Collision.Colliders
             Aabb actual = sphereCollider.Value.CalculateAabb(new RigidTransform(rotation, translation));
             TestUtils.AreEqual(expected.Min, actual.Min, 1e-3f);
             TestUtils.AreEqual(expected.Max, actual.Max, 1e-3f);
-
         }
 
         /// <summary>

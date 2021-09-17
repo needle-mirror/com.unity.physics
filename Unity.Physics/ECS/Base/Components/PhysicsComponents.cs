@@ -1,3 +1,4 @@
+using System;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -11,7 +12,31 @@ namespace Unity.Physics
     /// Add this tag to a body or joint to exclude it from the physics world.
     /// This allows you to retain all of its other data, but temporarily ignore it for purposes of physics
     /// </summary>
-    public struct PhysicsExclude : IComponentData { }
+    [Obsolete("PhysicsExclude will be deprecated soon. Instead of adding PhysicsExclude, please remove PhysicsWorldIndex from entities you want to exclude from all physics worlds. (RemovedAfter 2021-10-01)", false)]
+    public struct PhysicsExclude : IComponentData {}
+
+    /// <summary>
+    /// Shared component for entities that belong to a physics world. Default physics world is built in <see cref="Systems.BuildPhysicsWorld"/>, from entities that have Value of 0.
+    /// </summary>
+    public struct PhysicsWorldIndex : ISharedComponentData, IEquatable<PhysicsWorldIndex>
+    {
+        /// <summary>
+        /// Index of the physics world that this entity belongs to.
+        /// </summary>
+        public uint Value;
+
+        /// <summary>
+        /// Constructor taking the physics world index, with default value of 0 (used for default physics world).
+        /// </summary>
+        public PhysicsWorldIndex(uint worldIndex = 0)
+        {
+            Value = worldIndex;
+        }
+
+        public bool Equals(PhysicsWorldIndex other) => Value == other.Value;
+
+        public override int GetHashCode() => (int)Value;
+    }
 
     // The collision geometry of a rigid body.
     // If not present, the rigid body cannot collide with anything.
@@ -23,7 +48,17 @@ namespace Unity.Physics
         public unsafe Collider* ColliderPtr => (Collider*)Value.GetUnsafePtr();
         public MassProperties MassProperties => Value.IsCreated ? Value.Value.MassProperties : MassProperties.UnitSphere;
     }
-    
+
+    /// <summary>
+    /// A buffer element used to associate an original Entity with a collider key in a <see cref="CompoundCollider"/>.
+    /// </summary>
+    [InternalBufferCapacity(16)]
+    public struct PhysicsColliderKeyEntityPair : IBufferElementData
+    {
+        public ColliderKey Key;
+        public Entity Entity;
+    }
+
     // The mass properties of a rigid body.
     // If not present, the rigid body has infinite mass and inertia.
     public struct PhysicsMass : IComponentData
@@ -35,6 +70,10 @@ namespace Unity.Physics
 
         public float3 CenterOfMass { get => Transform.pos; set => Transform.pos = value; }
         public quaternion InertiaOrientation { get => Transform.rot; set => Transform.rot = value; }
+
+        public bool HasInfiniteMass => InverseMass == 0.0f;
+        public bool HasInfiniteInertia => !math.any(InverseInertia);
+        public bool IsKinematic => HasInfiniteMass && HasInfiniteInertia;
 
         public static PhysicsMass CreateDynamic(MassProperties massProperties, float mass)
         {
@@ -66,10 +105,12 @@ namespace Unity.Physics
     /// This allows you to retain its dynamic mass properties on its <see cref="PhysicsMass"/> component, but have the physics solver temporarily treat it as if it were kinematic.
     /// Kinematic bodies will have infinite mass and inertia. They should also not be affected by gravity.
     /// Hence, if IsKinematic is non-zero the value in an associated <see cref="PhysicsGravityFactor"/> component is also ignored.
+    /// If SetVelocityToZero is non-zero then the value in an associated <see cref="PhysicsVelocity"/> component is also ignored.
     /// </summary>
     public struct PhysicsMassOverride : IComponentData
     {
         public byte IsKinematic;
+        public byte SetVelocityToZero;
     }
 
     /// <summary>
@@ -167,72 +208,70 @@ namespace Unity.Physics
     }
 
     /// <summary>
-    /// Proxy component data structure for CollisionWorld to use in DataFlowGraph nodes. 
+    /// Proxy component data structure for CollisionWorld to use in DataFlowGraph nodes.
     /// </summary>
     /// <seealso cref="ColliderCastNode"/>
     /// <seealso cref="RaycastNode"/>
     public unsafe struct CollisionWorldProxy : IComponentData
     {
-        struct NativeArrayProxy<T> where T : struct
+        struct NativeArrayProxy
         {
             void* Ptr;
             int Size;
-           
+
             public bool IsCreated => Ptr != null;
+
+            public static NativeArrayProxy Create<T>(NativeArray<T> src) where T : struct
+            {
+                return new NativeArrayProxy() { Ptr = src.GetUnsafeReadOnlyPtr(), Size = src.Length };
+            }
+
+            public static NativeArrayProxy Create<T>(NativeSlice<T> src) where T : struct
+            {
+                return new NativeArrayProxy() { Ptr = src.GetUnsafeReadOnlyPtr(), Size = src.Length };
+            }
             
-            public NativeArrayProxy(NativeArray<T> nativeArray)
-            {
-                Ptr = nativeArray.GetUnsafeReadOnlyPtr();
-                Size = nativeArray.Length;
-            }
-
-            public NativeArrayProxy(NativeSlice<T> nativeSlice)
-            {
-                Ptr = nativeSlice.GetUnsafeReadOnlyPtr();
-                Size = nativeSlice.Length;
-            }
-
-            public NativeArray<T> ToArray(AtomicSafetyManager* safetyManager)
+            public NativeArray<T> ToArray<T>(AtomicSafetyManager* safetyManager) where T : struct
             {
                 var nativeArray = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<T>((void*)Ptr, Size, Allocator.Invalid);
-                safetyManager->MarkNativeArrayAsReadOnly(ref nativeArray); 
+                safetyManager->MarkNativeArrayAsReadOnly(ref nativeArray);
                 return nativeArray;
             }
         }
 
         struct BroadPhaseTreeProxy
         {
-            NativeArrayProxy<BoundingVolumeHierarchy.Node> Nodes;
-            NativeArrayProxy<CollisionFilter> NodeFilters;
-            NativeArrayProxy<CollisionFilter> BodyFilters;
-            NativeArrayProxy<BoundingVolumeHierarchy.Builder.Range> Ranges;
-            NativeArrayProxy<int> BranchCount;
+            NativeArrayProxy Nodes;
+            NativeArrayProxy NodeFilters;
+            NativeArrayProxy BodyFilters;
+            NativeArrayProxy Ranges;
+            NativeArrayProxy BranchCount;
 
             public bool IsCreated => Nodes.IsCreated && NodeFilters.IsCreated && BodyFilters.IsCreated && Ranges.IsCreated && BranchCount.IsCreated;
-            
+
             public BroadPhaseTreeProxy(Broadphase.Tree tree)
             {
-                Nodes = new NativeArrayProxy<BoundingVolumeHierarchy.Node>(tree.Nodes);
-                NodeFilters = new NativeArrayProxy<CollisionFilter>(tree.NodeFilters);
-                BodyFilters = new NativeArrayProxy<CollisionFilter>(tree.BodyFilters);
-                Ranges = new NativeArrayProxy<BoundingVolumeHierarchy.Builder.Range>(tree.Ranges);
-                BranchCount = new NativeArrayProxy<int>(tree.BranchCount);
+                Nodes = NativeArrayProxy.Create(tree.Nodes);
+                NodeFilters = NativeArrayProxy.Create(tree.NodeFilters);
+                BodyFilters = NativeArrayProxy.Create(tree.BodyFilters);
+                Ranges = NativeArrayProxy.Create(tree.Ranges);
+                BranchCount = NativeArrayProxy.Create(tree.BranchCount);
             }
 
             public Broadphase.Tree ToTree(AtomicSafetyManager* safetyManager)
             {
                 return new Broadphase.Tree
                 {
-                    BranchCount = BranchCount.ToArray(safetyManager),
-                    Nodes = Nodes.ToArray(safetyManager),
-                    NodeFilters = NodeFilters.ToArray(safetyManager),
-                    BodyFilters = BodyFilters.ToArray(safetyManager),
-                    Ranges = Ranges.ToArray(safetyManager)
+                    BranchCount = BranchCount.ToArray<int>(safetyManager),
+                    Nodes = Nodes.ToArray<BoundingVolumeHierarchy.Node>(safetyManager),
+                    NodeFilters = NodeFilters.ToArray<CollisionFilter>(safetyManager),
+                    BodyFilters = BodyFilters.ToArray<CollisionFilter>(safetyManager),
+                    Ranges = Ranges.ToArray<BoundingVolumeHierarchy.Builder.Range>(safetyManager)
                 };
             }
         }
 
-        NativeArrayProxy<RigidBody> m_Bodies;
+        NativeArrayProxy m_Bodies;
         BroadPhaseTreeProxy m_StaticTree;
         BroadPhaseTreeProxy m_DynamicTree;
 
@@ -240,16 +279,16 @@ namespace Unity.Physics
         readonly AtomicSafetyManager* m_SafetyManager;
 
         public bool IsCreated => m_Bodies.IsCreated && m_StaticTree.IsCreated && m_DynamicTree.IsCreated;
-        
+
         internal CollisionWorldProxy(CollisionWorld collisionWorld, AtomicSafetyManager* safetyManager)
         {
-            m_Bodies = new NativeArrayProxy<RigidBody>(collisionWorld.Bodies);
+            m_Bodies = NativeArrayProxy.Create(collisionWorld.Bodies);
             m_StaticTree = new BroadPhaseTreeProxy(collisionWorld.Broadphase.StaticTree);
             m_DynamicTree = new BroadPhaseTreeProxy(collisionWorld.Broadphase.DynamicTree);
             m_SafetyManager = safetyManager;
         }
 
         public CollisionWorld ToCollisionWorld() =>
-            new CollisionWorld(m_Bodies.ToArray(m_SafetyManager), new Broadphase(m_StaticTree.ToTree(m_SafetyManager), m_DynamicTree.ToTree(m_SafetyManager)));
+            new CollisionWorld(m_Bodies.ToArray<RigidBody>(m_SafetyManager), new Broadphase(m_StaticTree.ToTree(m_SafetyManager), m_DynamicTree.ToTree(m_SafetyManager)));
     }
 }

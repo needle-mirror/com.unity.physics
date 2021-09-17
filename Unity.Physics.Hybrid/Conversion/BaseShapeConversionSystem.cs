@@ -37,18 +37,20 @@ namespace Unity.Physics.Authoring
             };
             job.Schedule(count, 1).Complete();
         }
-        
+
         HashSet<UnityMesh> m_MeshAssets = new HashSet<UnityMesh>();
-        
+
         void GetInputDataFromAuthoringComponent(T shape)
         {
             var body = GetPrimaryBody(shape);
+            var child = shape.gameObject;
 
             var instance = new ColliderInstance
             {
                 AuthoringComponentId = shape.GetInstanceID(),
                 BodyEntity = GetPrimaryEntity(body),
                 ShapeEntity = GetPrimaryEntity(shape),
+                ChildEntity = GetPrimaryEntity(child),
                 BodyFromShape = ColliderInstance.GetCompoundFromChild(shape.transform, body.transform)
             };
 
@@ -72,7 +74,7 @@ namespace Unity.Physics.Authoring
             }
 
             m_MeshAssets.Clear();
-            
+
             if (body == shape.gameObject)
                 DstEntityManager.PostProcessTransformComponents(instance.BodyEntity, body.transform, BodyMotionType.Static);
         }
@@ -104,7 +106,7 @@ namespace Unity.Physics.Authoring
             m_BeginColliderConversionSystem = World.GetOrCreateSystem<BeginColliderConversionSystem>();
             m_BuildCompoundsSystem = World.GetOrCreateSystem<BuildCompoundCollidersConversionSystem>();
             m_EndColliderConversionSystem = World.GetOrCreateSystem<EndColliderConversionSystem>();
-            
+
             // A map from leaf shape entities to their respective bodies
             m_AllBodiesByLeaf = new NativeHashMap<Entity, Entity>(16, Allocator.Persistent);
 
@@ -224,7 +226,8 @@ namespace Unity.Physics.Authoring
                             new ColliderInstance
                             {
                                 BodyEntity = bodyEntity,
-                                ShapeEntity = bodyEntity
+                                ShapeEntity = bodyEntity,
+                                ChildEntity = bodyEntity
                             }
                         );
                         m_AllBodiesByLeaf[instance.ShapeEntity] = instance.BodyEntity;
@@ -259,9 +262,9 @@ namespace Unity.Physics.Authoring
 
             // Convert convex hulls and meshes
             Profiler.BeginSample("Convert Hulls and Meshes");
-            
+
             ConvertHullsAndMeshes();
-            
+
             Profiler.EndSample();
 
             m_AllBodiesByLeaf.Clear();

@@ -50,7 +50,6 @@ namespace Unity.Physics.Tests.Authoring
                 GameObject.DestroyImmediate(Root);
         }
 
-
         protected void TestConvertedData<T>(Action<T> checkValue) where T : struct, IComponentData =>
             TestConvertedData((Action<NativeArray<T>>)(components => { checkValue(components[0]); }), 1);
 
@@ -67,6 +66,41 @@ namespace Unity.Physics.Tests.Authoring
 
                     using (var group = world.EntityManager.CreateEntityQuery(typeof(T)))
                     {
+                        using (var components = group.ToComponentDataArray<T>(Allocator.Persistent))
+                        {
+                            Assume.That(components, Has.Length.EqualTo(assumeCount));
+                            checkValues(components);
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                world.Dispose();
+            }
+        }
+
+        protected void TestConvertedSharedData<T, S>(Action<T> checkValue, S sharedComponent)
+            where T : struct, IComponentData
+            where S : struct, ISharedComponentData =>
+            TestConvertedSharedData((Action<NativeArray<T>>)(components => { checkValue(components[0]); }), 1, sharedComponent);
+
+        protected void TestConvertedSharedData<T, S>(Action<NativeArray<T>> checkValues, int assumeCount, S sharedComponent)
+            where T : struct, IComponentData
+            where S : struct, ISharedComponentData
+        {
+            var world = new World("Test world");
+
+            try
+            {
+                using (var blobAssetStore = new BlobAssetStore())
+                {
+                    var settings = GameObjectConversionSettings.FromWorld(world, blobAssetStore);
+                    GameObjectConversionUtility.ConvertGameObjectHierarchy(Root, settings);
+
+                    using (var group = world.EntityManager.CreateEntityQuery(new ComponentType[] { typeof(T), typeof(S) }))
+                    {
+                        group.AddSharedComponentFilter(sharedComponent);
                         using (var components = group.ToComponentDataArray<T>(Allocator.Persistent))
                         {
                             Assume.That(components, Has.Length.EqualTo(assumeCount));

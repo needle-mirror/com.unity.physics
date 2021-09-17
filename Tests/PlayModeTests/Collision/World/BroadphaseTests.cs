@@ -133,7 +133,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             Physics.PhysicsWorld world = createTestWorld(1);
             addStaticBoxToWorld(world, 0, new Vector3(0, 0, 0), Quaternion.identity, new Vector3(10, 0.1f, 10));
             world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
-                    world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
+                world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
             world.Dispose();
         }
 
@@ -147,7 +147,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 addStaticBoxToWorld(world, i, new Vector3(i * 11, 0, 0), Quaternion.identity, new Vector3(10, 0.1f, 10));
             }
             world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
-                    world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
+                world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
             world.Dispose();
         }
 
@@ -161,7 +161,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 addStaticBoxToWorld(world, i, new Vector3(i * 11, 0, 0), Quaternion.identity, new Vector3(10, 0.1f, 10));
             }
             world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
-                    world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
+                world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
             world.Dispose();
         }
 
@@ -235,7 +235,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             Physics.PhysicsWorld world = createTestWorld(0, 1);
             addDynamicBoxToWorld(world, 0, new Vector3(0, 0, 0), Quaternion.identity, new Vector3(10, 10, 10));
             world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
-                    world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
+                world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
             world.Dispose();
         }
 
@@ -249,7 +249,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 addDynamicBoxToWorld(world, i, new Vector3(i * 11, 0, 0), Quaternion.identity, new Vector3(10, 10, 10));
             }
             world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
-                    world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
+                world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
             world.Dispose();
         }
 
@@ -263,7 +263,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 addDynamicBoxToWorld(world, i, new Vector3(i * 11, 0, 0), Quaternion.identity, new Vector3(10, 10, 10));
             }
             world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
-                    world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
+                world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
             world.Dispose();
         }
 
@@ -299,7 +299,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 addDynamicBoxToWorld(world, i, new Vector3(i * 11, 5, 0), Quaternion.identity, new Vector3(1, 1, 1));
             }
             world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
-                    world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
+                world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
             world.Dispose();
         }
 
@@ -326,7 +326,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         {
             Physics.PhysicsWorld world = createTestWorld();
             world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
-                    world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
+                world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
             world.Dispose();
         }
     }

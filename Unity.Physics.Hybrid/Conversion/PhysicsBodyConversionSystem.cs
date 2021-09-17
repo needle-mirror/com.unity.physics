@@ -14,13 +14,18 @@ namespace Unity.Physics.Authoring
                 {
                     var entity = GetPrimaryEntity(staticOptimized.gameObject);
                     if (DstEntityManager.HasComponent<PhysicsCollider>(entity))
+                    {
+                        DstEntityManager.AddSharedComponentData(entity, new PhysicsWorldIndex());
+
                         DstEntityManager.PostProcessTransformComponents(entity, staticOptimized.transform, BodyMotionType.Static);
+                    }
                 }
             );
             Entities.ForEach(
                 (PhysicsBodyAuthoring body) =>
                 {
                     var entity = GetPrimaryEntity(body.gameObject);
+                    DstEntityManager.AddSharedComponentData(entity, new PhysicsWorldIndex(body.WorldIndex));
 
                     DstEntityManager.PostProcessTransformComponents(entity, body.transform, body.MotionType);
 
@@ -92,6 +97,21 @@ namespace Unity.Physics.Authoring
                     }
                 }
             );
+            Entities.ForEach(
+                (PhysicsShapeAuthoring shape) =>
+                {
+                    var physicsBody = shape.gameObject.GetComponentInParent<PhysicsBodyAuthoring>(true);
+                    // If we have a PhysicsBodyAuthoring as a parent we can skip this Entity.
+                    // The PhysicsWorldIndex will be added in the loop above.
+                    if (physicsBody != null)
+                        return;
+
+                    var entity = GetPrimaryEntity(shape.gameObject);
+                    if (DstEntityManager.HasComponent<PhysicsCollider>(entity))
+                    {
+                        DstEntityManager.AddSharedComponentData(entity, new PhysicsWorldIndex());
+                    }
+                });
         }
     }
 }

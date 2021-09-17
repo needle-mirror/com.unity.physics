@@ -2,6 +2,7 @@ using System;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Collections.NotBurstCompatible;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -108,7 +109,8 @@ namespace Unity.Physics.Authoring
                                     Child = new CompoundCollider.ColliderBlobInstance
                                     {
                                         Collider = blobAsset,
-                                        CompoundFromChild = shape.BodyFromShape
+                                        CompoundFromChild = shape.BodyFromShape,
+                                        Entity = shape.ChildEntity
                                     }
                                 };
                                 children.Add(shape.ToColliderInstanceId(), child);
@@ -139,7 +141,8 @@ namespace Unity.Physics.Authoring
                                     Child = new CompoundCollider.ColliderBlobInstance
                                     {
                                         Collider = blobAsset,
-                                        CompoundFromChild = shape.BodyFromShape
+                                        CompoundFromChild = shape.BodyFromShape,
+                                        Entity = shape.ChildEntity
                                     }
                                 };
                                 children.TryAdd(shape.ToColliderInstanceId(), child);
@@ -210,6 +213,21 @@ namespace Unity.Physics.Authoring
 
                             compoundHash.Dispose();
                             childBlobs.Dispose();
+
+                            // If we created a CompoundCollider, add the mapping between each Child and original Entity.
+                            var colliderKeyEntityBuffer = DstEntityManager.AddBuffer<PhysicsColliderKeyEntityPair>(body);
+                            colliderKeyEntityBuffer.Clear();
+                            unsafe
+                            {
+                                var compoundCollider = (CompoundCollider*)collider.ColliderPtr;
+                                for (uint i = 0; i < compoundCollider->NumChildren; i++)
+                                {
+                                    var childEntity = compoundCollider->Children[(int)i].Entity;
+                                    var childKey = new ColliderKey(compoundCollider->NumColliderKeyBits, i);
+
+                                    colliderKeyEntityBuffer.Add(new PhysicsColliderKeyEntityPair() { Entity = childEntity, Key = childKey });
+                                }
+                            }
                         }
                     }
 

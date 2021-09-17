@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using NUnit.Framework;
 using Unity.Physics.Authoring;
@@ -108,6 +108,7 @@ namespace Unity.Physics.Tests.Authoring
 
             VerifyNoDataProduced<PhysicsGravityFactor>();
         }
+
 #endif
 
         [Test]
@@ -117,7 +118,7 @@ namespace Unity.Physics.Tests.Authoring
                 typeof(LegacyRigidBody),
 #endif
                 typeof(PhysicsBodyAuthoring)
-            )]
+             )]
             Type bodyType
         )
         {
@@ -140,13 +141,13 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public void ConversionSystems_WhenGOHasBody_GOIsInactive_BodyIsNotConverted(
-            [Values]Node inactiveNode,
+            [Values] Node inactiveNode,
             [Values(
 #if LEGACY_PHYSICS
                 typeof(LegacyRigidBody),
 #endif
                 typeof(PhysicsBodyAuthoring)
-            )]
+             )]
             Type bodyType
         )
         {

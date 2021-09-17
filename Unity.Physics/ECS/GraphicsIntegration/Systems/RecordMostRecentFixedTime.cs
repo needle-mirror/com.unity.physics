@@ -9,7 +9,7 @@ namespace Unity.Physics.GraphicsIntegration
     [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateAfter(typeof(BuildPhysicsWorld)), UpdateBefore(typeof(ExportPhysicsWorld))]
     [AlwaysUpdateSystem]
-    public class RecordMostRecentFixedTime : SystemBase
+    public partial class RecordMostRecentFixedTime : SystemBase
     {
         /// <summary>
         /// The value of <c>Time.ElapsedTime</c> in the most recent tick of the <c>FixedStepSimulationSystemGroup</c>.

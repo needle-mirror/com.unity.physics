@@ -799,11 +799,11 @@ namespace Unity.Physics
                         GetMotions(contactHeader.BodyPair, ref motionDatas, ref motionVelocities, out MotionVelocity velocityA, out MotionVelocity velocityB, out MTransform worldFromA, out MTransform worldFromB);
 
                         float sumInvMass = velocityA.InverseMass + velocityB.InverseMass;
-                        bool bodiesHaveInfiniteMass = velocityA.HasInfiniteInertiaAndMass && velocityB.HasInfiniteInertiaAndMass;
+                        bool bothMotionsAreKinematic = velocityA.IsKinematic && velocityB.IsKinematic;
 
                         // Skip contact between infinite mass bodies which don't want to raise events. These cannot have any effect during solving.
                         // These should not normally appear, because the collision detector doesn't generate such contacts.
-                        if (bodiesHaveInfiniteMass)
+                        if (bothMotionsAreKinematic)
                         {
                             if ((contactHeader.JacobianFlags & (JacobianFlags.IsTrigger | JacobianFlags.EnableCollisionEvents)) == 0)
                             {
@@ -911,7 +911,7 @@ namespace Unity.Physics
 
                             // Build friction jacobians
                             // (skip friction between two infinite-mass objects)
-                            if (!bodiesHaveInfiniteMass)
+                            if (!bothMotionsAreKinematic)
                             {
                                 // Clear accumulated impulse
                                 contactJacobian.Friction0.Impulse = 0.0f;
@@ -1094,7 +1094,7 @@ namespace Unity.Physics
                 header.Type = jacType;
                 header.Flags = jacFlags;
 
-                JacobianUtilities.CalculateTauAndDamping(constraint, timestep, numIterations, out float tau, out float damping);
+                JacobianUtilities.CalculateConstraintTauAndDamping(constraint.SpringFrequency, constraint.SpringDamping, timestep, numIterations, out float tau, out float damping);
 
                 // Build the Jacobian
                 switch (constraint.Type)

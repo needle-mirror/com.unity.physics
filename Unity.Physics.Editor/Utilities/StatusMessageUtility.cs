@@ -68,8 +68,8 @@ namespace Unity.Physics.Editor
             {
                 statusMessage = L10n.Tr(
                     matrixStates.Count == 1
-                        ? "Target's local-to-world matrix is not a valid transformation."
-                        : "One or more targets' local-to-world matrices are not valid transformations."
+                    ? "Target's local-to-world matrix is not a valid transformation."
+                    : "One or more targets' local-to-world matrices are not valid transformations."
                 );
                 return MessageType.Error;
             }
@@ -85,8 +85,8 @@ namespace Unity.Physics.Editor
             {
                 statusMessage = L10n.Tr(
                     matrixStates.Count == 1
-                        ? "Target has non-uniform scale. Shape data will be transformed during conversion in order to bake scale into the run-time format."
-                        : "One or more targets has non-uniform scale. Shape data will be transformed during conversion in order to bake scale into the run-time format."
+                    ? "Target has non-uniform scale. Shape data will be transformed during conversion in order to bake scale into the run-time format."
+                    : "One or more targets has non-uniform scale. Shape data will be transformed during conversion in order to bake scale into the run-time format."
                 );
                 return MessageType.Warning;
             }

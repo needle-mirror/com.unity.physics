@@ -179,10 +179,10 @@ namespace Unity.Physics.Authoring
             return topCollider == null
                 ? topShape == null ? shape.gameObject : topShape
                 : topShape == null
-                    ? topCollider
-                    : topShape.transform.IsChildOf(topCollider.transform)
-                        ? topCollider
-                        : topShape;
+                ? topCollider
+                : topShape.transform.IsChildOf(topCollider.transform)
+                ? topCollider
+                : topShape;
         }
 
         static GameObject FindFirstEnabledAncestor<T>(GameObject shape, List<T> buffer) where T : Component
@@ -234,7 +234,7 @@ namespace Unity.Physics.Authoring
         ) =>
             math.mul(localToWorld, float4x4.TRS(center, orientation, size));
 
-        [Conditional(SafetyChecks.ConditionalSymbol)]
+        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
         static void CheckBasisPriorityAndThrow(int3 basisPriority)
         {
             if (

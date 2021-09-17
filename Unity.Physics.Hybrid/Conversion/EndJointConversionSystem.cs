@@ -78,7 +78,7 @@ namespace Unity.Physics.Authoring
             {
                 m_JointEntitiesPerAuthoringComponent[authoringComponent]
                     = allJointEntities
-                    = new NativeList<Entity>(joints.Length, Allocator.Persistent);
+                        = new NativeList<Entity>(joints.Length, Allocator.Persistent);
             }
 
             // create all new joints
@@ -92,7 +92,15 @@ namespace Unity.Physics.Authoring
 #endif
             for (var i = 0; i < joints.Length; ++i)
             {
+                uint worldIndex = DstEntityManager.GetSharedComponentData<PhysicsWorldIndex>(constrainedBodyPair.EntityA).Value;
+                Assertions.Assert.AreEqual(
+                    worldIndex,
+                    constrainedBodyPair.EntityB == Entity.Null ? worldIndex : DstEntityManager.GetSharedComponentData<PhysicsWorldIndex>(constrainedBodyPair.EntityB).Value);
+
                 var jointEntity = CreateAdditionalEntity(authoringComponent);
+
+                DstEntityManager.AddSharedComponentData(jointEntity, new PhysicsWorldIndex(worldIndex));
+
 #if UNITY_EDITOR
                 DstEntityManager.SetName(jointEntity, $"{baseName} ({joints[i].JointType})");
 #endif
@@ -143,7 +151,7 @@ namespace Unity.Physics.Authoring
                 jointEntities.Add(jointEntity);
         }
 
-        protected override void OnUpdate() { }
+        protected override void OnUpdate() {}
 
         protected override void OnDestroy()
         {

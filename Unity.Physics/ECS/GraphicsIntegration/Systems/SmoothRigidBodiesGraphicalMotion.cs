@@ -1,3 +1,4 @@
+using System;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
@@ -13,12 +14,9 @@ namespace Unity.Physics.GraphicsIntegration
     /// Each affected body's LocalToWorld is adjusted before rendering, but its underlying Translation and Rotation values are left alone.
     /// </summary>
     [UpdateInGroup(typeof(TransformSystemGroup))]
-    [UpdateBefore(typeof(EndFrameTRSToLocalToWorldSystem))]
-    public class SmoothRigidBodiesGraphicalMotion : SystemBase, IPhysicsSystem
+    [UpdateBefore(typeof(TRSToLocalToWorldSystem))]
+    public partial class SmoothRigidBodiesGraphicalMotion : SystemBase
     {
-        JobHandle m_InputDependency;
-        JobHandle m_OutputDependency;
-
         RecordMostRecentFixedTime m_RecordMostRecentFixedTime;
 
         /// <summary>
@@ -26,18 +24,11 @@ namespace Unity.Physics.GraphicsIntegration
         /// </summary>
         public EntityQuery SmoothedDynamicBodiesGroup { get; private set; }
 
-        /// <summary>
-        /// Inject an input dependency into this system's job chain.
-        /// </summary>
-        /// <param name="inputDep">The JobHandle for the dependency.</param>
-        public void AddInputDependency(JobHandle inputDep) =>
-            m_InputDependency = JobHandle.CombineDependencies(m_InputDependency, inputDep);
+        [Obsolete("AddInputDependency() has been deprecated. Please call RegisterPhysicsRuntimeSystemReadWrite() or RegisterPhysicsRuntimeSystemReadOnly() in your system's OnStartRunning() to achieve the same effect. (RemovedAfter 2021-05-01)", true)]
+        public void AddInputDependency(JobHandle inputDep) {}
 
-        /// <summary>
-        /// Get the final job handle for this system;
-        /// </summary>
-        /// <returns></returns>
-        public JobHandle GetOutputDependency() => m_OutputDependency;
+        [Obsolete("GetOutputDependency() has been deprecated. Please call RegisterPhysicsRuntimeSystemReadWrite() or RegisterPhysicsRuntimeSystemReadOnly() in your system's OnStartRunning() to achieve the same effect. (RemovedAfter 2021-05-01)", true)]
+        public JobHandle GetOutputDependency() => default;
 
         protected override void OnCreate()
         {
@@ -49,11 +40,8 @@ namespace Unity.Physics.GraphicsIntegration
                     typeof(Translation),
                     typeof(Rotation),
                     typeof(PhysicsGraphicalSmoothing),
-                    typeof(LocalToWorld)
-                },
-                None = new ComponentType[]
-                {
-                    typeof(PhysicsExclude)
+                    typeof(LocalToWorld),
+                    typeof(PhysicsWorldIndex)
                 }
             });
             RequireForUpdate(SmoothedDynamicBodiesGroup);
@@ -64,11 +52,9 @@ namespace Unity.Physics.GraphicsIntegration
         {
             var timeAhead = (float)(Time.ElapsedTime - m_RecordMostRecentFixedTime.MostRecentElapsedTime);
             var timeStep = (float)m_RecordMostRecentFixedTime.MostRecentDeltaTime;
-            if (timeAhead <= 0f || timeStep == 0f)
+            if (timeAhead < 0f || timeStep == 0f)
                 return;
             var normalizedTimeAhead = math.clamp(timeAhead / timeStep, 0f, 1f);
-
-            Dependency = JobHandle.CombineDependencies(Dependency, m_InputDependency);
 
             Dependency = new SmoothMotionJob
             {
@@ -83,15 +69,7 @@ namespace Unity.Physics.GraphicsIntegration
                 LocalToWorldType = GetComponentTypeHandle<LocalToWorld>(),
                 TimeAhead = timeAhead,
                 NormalizedTimeAhead = normalizedTimeAhead
-            }.ScheduleParallel(SmoothedDynamicBodiesGroup, 1, Dependency);
-
-            // Combine implicit output dependency with user one
-            m_OutputDependency = Dependency;
-
-            // TODO: do we need to be able to inject this system's job handle as a dependency into the transform systems?
-
-            // Invalidate input dependency since it's been used by now
-            m_InputDependency = default;
+            }.ScheduleParallel(SmoothedDynamicBodiesGroup, ScheduleGranularity.Chunk, limitToEntityArray: default, Dependency);
         }
 
         [BurstCompile]
@@ -138,7 +116,7 @@ namespace Unity.Physics.GraphicsIntegration
                     RigidTransform smoothedTransform;
 
                     // apply no smoothing (i.e., teleported bodies)
-                    if (smoothing.ApplySmoothing == 0)
+                    if (smoothing.ApplySmoothing == 0 || TimeAhead == 0)
                     {
                         smoothedTransform = currentTransform;
                     }

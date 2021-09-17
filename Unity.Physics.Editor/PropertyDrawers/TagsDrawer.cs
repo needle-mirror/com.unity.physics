@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using Unity.Physics.Authoring;
 using UnityEditor;
@@ -59,6 +59,7 @@ namespace Unity.Physics.Editor
 
             return m_Options;
         }
+
         string[] m_Options;
 
         static string GetButtonLabel(int value, IReadOnlyList<string> optionNames)
@@ -198,7 +199,6 @@ namespace Unity.Physics.Editor
                             Selection.activeObject = AssetDatabase.LoadAssetAtPath<T>(assetPath);
                             m_Options = null;
                         }
-
                     }
                 );
                 menu.DropDown(controlPosition);

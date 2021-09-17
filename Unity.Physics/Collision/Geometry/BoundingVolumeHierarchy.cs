@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Unity.Collections;
@@ -51,7 +51,7 @@ namespace Unity.Physics
 
             public bool IsInternal { get => Flags == 0; set => Flags = value ? 0 : 1; }
             public bool IsLeaf { get => Flags != 0; set => Flags = value ? 1 : 0; }
-            
+
             public bool4 AreLeavesValid => (Data != new int4(-1));
             public bool4 AreInternalsValid => (Data != int4.zero);
 
@@ -141,7 +141,8 @@ namespace Unity.Physics
                         }
                         pairWriter.FlushIfNeeded();
                     }
-                } while (stack > unaryStack);
+                }
+                while (stack > unaryStack);
             }
             else
             {
@@ -158,7 +159,8 @@ namespace Unity.Physics
                     }
 
                     pairWriter.FlushIfNeeded();
-                } while (stackA > binaryStackA);
+                }
+                while (stackA > binaryStackA);
             }
         }
 
@@ -336,7 +338,8 @@ namespace Unity.Physics
                     *((int4*)stack) = compressedValues;
                     stack += compressedCount;
                 }
-            } while (stack > binaryStack);
+            }
+            while (stack > binaryStack);
         }
 
         #endregion
@@ -379,7 +382,8 @@ namespace Unity.Physics
                     *((int4*)top) = hitData;
                     top += hitCount;
                 }
-            } while (top > stack);
+            }
+            while (top > stack);
 
             return hadHit;
         }
@@ -438,7 +442,8 @@ namespace Unity.Physics
                     *((int4*)top) = hitData;
                     top += hitCount;
                 }
-            } while (top > stack);
+            }
+            while (top > stack);
 
             return hadHit;
         }
@@ -496,7 +501,8 @@ namespace Unity.Physics
                     *((int4*)stack) = hitData;
                     stack += hitCount;
                 }
-            } while (stack > binaryStack);
+            }
+            while (stack > binaryStack);
 
             return hadHit;
         }
@@ -555,7 +561,8 @@ namespace Unity.Physics
                     *((int4*)stack) = hitData;
                     stack += hitCount;
                 }
-            } while (stack > binaryStack);
+            }
+            while (stack > binaryStack);
 
             return hadHit;
         }

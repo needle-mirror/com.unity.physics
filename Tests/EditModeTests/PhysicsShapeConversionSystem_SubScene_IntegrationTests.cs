@@ -26,7 +26,7 @@ namespace Unity.Physics.Tests.Authoring
         UnityMesh NonReadableMesh { get; set; }
 
         World PreviousGameObjectInjectionWorld { get; set; }
-        
+
         PlayerLoopSystem PreviousPlayerLoop { get; set; }
 
         static readonly Regex k_NonWords = new Regex(@"\W");

@@ -3,6 +3,11 @@ using Unity.Entities;
 using Unity.Physics.GraphicsIntegration;
 using UnityEngine;
 using LegacyRigidBody = UnityEngine.Rigidbody;
+using LegacyCollider = UnityEngine.Collider;
+using LegacyBox = UnityEngine.BoxCollider;
+using LegacyCapsule = UnityEngine.CapsuleCollider;
+using LegacyMesh = UnityEngine.MeshCollider;
+using LegacySphere = UnityEngine.SphereCollider;
 
 namespace Unity.Physics.Authoring
 {
@@ -19,6 +24,8 @@ namespace Unity.Physics.Authoring
                     // prefer conversions from non-legacy data if they have already been performed
                     if (DstEntityManager.HasComponent<PhysicsVelocity>(entity))
                         return;
+
+                    DstEntityManager.AddSharedComponentData(entity, new PhysicsWorldIndex());
 
                     DstEntityManager.PostProcessTransformComponents(
                         entity, body.transform,
@@ -68,6 +75,19 @@ namespace Unity.Physics.Authoring
                         DstEntityManager.AddOrSetComponent(entity, new PhysicsGravityFactor { Value = 0 });
                 }
             );
+
+            Entities
+                .WithAny<LegacyCollider, LegacyBox, LegacySphere, LegacyCapsule, LegacyMesh>()
+                .WithNone<LegacyRigidBody>()
+                .ForEach((Transform transform) =>
+                {
+                    // If the Entity has a collider we need to add it to the default PhysicsWorld
+                    var entity = GetPrimaryEntity(transform.gameObject);
+                    if (DstEntityManager.HasComponent<PhysicsCollider>(entity))
+                    {
+                        DstEntityManager.AddSharedComponentData(entity, new PhysicsWorldIndex());
+                    }
+                });
         }
     }
 }

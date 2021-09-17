@@ -291,7 +291,7 @@ namespace Unity.DebugDisplay
 
     internal struct Label
     {
-        internal static void Draw(float3 position, in FixedString128 s, ColorIndex fg, ColorIndex bg)
+        internal static void Draw(float3 position, in FixedString128Bytes s, ColorIndex fg, ColorIndex bg)
         {
             DebugDisplay.Instantiate();
             var unit = Unmanaged.Instance.Data.m_TextBufferAllocations.AllocateAtomic(1);
@@ -304,7 +304,7 @@ namespace Unity.DebugDisplay
 
     internal struct Text
     {
-        internal static void Draw(int x, int y, byte color, in FixedString128 f)
+        internal static void Draw(int x, int y, byte color, in FixedString128Bytes f)
         {
             DebugDisplay.Instantiate();
             var xy = new int2(x, y);
@@ -314,25 +314,25 @@ namespace Unity.DebugDisplay
 
     internal struct Log
     {
-        internal static void Info(in FixedString128 f)
+        internal static void Info(in FixedString128Bytes f)
         {
             DebugDisplay.Instantiate();
             Unmanaged.Instance.Data.m_LogBuffer.WriteLine(f);
         }
 
-        internal static void Debug(in FixedString128 f)
+        internal static void Debug(in FixedString128Bytes f)
         {
             DebugDisplay.Instantiate();
             Unmanaged.Instance.Data.m_LogBuffer.WriteLine(f);
         }
 
-        internal static void Error(in FixedString128 f)
+        internal static void Error(in FixedString128Bytes f)
         {
             DebugDisplay.Instantiate();
             Unmanaged.Instance.Data.m_LogBuffer.WriteLine(f);
         }
 
-        internal static void Warn(in FixedString128 f)
+        internal static void Warn(in FixedString128Bytes f)
         {
             DebugDisplay.Instantiate();
             Unmanaged.Instance.Data.m_LogBuffer.WriteLine(f);

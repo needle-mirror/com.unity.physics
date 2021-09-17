@@ -27,7 +27,7 @@ namespace Unity.Physics
 
             public override int GetHashCode() => unchecked((int)math.hash(new float2(Min, Max)));
 
-            public static implicit operator float2 (FloatRange range) => new float2(range.Min, range.Max);
+            public static implicit operator float2(FloatRange range) => new float2(range.Min, range.Max);
 
             public static implicit operator FloatRange(float2 f) => new FloatRange { Min = f.x, Max = f.y };
 

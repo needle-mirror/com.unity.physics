@@ -19,14 +19,14 @@ namespace Unity.Physics.Tests.Authoring
                 typeof(LegacyRigidBody),
 #endif
                 typeof(PhysicsBodyAuthoring)
-            )]
+             )]
             Type rootBodyType,
             [Values(
 #if LEGACY_PHYSICS
                 typeof(LegacyRigidBody),
 #endif
                 typeof(PhysicsBodyAuthoring)
-            )]
+             )]
             Type parentBodyType
         )
         {
@@ -44,14 +44,14 @@ namespace Unity.Physics.Tests.Authoring
                 typeof(LegacyRigidBody),
 #endif
                 typeof(PhysicsBodyAuthoring)
-            )]
+             )]
             Type rootBodyType,
             [Values(
 #if LEGACY_PHYSICS
                 typeof(LegacyRigidBody),
 #endif
                 typeof(PhysicsBodyAuthoring)
-            )]
+             )]
             Type parentBodyType
         )
         {
@@ -72,14 +72,14 @@ namespace Unity.Physics.Tests.Authoring
                 typeof(LegacyRigidBody),
 #endif
                 typeof(PhysicsBodyAuthoring)
-            )]
+             )]
             Type parentBodyType,
             [Values(
 #if LEGACY_PHYSICS
                 typeof(LegacyBox),
 #endif
                 typeof(PhysicsShapeAuthoring)
-            )]
+             )]
             Type childShapeType
         )
         {
@@ -97,21 +97,21 @@ namespace Unity.Physics.Tests.Authoring
                 typeof(LegacyBox),
 #endif
                 typeof(PhysicsShapeAuthoring)
-            )]
+             )]
             Type rootShapeType,
             [Values(
 #if LEGACY_PHYSICS
                 typeof(LegacyBox),
 #endif
                 typeof(PhysicsShapeAuthoring)
-            )]
+             )]
             Type parentShapeType,
             [Values(
 #if LEGACY_PHYSICS
                 typeof(LegacyBox),
 #endif
                 typeof(PhysicsShapeAuthoring)
-            )]
+             )]
             Type childShapeType
         )
         {
@@ -129,7 +129,7 @@ namespace Unity.Physics.Tests.Authoring
                 typeof(LegacyBox),
 #endif
                 typeof(PhysicsShapeAuthoring)
-            )]
+             )]
             Type childShapeType
         )
         {

@@ -40,7 +40,7 @@ namespace Unity.Physics.Tests.Authoring
                 Assert.That(j[0].Min, Is.EqualTo(expectedMin));
             });
         }
-        
+
         [Test]
         public void ConversionSystems_WhenGOHasSpringJoint_IsMaxDistanceValueSet()
         {
@@ -57,7 +57,7 @@ namespace Unity.Physics.Tests.Authoring
         }
 
         [Test]
-        public void ConversionSystems_WhenGOHasHingeJoint_WhenUseLimitsHasValue_FinalConstraintIsAllLinearAxesLocked([Values]bool useLimits)
+        public void ConversionSystems_WhenGOHasHingeJoint_WhenUseLimitsHasValue_FinalConstraintIsAllLinearAxesLocked([Values] bool useLimits)
         {
             CreateHierarchy(new[] { typeof(LegacyHinge) }, Array.Empty<Type>(), Array.Empty<Type>());
             var joint = Root.GetComponent<LegacyHinge>();
@@ -321,7 +321,7 @@ namespace Unity.Physics.Tests.Authoring
                 Assert.That(j[0].ConstrainedAxes, Is.EqualTo(expectedConstrainedAxes));
             });
         }
-        
+
         [Test]
         public void ConversionSystems_WhenGOHasConfigurableJoint_AngularMotion__AllAxesAreLimited()
         {

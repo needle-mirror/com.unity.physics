@@ -25,8 +25,15 @@ namespace Unity.Physics
     public static class ITriggerEventJobExtensions
     {
 #if !HAVOK_PHYSICS_EXISTS
-        // Default Schedule() implementation for ITriggerEventsJob.
+        [Obsolete("Schedule() has been deprecated. Use the new method that doesn't take PhysicsWorld. (RemovedAfter 2021-05-01)", true)]
         public static unsafe JobHandle Schedule<T>(this T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)
+            where T : struct, ITriggerEventsJobBase
+        {
+            return Schedule(jobData, simulation, inputDeps);
+        }
+
+        // Default Schedule() implementation for ITriggerEventsJob.
+        public static unsafe JobHandle Schedule<T>(this T jobData, ISimulation simulation, JobHandle inputDeps)
             where T : struct, ITriggerEventsJobBase
         {
             // Should work only for UnityPhysics
@@ -35,14 +42,15 @@ namespace Unity.Physics
                 return inputDeps;
             }
 
-            return ScheduleUnityPhysicsTriggerEventsJob(jobData, simulation, ref world, inputDeps);
+            return ScheduleUnityPhysicsTriggerEventsJob(jobData, simulation, inputDeps);
         }
+
 #else
         // In this case Schedule() implementation for ITriggerEventsJob is provided by the Havok.Physics assembly.
         // This is a stub to catch when that assembly is missing.
         //<todo.eoin.modifier Put in a link to documentation for this:
         [Obsolete("This error occurs when HAVOK_PHYSICS_EXISTS is defined but Havok.Physics is missing from your package's asmdef references. (DoNotRemove)", true)]
-        public static unsafe JobHandle Schedule<T>(this T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps,
+        public static unsafe JobHandle Schedule<T>(this T jobData, ISimulation simulation, JobHandle inputDeps,
             HAVOK_PHYSICS_MISSING_FROM_ASMDEF _causeCompileError = HAVOK_PHYSICS_MISSING_FROM_ASMDEF.HAVOK_PHYSICS_MISSING_FROM_ASMDEF)
             where T : struct, ITriggerEventsJobBase
         {
@@ -56,7 +64,7 @@ namespace Unity.Physics
 #endif
 
         // Schedules a trigger events job only for UnityPhysics simulation
-        internal static unsafe JobHandle ScheduleUnityPhysicsTriggerEventsJob<T>(T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)
+        internal static unsafe JobHandle ScheduleUnityPhysicsTriggerEventsJob<T>(T jobData, ISimulation simulation, JobHandle inputDeps)
             where T : struct, ITriggerEventsJobBase
         {
             SafetyChecks.CheckAreEqualAndThrow(SimulationType.UnityPhysics, simulation.Type);
@@ -67,8 +75,6 @@ namespace Unity.Physics
                 EventReader = ((Simulation)simulation).TriggerEvents
             };
 
-            // Ensure the input dependencies include the end-of-simulation job, so events will have been generated
-            inputDeps = JobHandle.CombineDependencies(inputDeps, simulation.FinalSimulationJobHandle);
 #if UNITY_2020_2_OR_NEWER
             var parameters = new JobsUtility.JobScheduleParameters(UnsafeUtility.AddressOf(ref data), TriggerEventJobProcess<T>.Initialize(), inputDeps, ScheduleMode.Single);
 #else

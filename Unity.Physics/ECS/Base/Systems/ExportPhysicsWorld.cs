@@ -1,10 +1,8 @@
 using System;
 using Unity.Burst;
 using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
-using Unity.Mathematics;
 using Unity.Transforms;
 
 namespace Unity.Physics.Systems
@@ -12,53 +10,17 @@ namespace Unity.Physics.Systems
     // A system which copies transforms and velocities from the physics world back to the original entity components.
     [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateAfter(typeof(StepPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
-    public class ExportPhysicsWorld : SystemBase, IPhysicsSystem
+    public partial class ExportPhysicsWorld : SystemBase
     {
-        private JobHandle m_InputDependency;
-        private JobHandle m_OutputDependency;
-
         BuildPhysicsWorld m_BuildPhysicsWorldSystem;
-        EndFramePhysicsSystem m_EndFramePhysicsSystem;
 
-        internal unsafe struct SharedData : IDisposable
-        {
-            [NativeDisableUnsafePtrRestriction]
-            public AtomicSafetyManager* SafetyManager;
-
-            public static SharedData Create()
-            {
-                var sharedData = new SharedData();
-                sharedData.SafetyManager = (AtomicSafetyManager*)UnsafeUtility.Malloc(UnsafeUtility.SizeOf<AtomicSafetyManager>(), 16, Allocator.Persistent);
-                *sharedData.SafetyManager = AtomicSafetyManager.Create();
-
-                return sharedData;
-            }
-
-            public void Dispose()
-            {
-                SafetyManager->Dispose();
-            }
-
-            public void Sync()
-            {
-                SafetyManager->BumpTemporaryHandleVersions();
-            }
-        }
-
-        private SharedData m_SharedData;
+        private PhysicsWorldExporter.SharedData m_SharedData;
 
         protected override void OnCreate()
         {
             m_BuildPhysicsWorldSystem = World.GetOrCreateSystem<BuildPhysicsWorld>();
-            m_EndFramePhysicsSystem = World.GetOrCreateSystem<EndFramePhysicsSystem>();
 
-            m_SharedData = SharedData.Create();
-
-#if !ENABLE_UNITY_COLLECTIONS_CHECKS
-            // Calling RequireForUpdate will mean that the system will not be updated if there are no dynamic bodies.
-            // However, if we are performing want collider integrity checks we need the system to run regardless.
-            RequireForUpdate(m_BuildPhysicsWorldSystem.DynamicEntityGroup);
-#endif
+            m_SharedData = PhysicsWorldExporter.SharedData.Create();
         }
 
         protected override void OnDestroy()
@@ -66,118 +28,34 @@ namespace Unity.Physics.Systems
             m_SharedData.Dispose();
         }
 
+        protected override void OnStartRunning()
+        {
+            base.OnStartRunning();
+            this.RegisterPhysicsRuntimeSystemReadOnly();
+        }
+
         protected override void OnUpdate()
         {
-            // Combine implicit input dependency with the user one
-            JobHandle handle = JobHandle.CombineDependencies(Dependency, m_InputDependency);
+            JobHandle handle = Dependency;
 
-#if ENABLE_UNITY_COLLECTIONS_CHECKS
+#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
             handle = CheckIntegrity(handle, m_BuildPhysicsWorldSystem.IntegrityCheckMap);
 #endif
 
-            ref PhysicsWorld world = ref m_BuildPhysicsWorldSystem.PhysicsWorld;
+            handle = PhysicsWorldExporter.SchedulePhysicsWorldExport(this, in m_BuildPhysicsWorldSystem.PhysicsWorld, handle, m_BuildPhysicsWorldSystem.PhysicsData.DynamicEntityGroup);
 
-            var positionType = GetComponentTypeHandle<Translation>();
-            var rotationType = GetComponentTypeHandle<Rotation>();
-            var velocityType = GetComponentTypeHandle<PhysicsVelocity>();
-
-            handle = new ExportDynamicBodiesJob
-            {
-                MotionVelocities = world.MotionVelocities,
-                MotionDatas = world.MotionDatas,
-
-                PositionType = positionType,
-                RotationType = rotationType,
-                VelocityType = velocityType
-            }.ScheduleParallel(m_BuildPhysicsWorldSystem.DynamicEntityGroup, 1, handle);
-
-            // Sync shared data.
-            m_SharedData.Sync();
-
-            int numCollisionWorldProxies = m_BuildPhysicsWorldSystem.CollisionWorldProxyGroup.CalculateEntityCount();
-            if (numCollisionWorldProxies > 0)
-            {
-                handle = new CopyCollisionWorld
-                {
-                    World = m_BuildPhysicsWorldSystem.PhysicsWorld,
-                    SharedData = m_SharedData,
-                    ProxyType = GetComponentTypeHandle<CollisionWorldProxy>()
-                }.ScheduleParallel(m_BuildPhysicsWorldSystem.CollisionWorldProxyGroup, 1, handle);
-            }
-
-            m_OutputDependency = handle;
+            handle = PhysicsWorldExporter.ScheduleCollisionWorldCopy(this, ref m_SharedData, in m_BuildPhysicsWorldSystem.PhysicsWorld,
+                handle, m_BuildPhysicsWorldSystem.CollisionWorldProxyGroup);
 
             // Combine implicit output dependency with user one
-            Dependency = JobHandle.CombineDependencies(m_OutputDependency, Dependency);
-
-            // Inform next system in the pipeline of its dependency
-            m_EndFramePhysicsSystem.AddInputDependency(m_OutputDependency);
-
-            // Invalidate input dependency since it's been used now
-            m_InputDependency = default;
+            Dependency = JobHandle.CombineDependencies(Dependency, handle);
         }
 
-        public void AddInputDependency(JobHandle inputDep)
-        {
-            m_InputDependency = JobHandle.CombineDependencies(m_InputDependency, inputDep);
-        }
+        [Obsolete("AddInputDependency() has been deprecated. Please call RegisterPhysicsRuntimeSystemReadWrite() or RegisterPhysicsRuntimeSystemReadOnly() in your system's OnStartRunning() to achieve the same effect. (RemovedAfter 2021-05-01)", true)]
+        public void AddInputDependency(JobHandle inputDep) {}
 
-        public JobHandle GetOutputDependency()
-        {
-            return m_OutputDependency;
-        }
-
-        [BurstCompile]
-        internal struct ExportDynamicBodiesJob : IJobEntityBatchWithIndex
-        {
-            [ReadOnly] public NativeArray<MotionVelocity> MotionVelocities;
-            [ReadOnly] public NativeArray<MotionData> MotionDatas;
-
-            public ComponentTypeHandle<Translation> PositionType;
-            public ComponentTypeHandle<Rotation> RotationType;
-            public ComponentTypeHandle<PhysicsVelocity> VelocityType;
-
-            public void Execute(ArchetypeChunk batchInChunk, int batchIndex, int entityStartIndex)
-            {
-                var chunkPositions = batchInChunk.GetNativeArray(PositionType);
-                var chunkRotations = batchInChunk.GetNativeArray(RotationType);
-                var chunkVelocities = batchInChunk.GetNativeArray(VelocityType);
-
-                int numItems = batchInChunk.Count;
-
-                for (int i = 0, motionIndex = entityStartIndex; i < numItems; i++, motionIndex++)
-                {
-                    MotionData md = MotionDatas[motionIndex];
-                    RigidTransform worldFromBody = math.mul(md.WorldFromMotion, math.inverse(md.BodyFromMotion));
-                    chunkPositions[i] = new Translation { Value = worldFromBody.pos };
-                    chunkRotations[i] = new Rotation { Value = worldFromBody.rot };
-                    chunkVelocities[i] = new PhysicsVelocity
-                    {
-                        Linear = MotionVelocities[motionIndex].LinearVelocity,
-                        Angular = MotionVelocities[motionIndex].AngularVelocity
-                    };
-                }
-            }
-        }
-
-        [BurstCompile]
-        internal unsafe struct CopyCollisionWorld : IJobEntityBatch
-        {
-            [ReadOnly] public PhysicsWorld World;
-            public SharedData SharedData;
-            public ComponentTypeHandle<CollisionWorldProxy> ProxyType;
-
-            //public void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
-            public void Execute(ArchetypeChunk batchInChunk, int batchIndex)
-            {
-                NativeArray<CollisionWorldProxy> chunkProxies = batchInChunk.GetNativeArray(ProxyType);
-
-                var proxy = new CollisionWorldProxy(World.CollisionWorld, SharedData.SafetyManager);
-
-                for (var i = 0; i < batchInChunk.Count; ++i)
-                    chunkProxies[i] = proxy;
-            }
-        }
+        [Obsolete("GetOutputDependency() has been deprecated. Please call RegisterPhysicsRuntimeSystemReadWrite() or RegisterPhysicsRuntimeSystemReadOnly() in your system's OnStartRunning() to achieve the same effect. (RemovedAfter 2021-05-01)", true)]
+        public JobHandle GetOutputDependency() => default;
 
         #region Integrity checks
 
@@ -197,7 +75,7 @@ namespace Unity.Physics.Systems
                 PhysicsColliderType = physicsColliderType
             };
 
-            inputDeps = checkDynamicBodyIntegrity.Schedule(m_BuildPhysicsWorldSystem.DynamicEntityGroup, inputDeps);
+            inputDeps = checkDynamicBodyIntegrity.Schedule(m_BuildPhysicsWorldSystem.PhysicsData.DynamicEntityGroup, inputDeps);
 
             var checkStaticBodyColliderIntegrity = new CheckColliderIntegrity
             {
@@ -205,7 +83,7 @@ namespace Unity.Physics.Systems
                 PhysicsColliderType = physicsColliderType
             };
 
-            inputDeps = checkStaticBodyColliderIntegrity.Schedule(m_BuildPhysicsWorldSystem.StaticEntityGroup, inputDeps);
+            inputDeps = checkStaticBodyColliderIntegrity.Schedule(m_BuildPhysicsWorldSystem.PhysicsData.StaticEntityGroup, inputDeps);
 
             var checkTotalIntegrity = new CheckTotalIntegrity
             {
@@ -304,7 +182,7 @@ namespace Unity.Physics.Systems
             for (int i = 0; i < colliders.Length; i++)
             {
                 var collider = colliders[i];
-                if (collider.Value.Value.Type == ColliderType.Compound)
+                if (collider.IsValid && collider.Value.Value.Type == ColliderType.Compound)
                 {
                     unsafe
                     {
@@ -318,7 +196,12 @@ namespace Unity.Physics.Systems
                             combinedFilter = CollisionFilter.CreateUnion(combinedFilter, c.Collider->Filter);
                         }
 
-                        // Check that the combined filter of all children is the same as root filter.
+                        // GroupIndex has no concept of union. Creating one from children has no guarantees
+                        // that it will be the same as the GroupIndex of the root, so we can't compare those two.
+                        // Setting combinedFilter's GroupIndex to rootFilter's will exclude GroupIndex from comparing the two filters.
+                        combinedFilter.GroupIndex = rootFilter.GroupIndex;
+
+                        // Check that the combined filter (excluding GroupIndex) of all children is the same as root filter.
                         // If not, it means user has forgotten to call RefreshCollisionFilter() on the CompoundCollider.
                         if (!rootFilter.Equals(combinedFilter))
                         {

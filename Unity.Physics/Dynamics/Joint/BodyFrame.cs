@@ -89,6 +89,6 @@ namespace Unity.Physics
         public override string ToString() =>
             $"BodyFrame {{ Axis = {Axis}, PerpendicularAxis = {PerpendicularAxis}, Position = {Position} }}";
 
-        public static implicit operator BodyFrame (RigidTransform transform) => new BodyFrame(transform);
+        public static implicit operator BodyFrame(RigidTransform transform) => new BodyFrame(transform);
     }
 }

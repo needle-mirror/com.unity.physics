@@ -1,4 +1,4 @@
-﻿using System.Runtime.CompilerServices;
+using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("Unity.Physics.Editor")]
 [assembly: InternalsVisibleTo("Unity.Physics.Hybrid")]

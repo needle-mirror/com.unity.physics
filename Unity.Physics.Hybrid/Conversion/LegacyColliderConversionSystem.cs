@@ -18,11 +18,11 @@ namespace Unity.Physics.Authoring
     {
         static readonly IReadOnlyDictionary<PhysicMaterialCombine, Material.CombinePolicy> k_MaterialCombineLookup =
             new Dictionary<PhysicMaterialCombine, Material.CombinePolicy>
-            {
-                { PhysicMaterialCombine.Average, Material.CombinePolicy.ArithmeticMean },
-                { PhysicMaterialCombine.Maximum, Material.CombinePolicy.Maximum },
-                { PhysicMaterialCombine.Minimum, Material.CombinePolicy.Minimum }
-            };
+        {
+            { PhysicMaterialCombine.Average, Material.CombinePolicy.ArithmeticMean },
+            { PhysicMaterialCombine.Maximum, Material.CombinePolicy.Maximum },
+            { PhysicMaterialCombine.Minimum, Material.CombinePolicy.Minimum }
+        };
 
         static PhysicMaterial DefaultMaterial
         {

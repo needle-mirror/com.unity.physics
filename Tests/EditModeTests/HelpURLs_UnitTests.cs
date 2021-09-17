@@ -27,14 +27,14 @@ namespace Unity.Physics.Tests.Authoring
 
         static readonly IEnumerable<Type> AllAuthoringTypes = typeof(PhysicsShapeAuthoring).Assembly.GetTypes().Where(
             t => t.IsPublic
-                && !t.IsAbstract
-                && !t.IsGenericType
-                && (t.IsSubclassOf(typeof(ScriptableObject)) || t.IsSubclassOf(typeof(MonoBehaviour)))
-                && t.GetCustomAttributes().Count(a => a is ObsoleteAttribute) == 0
+            && !t.IsAbstract
+            && !t.IsGenericType
+            && (t.IsSubclassOf(typeof(ScriptableObject)) || t.IsSubclassOf(typeof(MonoBehaviour)))
+            && t.GetCustomAttributes().Count(a => a is ObsoleteAttribute) == 0
         );
 
         [Test]
-        public void AuthoringType_HasProperlyFormattedHelpURL([ValueSource(nameof(AllAuthoringTypes))]Type type)
+        public void AuthoringType_HasProperlyFormattedHelpURL([ValueSource(nameof(AllAuthoringTypes))] Type type)
         {
             var attr = type.GetCustomAttribute(typeof(HelpURLAttribute)) as HelpURLAttribute;
             Assume.That(attr, Is.Not.Null, "Public authoring type has no HelpURLAttribute");

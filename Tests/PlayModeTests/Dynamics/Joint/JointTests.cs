@@ -27,8 +27,7 @@ namespace Unity.Physics.Tests.Joints
 
         static void integrate(ref MotionVelocity velocity, ref MotionData motion, float timestep)
         {
-            motion.WorldFromMotion.pos += velocity.LinearVelocity * timestep;
-            Integrator.IntegrateOrientation(ref motion.WorldFromMotion.rot, velocity.AngularVelocity, timestep);
+            Integrator.Integrate(ref motion.WorldFromMotion, velocity, timestep);
         }
 
         //
@@ -217,7 +216,7 @@ namespace Unity.Physics.Tests.Joints
                 MotionVelocity velocityA, velocityB;
                 MotionData motionA, motionB;
                 generateRandomMotion(ref rnd, out velocityA, out motionA, true);
-                generateRandomMotion(ref rnd, out velocityB, out motionB, !velocityA.HasInfiniteInertiaAndMass);
+                generateRandomMotion(ref rnd, out velocityB, out motionB, !velocityA.IsKinematic);
 
                 // Simulate the joint
                 {

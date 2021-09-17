@@ -82,9 +82,12 @@ namespace Unity.Physics
             Solver.StepInput stepInput, ref NativeStream.Writer collisionEventsWriter, bool enableFrictionVelocitiesHeuristic,
             Solver.MotionStabilizationInput motionStabilizationSolverInputA, Solver.MotionStabilizationInput motionStabilizationSolverInputB)
         {
-            bool bothBodiesWithInfInertiaAndMass = velocityA.HasInfiniteInertiaAndMass && velocityB.HasInfiniteInertiaAndMass;
-            if (bothBodiesWithInfInertiaAndMass)
+            bool bothMotionsAreKinematic = velocityA.IsKinematic && velocityB.IsKinematic;
+            if (bothMotionsAreKinematic)
             {
+                // Note that static bodies are assigned with MotionVelocity.Zero.
+                // So, at this point the bodies could be a kinematic vs kinematic pair, or a kinematic vs static pair.
+                // Either way, both bodies have an infinite mass and applying contact impulses would have no effect.
                 SolveInfMassPair(ref jacHeader, velocityA, velocityB, stepInput, ref collisionEventsWriter);
             }
             else

@@ -33,9 +33,9 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public void GetCapsuleProperties_WhenShapeIsBox_HeightIsMaxDimension(
-            [Values(0f, 1f, 2f, 3f)]float sizeX,
-            [Values(0f, 1f, 2f, 3f)]float sizeY,
-            [Values(0f, 1f, 2f, 3f)]float sizeZ
+            [Values(0f, 1f, 2f, 3f)] float sizeX,
+            [Values(0f, 1f, 2f, 3f)] float sizeY,
+            [Values(0f, 1f, 2f, 3f)] float sizeZ
         )
         {
             var size = new float3(sizeX, sizeY, sizeZ);
@@ -49,9 +49,9 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public void GetCapsuleProperties_WhenShapeIsBox_RadiusIsHalfSecondMaxDimension(
-            [Values(0f, 1f, 2f, 3f)]float sizeX,
-            [Values(0f, 1f, 2f, 3f)]float sizeY,
-            [Values(0f, 1f, 2f, 3f)]float sizeZ
+            [Values(0f, 1f, 2f, 3f)] float sizeX,
+            [Values(0f, 1f, 2f, 3f)] float sizeY,
+            [Values(0f, 1f, 2f, 3f)] float sizeZ
         )
         {
             var size = new float3(sizeX, sizeY, sizeZ);
@@ -86,9 +86,9 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public void GetCapsuleProperties_WhenShapeIsRotatedElongatedBox_MidpointIsBoxCenter(
-            [Values(0f, 1f, 2f, 3f)]float sizeX,
-            [Values(0f, 1f, 2f, 3f)]float sizeY,
-            [Values(0f, 1f, 2f, 3f)]float sizeZ
+            [Values(0f, 1f, 2f, 3f)] float sizeX,
+            [Values(0f, 1f, 2f, 3f)] float sizeY,
+            [Values(0f, 1f, 2f, 3f)] float sizeZ
         )
         {
             var size = new float3(sizeX, sizeY, sizeZ);
@@ -103,9 +103,9 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public void GetCylinderProperties_WhenShapeIsBox_HeightIsDeviantDimension(
-            [Values(0f, 1f, 2f, 3f)]float sizeX,
-            [Values(0f, 1f, 2f, 3f)]float sizeY,
-            [Values(0f, 1f, 2f, 3f)]float sizeZ
+            [Values(0f, 1f, 2f, 3f)] float sizeX,
+            [Values(0f, 1f, 2f, 3f)] float sizeY,
+            [Values(0f, 1f, 2f, 3f)] float sizeZ
         )
         {
             var size = new float3(sizeX, sizeY, sizeZ);
@@ -119,9 +119,9 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public void GetCylinderProperties_WhenShapeIsBox_RadiusIsHalfMaxHomogenousDimension(
-            [Values(0f, 1f, 2f, 3f)]float sizeX,
-            [Values(0f, 1f, 2f, 3f)]float sizeY,
-            [Values(0f, 1f, 2f, 3f)]float sizeZ
+            [Values(0f, 1f, 2f, 3f)] float sizeX,
+            [Values(0f, 1f, 2f, 3f)] float sizeY,
+            [Values(0f, 1f, 2f, 3f)] float sizeZ
         )
         {
             var size = new float3(sizeX, sizeY, sizeZ);

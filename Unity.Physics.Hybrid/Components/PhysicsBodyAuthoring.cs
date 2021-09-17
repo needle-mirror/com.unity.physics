@@ -1,4 +1,4 @@
-﻿using Unity.Mathematics;
+using Unity.Mathematics;
 using UnityEngine;
 
 namespace Unity.Physics.Authoring
@@ -37,7 +37,7 @@ namespace Unity.Physics.Authoring
         /// The body's graphics representation will display a smooth result between the two most recent physics simulation ticks.
         /// The result is one tick behind, but will not mis-predict the body's position and orientation.
         /// However, it can make the body appear as if it changes direction before making contact with other bodies, particularly when the physics tick rate is low.
-        /// See <seealso cref="GraphicsIntegration.GraphicalSmoothingUtility.InterpolateUsingVelocity"/> for details.
+        /// See <seealso cref="GraphicsIntegration.GraphicalSmoothingUtility.Interpolate"/> for details.
         /// </summary>
         Interpolation,
         /// <summary>
@@ -53,7 +53,7 @@ namespace Unity.Physics.Authoring
     [HelpURL(HelpURLs.PhysicsBodyAuthoring)]
     public sealed class PhysicsBodyAuthoring : MonoBehaviour
     {
-        PhysicsBodyAuthoring() { }
+        PhysicsBodyAuthoring() {}
 
         public BodyMotionType MotionType { get => m_MotionType; set => m_MotionType = value; }
         [SerializeField]
@@ -142,7 +142,12 @@ namespace Unity.Physics.Authoring
 
         [SerializeField]
         // Default value to solid unit sphere : https://en.wikipedia.org/wiki/List_of_moments_of_inertia
-        float3 m_InertiaTensor = new float3(2f/5f);
+        float3 m_InertiaTensor = new float3(2f / 5f);
+
+        public uint WorldIndex { get => m_WorldIndex; set => m_WorldIndex = value; }
+        [SerializeField]
+        [Tooltip("The index of the physics world this body belongs to. Default physics world has index 0.")]
+        uint m_WorldIndex = 0;
 
         public CustomPhysicsBodyTags CustomTags { get => m_CustomTags; set => m_CustomTags = value; }
         [SerializeField]

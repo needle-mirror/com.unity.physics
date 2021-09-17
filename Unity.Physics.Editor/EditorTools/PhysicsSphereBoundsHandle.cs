@@ -42,15 +42,15 @@ namespace Unity.Physics.Editor
 
                 // Since the geometry is transformed by Handles.matrix during rendering, we transform the camera position
                 // by the inverse matrix so that the two-shaded wireframe will have the proper orientation.
-                var invMatrix				= Handles.inverseMatrix;
+                var invMatrix               = Handles.inverseMatrix;
 
-                var cameraCenter			= Camera.current == null ? Vector3.zero: Camera.current.transform.position;
-                var cameraToCenter			= center - invMatrix.MultiplyPoint(cameraCenter); // vector from camera to center
-                var sqrDistCameraToCenter	= cameraToCenter.sqrMagnitude;
-                var sqrRadius				= radius * radius;					// squared radius
+                var cameraCenter            = Camera.current == null ? Vector3.zero : Camera.current.transform.position;
+                var cameraToCenter          = center - invMatrix.MultiplyPoint(cameraCenter); // vector from camera to center
+                var sqrDistCameraToCenter   = cameraToCenter.sqrMagnitude;
+                var sqrRadius               = radius * radius;                  // squared radius
                 var isCameraOrthographic    = Camera.current == null || Camera.current.orthographic;
-                var sqrOffset				= isCameraOrthographic ? 0 : (sqrRadius * sqrRadius / sqrDistCameraToCenter);	// squared distance from actual center to drawn disc center
-                var insideAmount			= sqrOffset / sqrRadius;
+                var sqrOffset               = isCameraOrthographic ? 0 : (sqrRadius * sqrRadius / sqrDistCameraToCenter);   // squared distance from actual center to drawn disc center
+                var insideAmount            = sqrOffset / sqrRadius;
                 if (insideAmount < 1)
                 {
                     if (math.abs(sqrDistCameraToCenter) >= kEpsilon)
@@ -86,10 +86,10 @@ namespace Unity.Physics.Editor
                             float g = math.sqrt(sqrOffset + f * f * sqrOffset) / radius;
                             if (g < 1)
                             {
-                                var angleToHorizon			= math.degrees(math.asin(g));
-                                var discTangent				= math.cross(discOrientation, planeNormal);
-                                var vectorToPointOnHorizon	= Quaternion.AngleAxis(angleToHorizon, discOrientation) * discTangent;
-                                var horizonArcLength		= (90 - angleToHorizon) * 2.0f;
+                                var angleToHorizon          = math.degrees(math.asin(g));
+                                var discTangent             = math.cross(discOrientation, planeNormal);
+                                var vectorToPointOnHorizon  = Quaternion.AngleAxis(angleToHorizon, discOrientation) * discTangent;
+                                var horizonArcLength        = (90 - angleToHorizon) * 2.0f;
 
                                 using (new Handles.DrawingScope(frontfacedColor))
                                     Handles.DrawWireArc(center, discOrientation, vectorToPointOnHorizon, horizonArcLength, radius);

@@ -276,14 +276,23 @@ namespace Unity.Physics
         public unsafe Aabb CalculateAabb(RigidTransform transform)
         {
             transform = math.mul(transform, new RigidTransform(m_Orientation, m_Center));
-            float3 axis = math.rotate(transform, new float3(0, 0, 1));
-            float3 v0 = transform.pos + axis * m_Height * 0.5f;
-            float3 v1 = transform.pos - axis * m_Height * 0.5f;
-            float3 e = m_Radius;
+            var halfAxis = math.rotate(transform, new float3(0, 0, m_Height * 0.5f));
+            float3 v0 = transform.pos + halfAxis;
+            float3 v1 = transform.pos - halfAxis;
+            var axis = v1 - v0;
+            float axisLen2 = m_Height * m_Height;
+            float invAxisLen2 = math.rcp(axisLen2);
+            float3 axisYZX = new float3(axis.y, axis.z, axis.x);
+            float3 axisZXY = new float3(axis.z, axis.x, axis.y);
+            float3 root = axisYZX * axisYZX;
+            root += axisZXY * axisZXY;
+            root *= invAxisLen2;
+            float3 expansion = math.sqrt(root);
+            expansion *= m_Radius;
             return new Aabb
             {
-                Min = math.min(v0, v1) - e,
-                Max = math.max(v0, v1) + e
+                Min = math.min(v0, v1) - expansion,
+                Max = math.max(v0, v1) + expansion
             };
         }
 

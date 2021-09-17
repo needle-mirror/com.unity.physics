@@ -61,7 +61,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
                 vertices.Dispose();
             }
         }
+
 #endif
     }
 }
-

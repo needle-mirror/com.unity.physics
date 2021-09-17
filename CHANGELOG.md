@@ -1,5 +1,144 @@
-# Change Log
-All notable changes to this package will be documented in this file.
+# Changelog
+
+## [0.50.0] - 2021-09-17
+
+### Changed
+
+* Upgraded com.unity.burst to 1.5.5
+* Adjusted code to remove obsolete APIs across all jobs inheriting IJobEntityBatch
+
+### Removed
+
+* All usages of PhysicsExclude from Demo and Runtime code.
+
+
+
+## [0.10.0-preview.1] - 9999-12-31
+### Upgrade guide
+* Added `PhysicsWorldIndex` shared component, which is required on every Entity that should be involved in physics simulation (body or joint). Its `Value` denotes the index of physics world that the Entity belongs to (0 for default `PhysicsWorld` processed by `BuildPhysicsWorld`, `StepPhysicsWorld` and `ExportPhysicsWorld` systems). Note that Entities for different physics worlds will be stored in separate chunks, due to different values of shared component.
+* `PhysicsExclude` component is obsolete, but will still work at least until 2021-10-01. Instead of adding `PhysicsExclude` when you want to exclude an Entity from physics simulation, you can achieve the same thing by removing the required `PhysicsWorldIndex` shared component.
+* `HaveStaticBodiesChanged` was added to `SimulationStepInput`. It's a NativeArray of size 1, used for optimization of static body synchronization.
+### Changes
+* Dependencies
+* Run-Time API
+    * Added `BlobAssetReferenceColliderExtension` functions for ease of use and to help avoid unsafe code
+        * Added reinterpret_cast-like logic via `BlobAssetReference<Collider>.As<To>` where `To` is the destination collider struct type. The extension will return a reference to the desired type.
+        * Added reinterpret_cast-like logic via `BlobAssetReference<Collider>.AsPtr<To>` where `To` is the destination collider struct type. The extension will return a pointer to the desired type.
+        * Added an easy conversion helper to `PhysicsCollider` via `BlobAssetReference<Collider>.AsComponent()`
+        * Added `ColliderCastInput` and `ColliderDistanceInput` constructors that do not require unsafe code, along with `SetCollider` function to change a collider after creation of the input struct.
+    * `PhysicsWorldData` is a new structure encapsulating `PhysicsWorld` and other data and queries that are necessary for simulating a physics world.
+    * `PhysicsWorldBuilder` and `PhysicsWorldExporter` are new utility classes providing methods for building a `PhysicsWorld` and exporting its data to ECS components, with options to tweak queries that fetch Entities for the physics world.
+    * `PhysicsWorldStepper` is a new helper class for scheduling physics simulation jobs. Its `SimulationCreator` delegate and methods that need to instantiate an `ISimulation` require physics world index to be passed in.
+    * `BuildPhysicsWorld` was refactored to keep the data in `PhysicsWorldData` and use `PhysicsWorldBuilder`. `WorldFilter` field holds its physics world index (0).
+    * `StepPhysicsWorld` was refactored to use `PhysicsWorldStepper`.
+    * `ExportPhysicsWorld` was refactored to use `PhysicsWorldExporter`, which knows how to copy `CollisionWorld` and export data to Entities fetched by its queries.
+    * Optimized `Collider.Clone()` to no longer create an extra copy of the `Collider` memory during the clone process.
+* Authoring/Conversion API
+    * Physics Body authoring component has a new field `WorldIndex` in Advanced section, with default value of 0 (meaning that it belongs to the default `PhysicsWorld`). Objects that don't have Physics Body authoring component on them or on any parent in the hierarchy will also get the default value. `CustomTags` field was moved to the Advanced section.
+    * `PhysicsRuntimeExtensions` has new template methods `RegisterPhysicsRuntimeSystem*` which can be used in system's `OnStartRunning()` method for automatic dependency management for non-default physics runtime data. They are analoguous to the existing non-templated counterparts, just require a separate `ComponentData` type for each non-default physics world.
+* Run-Time Behavior
+    * Added support for multiple `PhysicsWorlds`, where each body in each world is represented by a separate Entity. Each entity must have all components that are needed for physics simulation in its world.
+    * Non-default physics worlds require custom systems that will processs (build, simulate and export) them, from Entities that are marked with appropriate `PhysicsWorldIndex` shared component. Storage of `PhysicsWorld` is also controlled by the user. A number of utilities was added to make this easier.
+* Authoring/Conversion Behavior
+### Fixes
+* Fixed a bug in Graphical Interpolation where `LocalToWorld` was not updated if rendering and physics were exactly in sync.
+* Fixed the spring constant calculation during joint conversion
+* Fixed the configurable joint linear limit during joint conversion
+* Physics Debug Display: Draw Collider Edges performance improved
+* Physics Debug Display: Draw Collider Edges for sphere colliders improved
+
+
+## [0.9.0-preview.4] - 2021-05-19
+### Upgrade guide
+* An extra check was added to verify that the data provided to the 'Start/End' properties of 'RayCastInput/ColliderCastInput' does not generate a cast length that is not too long. The maximum length allowed is half of 'float.MaxValue'
+* Integrity checks can be now be enabled and disabled by toggling the new "DOTS/Physics/Enable Integrity Checks" menu item. Integrity checks should be enabled when checking simulation quality and behaviour. Integrity checks should be disabled when measuring performance. When enabled, Integrity checks will be included in a in Development build of a standalone executable, but are always excluded in release builds.
+* An extra check was added to verify that the data provided to the `Start` & `End` properties of `RayCastInput` & `ColliderCastInput` does not generate a cast length that is too long. The maximum length allowed is half of `float.MaxValue`
+### Changes
+* Dependencies
+    * Updated Burst to `1.5.3`
+    * Updated Collections to `0.17.0-preview.18`
+    * Updated Entities to `0.19.0-preview.30`
+    * Updated Jobs to `0.10.0-preview.18`
+    * Updated Test Framework to `1.1.24`
+* Added `partial` keyword to all `SystemBase`-derived classes
+### Fixes
+* Fixed the condition for empty physics world, to return from `BuildPhysicsWorld.OnUpdate()` before calling `PhysicsWorld.Reset()`.
+* Fixed a bug in `DebugDisplay.Managed.Instance.Render()` where only half of Debug Display lines were rendered for a MeshTopology.Lines type
+* Fixed a bug in `CalculateAabb` method for cylinder collider that was increasing the AABB height axis by radius
+* Integrity checks can now be toggled via an Editor menu item, and can be run in Development builds.
+* Fixed a bug where PhysicsDebugDisplay lines would disappear if editor was paused in PlayMode
+
+### Known Issues
+## [0.8.0-preview.1] - 2021-03-26
+### Upgrade guide
+### Changes
+* Dependencies
+    * Updated Collections from `0.16.0-preview.22` to `0.17.0-preview.10`
+    * Updated Entities from `0.18.0-preview.42` to `0.19.0-preview.17`
+    * Updated Jobs from `0.9.0-preview.24` to `0.10.0-preview.10`
+
+* Run-Time API
+    * Made `CollisionEvent` and `TriggerEvent` implement a common `ISimulationEvent` interface allowing them to be equatable and comparable.
+    * Made `ColliderKey` comparable.
+    * Exposed a `MotionVelocity.IsKinematic` property.
+    * Exposed a `PhysicsMass.IsKinematic` property.
+    * Added a `PhysicsMassOverride.SetVelocityToZero` field. If `PhysicsMassOverride.IsKinematic`, is a non-zero value, then a body's mass and inertia are made infinite, though it's motion will still be integrated. If `PhysicsMassOverride.SetVelocityToZero` is also a non-zero value, the kinematic body will ignore the values in the associated `PhysicsVelocity` component and no longer move.
+
+* Run-Time Behavior
+	* If a body has infinite mass and/or inertia, then linear and/or angular damping will no longer be applied respectively.
+
+### Fixes
+
+* Fixed a bug in `ExportPhysicsWorld.CheckColliderFilterIntegrity()` method that was giving false integrity errors due to the fact that it had incorrectly handled compound colliders, if they (or their children) had a `GroupIndex` on the `Filter` that is not 0.
+* Added an extra change check on the `Parent` component type to `CheckStaticBodyChangesJob` in the `BuildPhysicsWorld` system.
+### Known Issues
+
+
+## [0.7.0-preview.3] - 2021-02-24
+
+### Upgrade guide
+* `RegisterPhysicsRuntimeSystemReadOnly()` and `RegisterPhysicsRuntimeSystemReadWrite()` (both registered as extensions of `SystemBase`) should be used to manage physics data dependencies instead of the old `AddInputDependency()` and `GetOutputDependency()` approach. Users should declare their `UpdateBefore` and `UpdateAfter` systems as before and additionally only call one of the two new functions in their system's `OnStartRunning()`, which will be enough to get an automatic update of the `Dependency` property without the need for manually combining the dependencies as before. Note that things have not changed if you want to read or write physics runtime data directly in your system's `OnUpdate()` - in that case, you still need to ensure that jobs from previous systems touching physics runtime data are complete, by completing the `Dependency`. Also note that `BuildPhysicsWorld.AddInputDependencyToComplete()` still remains needed for jobs that need to finish before any changes are made to the PhysicsWorld, if your system is not scheduled in between other 2 physics systems that will do that for you.
+
+* The `Constraint.DefaultSpringFrequency` and `Constraint.DefaultSpringDamping` values have been changed. The original defaults were setup to match the default `fixedDeltaTime` and therefore assumed a 50hz simulation timestep. The current default simulation step is now 60hz and so the default spring parameters have been changed to match this assumption. This change may affect more complex Joint setups that are close to being overconstrained, but generally it should not break the original intent of the setup.
+
+### Changes
+
+* Dependencies
+
+    * Updated minimum Unity Editor version from `2020.1.0f1` to `2020.2.4f1`
+    * Updated Collections from `0.15.0-preview.21` to `0.16.0-preview.22`
+    * Updated Entities from `0.17.0-preview.41` to `0.18.0-preview.42`
+    * Updated Jobs from `0.8.0-preview.23` to `0.9.0-preview.24`
+
+* Run-Time API
+
+    * Added a `CompoundCollider.Child.Entity` & associated `ChildCollider.Entity` field. This field is useful in creating a link back to the original Entity from which the Child was built.
+    * Added `Integrator.Integrate()` which takes a `RigidTransform`, `MotionVelocity` and time step and integrates the transform in time. This can be used to integrate forward in time, but also to undo integration if necessary (by providing the negative time).
+    * Removed `ModifiableJacobianHeader.HasColliderKeys`, `ModifiableJacobianHeader.ColliderKeyA` and `ModifiableJacobianHeader.ColliderKeyB` as they are not meant to be read by users, but to fill the data for collision events.
+    * Removed `SimulationCallbacks.Phase.PostSolveJacobians` as it doesn't have real use cases and it's causing inconsistencies between the two engines. Instead, users should schedule their jobs after `StepPhysicsWorld` and before `ExportPhysicsWorld` to achieve a similar effect.
+    * Added `ClampToMaxLength()` to `Unity.Physics.Math`, which reduces the length of specified `float3` vector to specified maxLength if it was bigger.
+	* `ColliderCastHit` and `DistanceHit` now have `QueryColliderKey` field. If the input of `ColliderCast` or `ColliderDistance` queries contains a non-convex collider, this field will contain the collider key of the input collider. Otherwise, its value will be `ColliderKey.Empty`.
+    * Removed `AddInputDependency()` and `GetOutputDependency()` from all physics systems as dependencies are now handled in a different way (see below).
+    * Added `RegisterPhysicsRuntimeSystemReadOnly()` and `RegisterPhysicsRuntimeSystemReadWrite()` that are both extension methods for `SystemBase` and are used to declare interaction with the runtime physics data (stored in PhysicsWorld). One should call one of these in their system's `OnStartRunning()` (using `this.RegisterPhysicsRuntimeSystemReadOnly()` or `this.RegisterPhysicsRuntimeSystemReadWrite()`) to declare interaction with the physics data, which will translate to automatic data dependencies being included in the `SystemBase.Dependency` property of any system.
+    * Previously internal functions in `ColliderKey`, `ColliderKeyPath` and `ChildCollider` are now public to aid the traversal of a `Collider` hierarchy.
+
+* Authoring/Conversion API
+
+    * A new `CompoundCollider.Child.Entity` field is automatically populated through the conversion system, to point at the converted Entity associated with the GameObject that contacted the `PhysicsShapeAuthoring` component.
+        * This default setting can be overriden by adding a `PhysicsRenderEntity` component data. The common use case for this is where no `MeshRenderer` component is on the converted child Entity, and it is desirable to redirect to another Entity with a graphical representation in a different branch of the hierarchy.
+    * Added a `PhysicsRenderEntity` component data. This is primarily used for populating a `CompoundCollider.Child.Entity` field where there was no graphical representation on the same GameObject that has a `PhysicsShapeAuthoring` component.
+
+* Run-Time Behavior
+	* `ColliderDistance` and `ColliderCast` queries now support non-convex input colliders (Compounds, Meshes and Terrains).
+
+* Authoring/Conversion Behavior
+
+### Fixes
+
+* Fixed a bug in `ExportPhysicsWorld.OnCreate()` method that relied on the fact that `BuildPhysicsWorld.OnCreate()` was executed before it.
+* Fixed `CompoundCollider.RefreshCollisionFilter()` when compound contains compound children.
+
+### Known Issues
 
 ## [0.6.0-preview.3] - 2021-01-18
 
@@ -314,7 +453,7 @@ All notable changes to this package will be documented in this file.
         * `PhysicsJoint.EnableCollision` (now defined on `PhysicsConstrainedBodyPair`)
         * `PhysicsJoint.JointData` (use `BodyAFromJoint`, `BodyBFromJoint`, and `GetConstraints()`/`SetConstraints()` instead).
         * `SimulationContext.Reset()` passing `PhysicsWorld` (use signature passing `SimulationStepInput` instead).
-    * Removed the following members/types:        
+    * Removed the following members/types:
         * `CollisionFilter.IsValid`
         * `CollisionWorld.ScheduleUpdateDynamicLayer()`
         * `Constraint` factory signatures passing `float` values for ranges:
@@ -363,7 +502,7 @@ All notable changes to this package will be documented in this file.
 * Run-Time Behavior
     * `BuildPhysicsWorld.JointEntityGroup` now requires both a `PhysicsJoint` and `PhysicsConstrainedBodyPair` component.
     * `Constraint` factory methods taking a `FloatRange` swizzle the input value if needed to ensure that `Min` cannot be greater than `Max`.
-    * `RigidBody` queries (`Raycast()`, `ColliderCast()`, `PointDistance()`, and `ColliderDistance()`) now use world space input, and provide world space output, instead of using body space.     
+    * `RigidBody` queries (`Raycast()`, `ColliderCast()`, `PointDistance()`, and `ColliderDistance()`) now use world space input, and provide world space output, instead of using body space.
 
 * Authoring/Conversion Behavior
     * It is now possible to create a compound collider by adding multiple `PhysicsShapeAuthoring` components to a single GameObject.

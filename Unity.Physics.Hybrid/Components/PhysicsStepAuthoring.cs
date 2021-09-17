@@ -10,7 +10,7 @@ namespace Unity.Physics.Authoring
     [HelpURL(HelpURLs.PhysicsStepAuthoring)]
     public sealed class PhysicsStepAuthoring : MonoBehaviour, IConvertGameObjectToEntity
     {
-        PhysicsStepAuthoring() { }
+        PhysicsStepAuthoring() {}
 
         public SimulationType SimulationType
         {
@@ -72,13 +72,13 @@ namespace Unity.Physics.Authoring
             SolverIterationCount = SolverIterationCount,
             SolverStabilizationHeuristicSettings = EnableSolverStabilizationHeuristic ?
                 new Solver.StabilizationHeuristicSettings
-                {
-                    EnableSolverStabilization = true,
-                    EnableFrictionVelocities = Default.SolverStabilizationHeuristicSettings.EnableFrictionVelocities,
-                    VelocityClippingFactor = Default.SolverStabilizationHeuristicSettings.VelocityClippingFactor,
-                    InertiaScalingFactor = Default.SolverStabilizationHeuristicSettings.InertiaScalingFactor
-                } :
-                Solver.StabilizationHeuristicSettings.Default,
+            {
+                EnableSolverStabilization = true,
+                EnableFrictionVelocities = Default.SolverStabilizationHeuristicSettings.EnableFrictionVelocities,
+                VelocityClippingFactor = Default.SolverStabilizationHeuristicSettings.VelocityClippingFactor,
+                InertiaScalingFactor = Default.SolverStabilizationHeuristicSettings.InertiaScalingFactor
+            } :
+            Solver.StabilizationHeuristicSettings.Default,
             MultiThreaded = (byte)(MultiThreaded ? 1 : 0),
             SynchronizeCollisionWorld = (byte)(SynchronizeCollisionWorld ? 1 : 0)
         };

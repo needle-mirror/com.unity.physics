@@ -18,6 +18,7 @@ namespace Unity.Physics
         {
             public RigidTransform CompoundFromChild;
             internal int m_ColliderOffset;
+            public Entity Entity;
 
             public unsafe Collider* Collider
             {
@@ -63,6 +64,7 @@ namespace Unity.Physics
         {
             public RigidTransform CompoundFromChild;
             public BlobAssetReference<Collider> Collider;
+            public Entity Entity;
         }
 
         // Create a compound collider containing an array of other colliders.
@@ -122,6 +124,7 @@ namespace Unity.Physics
                 }
                 childrenPtr[i].m_ColliderOffset = (int)((byte*)dstAddr - (byte*)(&childrenPtr[i].m_ColliderOffset));
                 childrenPtr[i].CompoundFromChild = children[i].CompoundFromChild;
+                childrenPtr[i].Entity = children[i].Entity;
 
                 maxTotalNumColliderKeyBits = math.max(maxTotalNumColliderKeyBits, collider->TotalNumColliderKeyBits);
             }
@@ -348,6 +351,13 @@ namespace Unity.Physics
             for (int childIndex = 0; childIndex < Children.Length; childIndex++)
             {
                 ref Child c = ref Children[childIndex];
+
+                // If a child is also a compound, refresh its collision filter first
+                if (c.Collider->Type == ColliderType.Compound)
+                {
+                    ((CompoundCollider*)c.Collider)->RefreshCollisionFilter();
+                }
+
                 filter = CollisionFilter.CreateUnion(filter, c.Collider->Filter);
             }
 
@@ -538,7 +548,7 @@ namespace Unity.Physics
             if (key.PopSubKey(NumColliderKeyBits, out uint childIndex))
             {
                 ref Child c = ref Children[(int)childIndex];
-                child = new ChildCollider(c.Collider) { TransformFromChild = c.CompoundFromChild };
+                child = new ChildCollider(c.Collider, c.CompoundFromChild, c.Entity);
                 return true;
             }
 
@@ -568,7 +578,7 @@ namespace Unity.Physics
                 }
                 else
                 {
-                    var child = new ChildCollider(c.Collider) { TransformFromChild = c.CompoundFromChild };
+                    var child = new ChildCollider(c.Collider, c.CompoundFromChild, c.Entity);
                     collector.AddLeaf(childKey, ref child);
                 }
             }

@@ -16,7 +16,6 @@ namespace Unity.Physics.Authoring
                 manager.SetComponentData(entity, value);
         }
 
-
         internal static void PostProcessTransformComponents(
             this EntityManager manager, Entity entity, Transform worldTransform, BodyMotionType motionType
         )
@@ -25,12 +24,12 @@ namespace Unity.Physics.Authoring
             var haveParentEntity    = transformParent != null; // TODO: revisit what to do in subscenes where everything is implicitly converted
             var haveBakedTransform  = worldTransform.GetComponent<StaticOptimizeEntity>() != null;
             var unparent            = motionType != BodyMotionType.Static || !haveParentEntity || haveBakedTransform;
-            
+
             // ensure dynamic and kinematic bodies translation/rotation are in world space
             // ensure static optimized entities have translation/rotation so they can be processed more efficiently
             if (!unparent)
                 return;
-            
+
             var rigidBodyTransform = Math.DecomposeRigidBodyTransform(worldTransform.localToWorldMatrix);
 
             manager.RemoveComponent<Parent>(entity);
@@ -52,6 +51,5 @@ namespace Unity.Physics.Authoring
             manager.RemoveComponent<NonUniformScale>(entity);
             manager.RemoveComponent<Scale>(entity);
         }
-    }    
+    }
 }
-

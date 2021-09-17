@@ -37,12 +37,12 @@ namespace Unity.Physics
                 m_TransposedPoints.c2 = new float4(v0.z, v1.z, v2.z, v3.z);
             }
 
-            public static FourTransposedPoints operator +(FourTransposedPoints lhs, FourTransposedPoints rhs)
+            public static FourTransposedPoints operator+(FourTransposedPoints lhs, FourTransposedPoints rhs)
             {
                 return new FourTransposedPoints { m_TransposedPoints = lhs.m_TransposedPoints + rhs.m_TransposedPoints };
             }
 
-            public static FourTransposedPoints operator -(FourTransposedPoints lhs, FourTransposedPoints rhs)
+            public static FourTransposedPoints operator-(FourTransposedPoints lhs, FourTransposedPoints rhs)
             {
                 return new FourTransposedPoints { m_TransposedPoints = lhs.m_TransposedPoints - rhs.m_TransposedPoints };
             }

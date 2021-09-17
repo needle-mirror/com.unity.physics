@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Unity.Mathematics;
@@ -91,14 +91,13 @@ namespace Unity.Physics
             return math.all(Max >= other.Min & Min <= other.Max);
         }
 
-
         /// <summary>
         /// Returns the closest point on the bounds of the AABB to the specified position.
         /// <param name="position">A target point in space.</param>
         /// </summary>
         public float3 ClosestPoint(float3 position)
         {
-            return math.min(Max,math.max(Min, position));
+            return math.min(Max, math.max(Min, position));
         }
     }
 

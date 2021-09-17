@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -18,7 +18,7 @@ namespace Unity.Physics.Tests.Dynamics.Materials
             mat2.FrictionCombinePolicy = Material.CombinePolicy.GeometricMean;
 
             mat1.Friction = 1.0f;
-            mat2.Friction = 0.0f;      
+            mat2.Friction = 0.0f;
             combinedFriction = Material.GetCombinedFriction(mat1, mat2);
             Assert.IsTrue(combinedFriction == 0.0f);
 
@@ -147,7 +147,6 @@ namespace Unity.Physics.Tests.Dynamics.Materials
             combinedFriction = Material.GetCombinedFriction(mat2, mat1);
             Assert.IsTrue(combinedFriction == 1.25f);
         }
-
 
         [Test]
         public void RestitutionCombinePolicyTest()

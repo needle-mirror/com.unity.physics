@@ -48,7 +48,7 @@ namespace Unity.Physics
             set
             {
                 // Some flags change the size of the jacobian; don't allow these to be changed:
-                byte notPermitted = (byte)(JacobianFlags.EnableSurfaceVelocity | JacobianFlags.EnableMassFactors | JacobianFlags.EnableMassFactors);
+                byte notPermitted = (byte)(JacobianFlags.EnableSurfaceVelocity | JacobianFlags.EnableMassFactors | JacobianFlags.EnableCollisionEvents);
                 byte userFlags = (byte)value;
                 byte alreadySet = (byte)m_Header->Flags;
 
@@ -61,9 +61,6 @@ namespace Unity.Physics
                 m_Header->Flags = value;
             }
         }
-        public bool HasColliderKeys => m_Header->HasContactManifold;
-        public ColliderKey ColliderKeyB => m_Header->ColliderKeys.ColliderKeyB;
-        public ColliderKey ColliderKeyA => m_Header->ColliderKeys.ColliderKeyA;
 
         public bool HasMassFactors => m_Header->HasMassFactors;
         public MassFactors MassFactors
@@ -210,9 +207,9 @@ namespace Unity.Physics
             };
             var parameters = new JobsUtility.JobScheduleParameters(
 #if UNITY_2020_2_OR_NEWER
-            UnsafeUtility.AddressOf(ref data), JacobiansJobProcess<T>.Initialize(), inputDeps, ScheduleMode.Single);
+                UnsafeUtility.AddressOf(ref data), JacobiansJobProcess<T>.Initialize(), inputDeps, ScheduleMode.Single);
 #else
-                    UnsafeUtility.AddressOf(ref data), JacobiansJobProcess<T>.Initialize(), inputDeps, ScheduleMode.Batched);
+                UnsafeUtility.AddressOf(ref data), JacobiansJobProcess<T>.Initialize(), inputDeps, ScheduleMode.Batched);
 #endif
             return JobsUtility.Schedule(ref parameters);
         }

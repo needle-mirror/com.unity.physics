@@ -14,7 +14,7 @@ namespace Unity.Physics.Tests.DFG
     internal class RaycastNodeTests
     {
         const uint seed = 0x87654321;
-        
+
         private Random m_Rnd = new Random(seed);
         private PhysicsWorld m_World;
 
@@ -27,9 +27,9 @@ namespace Unity.Physics.Tests.DFG
         [TearDown]
         public void TearDown()
         {
-            m_World.Dispose(); 
+            m_World.Dispose();
         }
-       
+
         [BurstCompile]
         struct RaycastJob : IJob, IDisposable
         {
@@ -41,7 +41,7 @@ namespace Unity.Physics.Tests.DFG
 
             public RaycastHit Hit { get => HitArray[0]; }
             public bool HitSuccess { get => HitSuccessArray[0]; }
-            
+
             public static RaycastJob Create(PhysicsWorld world, RaycastInput input)
             {
                 return new RaycastJob()
@@ -58,15 +58,15 @@ namespace Unity.Physics.Tests.DFG
                 HitArray.Dispose();
                 HitSuccessArray.Dispose();
             }
-            
+
             public void Execute()
             {
                 HitSuccessArray[0] = World.CastRay(Input, out RaycastHit hit);
                 HitArray[0] = hit;
             }
         }
-        
-#if !UNITY_EDITOR        
+
+#if !UNITY_EDITOR
         // Test is only run where Burst is AOT
         [Test]
 #endif
@@ -74,7 +74,7 @@ namespace Unity.Physics.Tests.DFG
         {
             RaycastHit hit, hitQuery;
             bool hitSuccess, hitSuccessQuery;
-            
+
             int numTests = 1000;
             for (int iTest = 0; iTest < numTests; iTest++)
             {
@@ -93,7 +93,7 @@ namespace Unity.Physics.Tests.DFG
                     End = endPos,
                     Filter = CollisionFilter.Default
                 };
-               
+
                 // Build and evaluate node set.
                 using (var safetyManager = AtomicSafetyManager.Create())
                 {
@@ -103,16 +103,22 @@ namespace Unity.Physics.Tests.DFG
                     {
                         var rayCastNode = set.Create<RaycastNode>();
 
-                        set.SetData(rayCastNode, RaycastNode.KernelPorts.CollisionWorld, collisionWorldProxy);
-                        set.SetData(rayCastNode, RaycastNode.KernelPorts.Input, input);
+                        var collisionWorldInputEndPoint = rayCastNode.Tie(RaycastNode.KernelPorts.CollisionWorld);
+                        set.SetData(collisionWorldInputEndPoint, collisionWorldProxy);
 
-                        var hitGraphValue = set.CreateGraphValue(rayCastNode, RaycastNode.KernelPorts.Hit);
-                        var hitSuccessGraphValue = set.CreateGraphValue(rayCastNode, RaycastNode.KernelPorts.HitSuccess);
+                        var rayCastInputEndpoint = rayCastNode.Tie(RaycastNode.KernelPorts.Input);
+                        set.SetData(rayCastInputEndpoint, input);
+
+                        var hitOutputEndpoint = rayCastNode.Tie(RaycastNode.KernelPorts.Hit);
+                        var hitGraphValue = set.CreateGraphValue(hitOutputEndpoint);
+                        var hitSuccessOutputEndpoint = rayCastNode.Tie(RaycastNode.KernelPorts.HitSuccess);
+                        var hitSuccessGraphValue = set.CreateGraphValue(hitSuccessOutputEndpoint);
 
                         set.Update();
 
-                        hit = set.GetValueBlocking(hitGraphValue);
-                        hitSuccess = set.GetValueBlocking(hitSuccessGraphValue);
+                        var resolver = set.GetGraphValueResolver(out var job); job.Complete();
+                        hit = resolver.Resolve(hitGraphValue);
+                        hitSuccess = resolver.Resolve(hitSuccessGraphValue);
 
                         set.ReleaseGraphValue(hitGraphValue);
                         set.ReleaseGraphValue(hitSuccessGraphValue);
@@ -129,7 +135,7 @@ namespace Unity.Physics.Tests.DFG
                     hitSuccessQuery = job.HitSuccess;
                     hitQuery = job.Hit;
                 }
-                
+
                 if (hitSuccessQuery)
                 {
                     Assert.That(hitSuccess, Is.True);
@@ -146,7 +152,7 @@ namespace Unity.Physics.Tests.DFG
         public void RayCastNode_WithInvalidProxy_Returns_HitSuccess_Equals_To_False()
         {
             bool hitSuccess;
-            
+
             // Empty CollisionWorldProxy
             var collisionWorldProxy = new CollisionWorldProxy();
 
@@ -156,24 +162,29 @@ namespace Unity.Physics.Tests.DFG
                 End = float3.zero,
                 Filter = CollisionFilter.Default
             };
-            
+
             using (var set = new NodeSet())
             {
                 var rayCastNode = set.Create<RaycastNode>();
 
-                set.SetData(rayCastNode, RaycastNode.KernelPorts.CollisionWorld, collisionWorldProxy);
-                set.SetData(rayCastNode, RaycastNode.KernelPorts.Input, input);
-               
-                var hitSuccessGraphValue = set.CreateGraphValue(rayCastNode, RaycastNode.KernelPorts.HitSuccess);
-                
+                var collisionWorldInputEndPoint = rayCastNode.Tie(RaycastNode.KernelPorts.CollisionWorld);
+                set.SetData(collisionWorldInputEndPoint, collisionWorldProxy);
+
+                var rayCastInputEndpoint = rayCastNode.Tie(RaycastNode.KernelPorts.Input);
+                set.SetData(rayCastInputEndpoint, input);
+
+                var hitSuccessOutputEndpoint = rayCastNode.Tie(RaycastNode.KernelPorts.HitSuccess);
+                var hitSuccessGraphValue = set.CreateGraphValue(hitSuccessOutputEndpoint);
+
                 set.Update();
-               
-                hitSuccess = set.GetValueBlocking(hitSuccessGraphValue);
-              
+
+                var resolver = set.GetGraphValueResolver(out var job); job.Complete();
+                hitSuccess = resolver.Resolve(hitSuccessGraphValue);
+
                 set.ReleaseGraphValue(hitSuccessGraphValue);
                 set.Destroy(rayCastNode);
             }
-           
+
             Assert.That(hitSuccess, Is.False);
         }
     }

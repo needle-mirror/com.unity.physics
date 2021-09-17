@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -9,7 +9,7 @@ namespace Unity.Physics.Authoring
     [HelpURL(HelpURLs.CustomPhysicsBodyTagNames)]
     public sealed class CustomPhysicsBodyTagNames : ScriptableObject, ITagNames
     {
-        CustomPhysicsBodyTagNames() { }
+        CustomPhysicsBodyTagNames() {}
 
         public IReadOnlyList<string> TagNames => m_TagNames;
         [SerializeField]

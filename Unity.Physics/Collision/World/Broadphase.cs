@@ -368,7 +368,13 @@ namespace Unity.Physics
 
             public BoundingVolumeHierarchy BoundingVolumeHierarchy => new BoundingVolumeHierarchy(Nodes, NodeFilters);
 
-            public int NumBodies => BodyFilters.Length;
+            public int NumBodies
+            {
+                get
+                {
+                    return BodyFilters.Length;
+                }
+            }
 
             public Tree(int numBodies, Allocator allocator = Allocator.Persistent)
             {
@@ -516,6 +522,7 @@ namespace Unity.Physics
         {
             if (input.Filter.IsEmpty)
                 return false;
+
             var leafProcessor = new BvhLeafProcessor(rigidBodies);
 
             leafProcessor.BaseRigidBodyIndex = m_DynamicTree.NumBodies;
@@ -533,6 +540,7 @@ namespace Unity.Physics
             Assert.IsTrue(input.Collider != null);
             if (input.Collider->Filter.IsEmpty)
                 return false;
+
             var leafProcessor = new BvhLeafProcessor(rigidBodies);
 
             leafProcessor.BaseRigidBodyIndex = m_DynamicTree.NumBodies;

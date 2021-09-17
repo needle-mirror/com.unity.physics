@@ -21,7 +21,7 @@ namespace Unity.Physics.Authoring
     [HelpURL(HelpURLs.PhysicsDebugDisplayAuthoring)]
     public sealed class PhysicsDebugDisplayAuthoring : MonoBehaviour, IConvertGameObjectToEntity
     {
-        PhysicsDebugDisplayAuthoring() { }
+        PhysicsDebugDisplayAuthoring() {}
 
         public bool DrawColliders = false;
         public bool DrawColliderEdges = false;

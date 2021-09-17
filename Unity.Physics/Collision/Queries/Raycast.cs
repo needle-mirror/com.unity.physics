@@ -1,3 +1,4 @@
+using Unity.Assertions;
 using Unity.Entities;
 using Unity.Mathematics;
 using static Unity.Physics.Math;
@@ -52,6 +53,7 @@ namespace Unity.Physics
                 float3 end = Ray.Origin + Ray.Displacement;
                 Ray.Origin = value;
                 Ray.Displacement = end - value;
+                Assert.IsTrue(math.all(math.abs(Ray.Displacement) < Math.Constants.MaxDisplacement3F), "RayCast length is very long. This would lead to floating point inaccuracies and invalid results.");
             }
         }
         /// <summary>
@@ -60,7 +62,11 @@ namespace Unity.Physics
         public float3 End
         {
             get => Ray.Origin + Ray.Displacement;
-            set => Ray.Displacement = value - Ray.Origin;
+            set
+            {
+                Ray.Displacement = value - Ray.Origin;
+                Assert.IsTrue(math.all(math.abs(Ray.Displacement) < Math.Constants.MaxDisplacement3F), "RayCast length is very long. This would lead to floating point inaccuracies and invalid results.");
+            }
         }
         /// <summary>
         /// The CollisionFilter is used to determine what objects the Ray is and isn't going to hit.

@@ -58,22 +58,23 @@ namespace Unity.Physics.Authoring
     }
 
     // Creates DisplayBroadphaseJobs
-    // Update before end frame system as well as some test systems might have disabled the step system
     [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
-    [UpdateAfter(typeof(BuildPhysicsWorld)), UpdateBefore(typeof(StepPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
-    public class DisplayBroadphaseAabbsSystem : SystemBase
+    [UpdateAfter(typeof(BuildPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
+    public partial class DisplayBroadphaseAabbsSystem : SystemBase
     {
         BuildPhysicsWorld m_BuildPhysicsWorldSystem;
-        StepPhysicsWorld m_StepPhysicsWorldSystem;
-        EndFramePhysicsSystem m_EndFramePhysicsSystem;
         DebugStream m_DebugStreamSystem;
 
         protected override void OnCreate()
         {
             m_BuildPhysicsWorldSystem = World.GetOrCreateSystem<BuildPhysicsWorld>();
-            m_StepPhysicsWorldSystem = World.GetOrCreateSystem<StepPhysicsWorld>();
-            m_EndFramePhysicsSystem = World.GetOrCreateSystem<EndFramePhysicsSystem>();
             m_DebugStreamSystem = World.GetOrCreateSystem<DebugStream>();
+        }
+
+        protected override void OnStartRunning()
+        {
+            base.OnStartRunning();
+            this.RegisterPhysicsRuntimeSystemReadOnly();
         }
 
         protected override void OnUpdate()
@@ -83,23 +84,14 @@ namespace Unity.Physics.Authoring
                 return;
             }
 
-            var handle = JobHandle.CombineDependencies(Dependency, m_BuildPhysicsWorldSystem.GetOutputDependency());
-
             ref Broadphase broadphase = ref m_BuildPhysicsWorldSystem.PhysicsWorld.CollisionWorld.Broadphase;
 
-            handle = new DisplayBroadphaseJob
+            Dependency = new DisplayBroadphaseJob
             {
                 OutputStream = m_DebugStreamSystem.GetContext(1),
                 StaticNodes = broadphase.StaticTree.Nodes,
                 DynamicNodes = broadphase.DynamicTree.Nodes,
-            }.Schedule(handle);
-
-            m_StepPhysicsWorldSystem.AddInputDependency(handle);
-
-            // Add dependency for end frame system as well as some test systems might have disabled the step system
-            m_EndFramePhysicsSystem.AddInputDependency(handle);
-
-            Dependency = handle;
+            }.Schedule(Dependency);
         }
     }
 }

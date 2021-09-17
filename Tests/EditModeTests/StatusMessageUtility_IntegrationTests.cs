@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using NUnit.Framework;
 using Unity.Physics.Authoring;
 using Unity.Physics.Editor;
@@ -33,14 +33,14 @@ namespace Unity.Physics.Tests.Editor
                 typeof(LegacyRigidBody), typeof(LegacyBox),
 #endif
                 typeof(PhysicsBodyAuthoring), typeof(PhysicsShapeAuthoring)
-            )]
+             )]
             Type parentComponentType,
             [Values(
 #if LEGACY_PHYSICS
                 typeof(LegacyBox), typeof(LegacyCapsule), typeof(LegacyMesh), typeof(LegacySphere),
 #endif
                 typeof(PhysicsShapeAuthoring)
-            )]
+             )]
             Type childComponentType
         )
         {
@@ -59,7 +59,7 @@ namespace Unity.Physics.Tests.Editor
                 typeof(LegacyRigidBody), typeof(LegacyBox), typeof(LegacyCapsule), typeof(LegacyMesh), typeof(LegacySphere),
 #endif
                 typeof(PhysicsBodyAuthoring), typeof(PhysicsShapeAuthoring)
-            )]
+             )]
             Type childComponentType
         )
         {
@@ -78,14 +78,14 @@ namespace Unity.Physics.Tests.Editor
                 typeof(LegacyRigidBody),
 #endif
                 typeof(PhysicsBodyAuthoring)
-            )]
+             )]
             Type bodyType,
             [Values(
 #if LEGACY_PHYSICS
                 typeof(LegacyBox), typeof(LegacyCapsule), typeof(LegacyMesh), typeof(LegacySphere),
 #endif
                 typeof(PhysicsShapeAuthoring)
-            )]
+             )]
             Type shapeType
         )
         {
@@ -104,14 +104,14 @@ namespace Unity.Physics.Tests.Editor
                 typeof(LegacyRigidBody),
 #endif
                 typeof(PhysicsBodyAuthoring)
-            )]
+             )]
             Type bodyType,
             [Values(
 #if LEGACY_PHYSICS
                 typeof(LegacyBox), typeof(LegacyCapsule), typeof(LegacyMesh), typeof(LegacySphere),
 #endif
                 typeof(PhysicsShapeAuthoring)
-            )]
+             )]
             Type shapeType
         )
         {

@@ -5,6 +5,8 @@ using System.IO;
 using System;
 using Unity.Burst;
 using Unity.Mathematics;
+using Unity.Physics.Authoring; //for meshes
+using UnityEditor;
 
 namespace Unity.DebugDisplay
 {
@@ -17,7 +19,7 @@ namespace Unity.DebugDisplay
 
     internal struct EightK
     {
-        internal FixedString4096 a, b;
+        internal FixedString4096Bytes a, b;
     }
 
     internal struct Unmanaged
@@ -171,13 +173,37 @@ namespace Unity.DebugDisplay
         internal static int IntegralCellsWide => (PixelsWide + Cell.kPixelsWide - 1) / Cell.kPixelsWide;
         internal static int IntegralCellsTall => (PixelsTall + Cell.kPixelsTall - 1) / Cell.kPixelsTall;
 
+#if UNITY_EDITOR
+        internal static string debugDirName =
+            "Packages/com.unity.physics/Unity.Physics.Hybrid/Assets/DebugDisplay/DebugDisplayResources/";
+        private static Material debugTextMaterial;
+        private static Material graphMaterial;
+        private static Material lineMaterial;
+        private static TextAsset wideTestAsset;
+        private bool resourcesLoaded = false;
+#endif
+
+        private void LoadDebugResources()
+        {
+#if UNITY_EDITOR
+            debugTextMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(debugDirName, "DebugTextMaterial.mat"));
+            graphMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(debugDirName, "GraphMaterial.mat"));
+            lineMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(debugDirName, "LineMaterial.mat"));
+            wideTestAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(Path.Combine(debugDirName, "wide.bytes"));
+            resourcesLoaded = true;
+#endif
+        }
+
         internal unsafe Managed()
         {
             Unmanaged.Instance.Data.Initialize();
-            resources.textMaterial = Resources.Load<Material>("DebugTextMaterial");
-            resources.graphMaterial = Resources.Load<Material>("GraphMaterial");
-            resources.lineMaterial = Resources.Load<Material>("LineMaterial");
-            resources.wide = Resources.Load<TextAsset>("wide");
+#if UNITY_EDITOR
+            if (!resourcesLoaded) LoadDebugResources();
+            resources.textMaterial = debugTextMaterial;
+            resources.graphMaterial = graphMaterial;
+            resources.lineMaterial = lineMaterial;
+            resources.wide = wideTestAsset;
+
             Stream s = new MemoryStream(resources.wide.bytes);
             BinaryReader br = new BinaryReader(s);
             var wide = new byte[s.Length];
@@ -187,10 +213,12 @@ namespace Unity.DebugDisplay
             {
                 UnsafeUtility.MemCpy(e, w, 8192);
             }
+#endif
 #if !UNITY_DOTSRUNTIME
             AppDomain.CurrentDomain.DomainUnload += OnDomainUnload;
 #endif
         }
+
         static void OnDomainUnload(object sender, EventArgs e)
         {
             instance?.Dispose();
@@ -305,7 +333,7 @@ namespace Unity.DebugDisplay
         internal void Render()
         {
             resources.lineMaterial.SetPass(0);
-            Graphics.DrawProceduralNow(MeshTopology.Lines, m_NumLinesToDraw, 1);
+            Graphics.DrawProceduralNow(MeshTopology.Lines, m_NumLinesToDraw * 2, 1);
             resources.textMaterial.SetPass(0);
             Graphics.DrawProceduralNow(MeshTopology.Triangles, m_NumTextBoxesToDraw * 6, 1);
             resources.graphMaterial.SetPass(0);

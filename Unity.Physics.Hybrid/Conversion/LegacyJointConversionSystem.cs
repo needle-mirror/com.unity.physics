@@ -28,38 +28,55 @@ namespace Unity.Physics.Authoring
             bool3 angularLimited, SoftJointLimit lowAngularXLimit, SoftJointLimit highAngularXLimit, SoftJointLimitSpring angularXLimitSpring, SoftJointLimit angularYLimit,
             SoftJointLimit angularZLimit, SoftJointLimitSpring angularYZLimitSpring)
         {
-            var constraints = new FixedList128<Constraint>();
-
-            // TODO: investigate mapping PhysX spring and damping to Unity Physics SpringFrequency and SpringDamping
-            var springFrequency = Constraint.DefaultSpringFrequency;
-            var springDamping = Constraint.DefaultSpringDamping;
+            var constraints = new FixedList128Bytes<Constraint>();
 
             if (angularLimited[0])
             {
-                constraints.Add(Constraint.Twist(0, math.radians(new FloatRange(-highAngularXLimit.limit, -lowAngularXLimit.limit).Sorted()), springFrequency, springDamping));
+                constraints.Add(Constraint.Twist(
+                    0,
+                    math.radians(new FloatRange(-highAngularXLimit.limit, -lowAngularXLimit.limit).Sorted()),
+                    CalculateSpringFrequencyFromSpringConstant(angularXLimitSpring.spring),
+                    angularXLimitSpring.damper)
+                );
             }
 
             if (angularLimited[1])
             {
-                constraints.Add(Constraint.Twist(1, math.radians(new FloatRange(-angularYLimit.limit, angularYLimit.limit).Sorted()), springFrequency, springDamping));
+                constraints.Add(Constraint.Twist(
+                    1,
+                    math.radians(new FloatRange(-angularYLimit.limit, angularYLimit.limit).Sorted()),
+                    CalculateSpringFrequencyFromSpringConstant(angularYZLimitSpring.spring),
+                    angularYZLimitSpring.damper));
             }
 
             if (angularLimited[2])
             {
-                constraints.Add(Constraint.Twist(2, math.radians(new FloatRange(-angularZLimit.limit, angularZLimit.limit).Sorted()), springFrequency, springDamping));
+                constraints.Add(Constraint.Twist(
+                    2,
+                    math.radians(new FloatRange(-angularZLimit.limit, angularZLimit.limit).Sorted()),
+                    CalculateSpringFrequencyFromSpringConstant(angularYZLimitSpring.spring),
+                    angularYZLimitSpring.damper));
             }
 
             if (math.any(linearLimited))
             {
-                var distanceRange = new FloatRange(-linearLimit.limit, linearLimit.limit).Sorted();
+                //If spring=0, then need to treat it and damper as locked. Okay for damper=0 if spring>0
+                var spring = Constraint.DefaultSpringFrequency; //stiff spring
+                var damping = 1.0f; //critically damped
+                if (linearSpring.spring > 0.0f)
+                {
+                    spring = linearSpring.spring;
+                    damping = linearSpring.damper;
+                }
+
                 constraints.Add(new Constraint
                 {
                     ConstrainedAxes = linearLimited,
                     Type = ConstraintType.Linear,
-                    Min = math.csum((int3)linearLimited) == 1 ? distanceRange.Min : 0f,
-                    Max = distanceRange.Max,
-                    SpringFrequency = springFrequency,
-                    SpringDamping = springDamping
+                    Min = 0f,
+                    Max = linearLimit.limit,  //allow movement up to limit from anchor
+                    SpringFrequency = CalculateSpringFrequencyFromSpringConstant(spring),
+                    SpringDamping = damping
                 });
             }
 
@@ -69,10 +86,10 @@ namespace Unity.Physics.Authoring
                 {
                     ConstrainedAxes = linearLocks,
                     Type = ConstraintType.Linear,
-                    Min = 0,
-                    Max = 0,
-                    SpringFrequency = springFrequency,
-                    SpringDamping = springDamping
+                    Min = linearLimit.limit,    //lock at distance from anchor
+                    Max = linearLimit.limit,
+                    SpringFrequency =  Constraint.DefaultSpringFrequency, //stiff spring
+                    SpringDamping = 1.0f //critically damped
                 });
             }
 
@@ -84,8 +101,8 @@ namespace Unity.Physics.Authoring
                     Type = ConstraintType.Angular,
                     Min = 0,
                     Max = 0,
-                    SpringFrequency = springFrequency,
-                    SpringDamping = springDamping
+                    SpringFrequency = Constraint.DefaultSpringFrequency, //stiff spring
+                    SpringDamping = 1.0f //critically damped
                 });
             }
 
@@ -124,6 +141,13 @@ namespace Unity.Physics.Authoring
             return jointData;
         }
 
+        float CalculateSpringFrequencyFromSpringConstant(float springConstant)
+        {
+            if (springConstant < Math.Constants.Eps) return 0.0f;
+
+            return math.sqrt(springConstant) * Math.Constants.OneOverTau;
+        }
+
         bool3 GetAxesWithMotionType(
             ConfigurableJointMotion motionType,
             ConfigurableJointMotion x, ConfigurableJointMotion y, ConfigurableJointMotion z
@@ -151,8 +175,10 @@ namespace Unity.Physics.Authoring
                 GetAxesWithMotionType(ConfigurableJointMotion.Limited, joint.angularXMotion, joint.angularYMotion, joint.angularZMotion);
 
             var jointFrameOrientation = GetJointFrameOrientation(joint.axis, joint.secondaryAxis);
-            var jointData = CreateConfigurableJoint(jointFrameOrientation, joint, linearLocks, linearLimited, joint.linearLimit, joint.linearLimitSpring, angularFree, angularLocks, angularLimited,
-                joint.lowAngularXLimit, joint.highAngularXLimit, joint.angularXLimitSpring, joint.angularYLimit, joint.angularZLimit, joint.angularYZLimitSpring);
+            var jointData = CreateConfigurableJoint(jointFrameOrientation, joint, linearLocks, linearLimited,
+                joint.linearLimit, joint.linearLimitSpring, angularFree, angularLocks, angularLimited,
+                joint.lowAngularXLimit, joint.highAngularXLimit, joint.angularXLimitSpring, joint.angularYLimit,
+                joint.angularZLimit, joint.angularYZLimitSpring);
 
             m_EndJointConversionSystem.CreateJointEntity(joint, GetConstrainedBodyPair(joint), jointData);
         }
@@ -178,8 +204,12 @@ namespace Unity.Physics.Authoring
             var angularLimited = new bool3(true);
 
             var jointFrameOrientation = GetJointFrameOrientation(joint.axis, joint.swingAxis);
-            var jointData = CreateConfigurableJoint(jointFrameOrientation, joint, linearLocks, linearLimited, new SoftJointLimit { limit = 0f, bounciness = 0f }, new SoftJointLimitSpring { spring = 0f, damper = 0f }, angularFree, angularLocks, angularLimited,
-                joint.lowTwistLimit, joint.highTwistLimit, joint.twistLimitSpring, joint.swing1Limit, joint.swing2Limit, joint.swingLimitSpring);
+            var jointData = CreateConfigurableJoint(jointFrameOrientation, joint, linearLocks, linearLimited,
+                new SoftJointLimit { limit = 0f, bounciness = 0f },
+                new SoftJointLimitSpring { spring = 0f, damper = 0f },
+                angularFree, angularLocks, angularLimited,
+                joint.lowTwistLimit, joint.highTwistLimit, joint.twistLimitSpring,
+                joint.swing1Limit, joint.swing2Limit, joint.swingLimitSpring);
 
             m_EndJointConversionSystem.CreateJointEntity(joint, GetConstrainedBodyPair(joint), jointData);
         }
@@ -187,13 +217,14 @@ namespace Unity.Physics.Authoring
         void ConvertSpringJoint(LegacySpring joint)
         {
             var distanceRange = new FloatRange(joint.minDistance, joint.maxDistance).Sorted();
-            var constraint = new Constraint {
+            var constraint = new Constraint
+            {
                 ConstrainedAxes = new bool3(true),
                 Type = ConstraintType.Linear,
                 Min = distanceRange.Min,
                 Max = distanceRange.Max,
-                SpringFrequency = 1f, // ?
-                SpringDamping = 0.1f // ?
+                SpringFrequency = CalculateSpringFrequencyFromSpringConstant(joint.spring),
+                SpringDamping = joint.damper
             };
 
             var jointFrameA = BodyFrame.Identity;
@@ -215,7 +246,7 @@ namespace Unity.Physics.Authoring
                 BodyAFromJoint = jointFrameA,
                 BodyBFromJoint = jointFrameB
             };
-            jointData.SetConstraints(new FixedList128<Constraint>
+            jointData.SetConstraints(new FixedList128Bytes<Constraint>
             {
                 Length = 1,
                 [0] = constraint

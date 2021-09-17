@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using NUnit.Framework;
 using Unity.Mathematics;
 using static Unity.Physics.SimplexSolver;

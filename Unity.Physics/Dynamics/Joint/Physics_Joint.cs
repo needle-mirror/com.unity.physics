@@ -1,6 +1,5 @@
 using System;
 using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine.Assertions;
@@ -17,11 +16,12 @@ namespace Unity.Physics
     // A linear or angular constraint in 1, 2, or 3 dimensions.
     public struct Constraint : IEquatable<Constraint>
     {
-        // TODO think more about these
-        // Current values give tau = 0.6 damping = 0.99 at 50hz
+        // Current values give tau = 0.6 damping = 0.99 at 60hz
         // The values are huge and we can't get damping = 1 -- a stiff constraint is the limit of a damped spring as spring params go to infinity.
-        public const float DefaultSpringFrequency = 61950.977267809007887192914302327f;
-        public const float DefaultSpringDamping = 2530.12155587434178122630287018f;
+        // Rather then baking them these values could be calculated using
+        // JacobianUtilities.CalculateSpringFrequencyAndDamping(0.6f, 0.99f, math.rcp(60.0f), 4, out DefaultSpringFrequency, out DefaultSpringDamping);
+        public const float DefaultSpringFrequency = 74341.31f;
+        public const float DefaultSpringDamping = 2530.126f;
 
         public bool3 ConstrainedAxes;
         public ConstraintType Type;
@@ -272,7 +272,7 @@ namespace Unity.Physics
         public MTransform AFromJoint;
         public MTransform BFromJoint;
         // Note that Constraints needs to be 4-byte aligned for Android 32.
-        public FixedList128<Constraint> Constraints;
+        public FixedList128Bytes<Constraint> Constraints;
         public byte EnableCollision; // If non-zero, allows these bodies to collide
         public byte Version;
 

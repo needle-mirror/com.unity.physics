@@ -120,7 +120,7 @@ namespace Unity.Physics
         BodyFrame m_BodyBFromJoint;
         byte m_Version;
         JointType m_JointType;
-        FixedList128<Constraint> m_Constraints;
+        FixedList128Bytes<Constraint> m_Constraints;
 
         /// <summary>
         /// The anchor point and orientation in the space of the first body.
@@ -197,13 +197,13 @@ namespace Unity.Physics
         /// <summary>
         /// Get the sequence of <see cref="Constraint"/> atoms to apply between the two bodies.
         /// </summary>
-        public FixedList128<Constraint> GetConstraints() => m_Constraints;
+        public FixedList128Bytes<Constraint> GetConstraints() => m_Constraints;
 
         /// <summary>
         /// Set the sequence of <see cref="Constraint"/> atoms to apply between the two bodies.
         /// </summary>
         /// <param name="constraints">A sequence of <see cref="Constraint"/> atoms to apply in order.</param>
-        public void SetConstraints(FixedList128<Constraint> constraints)
+        public void SetConstraints(FixedList128Bytes<Constraint> constraints)
         {
             for (var i = 0; i < constraints.Length; ++i)
             {
@@ -235,7 +235,7 @@ namespace Unity.Physics
                 BodyAFromJoint = bodyAFromJoint,
                 BodyBFromJoint = bodyBFromJoint,
                 m_JointType = JointType.BallAndSocket,
-                m_Constraints = new FixedList128<Constraint>
+                m_Constraints = new FixedList128Bytes<Constraint>
                 {
                     Length = 1,
                     [0] = Constraint.BallAndSocket()
@@ -250,17 +250,17 @@ namespace Unity.Physics
         /// <param name="bodyBFromJoint">Specifies a target point and orientation in the space of body B.</param>
         public static PhysicsJoint CreateFixed(BodyFrame bodyAFromJoint, BodyFrame bodyBFromJoint) =>
             new PhysicsJoint
+        {
+            BodyAFromJoint = bodyAFromJoint,
+            BodyBFromJoint = bodyBFromJoint,
+            m_JointType = JointType.Fixed,
+            m_Constraints = new FixedList128Bytes<Constraint>
             {
-                BodyAFromJoint = bodyAFromJoint,
-                BodyBFromJoint = bodyBFromJoint,
-                m_JointType = JointType.Fixed,
-                m_Constraints = new FixedList128<Constraint>
-                {
-                    Length = 2,
-                    [0] = Constraint.BallAndSocket(),
-                    [1] = Constraint.FixedAngle()
-                }
-            };
+                Length = 2,
+                [0] = Constraint.BallAndSocket(),
+                [1] = Constraint.FixedAngle()
+            }
+        };
 
         /// <summary>
         /// Create a <see cref="JointType.Hinge"/> joint.
@@ -269,17 +269,17 @@ namespace Unity.Physics
         /// <param name="bodyBFromJoint">Specifies the target point and axis of alignment in the space of body B.</param>
         public static PhysicsJoint CreateHinge(BodyFrame bodyAFromJoint, BodyFrame bodyBFromJoint) =>
             new PhysicsJoint
+        {
+            BodyAFromJoint = bodyAFromJoint,
+            BodyBFromJoint = bodyBFromJoint,
+            m_JointType = JointType.Hinge,
+            m_Constraints = new FixedList128Bytes<Constraint>
             {
-                BodyAFromJoint = bodyAFromJoint,
-                BodyBFromJoint = bodyBFromJoint,
-                m_JointType = JointType.Hinge,
-                m_Constraints = new FixedList128<Constraint>
-                {
-                    Length = 2,
-                    [0] = Constraint.Hinge(0),
-                    [1] = Constraint.BallAndSocket()
-                }
-            };
+                Length = 2,
+                [0] = Constraint.Hinge(0),
+                [1] = Constraint.BallAndSocket()
+            }
+        };
 
         internal const int k_LimitedDistanceRangeIndex = 0;
 
@@ -300,7 +300,7 @@ namespace Unity.Physics
                 BodyAFromJoint = bodyAFromJoint,
                 BodyBFromJoint = bodyBFromJoint,
                 m_JointType = JointType.LimitedDistance,
-                m_Constraints = new FixedList128<Constraint>
+                m_Constraints = new FixedList128Bytes<Constraint>
                 {
                     Length = 1,
                     [k_LimitedDistanceRangeIndex] = Constraint.LimitedDistance(distanceRange.Sorted())
@@ -320,18 +320,18 @@ namespace Unity.Physics
             BodyFrame bodyAFromJoint, BodyFrame bodyBFromJoint, FloatRange angularRange
         ) =>
             new PhysicsJoint
+        {
+            BodyAFromJoint = bodyAFromJoint,
+            BodyBFromJoint = bodyBFromJoint,
+            m_JointType = JointType.LimitedHinge,
+            m_Constraints = new FixedList128Bytes<Constraint>
             {
-                BodyAFromJoint = bodyAFromJoint,
-                BodyBFromJoint = bodyBFromJoint,
-                m_JointType = JointType.LimitedHinge,
-                m_Constraints = new FixedList128<Constraint>
-                {
-                    Length = 3,
-                    [k_LimitedHingeRangeIndex]     = Constraint.Twist(0, angularRange.Sorted()),
-                    [k_LimitedHingeRangeIndex + 1] = Constraint.Hinge(0),
-                    [k_LimitedHingeRangeIndex + 2] = Constraint.BallAndSocket()
-                }
-            };
+                Length = 3,
+                [k_LimitedHingeRangeIndex]     = Constraint.Twist(0, angularRange.Sorted()),
+                [k_LimitedHingeRangeIndex + 1] = Constraint.Hinge(0),
+                [k_LimitedHingeRangeIndex + 2] = Constraint.BallAndSocket()
+            }
+        };
 
         internal const int k_PrismaticDistanceOnAxisIndex = 1;
 
@@ -345,18 +345,18 @@ namespace Unity.Physics
             BodyFrame bodyAFromJoint, BodyFrame bodyBFromJoint, FloatRange distanceOnAxis
         ) =>
             new PhysicsJoint
+        {
+            BodyAFromJoint = bodyAFromJoint,
+            BodyBFromJoint = bodyBFromJoint,
+            m_JointType = JointType.Prismatic,
+            m_Constraints = new FixedList128Bytes<Constraint>
             {
-                BodyAFromJoint = bodyAFromJoint,
-                BodyBFromJoint = bodyBFromJoint,
-                m_JointType = JointType.Prismatic,
-                m_Constraints = new FixedList128<Constraint>
-                {
-                    Length = 3,
-                    [0]                                  = Constraint.FixedAngle(),
-                    [k_PrismaticDistanceOnAxisIndex]     = Constraint.Planar(0, distanceOnAxis.Sorted()),
-                    [k_PrismaticDistanceOnAxisIndex + 1] = Constraint.Cylindrical(0, float2.zero)
-                }
-            };
+                Length = 3,
+                [0]                                  = Constraint.FixedAngle(),
+                [k_PrismaticDistanceOnAxisIndex]     = Constraint.Planar(0, distanceOnAxis.Sorted()),
+                [k_PrismaticDistanceOnAxisIndex + 1] = Constraint.Cylindrical(0, float2.zero)
+            }
+        };
 
         internal const int k_RagdollPrimaryMaxConeIndex = 1;
         internal const int k_RagdollPrimaryTwistRangeIndex = 0;
@@ -385,7 +385,7 @@ namespace Unity.Physics
                 BodyAFromJoint = bodyAFromJoint,
                 BodyBFromJoint = bodyBFromJoint,
                 m_JointType = JointType.RagdollPrimaryCone,
-                m_Constraints = new FixedList128<Constraint>
+                m_Constraints = new FixedList128Bytes<Constraint>
                 {
                     Length = 2,
                     [k_RagdollPrimaryTwistRangeIndex] = Constraint.Twist(0, math.clamp(angularTwistRange.Sorted(), new float2(-math.PI), new float2(math.PI))),
@@ -403,7 +403,7 @@ namespace Unity.Physics
                     Position = bodyBFromJoint.Position
                 },
                 m_JointType = JointType.RagdollPerpendicularCone,
-                m_Constraints = new FixedList128<Constraint>
+                m_Constraints = new FixedList128Bytes<Constraint>
                 {
                     Length = 2,
                     [k_RagdollPerpendicularRangeIndex]     = Constraint.Cone(0, math.clamp(angularPlaneRange.Sorted() + new float2(math.PI / 2), new float2(0f), new float2(math.PI))),
@@ -428,7 +428,7 @@ namespace Unity.Physics
                 BodyAFromJoint = BodyFrame.Identity,
                 BodyBFromJoint = offset,
                 m_JointType = JointType.LimitedDegreeOfFreedom,
-                m_Constraints = new FixedList128<Constraint>
+                m_Constraints = new FixedList128Bytes<Constraint>
                 {
                     Length = 2,
                     [k_LimitedDOFLinearIndex] = new Constraint

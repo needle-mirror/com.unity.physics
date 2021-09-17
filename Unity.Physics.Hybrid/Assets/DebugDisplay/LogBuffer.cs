@@ -20,7 +20,7 @@ namespace Unity.DebugDisplay
             CellSurface.Clear(ref m_Surface, new Cell {fg = m_Fg, bg = m_Bg, rune = new Unicode.Rune {value = ' '}});
         }
 
-        internal void WriteLine(in FixedString128 f)
+        internal void WriteLine(in FixedString128Bytes f)
         {
             var y = m_Cursor.y & (m_Surface.m_Size.y - 1);
             CellSurface.Clear(ref m_Surface, new Cell {fg = m_Fg, bg = m_Bg, rune = new Unicode.Rune {value = ' '}}, new Window {m_begin = new int2(0, y), m_end = new int2(m_Surface.m_Size.x, y + 1)});

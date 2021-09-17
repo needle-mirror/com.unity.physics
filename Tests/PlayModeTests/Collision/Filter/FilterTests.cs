@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using NUnit.Framework;
 
 namespace Unity.Physics.Tests.Collision.Filter
@@ -181,7 +181,5 @@ namespace Unity.Physics.Tests.Collision.Filter
             Assert.IsTrue(CollisionFilter.CreateUnion(filter2, filter3).Equals(filter4));
             Assert.IsTrue(CollisionFilter.CreateUnion(filter3, filter4).Equals(filter4));
         }
-
     }
 }
-

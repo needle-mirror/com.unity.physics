@@ -12,19 +12,23 @@ namespace Unity.Physics.Authoring
     // A system which draws any trigger events produced by the physics step system
     [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateAfter(typeof(StepPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
-    public class DisplayTriggerEventsSystem : SystemBase
+    public partial class DisplayTriggerEventsSystem : SystemBase
     {
         BuildPhysicsWorld m_BuildPhysicsWorldSystem;
         StepPhysicsWorld m_StepPhysicsWorldSystem;
-        EndFramePhysicsSystem m_EndFramePhysicsSystem;
         DebugStream m_DebugStreamSystem;
 
         protected override void OnCreate()
         {
             m_BuildPhysicsWorldSystem = World.GetOrCreateSystem<BuildPhysicsWorld>();
             m_StepPhysicsWorldSystem = World.GetOrCreateSystem<StepPhysicsWorld>();
-            m_EndFramePhysicsSystem = World.GetOrCreateSystem<EndFramePhysicsSystem>();
             m_DebugStreamSystem = World.GetOrCreateSystem<DebugStream>();
+        }
+
+        protected override void OnStartRunning()
+        {
+            base.OnStartRunning();
+            this.RegisterPhysicsRuntimeSystemReadOnly();
         }
 
         protected override void OnUpdate()
@@ -47,22 +51,18 @@ namespace Unity.Physics.Authoring
                     OutputStreamContext = sharedOutput
                 };
 
-                JobHandle handle = new DisplayTriggerEventsJob
+                Dependency = new DisplayTriggerEventsJob
                 {
                     World = m_BuildPhysicsWorldSystem.PhysicsWorld,
                     OutputStreamContext = sharedOutput
-                }.Schedule(m_StepPhysicsWorldSystem.Simulation, ref m_BuildPhysicsWorldSystem.PhysicsWorld, Dependency);
+                }.Schedule(m_StepPhysicsWorldSystem.Simulation, Dependency);
 
 #pragma warning disable 618
-                JobHandle finishHandle = new FinishDisplayTriggerEventsJob
+                Dependency = new FinishDisplayTriggerEventsJob
                 {
                     OutputStreamContext = sharedOutput
-                }.Schedule(handle);
+                }.Schedule(Dependency);
 #pragma warning restore 618
-
-                m_EndFramePhysicsSystem.AddInputDependency(finishHandle);
-
-                Dependency = handle;
             }
         }
 

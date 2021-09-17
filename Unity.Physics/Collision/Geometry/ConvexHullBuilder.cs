@@ -27,7 +27,7 @@ namespace Unity.Physics
         {
             get
             {
-                fixed (ElementPoolBase* vertices = &m_Vertices)
+                fixed(ElementPoolBase* vertices = &m_Vertices)
                 {
                     return new ElementPool<Vertex> { ElementPoolBase = vertices };
                 }
@@ -38,7 +38,7 @@ namespace Unity.Physics
         {
             get
             {
-                fixed (ElementPoolBase* triangles = &m_Triangles)
+                fixed(ElementPoolBase* triangles = &m_Triangles)
                 {
                     return new ElementPool<Triangle> { ElementPoolBase = triangles };
                 }
@@ -136,11 +136,11 @@ namespace Unity.Physics
                 Uid = uid;
             }
 
-            public unsafe int GetVertex(int index) { fixed (int* p = &Vertex0) { return p[index]; } }
-            public unsafe void SetVertex(int index, int value) { fixed (int* p = &Vertex0) { p[index] = value; } }
+            public unsafe int GetVertex(int index) { fixed(int* p = &Vertex0) { return p[index]; } }
+            public unsafe void SetVertex(int index, int value) { fixed(int* p = &Vertex0) { p[index] = value; } }
 
-            public unsafe Edge GetLink(int index) { fixed (Edge* p = &Link0) { return p[index]; } }
-            public unsafe void SetLink(int index, Edge handle) { fixed (Edge* p = &Link0) { p[index] = handle; } }
+            public unsafe Edge GetLink(int index) { fixed(Edge* p = &Link0) { return p[index]; } }
+            public unsafe void SetLink(int index, Edge handle) { fixed(Edge* p = &Link0) { p[index] = handle; } }
 
             void IPoolElement.MarkFree(int nextFree)
             {
@@ -228,7 +228,7 @@ namespace Unity.Physics
         // domain is the AABB of all points that will be added to the hull
         // simplificationTolerance is the sum of tolerances that will be passed to SimplifyVertices() and SimplifyFacesAndShrink()
         public unsafe ConvexHullBuilder(int verticesCapacity, Vertex* vertices, Triangle* triangles, Plane* planes,
-            Aabb domain, float simplificationTolerance, IntResolution intResolution)
+                                        Aabb domain, float simplificationTolerance, IntResolution intResolution)
         {
             m_Vertices = new ElementPoolBase(vertices, verticesCapacity);
             m_Triangles = new ElementPoolBase(triangles, 2 * verticesCapacity);
@@ -261,7 +261,7 @@ namespace Unity.Physics
         /// Copy the content of another convex hull into this one.
         /// </summary>
         public unsafe ConvexHullBuilder(int verticesCapacity, Vertex* vertices, Triangle* triangles, Plane* planes,
-            ConvexHullBuilder other)
+                                        ConvexHullBuilder other)
         {
             m_Vertices = new ElementPoolBase(vertices, verticesCapacity);
             m_Triangles = new ElementPoolBase(triangles, 2 * verticesCapacity);
@@ -302,10 +302,9 @@ namespace Unity.Physics
             ProjectionPlane = new Plane(new float3(0), 0);
         }
 
-        // 
+        //
         public unsafe void Compact()
         {
-
             // Compact the vertices array
             NativeArray<int> vertexRemap = new NativeArray<int>(Vertices.PeakCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
             if (Vertices.Compact((int*)vertexRemap.GetUnsafePtr()))
@@ -328,8 +327,8 @@ namespace Unity.Physics
         /// Add a point the the convex hull.
         /// </summary>
         /// <param name="point">Point to insert.</param>
-        /// <param name="userData">User data attached to the new vertex if insertion succeeds.</param>        
-        /// <param name="force2D">If true, the hull will not grow beyond two dimensions.</param>        
+        /// <param name="userData">User data attached to the new vertex if insertion succeeds.</param>
+        /// <param name="force2D">If true, the hull will not grow beyond two dimensions.</param>
         /// <returns>true if the insertion succeeded, false otherwise.</returns>
         public unsafe bool AddPoint(float3 point, uint userData = 0, bool force2D = false)
         {
@@ -492,7 +491,7 @@ namespace Unity.Physics
                                 if (isOutside[i] && isOutside[i] != isOutside[j])
                                 {
                                     newVertices[numNewVertices++] = Vertices[j];
-                                    for (; ; )
+                                    for (;;)
                                     {
                                         if (isOutside[j]) break;
                                         j = (j + 1) % Vertices.PeakCount;
@@ -605,7 +604,8 @@ namespace Unity.Physics
                         int next = nextTriangles[firstFrontTriangleIndex];
                         ReleaseTriangle(firstFrontTriangleIndex);
                         firstFrontTriangleIndex = next;
-                    } while (firstFrontTriangleIndex != -1);
+                    }
+                    while (firstFrontTriangleIndex != -1);
 
                     // Add vertex.
                     int newVertex = AllocateVertex(point, userData);
@@ -997,7 +997,7 @@ namespace Unity.Physics
                                     double dot = math.dot(edge0Vec, lineVec);
                                     double diffSq = edge0LengthSq * lineVecLengthSq - dot * dot;
                                     double scaledTolSq = toleranceSq * lineVecLengthSq;
-                                    keep &= (dot < 0 || dot > lineVecLengthSq || diffSq > scaledTolSq);
+                                    keep &= (dot<0 || dot> lineVecLengthSq || diffSq > scaledTolSq);
 
                                     Edge edge2 = GetLinkedEdge(edge1.Prev);
                                     if (edge2.Value != firstEdge.Value)
@@ -1016,7 +1016,8 @@ namespace Unity.Physics
                             }
                         }
                         edge0 = GetLinkedEdge(edge0.Prev);
-                    } while (edge0.Value != firstEdge.Value && keep);
+                    }
+                    while (edge0.Value != firstEdge.Value && keep);
                     keep &= (!coplanar || anyRemoved);
 
                     removed[v] = !keep;
@@ -1173,7 +1174,7 @@ namespace Unity.Physics
         {
             return (int)(i * (n + n - i - 1) / 2 + j);
         }
-        
+
         // Simplifies the hull by collapsing pairs of vertices until the number of vertices is no more than maxVertices and no further pairs can be collapsed without
         // introducing error in excess of maxError.
         // Based on QEM, but with contractions only allowed for vertices connected by a triangle edge, and only to be replaced by vertices on the same edge
@@ -1552,7 +1553,7 @@ namespace Unity.Physics
             {
                 return 0.0f;
             }
-            
+
             float cosMinAngleBetweenFaces = math.cos(minAngleBetweenFaces);
             float simplificationToleranceSq = simplificationTolerance * simplificationTolerance;
             const float k_cosMaxMergeAngle = 0.707107f; // Don't merge planes at >45 degrees
@@ -1758,7 +1759,8 @@ namespace Unity.Physics
                             lastFaceIndex = faceIndex;
                         }
                         edge = GetLinkedEdge(edge).Next;
-                    } while (edge.Value != vertexEdge.Value);
+                    }
+                    while (edge.Value != vertexEdge.Value);
                     while (planeIndices[numPlaneIndices - 1] == planeIndices[0])
                     {
                         numPlaneIndices--; // first and last edge could be on different triangles on the same face
@@ -1891,7 +1893,7 @@ namespace Unity.Physics
                         }
 
                         // Can't merge a plane with itself, this happens if there is eg. a trifan that gets merged together
-                        if (updateMerge.Face0 == updateMerge.Face1) 
+                        if (updateMerge.Face0 == updateMerge.Face1)
                         {
                             merges[i] = merges[--numMerges];
                             continue;
@@ -1917,7 +1919,7 @@ namespace Unity.Physics
                             updateMerge.Cost = combined.Cost;
                             updateMerge.Plane = combined.Plane;
                             updateMerge.SmallAngle = smallAngle;
-                            merges[i] = updateMerge; 
+                            merges[i] = updateMerge;
                         }
                         else
                         {
@@ -2100,7 +2102,7 @@ namespace Unity.Physics
             }
 
             // Rebuild faces using the plane intersection vertices
-            if (numNewVertices >= 4) 
+            if (numNewVertices >= 4)
             {
                 Reset();
                 for (int i = 0; i < numNewVertices; i++)
@@ -2258,7 +2260,7 @@ namespace Unity.Physics
         /// <summary>
         /// Compute the mass properties of the convex hull.
         /// Note: Inertia computation adapted from S. Melax, http://www.melax.com/volint.
-        /// </summary>        
+        /// </summary>
         public unsafe void UpdateHullMassProperties()
         {
             var mp = new MassProperties();
@@ -2314,8 +2316,8 @@ namespace Unity.Physics
                         float3 v2 = Vertices[Triangles[i].Vertex2].Position - mp.CenterOfMass;
                         diag += (v0 * v1 + v1 * v2 + v2 * v0 + v0 * v0 + v1 * v1 + v2 * v2) * dets[i];
                         offd += (v0.yzx * v1.zxy + v1.yzx * v2.zxy + v2.yzx * v0.zxy +
-                                v0.yzx * v2.zxy + v1.yzx * v0.zxy + v2.yzx * v1.zxy +
-                                (v0.yzx * v0.zxy + v1.yzx * v1.zxy + v2.yzx * v2.zxy) * 2) * dets[i];
+                            v0.yzx * v2.zxy + v1.yzx * v0.zxy + v2.yzx * v1.zxy +
+                            (v0.yzx * v0.zxy + v1.yzx * v1.zxy + v2.yzx * v2.zxy) * 2) * dets[i];
                         numTriangles++;
                     }
 
@@ -2560,7 +2562,7 @@ namespace Unity.Physics
             m_Vertices = new NativeArray<ConvexHullBuilder.Vertex>(verticesCapacity, allocator);
             m_Triangles = new NativeArray<ConvexHullBuilder.Triangle>(trianglesCapacity, allocator);
             m_Planes = new NativeArray<Plane>(trianglesCapacity, allocator);
-            Builder = new ConvexHullBuilder(verticesCapacity, (ConvexHullBuilder.Vertex*)NativeArrayUnsafeUtility.GetUnsafePtr(m_Vertices), 
+            Builder = new ConvexHullBuilder(verticesCapacity, (ConvexHullBuilder.Vertex*)NativeArrayUnsafeUtility.GetUnsafePtr(m_Vertices),
                 (ConvexHullBuilder.Triangle*)NativeArrayUnsafeUtility.GetUnsafePtr(m_Triangles), (Plane*)NativeArrayUnsafeUtility.GetUnsafePtr(m_Planes),
                 domain, simplificationTolerance, resolution);
         }
@@ -2606,7 +2608,7 @@ namespace Unity.Physics
 
         public static Int128 Zero => new Int128 { High = 0, Low = 0 };
 
-        public static Int128 operator +(Int128 a, Int128 b)
+        public static Int128 operator+(Int128 a, Int128 b)
         {
             ulong low = a.Low + b.Low;
             ulong high = a.High + b.High;
@@ -2618,12 +2620,12 @@ namespace Unity.Physics
             };
         }
 
-        public static Int128 operator -(Int128 a, Int128 b)
+        public static Int128 operator-(Int128 a, Int128 b)
         {
             return a + (-b);
         }
 
-        public static Int128 operator -(Int128 a)
+        public static Int128 operator-(Int128 a)
         {
             ulong low = ~a.Low + 1;
             ulong high = ~a.High;

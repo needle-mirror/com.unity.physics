@@ -50,7 +50,7 @@ namespace Unity.DebugDisplay
             }
         }
 
-        void ParseAnsiColor(ref FixedListInt64 numbers, ref ColorIndex fg, ref ColorIndex bg)
+        void ParseAnsiColor(ref FixedList64Bytes<int> numbers, ref ColorIndex fg, ref ColorIndex bg)
         {
             for (var i = 0; i < numbers.Length; ++i)
             {
@@ -109,14 +109,14 @@ namespace Unity.DebugDisplay
             }
         }
 
-        void ParseAnsi(ref FixedListByte32 escape, ref ColorIndex fg, ref ColorIndex bg)
+        void ParseAnsi(ref FixedList32Bytes<byte> escape, ref ColorIndex fg, ref ColorIndex bg)
         {
             if (escape.Length < 4)
                 return;
             if (escape[0] != 0x1b || escape[1] != '[')
                 return;
             int offset = 2;
-            FixedListInt64 numbers = default;
+            FixedList64Bytes<int> numbers = default;
             int number = 0;
             while (offset < escape.Length)
             {
@@ -148,11 +148,11 @@ namespace Unity.DebugDisplay
             }
         }
 
-        internal unsafe void PutChars(ref int2 xy, in FixedString128 f, ColorIndex fg, ColorIndex bg)
+        internal unsafe void PutChars(ref int2 xy, in FixedString128Bytes f, ColorIndex fg, ColorIndex bg)
         {
-            fixed(FixedString128* ff = &f)
+            fixed(FixedString128Bytes* ff = &f)
             {
-                FixedListByte32 escape = default;
+                FixedList32Bytes<byte> escape = default;
                 int offset = 0;
                 while (offset < f.Length)
                 {
@@ -171,7 +171,7 @@ namespace Unity.DebugDisplay
                         else
                         {
                             escape.Add((byte)rune.value);
-                            if (((rune.value | 32) >= 'a' && (rune.value | 32) <= 'z') || escape.Length == FixedString32.UTF8MaxLengthInBytes)
+                            if (((rune.value | 32) >= 'a' && (rune.value | 32) <= 'z') || escape.Length == FixedString32Bytes.UTF8MaxLengthInBytes)
                             {
                                 if (rune.value == 'm')
                                     ParseAnsi(ref escape, ref fg, ref bg);
@@ -301,7 +301,7 @@ namespace Unity.DebugDisplay
             }
         }
 
-        internal static int WidthInCells(in FixedString128 f)
+        internal static int WidthInCells(in FixedString128Bytes f)
         {
             int widthInCells = 0;
             var offset = 0;
@@ -309,7 +309,7 @@ namespace Unity.DebugDisplay
             {
                 unsafe
                 {
-                    fixed(FixedString128* ff = &f)
+                    fixed(FixedString128Bytes* ff = &f)
                     {
                         var error = Unicode.Utf8ToUcs(out Unicode.Rune rune, (byte*)ff + 2, ref offset, f.Length);
                         if (error != 0)

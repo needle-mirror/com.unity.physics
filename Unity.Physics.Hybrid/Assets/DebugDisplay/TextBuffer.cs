@@ -58,7 +58,7 @@ namespace Unity.DebugDisplay
             };
         }
 
-        internal void SetLabel(float3 position, int2 cellXY, in FixedString128 f, ColorIndex fg, ColorIndex bg,
+        internal void SetLabel(float3 position, int2 cellXY, in FixedString128Bytes f, ColorIndex fg, ColorIndex bg,
             int index)
         {
             SetTextBoxSmooth(position, cellXY, new int2(CellSurface.WidthInCells(f), 1), index);

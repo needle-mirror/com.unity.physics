@@ -12,6 +12,6 @@ namespace Unity.Physics.Authoring
 #endif
     public sealed class BeginJointConversionSystem : GameObjectConversionSystem
     {
-        protected override void OnUpdate() { }
+        protected override void OnUpdate() {}
     }
 }

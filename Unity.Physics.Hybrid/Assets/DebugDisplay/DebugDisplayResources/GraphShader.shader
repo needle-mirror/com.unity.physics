@@ -1,4 +1,4 @@
-﻿Shader "GraphShader" {
+Shader "GraphShader" {
 	Properties{
 	}
 		SubShader{
@@ -112,7 +112,7 @@
 			uint ybits = 0xb33f86bf;
 
 			fixed4 color = (((xy.x&7)==0)||((xy.y&15)==0)) ? fixed4(0.125,0.125,0.125,0.5) : fixed4(0, 0, 0, 0.5);
-			for (uint i = 0; i < instanceBuffer[instID].samples; ++i)
+			for (uint j = 0; j < instanceBuffer[instID].samples; ++j)
 			{
 				int count = 0;
 				for (int sx = 0; sx < subsamples.x; ++sx)
@@ -120,14 +120,14 @@
 					int xsub = (sx - subsamples.x / 2);
 					float x = xy.x + xsub * step.x;
 
-					x = x * instanceBuffer[instID].data[i].indexMul
-					      + instanceBuffer[instID].data[i].indexAdd;
+					x = x * instanceBuffer[instID].data[j].indexMul
+					      + instanceBuffer[instID].data[j].indexAdd;
 
 					// where to read from sample buffer?
 
-					int f = instanceBuffer[instID].data[i].firstIndex;
+					int f = instanceBuffer[instID].data[j].firstIndex;
 					int s = (int)floor(x);
-					int m = instanceBuffer[instID].data[i].indexMask;
+					int m = instanceBuffer[instID].data[j].indexMask;
 
 					int s0 = f + ((s - 1) & m);
 					int s1 = f + ((s)& m);
@@ -151,7 +151,7 @@
 					//					+ (-1 / 2.0 * p0 +                1 / 2.0 * p2               ) * x
 					//					+ (                          p1                              );
 
-					y = y * instanceBuffer[instID].data[i].sampleMul + instanceBuffer[instID].data[i].sampleAdd;
+					y = y * instanceBuffer[instID].data[j].sampleMul + instanceBuffer[instID].data[j].sampleAdd;
 
 					for (int sy = 0; sy < subsamples.y; ++sy)
 					{
@@ -164,7 +164,7 @@
 				}
 				float alpha = 1 - abs(count) / (float)totalSubsamples;
 //				alpha = 1 - alpha * alpha;
-  			    color = color * (1-alpha) + Palette(instanceBuffer[instID].data[i].color) * alpha;
+  			    color = color * (1-alpha) + Palette(instanceBuffer[instID].data[j].color) * alpha;
 			}
 			return color;
 		}

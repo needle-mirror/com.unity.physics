@@ -15,13 +15,16 @@ namespace Unity.Physics.Editor
             public static readonly GUIContent MassLabel = EditorGUIUtility.TrTextContent("Mass");
             public static readonly GUIContent CenterOfMassLabel = EditorGUIUtility.TrTextContent(
                 "Center of Mass", "Center of mass in the space of this body's transform."
-                );
+            );
             public static readonly GUIContent InertiaTensorLabel = EditorGUIUtility.TrTextContent(
                 "Inertia Tensor", "Resistance to angular motion about each axis of rotation."
             );
             public static readonly GUIContent OrientationLabel = EditorGUIUtility.TrTextContent(
                 "Orientation", "Orientation of the body's inertia tensor in the space of its transform."
-                );
+            );
+            public static readonly GUIContent AdvancedLabel = EditorGUIUtility.TrTextContent(
+                "Advanced", "Advanced options"
+            );
         }
 
         #pragma warning disable 649
@@ -37,8 +40,11 @@ namespace Unity.Physics.Editor
         [AutoPopulate] SerializedProperty m_CenterOfMass;
         [AutoPopulate] SerializedProperty m_Orientation;
         [AutoPopulate] SerializedProperty m_InertiaTensor;
+        [AutoPopulate] SerializedProperty m_WorldIndex;
         [AutoPopulate] SerializedProperty m_CustomTags;
         #pragma warning restore 649
+
+        bool showAdvanced;
 
         public override void OnInspectorGUI()
         {
@@ -82,39 +88,45 @@ namespace Unity.Physics.Editor
                 EditorGUILayout.PropertyField(m_GravityFactor, true);
             }
 
-            if (m_MotionType.intValue != (int)BodyMotionType.Static)
+            showAdvanced = EditorGUILayout.Foldout(showAdvanced, Content.AdvancedLabel);
+            if (showAdvanced)
             {
-                EditorGUILayout.PropertyField(m_OverrideDefaultMassDistribution);
-                if (m_OverrideDefaultMassDistribution.boolValue)
+                ++EditorGUI.indentLevel;
+                EditorGUILayout.PropertyField(m_WorldIndex);
+                if (m_MotionType.intValue != (int)BodyMotionType.Static)
                 {
-                    ++EditorGUI.indentLevel;
-                    EditorGUILayout.PropertyField(m_CenterOfMass, Content.CenterOfMassLabel);
+                    EditorGUILayout.PropertyField(m_OverrideDefaultMassDistribution);
+                    if (m_OverrideDefaultMassDistribution.boolValue)
+                    {
+                        ++EditorGUI.indentLevel;
+                        EditorGUILayout.PropertyField(m_CenterOfMass, Content.CenterOfMassLabel);
 
-                    EditorGUI.BeginDisabledGroup(!dynamic);
-                    if (dynamic)
-                    {
-                        EditorGUILayout.PropertyField(m_Orientation, Content.OrientationLabel);
-                        EditorGUILayout.PropertyField(m_InertiaTensor, Content.InertiaTensorLabel);
-                    }
-                    else
-                    {
-                        EditorGUI.BeginDisabledGroup(true);
-                        var position =
-                            EditorGUILayout.GetControlRect(true, EditorGUI.GetPropertyHeight(m_InertiaTensor));
-                        EditorGUI.BeginProperty(position, Content.InertiaTensorLabel, m_InertiaTensor);
-                        EditorGUI.Vector3Field(position, Content.InertiaTensorLabel,
-                            Vector3.one * float.PositiveInfinity);
-                        EditorGUI.EndProperty();
+                        EditorGUI.BeginDisabledGroup(!dynamic);
+                        if (dynamic)
+                        {
+                            EditorGUILayout.PropertyField(m_Orientation, Content.OrientationLabel);
+                            EditorGUILayout.PropertyField(m_InertiaTensor, Content.InertiaTensorLabel);
+                        }
+                        else
+                        {
+                            EditorGUI.BeginDisabledGroup(true);
+                            var position =
+                                EditorGUILayout.GetControlRect(true, EditorGUI.GetPropertyHeight(m_InertiaTensor));
+                            EditorGUI.BeginProperty(position, Content.InertiaTensorLabel, m_InertiaTensor);
+                            EditorGUI.Vector3Field(position, Content.InertiaTensorLabel,
+                                Vector3.one * float.PositiveInfinity);
+                            EditorGUI.EndProperty();
+                            EditorGUI.EndDisabledGroup();
+                        }
+
                         EditorGUI.EndDisabledGroup();
+
+                        --EditorGUI.indentLevel;
                     }
-
-                    EditorGUI.EndDisabledGroup();
-
-                    --EditorGUI.indentLevel;
                 }
+                EditorGUILayout.PropertyField(m_CustomTags);
+                --EditorGUI.indentLevel;
             }
-
-            EditorGUILayout.PropertyField(m_CustomTags);
 
             if (EditorGUI.EndChangeCheck())
                 serializedObject.ApplyModifiedProperties();

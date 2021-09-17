@@ -6,7 +6,7 @@ using Unity.Mathematics;
 namespace Unity.Physics
 {
     // An event raised when a pair of bodies have collided during solving.
-    public struct CollisionEvent
+    public struct CollisionEvent : ISimulationEvent<CollisionEvent>
     {
         internal CollisionEventDataRef EventData;
         internal float TimeStep;
@@ -21,6 +21,8 @@ namespace Unity.Physics
         public ColliderKey ColliderKeyA => EventData.Value.ColliderKeys.ColliderKeyA;
 
         public float3 Normal => EventData.Value.Normal;
+
+        public int CompareTo(CollisionEvent other) => ISimulationEventUtilities.CompareEvents(this, other);
 
         // Calculate extra details about the collision.
         // Note: Since the solver does not naturally produce this data, it requires some computation.
@@ -72,7 +74,7 @@ namespace Unity.Physics
         //@TODO: Unity should have a Allow null safety restriction
         [NativeDisableContainerSafetyRestriction]
         private readonly NativeStream m_EventDataStream;
-
+        [ReadOnly]
         private readonly NativeArray<Velocity> m_InputVelocities;
         private readonly float m_TimeStep;
 

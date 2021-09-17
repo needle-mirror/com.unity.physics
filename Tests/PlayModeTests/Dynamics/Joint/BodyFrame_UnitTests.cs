@@ -7,7 +7,7 @@ namespace Unity.Physics.Tests.Joints
     {
         static readonly float3 k_XAxis = new float3(1f, 0f, 0f);
         static readonly float3 k_YAxis = new float3(0f, 1f, 0f);
-        static readonly (float3, float3) k_DefaultAxes = (k_XAxis, k_YAxis);
+        static readonly (float3, float3)k_DefaultAxes = (k_XAxis, k_YAxis);
 
         static readonly TestCaseData[] k_ValidateAxesTestCases =
         {

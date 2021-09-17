@@ -5,16 +5,14 @@ using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
-using UnityEngine;
 using static Unity.Physics.Math;
 
 namespace Unity.Physics.Authoring
 {
     // Creates DisplayJointsJobs
-    // Update before end frame system as well as some test systems might have disabled the step system
     [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
-    [UpdateAfter(typeof(BuildPhysicsWorld)), UpdateBefore(typeof(StepPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
-    public class DisplayJointsSystem : SystemBase
+    [UpdateAfter(typeof(BuildPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
+    public partial class DisplayJointsSystem : SystemBase
     {
         /// Job which draws every joint
         [BurstCompile]
@@ -199,16 +197,18 @@ namespace Unity.Physics.Authoring
         }
 
         BuildPhysicsWorld m_BuildPhysicsWorldSystem;
-        StepPhysicsWorld m_StepPhysicsWorldSystem;
-        EndFramePhysicsSystem m_EndFramePhysicsSystem;
         DebugStream m_DebugStreamSystem;
 
         protected override void OnCreate()
         {
             m_BuildPhysicsWorldSystem = World.GetOrCreateSystem<BuildPhysicsWorld>();
-            m_StepPhysicsWorldSystem = World.GetOrCreateSystem<StepPhysicsWorld>();
-            m_EndFramePhysicsSystem = World.GetOrCreateSystem<EndFramePhysicsSystem>();
             m_DebugStreamSystem = World.GetOrCreateSystem<DebugStream>();
+        }
+
+        protected override void OnStartRunning()
+        {
+            base.OnStartRunning();
+            this.RegisterPhysicsRuntimeSystemReadOnly();
         }
 
         protected override void OnUpdate()
@@ -218,23 +218,14 @@ namespace Unity.Physics.Authoring
                 return;
             }
 
-            var handle = JobHandle.CombineDependencies(Dependency, m_BuildPhysicsWorldSystem.GetOutputDependency());
-
 #pragma warning disable 618
-            handle = new DisplayJointsJob
+            Dependency = new DisplayJointsJob
             {
                 OutputStream = m_DebugStreamSystem.GetContext(1),
                 Bodies = m_BuildPhysicsWorldSystem.PhysicsWorld.Bodies,
                 Joints = m_BuildPhysicsWorldSystem.PhysicsWorld.Joints
-            }.Schedule(handle);
+            }.Schedule(Dependency);
 #pragma warning restore 618
-
-            m_StepPhysicsWorldSystem.AddInputDependency(handle);
-
-            // Add dependency for end frame system as well as some test systems might have disabled the step system
-            m_EndFramePhysicsSystem.AddInputDependency(handle);
-
-            Dependency = handle;
         }
     }
 }

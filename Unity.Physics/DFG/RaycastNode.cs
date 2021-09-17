@@ -9,10 +9,6 @@ namespace Unity.Physics
     /// </summary>
     public class RaycastNode : KernelNodeDefinition<RaycastNode.KernelDefs>
     {
-        public struct SimPorts : ISimulationPortDefinition
-        {
-        }
-
         public struct KernelDefs : IKernelPortDefinition
         {
             public DataInput<RaycastNode, RaycastInput> Input;
@@ -20,10 +16,6 @@ namespace Unity.Physics
 
             public DataOutput<RaycastNode, RaycastHit> Hit;
             public DataOutput<RaycastNode, bool> HitSuccess;
-        }
-
-        public struct Data : INodeData
-        {
         }
 
         public struct KernelData : IKernelData

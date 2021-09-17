@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Unity.Burst;
 using Unity.Collections;
@@ -138,11 +138,11 @@ namespace Unity.Physics
                     ScratchPointsY = new NativeArray<float4>(Aabbs.Length, Allocator.Temp);
                     ScratchPointsZ = new NativeArray<float4>(Aabbs.Length, Allocator.Temp);
                 }
-                
-                // This code relies on range.length always being less than or equal to the number of primitives, which 
+
+                // This code relies on range.length always being less than or equal to the number of primitives, which
                 // happens to be Aabbs.length.  If that ever becomes not true then scratch memory size should be increased.
-                Assert.IsTrue(range.Length <= ScratchScores.Length/*, "Aabbs.Length isn't a large enough scratch memory size for SegregateSah3"*/);
-                
+                Assert.IsTrue(range.Length <= ScratchScores.Length /*, "Aabbs.Length isn't a large enough scratch memory size for SegregateSah3"*/);
+
                 float4* p = PointsAsFloat4 + range.Start;
 
                 for (int i = 0; i < range.Length; i++)
@@ -194,10 +194,9 @@ namespace Unity.Physics
                 }
             }
 
-
             void Segregate(int axis, float pivot, Range range, int minItems, ref Range lRange, ref Range rRange)
             {
-                Assert.IsTrue(range.Length > 1/*, "Range length must be greater than 1."*/);
+                Assert.IsTrue(range.Length > 1 /*, "Range length must be greater than 1."*/);
 
                 Aabb lDomain = Aabb.Empty;
                 Aabb rDomain = Aabb.Empty;
@@ -227,7 +226,8 @@ namespace Unity.Physics
                     rDomain.Include((*start).xyz);
 
                     Swap(ref *(start++), ref *(end--));
-                } while (true);
+                }
+                while (true);
             FINISHED:
                 // Build sub-ranges.
                 int lSize = (int)(start - p);
@@ -324,8 +324,9 @@ namespace Unity.Physics
                     hasLeftOvers = 0;
                     CreateChildren(subRanges, numSubRanges, range.Root, ref freeNodeIndex, &range, ref hasLeftOvers);
 
-                    Assert.IsTrue(hasLeftOvers <= 1/*, "Internal error"*/);
-                } while (hasLeftOvers > 0);
+                    Assert.IsTrue(hasLeftOvers <= 1 /*, "Internal error"*/);
+                }
+                while (hasLeftOvers > 0);
             }
 
             public void ProcessLargeRange(Range range, Range* subRanges)
@@ -554,7 +555,6 @@ namespace Unity.Physics
             m_NodeFilters[nodeIndex] = combinedFilter;
         }
 
-
         public unsafe void Refit(NativeArray<Aabb> aabbs, int nodeStartIndex, int nodeEndIndex)
         {
             Node* baseNode = m_Nodes;
@@ -695,7 +695,8 @@ namespace Unity.Physics
                 level0Size = level1Size;
                 level1Size = 0;
                 smallRangeThreshold = largestAllowedRange;
-            } while (level0Size < Constants.MaxNumTreeBranches && largestRangeInLastLevel > largestAllowedRange);
+            }
+            while (level0Size < Constants.MaxNumTreeBranches && largestRangeInLastLevel > largestAllowedRange);
 
             RangeSizeAndIndex* rangeMapBySize = stackalloc RangeSizeAndIndex[Constants.MaxNumTreeBranches];
 
@@ -823,8 +824,8 @@ namespace Unity.Physics
         [BurstCompile]
         internal unsafe struct FinalizeTreeJob : IJob
         {
-            [ReadOnly] [DeallocateOnJobCompletion] public NativeArray<Aabb> Aabbs;
-            [ReadOnly] [DeallocateOnJobCompletion] public NativeArray<int> BranchNodeOffsets;
+            [ReadOnly][DeallocateOnJobCompletion] public NativeArray<Aabb> Aabbs;
+            [ReadOnly][DeallocateOnJobCompletion] public NativeArray<int> BranchNodeOffsets;
             [ReadOnly] public NativeArray<CollisionFilter> LeafFilters;
             [ReadOnly] public NativeArray<int> ShouldDoWork;
             [NativeDisableUnsafePtrRestriction]
@@ -832,7 +833,7 @@ namespace Unity.Physics
             [NativeDisableUnsafePtrRestriction]
             public CollisionFilter* NodeFilters;
             public int NumNodes;
-            [DeallocateOnJobCompletion] [ReadOnly] public NativeArray<int> OldBranchCount;
+            [DeallocateOnJobCompletion][ReadOnly] public NativeArray<int> OldBranchCount;
             public NativeArray<int> BranchCount;
 
             public void Execute()

@@ -75,7 +75,7 @@ namespace Unity.Physics
 
             public void AabbLeaf<T>(OverlapAabbInput input, int primitiveKey, [NoAlias] ref T collector) where T : struct, IOverlapCollector
             {
-                fixed (uint* keys = m_Keys)
+                fixed(uint* keys = m_Keys)
                 {
                     keys[m_NumKeys++] = new ColliderKey(m_NumColliderKeyBits, (uint)(primitiveKey << 1)).Value;
 
@@ -96,7 +96,7 @@ namespace Unity.Physics
             // Flush keys to collector
             internal void Flush<T>([NoAlias] ref T collector) where T : struct, IOverlapCollector
             {
-                fixed (uint* keys = m_Keys)
+                fixed(uint* keys = m_Keys)
                 {
                     collector.AddColliderKeys((ColliderKey*)keys, m_NumKeys);
                 }
@@ -111,7 +111,6 @@ namespace Unity.Physics
             mesh->Mesh.BoundingVolumeHierarchy.AabbOverlap(input, ref leafProcessor, ref collector);
             leafProcessor.Flush(ref collector);
         }
-
 
         // Compound
         internal unsafe struct CompoundLeafProcessor : BoundingVolumeHierarchy.IAabbOverlapLeafProcessor
@@ -158,7 +157,7 @@ namespace Unity.Physics
             // Flush keys to collector
             internal void Flush<T>(ref T collector) where T : struct, IOverlapCollector
             {
-                fixed (uint* keys = m_Keys)
+                fixed(uint* keys = m_Keys)
                 {
                     collector.AddColliderKeys((ColliderKey*)keys, m_NumKeys);
                 }

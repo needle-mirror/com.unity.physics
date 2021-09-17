@@ -37,7 +37,7 @@ namespace Unity.Physics
         {
             public BodyIndexPair BodyIndices;
             public CustomTagsPair BodyCustomTags;
-            public bool BodiesHaveInfiniteMass;
+            public bool BothMotionsAreKinematic;
             public NativeStream.Writer* ContactWriter;  // cannot be passed by value
         }
 
@@ -69,7 +69,7 @@ namespace Unity.Physics
             {
                 BodyIndices = pair,
                 BodyCustomTags = new CustomTagsPair { CustomTagsA = rigidBodyA.CustomTags, CustomTagsB = rigidBodyB.CustomTags },
-                BodiesHaveInfiniteMass = motionVelocityA.HasInfiniteInertiaAndMass && motionVelocityB.HasInfiniteInertiaAndMass,
+                BothMotionsAreKinematic = motionVelocityA.IsKinematic && motionVelocityB.IsKinematic,
                 ContactWriter = (NativeStream.Writer*)UnsafeUtility.AddressOf(ref contactWriter)
             };
 
@@ -221,8 +221,8 @@ namespace Unity.Physics
             }
 
             // Skip if the bodies have infinite mass and the materials don't want to raise any solver events,
-            // since the resulting contacts can't have any effect during solving
-            if (context.BodiesHaveInfiniteMass)
+            // since the resulting contacts can't have any effect during solving.
+            if (context.BothMotionsAreKinematic)
             {
                 if (combinedCollisionResponse != CollisionResponsePolicy.RaiseTriggerEvents &&
                     combinedCollisionResponse != CollisionResponsePolicy.CollideRaiseCollisionEvents)
@@ -656,7 +656,7 @@ namespace Unity.Physics
 
             // Skip if the bodies have infinite mass and the materials don't want to raise any solver events,
             // since the resulting contacts can't have any effect during solving
-            if (context.BodiesHaveInfiniteMass)
+            if (context.BothMotionsAreKinematic)
             {
                 if (combinedCollisionResponse != CollisionResponsePolicy.RaiseTriggerEvents &&
                     combinedCollisionResponse != CollisionResponsePolicy.CollideRaiseCollisionEvents)

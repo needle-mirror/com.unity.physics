@@ -85,7 +85,6 @@ namespace Unity.Physics.GraphicsIntegration
         /// This method tries to achieve a compromise between the visual artifacts of <see cref="Interpolate"/> and <see cref="Extrapolate"/>.
         /// While integrating forward using <c>previousVelocity</c> alone would exhibit behavior similar to <see cref="Extrapolate"/>, doing so in conjunction with <c>previousTransform</c> results in smoother motion for small velocity changes.
         /// Collisions can still appear premature when physics has a low tick rate, however, as when using <see cref="Interpolate"/>.
-        /// This method is the default approach used by the <see cref="SmoothRigidBodiesGraphicalMotion"/> system for interpolated bodies.
         /// </summary>
         /// <param name="previousTransform">The transform of the rigid body before physics stepped.</param>
         /// <param name="previousVelocity">The velocity of the rigid body before physics stepped.</param>
@@ -150,8 +149,8 @@ namespace Unity.Physics.GraphicsIntegration
             var scale = hasNonUniformScale
                 ? float4x4.Scale(nonUniformScales[i].Value)
                 : hasScale
-                    ? float4x4.Scale(new float3(scales[i].Value))
-                    : compositeScales[i].Value;
+                ? float4x4.Scale(new float3(scales[i].Value))
+                : compositeScales[i].Value;
 
             return new LocalToWorld { Value = math.mul(tr, scale) };
         }

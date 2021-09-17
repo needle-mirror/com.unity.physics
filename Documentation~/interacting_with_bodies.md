@@ -180,6 +180,7 @@ public unsafe Entity CreateBody(
     entityManager.SetComponentData(entity, new Rotation { Value = orientation });
     
     entityManager.SetComponentData(entity, new PhysicsCollider { Value = collider });
+    EntityManager.AddSharedComponentData(entity, new PhysicsWorldIndex());
 
     if (isDynamic)
     {
@@ -214,6 +215,11 @@ Getting your `RenderMesh` (etc.) is up to you, and you can create a Collider thr
     };
 ```
 
+# Multiple worlds - simulating groups of bodies separately
+
+It is possible to simulate groups of bodies totally separately from each other, in separate physics worlds. Each body in each world is represented by a separate Entity and each Entity must have all components that are needed for physics simulation in its world. `PhysicsWorldIndex.Value` denotes the index of physics world that the Entity belongs to (0 for default `PhysicsWorld` processed by `BuildPhysicsWorld`, `StepPhysicsWorld` and `ExportPhysicsWorld` systems). Note that Entities for different physics worlds will be stored in separate ECS chunks, due to different values of the shared component.
+Non-default physics worlds require custom systems that will processs (build, simulate and export) them, from Entities that are marked with appropriate `PhysicsWorldIndex`. Storage of a non-default `PhysicsWorld` is controlled by the user. There is a number of utilities and data classes that make this easier, like `PhysicsWorldData`, `PhysicsWorldBuilder`, `PhysicsWorldStepper`, `PhysicsWorldExporter` and `PhysicsRuntimeExtensions.RegisterPhysicsRuntimeSystem*` templated methods.
+
 # Next steps
 
-Now that you know how to create bodies, it would be a good time to learn about [Collision queries](collision_queries.md) and filtering. At that stage you should be all set for at least intermediate used of Unity Physics and can progress onto the more advanced topics such as modifying the simulation as it is running via callbacks and getting a deeper understanding of how the code works.
+Now that you know how to create bodies, it would be a good time to learn about [Collision queries](collision_queries.md) and filtering. At that stage you should be all set for at least intermediate use of Unity Physics and can progress onto the more advanced topics such as modifying the simulation as it is running ([directly](modifying_simulation_data.md) or via [callbacks](simulation_modification.md)) and getting a deeper understanding of how the code works.
