@@ -20,12 +20,12 @@ namespace Unity.Physics.Authoring
             public Material Material;
         }
 
-        NativeHashMap<Hash128, ConvexInput> m_ConvexColliderJobs;
+        NativeParallelHashMap<Hash128, ConvexInput> m_ConvexColliderJobs;
         NativeList<float3> m_ConvexColliderPoints;
 
         static JobHandle ProduceConvexColliders(
-            NativeHashMap<Hash128, ConvexInput> inputs, NativeArray<float3> points,
-            out NativeHashMap<Hash128, BlobAssetReference<Collider>> convexColliders,
+            NativeParallelHashMap<Hash128, ConvexInput> inputs, NativeArray<float3> points,
+            out NativeParallelHashMap<Hash128, BlobAssetReference<Collider>> convexColliders,
             JobHandle inputDeps = default
         )
         {
@@ -42,7 +42,7 @@ namespace Unity.Physics.Authoring
             }.Schedule(inputs.Count(), arrayLength, inputDeps);
 
             // put blob assets into hash map
-            convexColliders = new NativeHashMap<Hash128, BlobAssetReference<Collider>>(inputs.Count(), Allocator.TempJob);
+            convexColliders = new NativeParallelHashMap<Hash128, BlobAssetReference<Collider>>(inputs.Count(), Allocator.TempJob);
             jobHandle = new ConvertToHashMapJob<Hash128, BlobAssetReference<Collider>>
             {
                 Input = convexCollidersArray,

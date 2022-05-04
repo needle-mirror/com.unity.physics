@@ -192,7 +192,7 @@ namespace Unity.Physics.Authoring
             [DeallocateOnJobCompletion]
             [ReadOnly] public NativeArray<KeyValuePair<TKey, TValue>> Input;
 
-            public NativeHashMap<TKey, TValue> Output;
+            public NativeParallelHashMap<TKey, TValue> Output;
 
             public void Execute()
             {

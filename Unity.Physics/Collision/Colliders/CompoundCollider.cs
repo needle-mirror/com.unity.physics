@@ -78,7 +78,7 @@ namespace Unity.Physics
             // TODO: Verify that the size is enough
             int totalSize = Math.NextMultipleOf16(UnsafeUtility.SizeOf<CompoundCollider>());
             CollisionFilter filter = children[0].Collider.Value.Filter;
-            var srcToDestInstanceAddrs = new NativeHashMap<long, long>(children.Length, Allocator.Temp);
+            var srcToDestInstanceAddrs = new NativeParallelHashMap<long, long>(children.Length, Allocator.Temp);
             for (var childIndex = 0; childIndex < children.Length; childIndex++)
             {
                 var child = children[childIndex];

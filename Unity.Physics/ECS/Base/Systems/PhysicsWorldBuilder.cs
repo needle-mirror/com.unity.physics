@@ -420,7 +420,7 @@ namespace Unity.Physics.Systems
                 public int BodyIndex;
 
                 [NativeDisableContainerSafetyRestriction]
-                public NativeHashMap<Entity, int>.ParallelWriter EntityBodyIndexMap;
+                public NativeParallelHashMap<Entity, int>.ParallelWriter EntityBodyIndexMap;
 
                 public void Execute()
                 {
@@ -448,7 +448,7 @@ namespace Unity.Physics.Systems
                 [ReadOnly] public int FirstBodyIndex;
 
                 [NativeDisableContainerSafetyRestriction] public NativeArray<RigidBody> RigidBodies;
-                [NativeDisableContainerSafetyRestriction] public NativeHashMap<Entity, int>.ParallelWriter EntityBodyIndexMap;
+                [NativeDisableContainerSafetyRestriction] public NativeParallelHashMap<Entity, int>.ParallelWriter EntityBodyIndexMap;
 
                 //public void Execute(ArchetypeChunk chunk, int chunkIndex, int firstEntityIndex)
                 public void Execute(ArchetypeChunk batchInChunk, int batchIndex, int firstEntityIndex)
@@ -632,10 +632,10 @@ namespace Unity.Physics.Systems
                 [ReadOnly] public EntityTypeHandle EntityType;
                 [ReadOnly] public NativeArray<RigidBody> RigidBodies;
                 [ReadOnly] public int NumDynamicBodies;
-                [ReadOnly] public NativeHashMap<Entity, int> EntityBodyIndexMap;
+                [ReadOnly] public NativeParallelHashMap<Entity, int> EntityBodyIndexMap;
 
                 [NativeDisableParallelForRestriction] public NativeArray<Joint> Joints;
-                [NativeDisableParallelForRestriction] public NativeHashMap<Entity, int>.ParallelWriter EntityJointIndexMap;
+                [NativeDisableParallelForRestriction] public NativeParallelHashMap<Entity, int>.ParallelWriter EntityJointIndexMap;
 
                 public int DefaultStaticBodyIndex;
 

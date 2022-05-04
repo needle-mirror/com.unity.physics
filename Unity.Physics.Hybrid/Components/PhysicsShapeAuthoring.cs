@@ -642,6 +642,7 @@ namespace Unity.Physics.Authoring
             m_ShapeType = ShapeType.Cylinder;
             m_PrimitiveCenter = geometry.Center;
             m_PrimitiveOrientation = orientation;
+            m_CylinderSideCount = geometry.SideCount;
 
             geometry.Radius = math.max(0f, geometry.Radius);
             geometry.Height = math.max(0f, geometry.Height);

@@ -85,7 +85,7 @@ namespace Unity.Physics.Authoring
         internal bool TryGetRegisteredMeshInputs(Hash128 hash, out MeshInput inputData) =>
             m_MeshColliderJobs.TryGetValue(hash, out inputData);
 
-        NativeHashMap<Entity, Entity> m_AllBodiesByLeaf;
+        NativeParallelHashMap<Entity, Entity> m_AllBodiesByLeaf;
         NativeList<ShapeComputationData> m_ShapeComputationData;
 
         BuildCompoundCollidersConversionSystem m_BuildCompoundsSystem;
@@ -108,7 +108,7 @@ namespace Unity.Physics.Authoring
             m_EndColliderConversionSystem = World.GetOrCreateSystem<EndColliderConversionSystem>();
 
             // A map from leaf shape entities to their respective bodies
-            m_AllBodiesByLeaf = new NativeHashMap<Entity, Entity>(16, Allocator.Persistent);
+            m_AllBodiesByLeaf = new NativeParallelHashMap<Entity, Entity>(16, Allocator.Persistent);
 
             // A list of inputs gathered from authoring components
             const int defaultShapeCount = 128;
@@ -117,10 +117,10 @@ namespace Unity.Physics.Authoring
             // Lists to store input data for deferred convex and mesh jobs
             const int defaultPointsPerShape = 1024;
 
-            m_ConvexColliderJobs = new NativeHashMap<Hash128, ConvexInput>(defaultShapeCount, Allocator.Persistent);
+            m_ConvexColliderJobs = new NativeParallelHashMap<Hash128, ConvexInput>(defaultShapeCount, Allocator.Persistent);
             m_ConvexColliderPoints = new NativeList<float3>(defaultShapeCount * defaultPointsPerShape, Allocator.Persistent);
 
-            m_MeshColliderJobs = new NativeHashMap<Hash128, MeshInput>(defaultShapeCount, Allocator.Persistent);
+            m_MeshColliderJobs = new NativeParallelHashMap<Hash128, MeshInput>(defaultShapeCount, Allocator.Persistent);
             m_MeshColliderVertices = new NativeList<float3>(defaultShapeCount * defaultPointsPerShape, Allocator.Persistent);
             m_MeshColliderTriangles = new NativeList<int3>(defaultShapeCount * defaultPointsPerShape / 2 / 3, Allocator.Persistent);
         }

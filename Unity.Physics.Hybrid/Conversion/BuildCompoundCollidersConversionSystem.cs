@@ -17,11 +17,11 @@ namespace Unity.Physics.Authoring
     public sealed class BuildCompoundCollidersConversionSystem : GameObjectConversionSystem
     {
         // lifetime tied to system instance (i.e. LiveLink session) for incremental conversion
-        NativeMultiHashMap<Entity, ColliderInstance> m_AllLeafCollidersByBody;
+        NativeParallelMultiHashMap<Entity, ColliderInstance> m_AllLeafCollidersByBody;
 
         internal void SetLeafDirty(ColliderInstance leaf) => m_ChangedLeavesByBody.Add(leaf.BodyEntity, leaf);
 
-        NativeMultiHashMap<Entity, ColliderInstance> m_ChangedLeavesByBody;
+        NativeParallelMultiHashMap<Entity, ColliderInstance> m_ChangedLeavesByBody;
 
         BeginColliderConversionSystem m_BeginColliderConversionSystem;
         EndColliderConversionSystem m_EndColliderConversionSystem;
@@ -32,8 +32,8 @@ namespace Unity.Physics.Authoring
         protected override void OnCreate()
         {
             base.OnCreate();
-            m_AllLeafCollidersByBody = new NativeMultiHashMap<Entity, ColliderInstance>(16, Allocator.Persistent);
-            m_ChangedLeavesByBody = new NativeMultiHashMap<Entity, ColliderInstance>(16, Allocator.Persistent);
+            m_AllLeafCollidersByBody = new NativeParallelMultiHashMap<Entity, ColliderInstance>(16, Allocator.Persistent);
+            m_ChangedLeavesByBody = new NativeParallelMultiHashMap<Entity, ColliderInstance>(16, Allocator.Persistent);
             m_BeginColliderConversionSystem = World.GetOrCreateSystem<BeginColliderConversionSystem>();
             m_EndColliderConversionSystem = World.GetOrCreateSystem<EndColliderConversionSystem>();
         }
@@ -69,7 +69,7 @@ namespace Unity.Physics.Authoring
                         ? DstEntityManager.GetComponentData<PhysicsCollider>(body)
                         : new PhysicsCollider();
                     var children =
-                        new NativeHashMap<ColliderInstanceId, ChildInstance>(16, Allocator.Temp);
+                        new NativeParallelHashMap<ColliderInstanceId, ChildInstance>(16, Allocator.Temp);
 
                     var isLeafEntityBody = true;
 

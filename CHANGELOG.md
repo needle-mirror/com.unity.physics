@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.51.0] - 2022-05-04
+
+### Changed
+
+* Package Dependencies
+    * `com.unity.entities` to version `0.51.0`
+    * `com.unity.jobs` to version `0.51.0`
+    * `com.unity.mathematics` to version `1.2.6`
+    * `com.unity.collections` to version `1.3.0`
+
+### Fixed
+
+* `PhysicsShapeAuthoring.SetCylinder()` now takes into account provided geometry's side count.
+
+
+
 ## [0.50.0] - 2021-09-17
 
 ### Changed
@@ -16,8 +32,6 @@
 
 * An issue with the rendering pipeline used for the package samples, which caused none of the samples to render post conversion
 * An issue with the materials present in the samples as their colors were no longer correct
-
-
 
 ## [0.10.0-preview.1] - 2021-06-25
 ### Upgrade guide

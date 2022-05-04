@@ -4,7 +4,7 @@ namespace Unity.Physics.Authoring
 {
     static class HelpURLs
     {
-        public const string PackageVersion = "0.50";
+        public const string PackageVersion = "0.51";
 
         const string k_BaseURL = "https://docs.unity3d.com/Packages/com.unity.physics@" + PackageVersion + "/api/";
         const string k_Html = ".html";

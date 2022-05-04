@@ -59,7 +59,7 @@ namespace Unity.Physics.Systems
 
         #region Integrity checks
 
-        internal JobHandle CheckIntegrity(JobHandle inputDeps, NativeHashMap<uint, long> integrityCheckMap)
+        internal JobHandle CheckIntegrity(JobHandle inputDeps, NativeParallelHashMap<uint, long> integrityCheckMap)
         {
             var positionType = GetComponentTypeHandle<Translation>(true);
             var rotationType = GetComponentTypeHandle<Rotation>(true);
@@ -100,9 +100,9 @@ namespace Unity.Physics.Systems
             [ReadOnly] public ComponentTypeHandle<Rotation> RotationType;
             [ReadOnly] public ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
             [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
-            public NativeHashMap<uint, long> IntegrityCheckMap;
+            public NativeParallelHashMap<uint, long> IntegrityCheckMap;
 
-            internal static void DecrementIfExists(NativeHashMap<uint, long> integrityCheckMap, uint systemVersion)
+            internal static void DecrementIfExists(NativeParallelHashMap<uint, long> integrityCheckMap, uint systemVersion)
             {
                 if (integrityCheckMap.TryGetValue(systemVersion, out long occurences))
                 {
@@ -137,7 +137,7 @@ namespace Unity.Physics.Systems
         internal struct CheckColliderIntegrity : IJobEntityBatch
         {
             [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
-            public NativeHashMap<uint, long> IntegrityCheckMap;
+            public NativeParallelHashMap<uint, long> IntegrityCheckMap;
 
             public void Execute(ArchetypeChunk batchInChunk, int batchIndex)
             {
@@ -154,7 +154,7 @@ namespace Unity.Physics.Systems
         [BurstCompile]
         internal struct CheckTotalIntegrity : IJob
         {
-            public NativeHashMap<uint, long> IntegrityCheckMap;
+            public NativeParallelHashMap<uint, long> IntegrityCheckMap;
             public void Execute()
             {
                 var values = IntegrityCheckMap.GetValueArray(Allocator.Temp);

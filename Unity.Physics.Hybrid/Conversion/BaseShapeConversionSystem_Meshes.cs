@@ -20,15 +20,15 @@ namespace Unity.Physics.Authoring
             public Material Material;
         }
 
-        NativeHashMap<Hash128, MeshInput> m_MeshColliderJobs;
+        NativeParallelHashMap<Hash128, MeshInput> m_MeshColliderJobs;
         NativeList<float3> m_MeshColliderVertices;
         NativeList<int3> m_MeshColliderTriangles;
 
         JobHandle ProduceMeshColliders(
-            NativeHashMap<Hash128, MeshInput> inputs,
+            NativeParallelHashMap<Hash128, MeshInput> inputs,
             NativeList<float3> vertices,
             NativeList<int3> indices,
-            out NativeHashMap<Hash128, BlobAssetReference<Collider>> meshColliders,
+            out NativeParallelHashMap<Hash128, BlobAssetReference<Collider>> meshColliders,
             JobHandle inputDeps = default
         )
         {
@@ -46,7 +46,7 @@ namespace Unity.Physics.Authoring
             }.Schedule(inputs.Count(), arrayLength, inputDeps);
 
             // put blob assets into hash map
-            meshColliders = new NativeHashMap<Hash128, BlobAssetReference<Collider>>(inputs.Count(), Allocator.TempJob);
+            meshColliders = new NativeParallelHashMap<Hash128, BlobAssetReference<Collider>>(inputs.Count(), Allocator.TempJob);
             jobHandle = new ConvertToHashMapJob<Hash128, BlobAssetReference<Collider>>
             {
                 Input = meshCollidersArray,

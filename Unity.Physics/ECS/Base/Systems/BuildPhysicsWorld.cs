@@ -28,7 +28,7 @@ namespace Unity.Physics.Systems
         public EntityQuery CollisionWorldProxyGroup { get; private set; }
 
 #if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
-        internal NativeHashMap<uint, long> IntegrityCheckMap = new NativeHashMap<uint, long>(4, Allocator.Persistent);
+        internal NativeParallelHashMap<uint, long> IntegrityCheckMap = new NativeParallelHashMap<uint, long>(4, Allocator.Persistent);
 #endif
 
         protected override void OnCreate()
@@ -116,9 +116,9 @@ namespace Unity.Physics.Systems
                 [ReadOnly] public ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
                 [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
 
-                public NativeHashMap<uint, long> IntegrityCheckMap;
+                public NativeParallelHashMap<uint, long> IntegrityCheckMap;
 
-                internal static void AddOrIncrement(NativeHashMap<uint, long> integrityCheckMap, uint systemVersion)
+                internal static void AddOrIncrement(NativeParallelHashMap<uint, long> integrityCheckMap, uint systemVersion)
                 {
                     if (integrityCheckMap.TryGetValue(systemVersion, out long occurences))
                     {
@@ -154,7 +154,7 @@ namespace Unity.Physics.Systems
             internal struct RecordColliderIntegrity : IJobEntityBatch
             {
                 [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
-                public NativeHashMap<uint, long> IntegrityCheckMap;
+                public NativeParallelHashMap<uint, long> IntegrityCheckMap;
 
                 public void Execute(ArchetypeChunk batchInChunk, int batchIndex)
                 {
@@ -166,7 +166,7 @@ namespace Unity.Physics.Systems
             }
         }
 
-        internal void RecordIntegrity(NativeHashMap<uint, long> integrityCheckMap)
+        internal void RecordIntegrity(NativeParallelHashMap<uint, long> integrityCheckMap)
         {
             var positionType = GetComponentTypeHandle<Translation>(true);
             var rotationType = GetComponentTypeHandle<Rotation>(true);
