@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.51.1] - 2022-06-27
+
+### Changed
+
+* Package Dependencies
+    * `com.unity.entities` to version `0.51.1`
+    * `com.unity.collections` to version `1.4.0`
+
 ## [0.51.0] - 2022-05-04
 
 ### Changed
