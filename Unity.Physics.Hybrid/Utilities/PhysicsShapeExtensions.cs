@@ -129,12 +129,7 @@ namespace Unity.Physics.Authoring
             if (
                 host.gameObject.scene.isSubScene
                 // isSubScene is false in AssetImportWorker during sub-scene import
-#if UNITY_2020_2_OR_NEWER
-                || UnityEditor.AssetDatabase.IsAssetImportWorkerProcess()
-#else
-                || UnityEditor.Experimental.AssetDatabaseExperimental.IsAssetImportWorkerProcess()
-#endif
-            )
+                || UnityEditor.AssetDatabase.IsAssetImportWorkerProcess())
                 return true;
 #endif
             return mesh.isReadable;
@@ -831,9 +826,9 @@ namespace Unity.Physics.Authoring
                         Material = shape.GetMaterial(),
                         CollisionFilter = shape.GetFilter(),
                         BakeFromShape = shape.GetLocalToShapeMatrix(),
-                        Inputs = inputs,
-                        AllSkinIndices = allSkinIndices,
-                        AllBlendShapeWeights = allBlendShapeWeights
+                        Inputs = inputs.AsArray(),
+                        AllSkinIndices = allSkinIndices.AsArray(),
+                        AllBlendShapeWeights = allBlendShapeWeights.AsArray()
                     };
                     job.Run();
                     return hash[0];
@@ -844,7 +839,7 @@ namespace Unity.Physics.Authoring
         internal static void GetBakedConvexProperties(this PhysicsShapeAuthoring shape, NativeList<float3> pointCloud)
         {
             shape.GetConvexHullProperties(pointCloud, true, default, default, default, default);
-            shape.BakePoints(pointCloud);
+            shape.BakePoints(pointCloud.AsArray());
         }
 
 #if !(UNITY_ANDROID && !UNITY_64) // !Android32
@@ -889,11 +884,11 @@ namespace Unity.Physics.Authoring
             }
         }
 
-        internal static Hash128 GetBakedMeshInputs(this PhysicsShapeAuthoring shape)
+        internal static Hash128 GetBakedMeshInputs(this PhysicsShapeAuthoring shape, HashSet<UnityEngine.Mesh> meshAssets = null)
         {
             using (var inputs = new NativeList<HashableShapeInputs>(8, Allocator.TempJob))
             {
-                shape.GetMeshProperties(default, default, true, inputs);
+                shape.GetMeshProperties(default, default, true, inputs, meshAssets);
                 using (var hash = new NativeArray<Hash128>(1, Allocator.TempJob))
                 using (var allSkinIndices = new NativeArray<int>(0, Allocator.TempJob))
                 using (var allBlendShapeWeights = new NativeArray<float>(0, Allocator.TempJob))
@@ -905,7 +900,7 @@ namespace Unity.Physics.Authoring
                         Material = shape.GetMaterial(),
                         CollisionFilter = shape.GetFilter(),
                         BakeFromShape = shape.GetLocalToShapeMatrix(),
-                        Inputs = inputs,
+                        Inputs = inputs.AsArray(),
                         AllSkinIndices = allSkinIndices,
                         AllBlendShapeWeights = allBlendShapeWeights
                     };
@@ -921,7 +916,7 @@ namespace Unity.Physics.Authoring
         )
         {
             shape.GetMeshProperties(vertices, triangles, true, default, meshAssets);
-            shape.BakePoints(vertices);
+            shape.BakePoints(vertices.AsArray());
         }
     }
 }

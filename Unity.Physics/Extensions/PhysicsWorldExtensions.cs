@@ -1,22 +1,33 @@
 using System.Runtime.CompilerServices;
-using Unity.Entities;
 using Unity.Mathematics;
 
 namespace Unity.Physics.Extensions
 {
-    // Utility functions acting on a physics world
+    /// <summary>   Utility functions acting on a physics world. </summary>
     public static class PhysicsWorldExtensions
     {
+        /// <summary>   An in PhysicsWorld extension method that gets collision filter. </summary>
+        ///
+        /// <param name="world">            The world to act on. </param>
+        /// <param name="rigidBodyIndex">   Zero-based index of the rigid body. </param>
+        ///
+        /// <returns>   The collision filter. </returns>
         public static CollisionFilter GetCollisionFilter(this in PhysicsWorld world, int rigidBodyIndex)
         {
             CollisionFilter filter = CollisionFilter.Default;
             if (!(0 <= rigidBodyIndex && rigidBodyIndex < world.NumBodies)) return filter;
 
-            unsafe { filter = world.Bodies[rigidBodyIndex].Collider.Value.Filter; }
+            unsafe { filter = world.Bodies[rigidBodyIndex].Collider.Value.GetCollisionFilter(); }
 
             return filter;
         }
 
+        /// <summary>   An in PhysicsWorld extension method that gets the mass. </summary>
+        ///
+        /// <param name="world">            The world to act on. </param>
+        /// <param name="rigidBodyIndex">   Zero-based index of the rigid body. </param>
+        ///
+        /// <returns>   The mass. </returns>
         public static float GetMass(this in PhysicsWorld world, int rigidBodyIndex)
         {
             if (!(0 <= rigidBodyIndex && rigidBodyIndex < world.NumDynamicBodies)) return 0;
@@ -26,7 +37,17 @@ namespace Unity.Physics.Extensions
             return 0 == mv.InverseMass ? 0.0f : 1.0f / mv.InverseMass;
         }
 
-        // Get the effective mass of a Rigid Body in a given direction and from a particular point (in World Space)
+        /// <summary>
+        /// Get the effective mass of a Rigid Body in a given direction and from a particular point (in
+        /// World Space)
+        /// </summary>
+        ///
+        /// <param name="world">            The world to act on. </param>
+        /// <param name="rigidBodyIndex">   Zero-based index of the rigid body. </param>
+        /// <param name="impulse">          The impulse. </param>
+        /// <param name="point">            The point. </param>
+        ///
+        /// <returns>   The effective mass. </returns>
         public static float GetEffectiveMass(this in PhysicsWorld world, int rigidBodyIndex, float3 impulse, float3 point)
         {
             if (!(0 <= rigidBodyIndex && rigidBodyIndex < world.NumDynamicBodies)) return 0;
@@ -36,6 +57,14 @@ namespace Unity.Physics.Extensions
             return GetEffectiveMassImpl(GetCenterOfMass(world, rigidBodyIndex), mv.InverseInertia, impulse, point);
         }
 
+        /// <summary>   Gets effective mass implementation. </summary>
+        ///
+        /// <param name="centerOfMass">     The center of mass. </param>
+        /// <param name="inverseInertia">   The inverse inertia. </param>
+        /// <param name="impulse">          The impulse. </param>
+        /// <param name="point">            The point. </param>
+        ///
+        /// <returns>   The effective mass implementation. </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static float GetEffectiveMassImpl(float3 centerOfMass, float3 inverseInertia, float3 impulse, float3 point)
         {
@@ -47,7 +76,12 @@ namespace Unity.Physics.Extensions
             return math.select(1.0f / invEffMass, 0.0f, math.abs(invEffMass) < 1e-5);
         }
 
-        // Get the Rigid Bodies Center of Mass (in World Space)
+        /// <summary>   Get the Rigid Bodies Center of Mass (in World Space) </summary>
+        ///
+        /// <param name="world">            The world to act on. </param>
+        /// <param name="rigidBodyIndex">   Zero-based index of the rigid body. </param>
+        ///
+        /// <returns>   The center of mass. </returns>
         public static float3 GetCenterOfMass(this in PhysicsWorld world, int rigidBodyIndex)
         {
             if (!(0 <= rigidBodyIndex && rigidBodyIndex < world.NumDynamicBodies)) return float3.zero;
@@ -55,6 +89,12 @@ namespace Unity.Physics.Extensions
             return world.MotionDatas[rigidBodyIndex].WorldFromMotion.pos;
         }
 
+        /// <summary>   An in PhysicsWorld extension method that gets a position of a body in World Space. </summary>
+        ///
+        /// <param name="world">            The world to act on. </param>
+        /// <param name="rigidBodyIndex">   Zero-based index of the rigid body. </param>
+        ///
+        /// <returns>   The position. </returns>
         public static float3 GetPosition(this in PhysicsWorld world, int rigidBodyIndex)
         {
             if (!(0 <= rigidBodyIndex && rigidBodyIndex < world.NumDynamicBodies)) return float3.zero;
@@ -66,6 +106,12 @@ namespace Unity.Physics.Extensions
             return worldFromBody.pos;
         }
 
+        /// <summary>   An in PhysicsWorld extension method that gets a rotation. </summary>
+        ///
+        /// <param name="world">            The world to act on. </param>
+        /// <param name="rigidBodyIndex">   Zero-based index of the rigid body. </param>
+        ///
+        /// <returns>   The rotation. </returns>
         public static quaternion GetRotation(this in PhysicsWorld world, int rigidBodyIndex)
         {
             if (!(0 <= rigidBodyIndex && rigidBodyIndex < world.NumDynamicBodies)) return quaternion.identity;
@@ -77,7 +123,12 @@ namespace Unity.Physics.Extensions
             return worldFromBody.rot;
         }
 
-        // Get the linear velocity of a rigid body (in world space)
+        /// <summary>   Get the linear velocity of a rigid body (in world space) </summary>
+        ///
+        /// <param name="world">            The world to act on. </param>
+        /// <param name="rigidBodyIndex">   Zero-based index of the rigid body. </param>
+        ///
+        /// <returns>   The linear velocity. </returns>
         public static float3 GetLinearVelocity(this in PhysicsWorld world, int rigidBodyIndex)
         {
             if (!(0 <= rigidBodyIndex && rigidBodyIndex < world.NumDynamicBodies)) return float3.zero;
@@ -85,7 +136,11 @@ namespace Unity.Physics.Extensions
             return world.MotionVelocities[rigidBodyIndex].LinearVelocity;
         }
 
-        // Set the linear velocity of a rigid body (in world space)
+        /// <summary>   Set the linear velocity of a rigid body (in world space) </summary>
+        ///
+        /// <param name="world">            The world to act on. </param>
+        /// <param name="rigidBodyIndex">   Zero-based index of the rigid body. </param>
+        /// <param name="linearVelocity">   The linear velocity. </param>
         public static void SetLinearVelocity(this PhysicsWorld world, int rigidBodyIndex, float3 linearVelocity)
         {
             if (!(0 <= rigidBodyIndex && rigidBodyIndex < world.NumDynamicBodies)) return;
@@ -96,7 +151,13 @@ namespace Unity.Physics.Extensions
             motionVelocities[rigidBodyIndex] = mv;
         }
 
-        // Get the linear velocity of a rigid body at a given point (in world space)
+        /// <summary>   Get the linear velocity of a rigid body at a given point (in world space) </summary>
+        ///
+        /// <param name="world">            The world to act on. </param>
+        /// <param name="rigidBodyIndex">   Zero-based index of the rigid body. </param>
+        /// <param name="point">            The point. </param>
+        ///
+        /// <returns>   The linear velocity. </returns>
         public static float3 GetLinearVelocity(this in PhysicsWorld world, int rigidBodyIndex, float3 point)
         {
             if (!(0 <= rigidBodyIndex && rigidBodyIndex < world.NumDynamicBodies)) return float3.zero;
@@ -107,6 +168,14 @@ namespace Unity.Physics.Extensions
             return GetLinearVelocityImpl(md.WorldFromMotion, mv.AngularVelocity, mv.LinearVelocity, point);
         }
 
+        /// <summary>   Gets linear velocity implementation. </summary>
+        ///
+        /// <param name="worldFromMotion">  The world from motion. </param>
+        /// <param name="angularVelocity">  The angular velocity. </param>
+        /// <param name="linearVelocity">   The linear velocity. </param>
+        /// <param name="point">            The point. </param>
+        ///
+        /// <returns>   The linear velocity implementation. </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static float3 GetLinearVelocityImpl(RigidTransform worldFromMotion, float3 angularVelocity, float3 linearVelocity, float3 point)
         {
@@ -114,7 +183,14 @@ namespace Unity.Physics.Extensions
             return linearVelocity + math.cross(angularVelocity, point - worldFromMotion.pos);
         }
 
-        // Get the angular velocity of a rigid body around it's center of mass (in world space)
+        /// <summary>
+        /// Get the angular velocity of a rigid body around it's center of mass (in world space)
+        /// </summary>
+        ///
+        /// <param name="world">            The world to act on. </param>
+        /// <param name="rigidBodyIndex">   Zero-based index of the rigid body. </param>
+        ///
+        /// <returns>   The angular velocity. </returns>
         public static float3 GetAngularVelocity(this in PhysicsWorld world, int rigidBodyIndex)
         {
             if (!(0 <= rigidBodyIndex && rigidBodyIndex < world.NumDynamicBodies)) return float3.zero;
@@ -125,7 +201,11 @@ namespace Unity.Physics.Extensions
             return math.rotate(md.WorldFromMotion, mv.AngularVelocity);
         }
 
-        // Set the angular velocity of a rigid body (in world space)
+        /// <summary>   Set the angular velocity of a rigid body (in world space) </summary>
+        ///
+        /// <param name="world">            The world to act on. </param>
+        /// <param name="rigidBodyIndex">   Zero-based index of the rigid body. </param>
+        /// <param name="angularVelocity">  The angular velocity. </param>
         public static void SetAngularVelocity(this PhysicsWorld world, int rigidBodyIndex, float3 angularVelocity)
         {
             if (!(0 <= rigidBodyIndex && rigidBodyIndex < world.NumDynamicBodies)) return;
@@ -139,7 +219,12 @@ namespace Unity.Physics.Extensions
             motionVelocities[rigidBodyIndex] = mv;
         }
 
-        // Apply an impulse to a rigid body at a point (in world space)
+        /// <summary>   Apply an impulse to a rigid body at a point (in world space) </summary>
+        ///
+        /// <param name="world">            The world to act on. </param>
+        /// <param name="rigidBodyIndex">   Zero-based index of the rigid body. </param>
+        /// <param name="linearImpulse">    The linear impulse. </param>
+        /// <param name="point">            The point. </param>
         public static void ApplyImpulse(this PhysicsWorld world, int rigidBodyIndex, float3 linearImpulse, float3 point)
         {
             if (!(0 <= rigidBodyIndex && rigidBodyIndex < world.NumDynamicBodies)) return;
@@ -155,7 +240,11 @@ namespace Unity.Physics.Extensions
             motionVelocities[rigidBodyIndex] = mv;
         }
 
-        // Apply a linear impulse to a rigid body (in world space)
+        /// <summary>   Apply a linear impulse to a rigid body (in world space) </summary>
+        ///
+        /// <param name="world">            The world to act on. </param>
+        /// <param name="rigidBodyIndex">   Zero-based index of the rigid body. </param>
+        /// <param name="linearImpulse">    The linear impulse. </param>
         public static void ApplyLinearImpulse(this PhysicsWorld world, int rigidBodyIndex, float3 linearImpulse)
         {
             if (!(0 <= rigidBodyIndex && rigidBodyIndex < world.NumDynamicBodies)) return;
@@ -166,7 +255,11 @@ namespace Unity.Physics.Extensions
             motionVelocities[rigidBodyIndex] = mv;
         }
 
-        // Apply an angular impulse to a rigidBodyIndex (in world space)
+        /// <summary>   Apply an angular impulse to a rigidBodyIndex (in world space) </summary>
+        ///
+        /// <param name="world">            The world to act on. </param>
+        /// <param name="rigidBodyIndex">   Zero-based index of the rigid body. </param>
+        /// <param name="angularImpulse">   The angular impulse. </param>
         public static void ApplyAngularImpulse(this PhysicsWorld world, int rigidBodyIndex, float3 angularImpulse)
         {
             if (!(0 <= rigidBodyIndex && rigidBodyIndex < world.NumDynamicBodies)) return;
@@ -180,8 +273,17 @@ namespace Unity.Physics.Extensions
             motionVelocities[rigidBodyIndex] = mv;
         }
 
-        // Calculate a linear and angular velocity required to move the given rigid body to the given target transform
-        // in the given time step.
+        /// <summary>
+        /// Calculate a linear and angular velocity required to move the given rigid body to the given
+        /// target transform in the given time step.
+        /// </summary>
+        ///
+        /// <param name="world">                    The world to act on. </param>
+        /// <param name="rigidBodyIndex">           Zero-based index of the rigid body. </param>
+        /// <param name="targetTransform">          Target transform. </param>
+        /// <param name="timestep">                 The timestep. </param>
+        /// <param name="requiredLinearVelocity">   [out] The required linear velocity. </param>
+        /// <param name="requiredAngularVelocity">  [out] The required angular velocity. </param>
         public static void CalculateVelocityToTarget(
             this PhysicsWorld world, int rigidBodyIndex, RigidTransform targetTransform, float timestep,
             out float3 requiredLinearVelocity, out float3 requiredAngularVelocity)
@@ -201,6 +303,15 @@ namespace Unity.Physics.Extensions
             );
         }
 
+        /// <summary>   Calculates the velocity to target implementation. </summary>
+        ///
+        /// <param name="worldFromBody">            The world from body. </param>
+        /// <param name="motionFromWorld">          The motion from world. </param>
+        /// <param name="centerOfMass">             The center of mass. </param>
+        /// <param name="targetTransform">          Target transform. </param>
+        /// <param name="stepFrequency">            The step frequency. </param>
+        /// <param name="requiredLinearVelocity">   [out] The required linear velocity. </param>
+        /// <param name="requiredAngularVelocity">  [out] The required angular velocity. </param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static void CalculateVelocityToTargetImpl(
             RigidTransform worldFromBody, quaternion motionFromWorld, float3 centerOfMass,

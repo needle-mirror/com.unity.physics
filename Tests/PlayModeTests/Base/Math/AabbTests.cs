@@ -1,4 +1,3 @@
-using System;
 using NUnit.Framework;
 using static Unity.Mathematics.math;
 using Assert = UnityEngine.Assertions.Assert;
@@ -74,12 +73,12 @@ namespace Unity.Physics.Tests.Base.Math
                 Aabb ut; ut.Min = v0; ut.Max = v1;
 
                 // Identity transform should not modify aabb
-                Aabb outAabb = Unity.Physics.Math.TransformAabb(RigidTransform.identity, ut);
+                Aabb outAabb = Unity.Physics.Math.TransformAabb(ut, RigidTransform.identity);
 
                 TestUtils.AreEqual(ut.Min, outAabb.Min, 1e-3f);
 
                 // Test translation
-                outAabb = Unity.Physics.Math.TransformAabb(new RigidTransform(quaternion.identity, float3(100.0f, 0.0f, 0.0f)), ut);
+                outAabb = Unity.Physics.Math.TransformAabb(ut, new RigidTransform(quaternion.identity, float3(100.0f, 0.0f, 0.0f)));
 
                 Assert.AreEqual(outAabb.Min.x, 200);
                 Assert.AreEqual(outAabb.Min.y, 200);
@@ -88,7 +87,7 @@ namespace Unity.Physics.Tests.Base.Math
 
                 // Test rotation
                 quaternion rot = quaternion.EulerXYZ(0.0f, 0.0f, k_pi2);
-                outAabb = Unity.Physics.Math.TransformAabb(new RigidTransform(rot, float3.zero), ut);
+                outAabb = Unity.Physics.Math.TransformAabb(ut, new RigidTransform(rot, float3.zero));
 
                 TestUtils.AreEqual(outAabb.Min, float3(-300.0f, 100.0f, 300.0f), 1e-3f);
                 TestUtils.AreEqual(outAabb.Max, float3(-200.0f, 200.0f, 400.0f), 1e-3f);
@@ -109,10 +108,10 @@ namespace Unity.Physics.Tests.Base.Math
                 orig.Include(rnd.NextFloat3());
                 orig.Include(rnd.NextFloat3());
 
-                Aabb outAabb1 = Unity.Physics.Math.TransformAabb(new RigidTransform(r, t), orig);
+                Aabb outAabb1 = Unity.Physics.Math.TransformAabb(orig, new RigidTransform(r, t));
 
                 Physics.Math.MTransform bFromA = new Physics.Math.MTransform(r, t);
-                Aabb outAabb2 = Unity.Physics.Math.TransformAabb(bFromA, orig);
+                Aabb outAabb2 = Unity.Physics.Math.TransformAabb(orig, bFromA);
 
                 TestUtils.AreEqual(outAabb1.Min, outAabb2.Min, 1e-3f);
                 TestUtils.AreEqual(outAabb1.Max, outAabb2.Max, 1e-3f);

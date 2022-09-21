@@ -1,4 +1,3 @@
-using System;
 using NUnit.Framework;
 using Unity.Collections;
 using Unity.Mathematics;
@@ -201,6 +200,7 @@ namespace Unity.Physics.Tests.Collision.RigidBody
             var rigidBody = new Physics.RigidBody
             {
                 WorldFromBody = RigidTransform.identity,
+                Scale = 1.0f,
                 Collider = boxCollider
             };
 

@@ -11,13 +11,15 @@ namespace Unity.Physics.Tests.Systems
         public void OnUpdate_NoBodiesSingleJoint()
         {
             using (var world = new World("Test world"))
-            using (var blobAssetStore = new BlobAssetStore())
+            using (var blobAssetStore = new BlobAssetStore(128))
             {
-                BuildPhysicsWorld buildPhysicsWorldSystem = world.GetOrCreateSystem<BuildPhysicsWorld>();
+                // Create the system
+                var buildPhysicsWorld = world.GetOrCreateSystem<BuildPhysicsWorld>();
+                ref var bpwData = ref world.EntityManager.GetComponentDataRW<BuildPhysicsWorldData>(buildPhysicsWorld).ValueRW;
 
                 // Setup PhysicsWorld like it was already built in first system update.
                 // Not calling buildPhysicsWorldSystem.Update() here, although it would be the proper way, because there's no way to wait for completion of spawned jobs.
-                buildPhysicsWorldSystem.PhysicsWorld.Reset(1, 0, 0);
+                bpwData.PhysicsData.PhysicsWorld.Reset(1, 0, 0);
 
                 // Create joint entity
                 Entity jointEntity = world.EntityManager.CreateEntity(typeof(PhysicsJoint), typeof(PhysicsConstrainedBodyPair));
@@ -25,10 +27,10 @@ namespace Unity.Physics.Tests.Systems
                 world.EntityManager.AddComponentData(jointEntity, new PhysicsConstrainedBodyPair(Entity.Null, Entity.Null, false));
 
                 // Trigger system update
-                buildPhysicsWorldSystem.Update();
+                buildPhysicsWorld.Update(world.Unmanaged);
 
                 // Verify results
-                VerifySystemData(buildPhysicsWorldSystem, 1, 0, 0);
+                VerifySystemData(ref bpwData, 1, 0, 0);
             }
         }
 
@@ -36,27 +38,29 @@ namespace Unity.Physics.Tests.Systems
         public void OnUpdate_NoBodiesNoJoints()
         {
             using (var world = new World("Test world"))
-            using (var blobAssetStore = new BlobAssetStore())
+            using (var blobAssetStore = new BlobAssetStore(128))
             {
-                BuildPhysicsWorld buildPhysicsWorldSystem = world.GetOrCreateSystem<BuildPhysicsWorld>();
+                // Create the system
+                var buildPhysicsWorld = world.GetOrCreateSystem<BuildPhysicsWorld>();
+                ref var bpwData = ref world.EntityManager.GetComponentDataRW<BuildPhysicsWorldData>(buildPhysicsWorld).ValueRW;
 
                 // Setup PhysicsWorld like it was already built in first system update.
                 // Not calling buildPhysicsWorldSystem.Update() here, although it would be the proper way, because there's no way to wait for completion of spawned jobs.
-                buildPhysicsWorldSystem.PhysicsWorld.Reset(1, 0, 0);
+                bpwData.PhysicsData.PhysicsWorld.Reset(1, 0, 0);
 
                 // Trigger system update
-                buildPhysicsWorldSystem.Update();
+                buildPhysicsWorld.Update(world.Unmanaged);
 
                 // Verify results
-                VerifySystemData(buildPhysicsWorldSystem, 1, 0, 0);
+                VerifySystemData(ref bpwData, 1, 0, 0);
             }
         }
 
-        public static void VerifySystemData(BuildPhysicsWorld buildPhysicsWorldSystem, int expectedNumBodies, int expectedNumJoints, int expectedStaticBodiesChanged)
+        public static void VerifySystemData(ref BuildPhysicsWorldData bpwData, int expectedNumBodies, int expectedNumJoints, int expectedStaticBodiesChanged)
         {
-            Assert.AreEqual(expectedNumBodies, buildPhysicsWorldSystem.PhysicsWorld.NumBodies);
-            Assert.AreEqual(expectedNumJoints, buildPhysicsWorldSystem.PhysicsWorld.NumJoints);
-            Assert.AreEqual(expectedStaticBodiesChanged, buildPhysicsWorldSystem.PhysicsData.HaveStaticBodiesChanged[0]);
+            Assert.AreEqual(expectedNumBodies, bpwData.PhysicsData.PhysicsWorld.NumBodies);
+            Assert.AreEqual(expectedNumJoints, bpwData.PhysicsData.PhysicsWorld.NumJoints);
+            Assert.AreEqual(expectedStaticBodiesChanged, bpwData.PhysicsData.HaveStaticBodiesChanged.Value);
         }
     }
 }

@@ -1,5 +1,105 @@
 # Changelog
 
+## [1.0.0-exp.8] - 2022-09-21
+
+### Upgrade guide
+
+* The physics pipeline has been reworked. 	- `PhysicsSystemGroup` is introduced. It is a `ComponentSystemGroup` that covers all physics jobs. It consists of `PhysicsInitializeGroup`, `PhysicsSimulationGroup`, and `ExportPhysicsWorld`. `PhysicsSimulationGroup` further consists of `PhysicsCreateBodyPairsGroup`, `PhysicsCreateContactsGroup`, `PhysicsCreateJacobiansGroup`, `PhysicsSolveAndIntegrateGroup` which run in that order. See [documentation](xref:interacting-with-physics) for details. 	- `StepPhysicsWorld` and `EndFramePhysicsSystem` systems have been removed, `BuildPhysicsWorld` has been moved to `PhysicsInitializeGroup`: 	    - If you had `Update(Before|After)StepPhysicsWorld`, replace it with: `[UpdateInGroup(typeof(PhysicsSystemGroup))][Update(After|Before)(typeof(PhysicsSimulationGroup))]`. 	    - If you had `Update(Before|After)BuildPhysicsWorld`, replace it with: `[UpdateBefore(typeof(PhysicsSystemGroup))]` or `[UpdateInGroup(typeof(PhysicsSystemGroup))][UpdateAfter(typeof(PhysicsInitializeGroup))]` 	    - If you had `Update(Before|After)ExportPhysicsWorld` replace it with: `[UpdateInGroup(typeof(PhysicsSystemGroup))][UpdateBefore(typeof(ExportPhysicsWorld))]` or `[UpdateAfter(typeof(PhysicsSystemGroup))]` 	    - If you had `[Update(Before|After)EndFramePhysicsSystem]` replace it with: `[UpdateAfter(typeof(PhysicsSystemGroup))]` 	    - If you had combination of those (e.g. `[UpdateAfter(typeof(BuildPhysicsWorld))][UpdateBefore(typeof(StepPhysicsWorld))`) take a look at the diagram in [documentation](xref:interacting-with-physics). 	- All new systems are unmanaged, which means that they are more efficient, and their `OnUpdate()` is Burst friendly. You shouldn't call `World.GetOrCreateSystem<AnyPhysicsSystem>()` as of this release and should be using singletons (see below).
+* Retrieval of `PhysicsWorld` is achieved differently. Previously, it was necessary to get it directly from `BuildPhysicsWorld` system. Now, `PhysicsWorld` is retrieved by calling (`SystemAPI|SystemBase|EntityQuery`).GetSingleton<PhysicsWorldSingleton>().PhysicsWorld in case read-only access is required, and by calling (`SystemAPI|SystemBase|EntityQuery`).GetSingletonRW<PhysicsWorldSingleton>().PhysicsWorld in case of a read-write access. It is still possible to get the world from `BuildPhysicsWorld`, but is not recommended, as it can cause race conditions. This is only affecting the `PhysicsWorld` managed by the engine. Users still can create and manage their own `PhysicsWorld`. Check out [documentation](xref:interacting-with-physics) for more information.
+* Retrieval of `Simulation` is achieved differently. Previously, it was neccessary to get it directly from `StepPhysicsWorld` system. Now, `Simulation` is retrieved by calling (`SystemAPI|SystemBase|EntityQuery`).GetSingleton<SimulationSingleton>().AsSimulation() in case read-only access is required, and by calling (`SystemAPI|SystemBase|EntityQuery`).GetSingletonRW<SimulationSingleton>().AsSimulation() in case of read-write access. Check out [documentation](xref:interacting-with-physics) for more information.
+* The dependencies between physics systems now get sorted automatically as long as `GetSingleton<>()` approach is used for retrieving `PhysicsWorld` and `Simulation`. There is no need to call `RegisterPhysicsSystems(ReadOnly|ReadWrite)`, `AddInputDependency()` or `AddInputDependencyToComplete()` and these functions were removed.
+* `ITriggerEventsJob`, `ICollisionEventsJob`, `IBodyPairsJob`, `IContactsJob` and `IJacobiansJob` no longer take `ISimulation` as an argument for `Schedule()` method, but instead take `SimulationSingleton`. Use `GetSingleton<SimulationSingleton>()` for `ITriggerEventsJob` and `ICollisionEventsJob`, `GetSingletonRW<SimulationSingleton>()` for `IBodyPairsJob`, `IContactsJob` and `IJacobiansJob`. All of these jobs can be now scheduled in Burst friendly way.
+* Callbacks between simulation stages have been removed. To get the same functionality, you now need to:     
+    - Create a system     
+    - Make it `[UpdateInGroup(typeof(PhysicsSimulationGroup))]` and make it `[UpdateBefore]` and `[UpdateAfter]` one of 4 `PhysicsSimulationGroup` subgroups.     
+    - In `OnUpdate()` of the system, recreate the functionality of a callback by scheduling one of the specialised jobs: `IBodyPairsJob`, `IContactsJob`, `IJacobiansJob`.     
+    - See [documentation](xref:simulation-modification) for details and examples.
+* Uniform scale is now supported.     - `Scale` component is now taken into account when creating physics bodies. The component doesn't get created by `Baking` (previously known as `Conversion`) in the Editor. Scale set in Editor gets baked into the collider geometry. If you want to dynamically scale bodies, add this component to physics body entities.     - You might get problems if you were creating `RigidBody` struct instances directly, since the scale will be initialized to zero. Set it to `1.0f` to return to previous behaviour.     - `ColliderCast` and `ColliderDistance` queries now support uniform scale for colliders that you are querying with. `ColliderDistanceInput` and `ColliderCastInput` therefore have a new field that enables you to set it. Same as `RigidBody`, you might get problems since the scale will be initialized to zero. Set it to `1.0f` to return to previous behaviour.     - Positive and negative values of scale are supported.
+* Multiple worlds support has been reworked. To support this use case previously, it was necessary to create a physics pipeline on your own, by using helpers such as `PhysicsWorldData`, `PhysicsWorldStepper` and `PhysicsWorldExporter`. Now it is possible to instantiate a `CustomPhysicsSystemGroup` with a proper world index, which will run the physics simulation on non-default world index bodies. Check out the [documentation](xref:interacting-with-bodies) for more information.
+
+### Added
+
+* Reference to com.unity.render-pipelines.universal version 10.7
+* new shaders in the sammpler that are SRP batcher and universal render pipeline compliant compliant
+* New struct - `Unity.Physics.Math.ScaledMTransform`: Provides the same utility as `Unity.Physics.Math.MTransform` but supports uniform scale.
+* Operator which converts a `float4` into a `Unity.Physics.Plane`.
+* `PhysicsComponentExtensions.ApplyScale(in this PhysicsMass pm, in Scale scale)` - an extension method which scales up the `PhysicsMass` component.
+* The following extension methods have recieved a version which takes a `Scale` argument. The old versions are not deprecated, and they assume identity scale.     - `PhysicsComponentExtensions.GetEffectiveMass(in this PhysicsMass bodyMass, in Translation bodyPosition, in Rotation bodyOrientation, in Scale bodyScale, float3 impulse, float3 point)`     - `PhysicsComponentExtensions.GetCenterOfMassWorldSpace(in this PhysicsMass bodyMass, in Scale bodyScale, in Translation bodyPosition, in Rotation bodyOrientation)`     - `PhysicsComponentExtensions.GetImpulseFromForce(in this PhysicsMass bodyMass, in Scale bodyScale, in float3 force, in ForceMode mode, in float timestep, out float3 impulse, out PhysicsMass impulseMass)`     - `PhysicsComponentExtensions.ApplyExplosionForce(ref this PhysicsVelocity bodyVelocity, in PhysicsMass bodyMass, in PhysicsCollider bodyCollider, in Translation bodyPosition, in Rotation bodyOrientation, in Scale bodyScale,`         `float explosionForce, in float3 explosionPosition, in float explosionRadius, in float timestep, in float3 up, in CollisionFilter explosionFilter, in float upwardsModifier = 0, ForceMode mode = ForceMode.Force)`     - `PhysicsComponentExtensions.ApplyImpulse(ref this PhysicsVelocity pv, in PhysicsMass pm, in Translation t, in Rotation r, in Scale bodyScale, in float3 impulse, in float3 point)`     - `PhysicsComponentExtensions.ApplyLinearImpulse(ref this PhysicsVelocity velocityData, in PhysicsMass massData, in Scale bodyScale, in float3 impulse)`     - `PhysicsComponentExtensions.ApplyAngularImpulse(ref this PhysicsVelocity velocityData, in PhysicsMass massData, in Scale bodyScale, in float3 impulse)`
+* `bool OverlapAabb(OverlapAabbInput input, ref NativeList<int> allHits)` has been added to `PhysicsWorld`.
+* `SimulationSingleton` IComponentData is added:     - Use `AsSimulation()` to get the simulation that is stored in it.     - Use `InitializeFromSimulation(ref Simulation)` if you need to create it.      >Note - Physics engine internally manages one `SimulationSingleton`, so be careful if using `SetSingleton<>()` with the newly created `SimulationSingleton`, as it can override the one stored by the engine. You should be using this method if you are managing a local simulation and need a singleton to use events and simulation modification API.
+* `PhysicsWorldSingleton` IComponentData is added. It implements `ICollidable` and has access to the stored `PhysicsWorld` and it's utility methods.
+* `NativeReference<int> HaveStaticBodiesChanged` get property is added to `BuildPhysicsWorld`.
+* The following system groups are introduced:     - `PhysicsSystemGroup` - covers all physics systems     - `PhysicsInitializeGroup`, `PhysicsSimulationGroup` - subgroups of `PhysicsSystemGroup`     - `PhysicsCreateBodyPairsGroup`, `PhysicsCreateContactsGroup`, `PhysicsCreateJacobiansGroup` and `PhysicsSolveAndIntegrateGroup` - subgroups of `PhysicsSimulationGroup`
+* Impulse events to allow users to break joints
+* Supports the following types of motors: rotational, linear velocity, rotational, angular velocity
+* `CustomPhysicsSystemGroup` and `CustomPhysicsSystemGroupBase` for providing mulitple worlds support.
+* `CustomPhysicsProxyDriver` IComponentData, with it's authoring (`CustomPhysicsProxyAuthoring`) and a system (`SyncCustomPhysicsProxySystem`), which enable you to drive an entity from one world by an entity from another, using kinematic velocities.
+
+### Changed
+
+* All materials in the samples to be universal render pipeline compliant
+* Restored many Gizmo/Mesh methods from DisplayCollidersSystem.cs, but placed in a Utility file instead
+* Changed allocator label to `Allocator.Temp` internally when building `CollisionWorld` from `CollisionWorldProxy`.
+* Physics Debug Display: Performance improvements when drawing colliders (faces, edges, AABBs), broadphase, mass properties and contacts
+* Physics Debug Display: Drawing collider faces for Mesh and Convex Hull types use different rendering method
+* Physics Debug Display: The original Collider Edge drawing code that uses Gizmos has been moved to class 'DisplayGizmoColliderEdges' and to class 'AppendMeshColliders'
+* Using built-in resources for the reference mesh used by cube and icosahedron
+* Resources/ (used by Debug Draw) has been renamed DebugDisplayResources/ and now loads assets differently
+* Removed use of the obsolete AlwaysUpdateSystem attribute. The new RequireMatchingQueriesForUpdate attribute has been added where appropriate.
+* `ColliderCastInput` now has a property `QueryColliderScale`. It defaults to `1.0f`, and represents the scale of the passed in input collider.
+* `ColliderCastInput` constructor has changed to take in uniform scale of the query collider as the last parameter. It defaults to `1.0f`.
+* The following methods have a uniform scale argument added as the last argument (defaults to `1.0f`), and their arguments are reordered. The old versions are deprecated:     -  `AppendMeshColliders.GetMeshes.AppendSphere(SphereCollider* sphere, RigidTransform worldFromCollider, ref List results) has been deprecated.` `Use AppendSphere(ref List results, SphereCollider* sphere, RigidTransform worldFromCollider, float uniformScale = 1)`.     - `AppendMeshColliders.GetMeshes.AppendCapsule(CapsuleCollider* capsule, RigidTransform worldFromCollider, ref List results) has been deprecated. Use AppendCapsule(ref List results, CapsuleCollider* capsule, RigidTransform worldFromCollider, float uniformScale = 1).`     - `AppendMeshColliders.GetMeshes.AppendMesh(MeshCollider* meshCollider, RigidTransform worldFromCollider, ref List results) has been deprecated. Use AppendMesh(ref List results, MeshCollider* meshCollider, RigidTransform worldFromCollider, float uniformScale = 1).`     - `AppendMeshColliders.GetMeshes.AppendCompound(CompoundCollider* compoundCollider, RigidTransform worldFromCollider, ref List results) has been deprecated. Use AppendCompound(ref List results, CompoundCollider* compoundCollider, RigidTransform worldFromCollider, float uniformScale = 1).`     - `AppendMeshColliders.GetMeshes.AppendTerrain(TerrainCollider* terrainCollider, RigidTransform worldFromCollider, ref List results) has been deprecated. Use AppendTerrain(ref List results, TerrainCollider* terrainCollider, RigidTransform worldFromCollider, float uniformScale = 1).`     - `AppendMeshColliders.GetMeshes.AppendCollider(Collider* collider, RigidTransform worldFromCollider, ref List results) has been deprecated. Use AppendCollider(ref List results, Collider* collider, RigidTransform worldFromCollider, float uniformScale = 1).`     - `ColliderDistanceInput.ColliderDistanceInput(BlobAssetReference collider, RigidTransform transform, float maxDistance) has been deprecated. Use ColliderDistanceInput(BlobAssetReference collider, float maxDistance, RigidTransform transform, float uniformScale = 1).`     - `Collider.GetLeafCollider(Collider* root, RigidTransform rootTransform, ColliderKey key, out ChildCollider leaf) has been deprecated. Use Use GetLeafCollider(out ChildCollider leaf, Collider* root, ColliderKey key, RigidTransform rootTransform, float rootUniformScale = 1) instead.`     - `Math.TransformAabb(RigidTransform transform, Aabb aabb) hase been deprecated. Use Math.TransformAabb(Aabb aabb, RigidTransform transform, float uniformScale = 1) instead.`     - `Math.TransformAabb(MTransform transform, Aabb aabb) hase been deprecated. Use Math.TransformAabb(Aabb aabb, MTransform transform, float uniformScale = 1) instead.` - `Schedule()` signatures that accept `ISimulation` have been removed from `IBodyPairsJob`, `IContactsJob`, `IJacobiansJob`, `ICollisionEventsJob` and `ITriggerEventsJob`. New signatures accept `SimulationSingleton` instead. - `ColliderCastNode.KernelDefs.CollisionWorld` has been removed and replaced with `ColliderCastNode.KernelDefs.PhysicsWorld`. - `RaycastNode.KernelDefs.CollisionWorld` has been removed and replaced with `RaycastNode.KernelDefs.PhysicsWorld`. - `DispatchPairSequencer` is now a `struct` instead of a `class`. Use `DispatchPairSequencer.Create()` to create an instance of this struct, as empty constructor calls will not properly initialize it. - `Simulation` is now a `struct` instead of a `class`. Use `Simulation.Create()` to create an instance of this struct, as empty constructor calls will not properly initialize it. -  The following methods and interfaces have `SimulationCallbacks` argument removed.     - `ISimulation.ScheduleStepJobs(SimulationStepInput input, SimulationCallbacks callbacksIn, JobHandle inputDeps, bool multiThreaded = true)`     - `Simulation.ScheduleStepJobs(SimulationStepInput input, SimulationCallbacks callbacksIn, JobHandle inputDeps, bool multiThreaded = true)` - `Simulation` has new methods that enable stepping the simulation on a granularity of individual simulation phases:     - `Simulation.ScheduleBroadphaseJobs(SimulationStepInput input, JobHandle inputDeps, bool multiThreaded = true)`     - `Simulation.ScheduleNarrowphaseJobs(SimulationStepInput input, JobHandle inputDeps, bool multiThreaded = true)`     - `Simulation.ScheduleCreateJacobiansJobs(SimulationStepInput input, JobHandle inputDeps, bool multiThreaded = true)`     - `Simulation.ScheduleSolveAndIntegrateJobs(SimulationStepInput input, JobHandle inputDeps, bool multiThreaded = true)`
+* `BuildPhysicsWorld` is now a `struct` instead of a `class`, and implements `ISystem` instead of `SystemBase`.
+* `ExportPhysicsWorld` is now a `struct` instead of a `class`, and implements `ISystem` instead of `SystemBase`.
+* `PhysicsWorldBuilder.SchedulePhysicsWorldBuild(SystemBase system, ref PhysicsWorldData physicsData, in JobHandle inputDep, float timeStep, bool isBroadphaseBuildMultiThreaded, float3 gravity, uint lastSystemVersion )` signature has changed to `PhysicsWorldBuilder.SchedulePhysicsWorldBuild(ref SystemState systemState, ref PhysicsWorldData physicsData, in JobHandle inputDep, float timeStep, bool isBroadphaseBuildMultiThreaded, float3 gravity, uint lastSystemVersion )`.
+* `PhysicsWorldBuilder.SchedulePhysicsWorldBuild(SystemBase system, ref PhysicsWorld world, ref NativeArray<int> haveStaticBodiesChanged, ref PhysicsWorld world, ref NativeReference<int> haveStaticBodiesChanged, in PhysicsWorldData.PhysicsWorldComponentHandles componentHandles, in JobHandle inputDep, float timeStep, bool isBroadphaseBuildMultiThreaded, float3 gravity, uint lastSystemVersion, EntityQuery dynamicEntityGroup, EntityQuery staticEntityGroup, EntityQuery jointEntityGroup)` signature has changed to `PhysicsWorldBuilder.SchedulePhysicsWorldBuild(ref PhysicsWorld world, ref NativeReference<int> haveStaticBodiesChanged, in PhysicsWorldData.PhysicsWorldComponentHandles componentHandles, in JobHandle inputDep, float timeStep, bool isBroadphaseBuild,MultiThreadedfloat3 gravity, uint lastSystemVersion, EntityQuery dynamicEntityGroup, EntityQuery staticEntityGroup, EntityQuery jointEntityGroup)`.
+* `PhysicsWorldBuilder.ScheduleBroadphaseBVHBuild(ref PhysicsWorld world, ref NativeArray<int> haveStaticBodiesChanged, in JobHandle inputDep, float timeStep, bool isBroadphaseBuildMultiThreaded, float3 gravity)` signature has changed to `PhysicsWorldBuilder.ScheduleBroadphaseBVHBuild(ref PhysicsWorld world, NativeReference<int> haveStaticBodiesChanged, in JobHandle inputDep, float timeStep, bool isBroadphaseBuildMultiThreaded, float3 gravity)`.
+* `PhysicsWorldBuilder.BuildPhysicsWorldImmediate(SystemBase system, ref PhysicsWorldData data, float timeStep, float3 gravity, uint lastSystemVersion)`signature has changed to `PhysicsWorldBuilder.BuildPhysicsWorldImmediate(ref SystemState systemState, ref PhysicsWorldData data, float timeStep, float3 gravity, uint lastSystemVersion)`.
+* `PhysicsWorldBuilder.BuildPhysicsWorldImmediate(SystemBase system, ref PhysicsWorld world, ref NativeArray<int> haveStaticBodiesChanged, float timeStep, float3 gravity, uint lastSystemVersion, EntityQuery dynamicEntityGroup, EntityQuery staticEntityGroup, EntityQuery jointEntityGroup)` signature has changed to `PhysicsWorldBuilder.BuildPhysicsWorldImmediate(ref PhysicsWorld world, NativeReference<int> haveStaticBodiesChanged, in PhysicsWorldData.PhysicsWorldComponentHandles, float timeStep, float3 gravity, uint lastSystemVersion, EntityQuery dynamicEntityGroup, EntityQuery staticEntityGroup, EntityQuery jointEntityGroup)`.
+* `PhysicsWorldData.HaveStaticBodiesChanged` is now a `NativeReference<int>` instead of `NativeArray<int>`.
+* `PhysicsWorldData.PhysicsWorldComponentHandles` struct is added. It contains component handles to data types needed to create a PhysicsWorld.     - Added `PhysicsWorldComponentHandles(ref SystemState systemState)` constructor. Call it from the system in `OnCreate()` where you plan to use `PhysicsWorldData` in `OnUpdate()`, and not from some other system (can cause race conditions).     - Added `Update(ref SystemState)` method. Call it from a system in `OnUpdate()`. `PhysicsWorldBuilder` methods already update component handles, and there is no need to call this method prior to calling `PhysicsWorldBuilder.ScheduleBulilPhysicsWorld()/BuildPhysicsWorldImmediate())`
+* `PhysicsWorldData` also has `Update(ref SystemState)` method which just calls `Update(ref SystemState)` on`PhysicsWorldComponentHandles`.
+* `PhysicsWorldExporter.SchedulePhysicsWorldExport(SystemBase system, in PhysicsWorld world, in JobHandle inputDep, EntityQuery dynamicEntities)` signature has changed to `PhysicsWorldExporter.SchedulePhysicsWorldExport(ref SystemState systemState, ref ExportPhysicsWorldTypeHandles componentTypeHandles, in PhysicsWorld world, in JobHandle inputDep, EntityQuery dynamicEntities)`.
+* `PhysicsWorldExporter.ExportPhysicsWorldImmediate(SystemBase system, in PhysicsWorld world, EntityQuery dynamicEntities)` signature has changed to `PhysicsWorldExporter.ExportPhysicsWorldImmediate(ref SystemState systemState, ref ExportPhysicsWorldTypeHandles componentTypeHandles, in PhysicsWorld world, EntityQuery dynamicEntities)`.
+* `PhysicsWorldExporter.ExportPhysicsWorldTypeHandles` struct is added. It contains component handles to data types needed to export a PhysicsWorld to ECS data.     - Added `ExportPhysicsWorldTypeHandles(ref SystemState systemState)` constructor. Call it from the system in `OnCreate()` where you plan to export `PhysicsWorld` in `OnUpdate()`, and not from some other system (can cause race conditions).     - Added `Update(ref SystemState systemState) ` method. Call it from a system in `OnUpdate()`. `PhysicsWorldExporter` methods already update component handles, and there is no need to call this method prior to calling `PhysicsWorldExporter.ScheduleExportPhysicsWorld()/ExportPhysicsWorldImmediate())`.
+* Joint Constraints container changed from FixedList128 to a custom internal container. Users will get a FixedList512 returned when retrieving constraints
+* Replaced obsolete EntityQueryBuilder APIs with current ones.
+* ISystem implementations with public data converted to using components for data access
+
+### Deprecated
+
+* `CollisionWorld.CalculateAabb(RigidTransform transform) has been deprecated. Use CollisionWorld.CalculateAabb() without a parameter.`
+* `RigidBody.CalculateAabb(RigidTransform transform) has been deprecated. Use RigidBody.CalculateAabb() without a parameter.`
+* `PhysicsWorld.CalculateAabb(RigidTransform transform) has been deprecated. Use PhysicsWorld.CalculateAabb() without a parameter.`
+
+### Removed
+
+* Removed `ICollider.CalculateAabb(RigidTransform transform)`. All `ICollider` implementations will still be able to call `CalculateAabb(RigidTransform transform, float uniformScale = 1)`, except `RigidBody`, `PhysicsWorld` and `CollisionWorld`, where these methods are deprecated.
+* Removed `CollisionWorldProxy`. Use `PhysicsWorldSingleton` to achieve the same functionality.
+* Simulation callback mechanism has been removed. As a consequence, the following APIs are removed as well:     - class `SimulationCallbacks` is removed.     - enum `SimulationCallbacks.Phase` is removed.     - callback delegate : `public delegate JobHandle Callback(ref ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)` has been removed.
+* Removed `PhysicsWorld` getter from `BuildPhysicsWorld`. It is still possible to get a `PhysicsWorld` reference through `BuildPhysicsWorld.PhysicsData.PhysicsWorld` but it isn't recommended since it can cause race conditions.
+* Removed `StepPhysicsWorld` system.
+* Removed `EndFramePhysicsSystem` system.
+* Removed `BuildPhysicsWorld.AddInputDependencyToComplete()` from public API.
+* Removed `BuildPhysicsWorld.AddInputDependency()` method.
+* Removed `BuildPhysicsWorld.GetOutputDependency()` method.
+* Removed `ExportPhysicsWorld.AddInputDependency()` method.
+* Removed `ExportPhysicsWorld.GetOutputDependency()` method.
+* Removed `static class` `PhysicsRuntimeExtenstions`, as a consequence, the following extension methods are removed as well:     - `public static void RegisterPhysicsRuntimeSystemReadOnly(this SystemBase system)`     - `public static void RegisterPhysicsRuntimeSystemReadWrite(this SystemBase system)`     - `public static void RegisterPhysicsRuntimeSystemReadOnly<T>(this SystemBase system) where T : unmanaged, IComponentData`     - `public static void RegisterPhysicsRuntimeSystemReadWrite<T>(this SystemBase system) where T : unmanaged, IComponentData`
+* Removed `PhysicsWorldExporter.SharedData` struct.
+* Removed `PhysicsWorldExporter.ScheduleCollisionWorldProxy()` method.
+* Removed `PhysicsWorldExporter.ScheduleCollisionWorldCopy()` method.
+* Removed `PhysicsWorldExporter.CopyCollisionWorldImmediate()` method.
+* Removed `PhysicsWorldStepper` class.
+
+### Fixed
+
+* SingleThreadedRagdoll test was broken
+* Physics Debug Display: improved Sphere and Capsule Collider Edges drawing
+* Physics Debug Display: corrected z-ordering when drawing collider faces
+* Simplified math to improve performance in `CalculateTwistAngle()`
+* Fixed a bug in `ConvexHullBuilder.Compact()` where triangle indices in links were not properly updated after remapping.
+
 ## [0.51.1] - 2022-06-27
 
 ### Changed
@@ -41,6 +141,20 @@
 * An issue with the rendering pipeline used for the package samples, which caused none of the samples to render post conversion
 * An issue with the materials present in the samples as their colors were no longer correct
 
+
+## [0.10.0] - 2021-09-17
+
+### Changed
+
+* Upgraded com.unity.burst to 1.5.5
+* Adjusted code to remove obsolete APIs across all jobs inheriting IJobEntityBatch
+
+### Removed
+
+* All usages of PhysicsExclude from Demo and Runtime code.
+
+
+
 ## [0.10.0-preview.1] - 2021-06-25
 ### Upgrade guide
 * Added `PhysicsWorldIndex` shared component, which is required on every Entity that should be involved in physics simulation (body or joint). Its `Value` denotes the index of physics world that the Entity belongs to (0 for default `PhysicsWorld` processed by `BuildPhysicsWorld`, `StepPhysicsWorld` and `ExportPhysicsWorld` systems). Note that Entities for different physics worlds will be stored in separate chunks, due to different values of shared component.
@@ -74,6 +188,7 @@
 * Fixed the configurable joint linear limit during joint conversion
 * Physics Debug Display: Draw Collider Edges performance improved
 * Physics Debug Display: Draw Collider Edges for sphere colliders improved
+### Known Issues
 
 
 ## [0.9.0-preview.4] - 2021-05-19

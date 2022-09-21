@@ -606,7 +606,7 @@ namespace Unity.Physics
                 aabbB.Max = math.max(aabbB.Max, verticesB[i]);
             }
 
-            Aabb aabbBinA = Math.TransformAabb(aFromB, aabbB);
+            Aabb aabbBinA = TransformAabb(aabbB, aFromB);
             return new Aabb { Min = aabbA.Min - aabbBinA.Max, Max = aabbA.Max - aabbBinA.Min };
         }
     }

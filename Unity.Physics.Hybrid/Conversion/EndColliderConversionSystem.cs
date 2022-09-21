@@ -5,7 +5,6 @@ using UnityEngine;
 namespace Unity.Physics.Authoring
 {
     [UpdateAfter(typeof(BeginColliderConversionSystem))]
-    [AlwaysUpdateSystem]
     public sealed class EndColliderConversionSystem : GameObjectConversionSystem
     {
         BeginColliderConversionSystem m_BeginColliderConversionSystem;
@@ -25,7 +24,7 @@ namespace Unity.Physics.Authoring
         {
             base.OnCreate();
 
-            m_BeginColliderConversionSystem = World.GetOrCreateSystem<BeginColliderConversionSystem>();
+            m_BeginColliderConversionSystem = World.GetOrCreateSystemManaged<BeginColliderConversionSystem>();
         }
 
         protected override void OnUpdate()

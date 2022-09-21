@@ -10,5 +10,12 @@ namespace Unity.Jobs
         {
             return IJobParallelForDeferExtensions.Schedule(jobData, (int*)NativeArrayUnsafeUtility.GetUnsafeBufferPointerWithoutChecks(forEachCount), innerloopBatchCount, dependsOn);
         }
+
+        //@TODO: Should this be NativeReference.ReadOnly?
+        unsafe public static JobHandle ScheduleUnsafe<T>(this T jobData, NativeReference<int> forEachCount, int innerloopBatchCount, JobHandle dependsOn = new JobHandle())
+            where T : struct, IJobParallelForDefer
+        {
+            return IJobParallelForDeferExtensions.Schedule(jobData, (int*)NativeReferenceUnsafeUtility.GetUnsafePtrWithoutChecks(forEachCount), innerloopBatchCount, dependsOn);
+        }
     }
 }

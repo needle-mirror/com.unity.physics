@@ -5,30 +5,50 @@ using Unity.Entities;
 
 namespace Unity.Physics
 {
-    // A collection of motion information used during physics simulation.
+    /// <summary>   A collection of motion information used during physics simulation. </summary>
     [NoAlias]
     public struct DynamicsWorld : IDisposable
     {
         [NoAlias]
-        private NativeArray<MotionData> m_MotionDatas;
+        internal NativeArray<MotionData> m_MotionDatas;
         [NoAlias]
-        private NativeArray<MotionVelocity> m_MotionVelocities;
-        private int m_NumMotions; // number of motionDatas and motionVelocities currently in use
+        internal NativeArray<MotionVelocity> m_MotionVelocities;
+        internal int m_NumMotions; // number of motionDatas and motionVelocities currently in use
 
         [NoAlias]
         private NativeArray<Joint> m_Joints;
         private int m_NumJoints; // number of joints currently in use
         [NoAlias] internal NativeParallelHashMap<Entity, int> EntityJointIndexMap;
 
+        /// <summary>   Gets the motion datas. </summary>
+        ///
+        /// <value> The motion datas. </value>
         public NativeArray<MotionData> MotionDatas => m_MotionDatas.GetSubArray(0, m_NumMotions);
+
+        /// <summary>   Gets the motion velocities. </summary>
+        ///
+        /// <value> The motion velocities. </value>
         public NativeArray<MotionVelocity> MotionVelocities => m_MotionVelocities.GetSubArray(0, m_NumMotions);
+
+        /// <summary>   Gets the joints. </summary>
+        ///
+        /// <value> The joints. </value>
         public NativeArray<Joint> Joints => m_Joints.GetSubArray(0, m_NumJoints);
 
+        /// <summary>   Gets the number of motions. </summary>
+        ///
+        /// <value> The total number of motions. </value>
         public int NumMotions => m_NumMotions;
 
+        /// <summary>   Gets the number of joints. </summary>
+        ///
+        /// <value> The total number of joints. </value>
         public int NumJoints => m_NumJoints;
 
-        // Construct a dynamics world with the given number of uninitialized motions
+        /// <summary>   Construct a dynamics world with the given number of uninitialized motions. </summary>
+        ///
+        /// <param name="numMotions">   Number of motions. </param>
+        /// <param name="numJoints">    Number of joints. </param>
         public DynamicsWorld(int numMotions, int numJoints)
         {
             m_MotionDatas = new NativeArray<MotionData>(numMotions, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
@@ -41,6 +61,10 @@ namespace Unity.Physics
             EntityJointIndexMap = new NativeParallelHashMap<Entity, int>(numJoints, Allocator.Persistent);
         }
 
+        /// <summary>   Resets this object. </summary>
+        ///
+        /// <param name="numMotions">   Number of motions. </param>
+        /// <param name="numJoints">    Number of joints. </param>
         public void Reset(int numMotions, int numJoints)
         {
             m_NumMotions = numMotions;
@@ -65,16 +89,33 @@ namespace Unity.Physics
             EntityJointIndexMap.Clear();
         }
 
-        // Free internal memory
+        /// <summary>   Free internal memory. </summary>
         public void Dispose()
         {
-            m_MotionDatas.Dispose();
-            m_MotionVelocities.Dispose();
-            m_Joints.Dispose();
-            EntityJointIndexMap.Dispose();
+            if (m_MotionDatas.IsCreated)
+            {
+                m_MotionDatas.Dispose();
+            }
+
+            if (m_MotionVelocities.IsCreated)
+            {
+                m_MotionVelocities.Dispose();
+            }
+
+            if (m_Joints.IsCreated)
+            {
+                m_Joints.Dispose();
+            }
+
+            if (EntityJointIndexMap.IsCreated)
+            {
+                EntityJointIndexMap.Dispose();
+            }
         }
 
-        // Clone the world
+        /// <summary>   Clone the world. </summary>
+        ///
+        /// <returns>   A copy of this object. </returns>
         public DynamicsWorld Clone()
         {
             DynamicsWorld clone = new DynamicsWorld
@@ -93,6 +134,7 @@ namespace Unity.Physics
             return clone;
         }
 
+        /// <summary>   Updates the joint index map. </summary>
         public void UpdateJointIndexMap()
         {
             EntityJointIndexMap.Clear();
@@ -102,6 +144,11 @@ namespace Unity.Physics
             }
         }
 
+        /// <summary>   Gets the zero-based index of the joint. </summary>
+        ///
+        /// <param name="entity">   The entity. </param>
+        ///
+        /// <returns>   The joint index. </returns>
         public int GetJointIndex(Entity entity)
         {
             return EntityJointIndexMap.TryGetValue(entity, out var index) ? index : -1;

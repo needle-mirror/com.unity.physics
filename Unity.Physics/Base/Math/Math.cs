@@ -5,83 +5,98 @@ using UnityEngine.Assertions;
 
 namespace Unity.Physics
 {
-    // Common math helper functions
+    /// <summary>   Common math helper functions. </summary>
     [DebuggerStepThrough]
     public static partial class Math
     {
-        // Constants
+        /// <summary>   Constants. </summary>
         [DebuggerStepThrough]
         public static class Constants
         {
-            public static float4 One4F => new float4(1);
-            public static float4 Min4F => new float4(float.MinValue);
-            public static float4 Max4F => new float4(float.MaxValue);
-            public static float3 Min3F => new float3(float.MinValue);
-            public static float3 Max3F => new float3(float.MaxValue);
-            public static float3 MaxDisplacement3F => new float3(float.MaxValue * 0.5f);
+            internal static float4 One4F => new float4(1);
+            internal static float4 Min4F => new float4(float.MinValue);
+            internal static float4 Max4F => new float4(float.MaxValue);
+            internal static float3 Min3F => new float3(float.MinValue);
+            internal static float3 Max3F => new float3(float.MaxValue);
+            internal static float3 MaxDisplacement3F => new float3(float.MaxValue * 0.5f);
 
-            // Smallest float such that 1.0 + eps != 1.0
-            // Different from float.Epsilon which is the smallest value greater than zero.
+            /// <summary>
+            /// Smallest float such that 1.0 + eps != 1.0 Different from float.Epsilon which is
+            /// the smallest value greater than zero.
+            /// </summary>
             public const float Eps = 1.192092896e-07F;
 
-            // These constants are identical to the ones in the Unity Mathf library, to ensure identical behaviour
-            internal const float UnityEpsilonNormalSqrt = 1e-15F;
-            internal const float UnityEpsilon = 0.00001F;
+            /// <summary>
+            /// This constant is identical to the one in the Unity Mathf library, to ensure
+            /// identical behaviour.
+            /// </summary>
+            public const float UnityEpsilonNormalSqrt = 1e-15F;
 
+            /// <summary>
+            /// This constant is identical to the one in the Unity Mathf library, to ensure identical
+            /// behaviour.
+            /// </summary>
+            public const float UnityEpsilon = 0.00001F;
+
+            /// <summary>   Tau. </summary>
             public const float Tau = 2.0f * math.PI;
+            /// <summary>   1.0f / Tau. </summary>
             public const float OneOverTau = 1.0f / Tau;
-
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int NextMultipleOf16(int input) => ((input + 15) >> 4) << 4;
+        internal static int NextMultipleOf16(int input) => ((input + 15) >> 4) << 4;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static ulong NextMultipleOf16(ulong input) => ((input + 15) >> 4) << 4;
+        internal static ulong NextMultipleOf16(ulong input) => ((input + 15) >> 4) << 4;
 
         /// Note that alignment must be a power of two for this to work.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int NextMultipleOf(int input, int alignment) => (input + (alignment - 1)) & (~(alignment - 1));
+        internal static int NextMultipleOf(int input, int alignment) => (input + (alignment - 1)) & (~(alignment - 1));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static ulong NextMultipleOf(ulong input, ulong alignment) => (input + (alignment - 1)) & (~(alignment - 1));
+        internal static ulong NextMultipleOf(ulong input, ulong alignment) => (input + (alignment - 1)) & (~(alignment - 1));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int IndexOfMinComponent(float2 v) => v.x < v.y ? 0 : 1;
+        internal static int IndexOfMinComponent(float2 v) => v.x < v.y ? 0 : 1;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int IndexOfMinComponent(float3 v) => v.x < v.y ? ((v.x < v.z) ? 0 : 2) : ((v.y < v.z) ? 1 : 2);
+        internal static int IndexOfMinComponent(float3 v) => v.x < v.y ? ((v.x < v.z) ? 0 : 2) : ((v.y < v.z) ? 1 : 2);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int IndexOfMinComponent(float4 v) => math.cmax(math.select(new int4(0, 1, 2, 3), new int4(-1), math.cmin(v) < v));
+        internal static int IndexOfMinComponent(float4 v) => math.cmax(math.select(new int4(0, 1, 2, 3), new int4(-1), math.cmin(v) < v));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int IndexOfMaxComponent(float2 v) => v.x > v.y ? 0 : 1;
+        internal static int IndexOfMaxComponent(float2 v) => v.x > v.y ? 0 : 1;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int IndexOfMaxComponent(float3 v) => v.x > v.y ? ((v.x > v.z) ? 0 : 2) : ((v.y > v.z) ? 1 : 2);
+        internal static int IndexOfMaxComponent(float3 v) => v.x > v.y ? ((v.x > v.z) ? 0 : 2) : ((v.y > v.z) ? 1 : 2);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int IndexOfMaxComponent(float4 v) => math.cmax(math.select(new int4(0, 1, 2, 3), new int4(-1), math.cmax(v) > v));
+        internal static int IndexOfMaxComponent(float4 v) => math.cmax(math.select(new int4(0, 1, 2, 3), new int4(-1), math.cmax(v) > v));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static float HorizontalMul(float3 v) => v.x * v.y * v.z;
+        internal static float HorizontalMul(float3 v) => v.x * v.y * v.z;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static float HorizontalMul(float4 v) => (v.x * v.y) * (v.z * v.w);
+        internal static float HorizontalMul(float4 v) => (v.x * v.y) * (v.z * v.w);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static float Dotxyz1(float4 lhs, float3 rhs) => math.dot(lhs, new float4(rhs, 1));
+        internal static float Dotxyz1(float4 lhs, float3 rhs) => math.dot(lhs, new float4(rhs, 1));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static double Dotxyz1(double4 lhs, double3 rhs) => math.dot(lhs, new double4(rhs, 1));
+        internal static double Dotxyz1(double4 lhs, double3 rhs) => math.dot(lhs, new double4(rhs, 1));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static float Det(float3 a, float3 b, float3 c) => math.dot(math.cross(a, b), c); // TODO: use math.determinant()?
+        internal static float Det(float3 a, float3 b, float3 c) => math.dot(math.cross(a, b), c); // TODO: use math.determinant()?
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static float RSqrtSafe(float v) => math.select(math.rsqrt(v), 0.0f, math.abs(v) < 1e-10f);
+        internal static float RSqrtSafe(float v) => math.select(math.rsqrt(v), 0.0f, math.abs(v) < 1e-10f);
 
+        /// <summary>   Clamps the vector to to maximum length. </summary>
+        ///
+        /// <param name="maxLength">    The maximum length. </param>
+        /// <param name="vector">       [in,out] The vector to be clamped. </param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void ClampToMaxLength(float maxLength, ref float3 vector)
         {
@@ -95,6 +110,12 @@ namespace Unity.Physics
             }
         }
 
+        /// <summary>   Normalize and return the lenght of a vector. </summary>
+        ///
+        /// <param name="v">    A float3 to normalize. </param>
+        /// <param name="n">    [out] A normalized float3. </param>
+        ///
+        /// <returns>   Length of v. </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float NormalizeWithLength(float3 v, out float3 n)
         {
@@ -104,6 +125,11 @@ namespace Unity.Physics
             return lengthSq * invLength;
         }
 
+        /// <summary>   Check if 'v' is normalized. </summary>
+        ///
+        /// <param name="v">    A float3 to check if normalized. </param>
+        ///
+        /// <returns>   True if normalized, false if not. </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsNormalized(float3 v)
         {
@@ -112,7 +138,17 @@ namespace Unity.Physics
             return absLenZero < Constants.UnityEpsilon;
         }
 
-        // Return two normals perpendicular to the input vector
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static bool IsApproximatelyEqual(float a, float b, float epsilon = Constants.UnityEpsilon)
+        {
+            return math.abs(a - b) < epsilon;
+        }
+
+        /// <summary>   Return two normals perpendicular to the input vector. </summary>
+        ///
+        /// <param name="v">    Input vector. </param>
+        /// <param name="p">    [out] Normal 1. </param>
+        /// <param name="q">    [out] Normal 2. </param>
         public static void CalculatePerpendicularNormalized(float3 v, out float3 p, out float3 q)
         {
             float3 vSquared = v * v;
@@ -132,8 +168,12 @@ namespace Unity.Physics
             q = cross * invLength;
         }
 
-        // Calculate the eigenvectors and eigenvalues of a symmetric 3x3 matrix
-        public static void DiagonalizeSymmetricApproximation(float3x3 a, out float3x3 eigenVectors, out float3 eigenValues)
+        /// <summary>   Calculate the eigenvectors and eigenvalues of a symmetric 3x3 matrix. </summary>
+        ///
+        /// <param name="a">            A float3x3 to process. </param>
+        /// <param name="eigenVectors"> [out] The eigen vectors. </param>
+        /// <param name="eigenValues">  [out] The eigen values. </param>
+        internal static void DiagonalizeSymmetricApproximation(float3x3 a, out float3x3 eigenVectors, out float3 eigenValues)
         {
             float GetMatrixElement(float3x3 m, int row, int col)
             {
@@ -218,22 +258,35 @@ namespace Unity.Physics
             eigenValues = new float3(a.c0.x, a.c1.y, a.c2.z);
         }
 
-        // Returns the twist angle of the swing-twist decomposition of q about i, j, or k corresponding to index = 0, 1, or 2 respectively.
+        /// <summary>
+        /// Returns the twist angle of the swing-twist decomposition of q about i, j, or k corresponding
+        /// to index = 0, 1, or 2 respectively. Full calculation for readability:
+        ///      float invLength = RSqrtSafe(dot * dot + w * w);
+        ///      float sinHalfAngle = dot * invLength;
+        ///      float cosHalfAngle = w * invLength;
+        /// Observe: invLength cancels in the tan^-1(sin / cos) calc, so avoid unnecessary calculations.
+        /// </summary>
+        ///
+        /// <param name="q">                A quaternion to process. </param>
+        /// <param name="twistAxisIndex">   Zero-based index of the twist axis. </param>
+        ///
+        /// <returns>   The calculated twist angle. </returns>
         public static float CalculateTwistAngle(quaternion q, int twistAxisIndex)
         {
             // q = swing * twist, twist = normalize(twistAxis * twistAxis dot q.xyz, q.w)
             float dot = q.value[twistAxisIndex];
             float w = q.value.w;
-            float lengthSq = dot * dot + w * w;
-            float invLength = RSqrtSafe(lengthSq);
-            float sinHalfAngle = dot * invLength;
-            float cosHalfAngle = w * invLength;
-            float halfAngle = math.atan2(sinHalfAngle, cosHalfAngle);
+            float halfAngle = math.atan2(dot, w);
             return halfAngle + halfAngle;
         }
 
-        // Returns a quaternion q with q * from = to
-        public static quaternion FromToRotation(float3 from, float3 to)
+        /// <summary>   Returns a quaternion q with q * from = to. </summary>
+        ///
+        /// <param name="from"> From rotation. </param>
+        /// <param name="to">   To rotation. </param>
+        ///
+        /// <returns>   A quaternion such that q * from = to. </returns>
+        internal static quaternion FromToRotation(float3 from, float3 to)
         {
             Assert.IsTrue(math.abs(math.lengthsq(from) - 1.0f) < 1e-4f);
             Assert.IsTrue(math.abs(math.lengthsq(to) - 1.0f) < 1e-4f);
@@ -430,17 +483,28 @@ namespace Unity.Physics
         #endregion
 
         /// <summary>
-        /// Convert a quaternion orientation to Euler angles.
-        /// Use this method to calculate angular velocity needed to achieve a target orientation.
+        /// Convert a quaternion orientation to Euler angles. Use this method to calculate angular
+        /// velocity needed to achieve a target orientation.
         /// </summary>
-        /// <param name="q">An orientation.</param>
+        ///
+        /// <param name="q">        An orientation. </param>
+        /// <param name="order">    (Optional) The rotation order. </param>
+        ///
+        /// <returns>   The given quaternion converted Euler angles (float3). </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static float3 ToEulerAngles(this quaternion q, math.RotationOrder order = math.RotationOrder.XYZ)
         {
             return toEuler(q, order);
         }
 
-        // Returns the angle in degrees between /from/ and /to/. This is always the smallest
+        /// <summary>
+        /// Returns the angle in degrees between /from/ and /to/. This is always the smallest.
+        /// </summary>
+        ///
+        /// <param name="from"> Source for the. </param>
+        /// <param name="to">   to. </param>
+        ///
+        /// <returns>   A float. </returns>
         internal static float Angle(float3 from, float3 to)
         {
             // sqrt(a) * sqrt(b) = sqrt(a * b) -- valid for real numbers
@@ -452,9 +516,20 @@ namespace Unity.Physics
             return math.degrees(math.acos(dot));
         }
 
-        // The smaller of the two possible angles between the two vectors is returned, therefore the result will never be greater than 180 degrees or smaller than -180 degrees.
-        // If you imagine the from and to vectors as lines on a piece of paper, both originating from the same point, then the /axis/ vector would point up out of the paper.
-        // The measured angle between the two vectors would be positive in a clockwise direction and negative in an anti-clockwise direction.
+        /// <summary>
+        /// The smaller of the two possible angles between the two vectors is returned, therefore the
+        /// result will never be greater than 180 degrees or smaller than -180 degrees. If you imagine
+        /// the from and to vectors as lines on a piece of paper, both originating from the same point,
+        /// then the /axis/ vector would point up out of the paper. The measured angle between the two
+        /// vectors would be positive in a clockwise direction and negative in an anti-clockwise
+        /// direction.
+        /// </summary>
+        ///
+        /// <param name="from"> Source for the. </param>
+        /// <param name="to">   to. </param>
+        /// <param name="axis"> The axis. </param>
+        ///
+        /// <returns>   A float. </returns>
         internal static float SignedAngle(float3 from, float3 to, float3 axis)
         {
             var unsignedAngle = Angle(from, to);
@@ -462,7 +537,14 @@ namespace Unity.Physics
             return unsignedAngle * sign;
         }
 
-        // Projects a vector onto a plane defined by a normal orthogonal to the plane.
+        /// <summary>
+        /// Projects a vector onto a plane defined by a normal orthogonal to the plane.
+        /// </summary>
+        ///
+        /// <param name="vector">       The vector. </param>
+        /// <param name="planeNormal">  The plane normal. </param>
+        ///
+        /// <returns>   A float3. </returns>
         internal static float3 ProjectOnPlane(float3 vector, float3 planeNormal)
         {
             var sqrMag = math.dot(planeNormal, planeNormal);
@@ -474,21 +556,27 @@ namespace Unity.Physics
         }
 
         /// <summary>
-        /// Physics internally represents all rigid bodies in world space.
-        /// If a static body is in a hierarchy, its local-to-world matrix must be decomposed when building the physics world.
-        /// This method returns a world-space RigidTransform that would be decomposed for such a rigid body.
+        /// Physics internally represents all rigid bodies in world space. If a static body is in a
+        /// hierarchy, its local-to-world matrix must be decomposed when building the physics world. This
+        /// method returns a world-space RigidTransform that would be decomposed for such a rigid body.
         /// </summary>
-        /// <returns>A world-space RigidTransform as used by physics.</returns>
+        ///
+        /// <param name="localToWorld"> The local to world. </param>
+        ///
+        /// <returns>   A world-space RigidTransform as used by physics. </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static RigidTransform DecomposeRigidBodyTransform(in float4x4 localToWorld) =>
             new RigidTransform(DecomposeRigidBodyOrientation(localToWorld), localToWorld.c3.xyz);
 
         /// <summary>
-        /// Physics internally represents all rigid bodies in world space.
-        /// If a static body is in a hierarchy, its local-to-world matrix must be decomposed when building the physics world.
-        /// This method returns a world-space orientation that would be decomposed for such a rigid body.
+        /// Physics internally represents all rigid bodies in world space. If a static body is in a
+        /// hierarchy, its local-to-world matrix must be decomposed when building the physics world. This
+        /// method returns a world-space orientation that would be decomposed for such a rigid body.
         /// </summary>
-        /// <returns>A world-space orientation as used by physics.</returns>
+        ///
+        /// <param name="localToWorld"> The local to world. </param>
+        ///
+        /// <returns>   A world-space orientation as used by physics. </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static quaternion DecomposeRigidBodyOrientation(in float4x4 localToWorld) =>
             quaternion.LookRotationSafe(localToWorld.c2.xyz, localToWorld.c1.xyz);

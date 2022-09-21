@@ -69,6 +69,7 @@ namespace Unity.Physics.Tests.DFG
 #if !UNITY_EDITOR
         // Test is only run where Burst is AOT
         [Test]
+        [Ignore("Currently unstable on most platforms.")]
 #endif
         public unsafe void RayCastNode_ClosestHit_Matches_RayCastQuery_ClosestHit()
         {
@@ -95,36 +96,33 @@ namespace Unity.Physics.Tests.DFG
                 };
 
                 // Build and evaluate node set.
-                using (var safetyManager = AtomicSafetyManager.Create())
+                var physicsWorldSingleton = new PhysicsWorldSingleton { PhysicsWorld = m_World};
+
+                using (var set = new NodeSet())
                 {
-                    var collisionWorldProxy = new CollisionWorldProxy(m_World.CollisionWorld, &safetyManager);
+                    var rayCastNode = set.Create<RaycastNode>();
 
-                    using (var set = new NodeSet())
-                    {
-                        var rayCastNode = set.Create<RaycastNode>();
+                    var collisionWorldInputEndPoint = rayCastNode.Tie(RaycastNode.KernelPorts.PhysicsWorld);
+                    set.SetData(collisionWorldInputEndPoint, physicsWorldSingleton);
 
-                        var collisionWorldInputEndPoint = rayCastNode.Tie(RaycastNode.KernelPorts.CollisionWorld);
-                        set.SetData(collisionWorldInputEndPoint, collisionWorldProxy);
+                    var rayCastInputEndpoint = rayCastNode.Tie(RaycastNode.KernelPorts.Input);
+                    set.SetData(rayCastInputEndpoint, input);
 
-                        var rayCastInputEndpoint = rayCastNode.Tie(RaycastNode.KernelPorts.Input);
-                        set.SetData(rayCastInputEndpoint, input);
+                    var hitOutputEndpoint = rayCastNode.Tie(RaycastNode.KernelPorts.Hit);
+                    var hitGraphValue = set.CreateGraphValue(hitOutputEndpoint);
+                    var hitSuccessOutputEndpoint = rayCastNode.Tie(RaycastNode.KernelPorts.HitSuccess);
+                    var hitSuccessGraphValue = set.CreateGraphValue(hitSuccessOutputEndpoint);
 
-                        var hitOutputEndpoint = rayCastNode.Tie(RaycastNode.KernelPorts.Hit);
-                        var hitGraphValue = set.CreateGraphValue(hitOutputEndpoint);
-                        var hitSuccessOutputEndpoint = rayCastNode.Tie(RaycastNode.KernelPorts.HitSuccess);
-                        var hitSuccessGraphValue = set.CreateGraphValue(hitSuccessOutputEndpoint);
+                    set.Update();
 
-                        set.Update();
+                    var resolver = set.GetGraphValueResolver(out var job); job.Complete();
+                    hit = resolver.Resolve(hitGraphValue);
+                    hitSuccess = resolver.Resolve(hitSuccessGraphValue);
 
-                        var resolver = set.GetGraphValueResolver(out var job); job.Complete();
-                        hit = resolver.Resolve(hitGraphValue);
-                        hitSuccess = resolver.Resolve(hitSuccessGraphValue);
+                    set.ReleaseGraphValue(hitGraphValue);
+                    set.ReleaseGraphValue(hitSuccessGraphValue);
 
-                        set.ReleaseGraphValue(hitGraphValue);
-                        set.ReleaseGraphValue(hitSuccessGraphValue);
-
-                        set.Destroy(rayCastNode);
-                    }
+                    set.Destroy(rayCastNode);
                 }
 
                 // Compare with results obtained from query.
@@ -149,12 +147,13 @@ namespace Unity.Physics.Tests.DFG
         }
 
         [Test]
+        [Ignore("Currently unstable on most platforms.")]
         public void RayCastNode_WithInvalidProxy_Returns_HitSuccess_Equals_To_False()
         {
             bool hitSuccess;
 
-            // Empty CollisionWorldProxy
-            var collisionWorldProxy = new CollisionWorldProxy();
+            //Empty physicsWorldSingleton
+            var physicsWorldSingleton = new PhysicsWorldSingleton();
 
             RaycastInput input = new RaycastInput
             {
@@ -167,8 +166,8 @@ namespace Unity.Physics.Tests.DFG
             {
                 var rayCastNode = set.Create<RaycastNode>();
 
-                var collisionWorldInputEndPoint = rayCastNode.Tie(RaycastNode.KernelPorts.CollisionWorld);
-                set.SetData(collisionWorldInputEndPoint, collisionWorldProxy);
+                var collisionWorldInputEndPoint = rayCastNode.Tie(RaycastNode.KernelPorts.PhysicsWorld);
+                set.SetData(collisionWorldInputEndPoint, physicsWorldSingleton);
 
                 var rayCastInputEndpoint = rayCastNode.Tie(RaycastNode.KernelPorts.Input);
                 set.SetData(rayCastInputEndpoint, input);

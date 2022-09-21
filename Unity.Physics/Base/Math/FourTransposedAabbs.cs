@@ -3,7 +3,7 @@ using Unity.Mathematics;
 namespace Unity.Physics
 {
     // 4 transposed AABBs
-    public struct FourTransposedAabbs
+    internal struct FourTransposedAabbs
     {
         public float4 Lx, Hx;    // Lower and upper bounds along the X axis.
         public float4 Ly, Hy;    // Lower and upper bounds along the Y axis.

@@ -69,6 +69,7 @@ namespace Unity.Physics.Tests.DFG
 #if !UNITY_EDITOR
         // Test is only run where Burst is AOT
         [Test]
+        [Ignore("Currently unstable on most platforms.")]
 #endif
         public unsafe void ColliderCastNode_ClosestHit_Matches_ColliderCastQuery_ClosestHit()
         {
@@ -87,7 +88,7 @@ namespace Unity.Physics.Tests.DFG
                 var startPos = transform.pos;
                 var endPos = startPos + m_Rnd.NextFloat3(-5.0f, 5.0f);
 
-                var collider = TestUtils.GenerateRandomConvex(ref m_Rnd);
+                var collider = TestUtils.GenerateRandomConvex(ref m_Rnd, 1.0f);
                 ColliderCastInput input = new ColliderCastInput
                 {
                     Collider = (Collider*)collider.GetUnsafePtr(),
@@ -97,38 +98,38 @@ namespace Unity.Physics.Tests.DFG
                 };
 
                 // Build and evaluate node set.
-                using (var safetyManager = AtomicSafetyManager.Create())
+                var physicsWorldSingleton = new PhysicsWorldSingleton
                 {
-                    var collisionWorldProxy = new CollisionWorldProxy(m_World.CollisionWorld, &safetyManager);
+                    PhysicsWorld = m_World
+                };
 
-                    using (var set = new NodeSet())
-                    {
-                        var colliderCastNode = set.Create<ColliderCastNode>();
+                using (var set = new NodeSet())
+                {
+                    var colliderCastNode = set.Create<ColliderCastNode>();
 
-                        var collisionWorldInputEndPoint = colliderCastNode.Tie(ColliderCastNode.KernelPorts.CollisionWorld);
-                        set.SetData(collisionWorldInputEndPoint, collisionWorldProxy);
+                    var collisionWorldInputEndPoint = colliderCastNode.Tie(ColliderCastNode.KernelPorts.PhysicsWorld);
+                    set.SetData(collisionWorldInputEndPoint, physicsWorldSingleton);
 
-                        var colliderCastInputEndpoint = colliderCastNode.Tie(ColliderCastNode.KernelPorts.Input);
-                        set.SetData(colliderCastInputEndpoint, input);
+                    var colliderCastInputEndpoint = colliderCastNode.Tie(ColliderCastNode.KernelPorts.Input);
+                    set.SetData(colliderCastInputEndpoint, input);
 
-                        var hitOutputEndpoint = colliderCastNode.Tie(ColliderCastNode.KernelPorts.Hit);
-                        var hitGraphValue = set.CreateGraphValue(hitOutputEndpoint);
-                        var hitSuccessOutputEndpoint = colliderCastNode.Tie(ColliderCastNode.KernelPorts.HitSuccess);
-                        var hitSuccessGraphValue = set.CreateGraphValue(hitSuccessOutputEndpoint);
+                    var hitOutputEndpoint = colliderCastNode.Tie(ColliderCastNode.KernelPorts.Hit);
+                    var hitGraphValue = set.CreateGraphValue(hitOutputEndpoint);
+                    var hitSuccessOutputEndpoint = colliderCastNode.Tie(ColliderCastNode.KernelPorts.HitSuccess);
+                    var hitSuccessGraphValue = set.CreateGraphValue(hitSuccessOutputEndpoint);
 
-                        set.Update();
+                    set.Update();
 
-                        var resolver = set.GetGraphValueResolver(out var job);
-                        job.Complete();
+                    var resolver = set.GetGraphValueResolver(out var job);
+                    job.Complete();
 
-                        hit = resolver.Resolve(hitGraphValue);
-                        hitSuccess = resolver.Resolve(hitSuccessGraphValue);
+                    hit = resolver.Resolve(hitGraphValue);
+                    hitSuccess = resolver.Resolve(hitSuccessGraphValue);
 
-                        set.ReleaseGraphValue(hitGraphValue);
-                        set.ReleaseGraphValue(hitSuccessGraphValue);
+                    set.ReleaseGraphValue(hitGraphValue);
+                    set.ReleaseGraphValue(hitSuccessGraphValue);
 
-                        set.Destroy(colliderCastNode);
-                    }
+                    set.Destroy(colliderCastNode);
                 }
 
                 // Compare with results obtained from query.
@@ -153,14 +154,15 @@ namespace Unity.Physics.Tests.DFG
         }
 
         [Test]
+        [Ignore("Currently unstable on most platforms.")]
         public unsafe void ColliderCastNode_WithInvalidProxy_Returns_HitSuccess_Equal_To_False()
         {
             bool hitSuccess;
 
-            // Empty CollisionWorldProxy
-            var collisionWorldProxy = new CollisionWorldProxy();
+            // Empty PhysicsWorldSingleton
+            var physicsWorldSingleton = new PhysicsWorldSingleton();
 
-            var collider = TestUtils.GenerateRandomConvex(ref m_Rnd);
+            var collider = TestUtils.GenerateRandomConvex(ref m_Rnd, 1.0f);
             ColliderCastInput input = new ColliderCastInput
             {
                 Collider = (Collider*)collider.GetUnsafePtr(),
@@ -173,8 +175,8 @@ namespace Unity.Physics.Tests.DFG
             {
                 var colliderCastNode = set.Create<ColliderCastNode>();
 
-                var collisionWorldInputEndPoint = colliderCastNode.Tie(ColliderCastNode.KernelPorts.CollisionWorld);
-                set.SetData(collisionWorldInputEndPoint, collisionWorldProxy);
+                var collisionWorldInputEndPoint = colliderCastNode.Tie(ColliderCastNode.KernelPorts.PhysicsWorld);
+                set.SetData(collisionWorldInputEndPoint, physicsWorldSingleton);
 
                 var colliderCastInputEndpoint = colliderCastNode.Tie(ColliderCastNode.KernelPorts.Input);
                 set.SetData(colliderCastInputEndpoint, input);

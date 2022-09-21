@@ -8,7 +8,7 @@ namespace Unity.Physics.Authoring
     static class ConversionExtensions
     {
         internal static void AddOrSetComponent<T>(this EntityManager manager, Entity entity, T value)
-            where T : struct, IComponentData
+            where T : unmanaged, IComponentData
         {
             if (!manager.HasComponent<T>(entity))
                 manager.AddComponentData(entity, value);

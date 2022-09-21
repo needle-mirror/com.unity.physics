@@ -5,37 +5,56 @@ using Unity.Mathematics;
 
 namespace Unity.Physics
 {
+    /// <summary>   A contact jacobian angular. </summary>
     public struct ContactJacobianAngular
     {
+        /// <summary>   The angular a. </summary>
         public float3 AngularA;
+        /// <summary>   The angular b. </summary>
         public float3 AngularB;
+        /// <summary>   The effective mass. </summary>
         public float EffectiveMass;
-        public float Impulse; // Accumulated impulse
+        /// <summary>   Accumulated impulse. </summary>
+        public float Impulse;
     }
 
+    /// <summary>   A contact jacobian angle and velocity to reach the contact plane. </summary>
     public struct ContactJacAngAndVelToReachCp  // TODO: better name
     {
+        /// <summary>   The jacobian. </summary>
         public ContactJacobianAngular Jac;
 
-        // Velocity needed to reach the contact plane in one frame,
-        // both if approaching (negative) and depenetrating (positive)
+        /// <summary>
+        /// Velocity needed to reach the contact plane in one frame, both if approaching (negative) and
+        /// depenetrating (positive)
+        /// </summary>
         public float VelToReachCp;
     }
 
+    /// <summary>   A velocity between the two contacting objects. </summary>
     public struct SurfaceVelocity
     {
-        // Velocities between the two contacting objects
+        /// <summary>   Linear velocity between the two contacting objects. </summary>
         public float3 LinearVelocity;
+        /// <summary>   Angular velocity between the two contacting objects. </summary>
         public float3 AngularVelocity;
     }
 
+    /// <summary>   The mass factors. </summary>
     public struct MassFactors
     {
+        /// <summary>   The inverse inertia factor a. </summary>
         public float3 InverseInertiaFactorA;
+        /// <summary>   The inverse mass factor a. </summary>
         public float InverseMassFactorA;
+        /// <summary>   The inverse inertia factor b. </summary>
         public float3 InverseInertiaFactorB;
+        /// <summary>   The inverse mass factor b. </summary>
         public float InverseMassFactorB;
 
+        /// <summary>   Gets the default. </summary>
+        ///
+        /// <value> The default. </value>
         public static MassFactors Default => new MassFactors
         {
             InverseInertiaFactorA = new float3(1.0f),
@@ -45,9 +64,12 @@ namespace Unity.Physics
         };
     }
 
+    /// <summary>   A base contact jacobian. </summary>
     struct BaseContactJacobian
     {
+        /// <summary>   Number of contacts. </summary>
         public int NumContacts;
+        /// <summary>   The normal. </summary>
         public float3 Normal;
 
         internal static float GetJacVelocity(float3 linear, ContactJacobianAngular jacAngular,

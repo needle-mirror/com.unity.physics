@@ -1,4 +1,6 @@
 using Unity.Burst;
+using Unity.Collections;
+using Unity.Entities;
 using Unity.Mathematics;
 using static Unity.Physics.Math;
 
@@ -8,13 +10,25 @@ namespace Unity.Physics
     [NoAlias]
     struct LinearLimitJacobian
     {
-        // Pivot positions in motion space
-        public float3 PivotAinA;
-        public float3 PivotBinB;
+        // Constraint Bodies
+        public MTransform BodyFromConstraintA;
+        public MTransform BodyFromConstraintB;
 
         // Pivot distance limits
         public float MinDistance;
         public float MaxDistance;
+
+        // The max impulse that can be applied on this joint
+        float3 MaxImpulse;
+
+        // Accumulated impulse applied over all steps
+        public float3 AccumulatedImpulse;
+
+        // The joint entity between the body pair
+        Entity JointEntity;
+
+        // When true, will send impulse events when max impulse is exceeded
+        public bool EnableImpulseEvents;
 
         // Motion transforms before solving
         public RigidTransform WorldFromA;
@@ -39,7 +53,7 @@ namespace Unity.Physics
 
         // Build the Jacobian
         public void Build(
-            MTransform aFromConstraint, MTransform bFromConstraint,
+            Entity jointEntity, MTransform aFromConstraint, MTransform bFromConstraint,
             MotionVelocity velocityA, MotionVelocity velocityB,
             MotionData motionA, MotionData motionB,
             Constraint constraint, float tau, float damping)
@@ -47,14 +61,19 @@ namespace Unity.Physics
             WorldFromA = motionA.WorldFromMotion;
             WorldFromB = motionB.WorldFromMotion;
 
-            PivotAinA = aFromConstraint.Translation;
-            PivotBinB = bFromConstraint.Translation;
+            BodyFromConstraintA = aFromConstraint;
+            BodyFromConstraintB = bFromConstraint;
 
             AxisInB = float3.zero;
             Is1D = false;
 
             MinDistance = constraint.Min;
             MaxDistance = constraint.Max;
+
+            MaxImpulse = constraint.MaxImpulse;
+            EnableImpulseEvents = constraint.EnableImpulseEvents;
+            JointEntity = jointEntity;
+            AccumulatedImpulse = float3.zero;
 
             Tau = tau;
             Damping = damping;
@@ -78,15 +97,15 @@ namespace Unity.Physics
 
                 // Project pivot A onto the line or plane in B that it is attached to
                 RigidTransform bFromA = math.mul(math.inverse(WorldFromB), WorldFromA);
-                float3 pivotAinB = math.transform(bFromA, PivotAinA);
-                float3 diff = pivotAinB - PivotBinB;
+                float3 pivotAinB = math.transform(bFromA, BodyFromConstraintA.Translation);
+                float3 diff = pivotAinB - BodyFromConstraintB.Translation;
                 for (int i = 0; i < 3; i++)
                 {
                     float3 column = bFromConstraint.Rotation[i];
                     AxisInB = math.select(column, AxisInB, Is1D ^ constraint.ConstrainedAxes[i]);
 
                     float3 dot = math.select(math.dot(column, diff), 0.0f, constraint.ConstrainedAxes[i]);
-                    PivotBinB += column * dot;
+                    BodyFromConstraintB.Translation += column * dot;
                 }
             }
 
@@ -104,23 +123,27 @@ namespace Unity.Physics
         }
 
         // Solve the Jacobian
-        public void Solve(ref MotionVelocity velocityA, ref MotionVelocity velocityB, float timestep, float invTimestep)
+        public void Solve(ref JacobianHeader jacHeader, ref MotionVelocity velocityA, ref MotionVelocity velocityB, Solver.StepInput stepInput,
+            ref NativeStream.Writer impulseEventsWriter)
         {
             // Predict the motions' transforms at the end of the step
             MTransform futureWorldFromA;
             MTransform futureWorldFromB;
             {
-                quaternion dqA = Integrator.IntegrateAngularVelocity(velocityA.AngularVelocity, timestep);
-                quaternion dqB = Integrator.IntegrateAngularVelocity(velocityB.AngularVelocity, timestep);
+                quaternion dqA = Integrator.IntegrateAngularVelocity(velocityA.AngularVelocity, stepInput.Timestep);
+                quaternion dqB = Integrator.IntegrateAngularVelocity(velocityB.AngularVelocity, stepInput.Timestep);
                 quaternion futureOrientationA = math.normalize(math.mul(WorldFromA.rot, dqA));
                 quaternion futureOrientationB = math.normalize(math.mul(WorldFromB.rot, dqB));
-                futureWorldFromA = new MTransform(futureOrientationA, WorldFromA.pos + velocityA.LinearVelocity * timestep);
-                futureWorldFromB = new MTransform(futureOrientationB, WorldFromB.pos + velocityB.LinearVelocity * timestep);
+                futureWorldFromA = new MTransform(futureOrientationA, WorldFromA.pos + velocityA.LinearVelocity * stepInput.Timestep);
+                futureWorldFromB = new MTransform(futureOrientationB, WorldFromB.pos + velocityB.LinearVelocity * stepInput.Timestep);
             }
 
+            // Find the difference between the future distance and the limit range, then apply tau and damping
+            float futureDistanceError = CalculateError(futureWorldFromA, futureWorldFromB, out float3 futureDirection);
+
             // Calculate the angulars
-            CalculateAngulars(PivotAinA, futureWorldFromA.Rotation, out float3 angA0, out float3 angA1, out float3 angA2);
-            CalculateAngulars(PivotBinB, futureWorldFromB.Rotation, out float3 angB0, out float3 angB1, out float3 angB2);
+            CalculateAngulars(BodyFromConstraintA.Translation, futureWorldFromA.Rotation, out float3 angA0, out float3 angA1, out float3 angA2);
+            CalculateAngulars(BodyFromConstraintB.Translation, futureWorldFromB.Rotation, out float3 angB0, out float3 angB1, out float3 angB2);
 
             // Calculate effective mass
             float3 EffectiveMassDiag, EffectiveMassOffDiag;
@@ -147,18 +170,43 @@ namespace Unity.Physics
             float3 impulse;
             {
                 // Find the difference between the future distance and the limit range, then apply tau and damping
-                float futureDistanceError = CalculateError(futureWorldFromA, futureWorldFromB, out float3 futureDirection);
+                //float futureDistanceError = CalculateError(futureWorldFromA, futureWorldFromB, out float3 futureDirection);
                 float solveDistanceError = JacobianUtilities.CalculateCorrection(futureDistanceError, InitialError, Tau, Damping);
 
                 // Calculate the impulse to correct the error
                 float3 solveError = solveDistanceError * futureDirection;
                 float3x3 effectiveMass = JacobianUtilities.BuildSymmetricMatrix(EffectiveMassDiag, EffectiveMassOffDiag);
-                impulse = math.mul(effectiveMass, solveError) * invTimestep;
+                impulse = math.mul(effectiveMass, solveError) * stepInput.InvTimestep;
             }
 
             // Apply the impulse
             ApplyImpulse(impulse, angA0, angA1, angA2, ref velocityA);
             ApplyImpulse(-impulse, angB0, angB1, angB2, ref velocityB);
+
+            AccumulatedImpulse += impulse;
+
+            // if impulse exceeds max impulse, write back data
+            if (EnableImpulseEvents && stepInput.IsLastIteration && math.any(math.abs(AccumulatedImpulse) > MaxImpulse))
+            {
+                // We have to convert our impulse into constraint space to match what havok is returning from their impulses
+                // currently the linear motions are calculated in world space, therefore we need to convert it into constraint space
+                RigidTransform bFromA = math.mul(math.inverse(WorldFromB), WorldFromA);
+                // Project pivot A on the same plane as pivot B (same world space as body B) and calculate the diff between the two
+                float3 pivotAinB = BodyFromConstraintB.Translation - math.transform(bFromA, BodyFromConstraintA.Translation);
+                //Inverse the rotation of world space B on the pivot diff
+                pivotAinB = math.mul(BodyFromConstraintB.InverseRotation, pivotAinB);
+                float3 normal = math.normalize(pivotAinB);
+                // Move accumulated impulse into constraint space by multiplying with the direction vector
+                float3 constraintSpaceImpulse = normal * math.length(AccumulatedImpulse);
+
+                impulseEventsWriter.Write(new ImpulseEventData
+                {
+                    Type = ConstraintType.Linear,
+                    Impulse = constraintSpaceImpulse,
+                    JointEntity = JointEntity,
+                    BodyIndices = jacHeader.BodyPair
+                });
+            }
         }
 
         #region Helpers
@@ -176,8 +224,8 @@ namespace Unity.Physics
         private float CalculateError(MTransform worldFromA, MTransform worldFromB, out float3 direction)
         {
             // Find the direction from pivot A to B and the distance between them
-            float3 pivotA = Mul(worldFromA, PivotAinA);
-            float3 pivotB = Mul(worldFromB, PivotBinB);
+            float3 pivotA = Mul(worldFromA, BodyFromConstraintA.Translation);
+            float3 pivotB = Mul(worldFromB, BodyFromConstraintB.Translation);
             float3 axis = math.mul(worldFromB.Rotation, AxisInB);
             direction = pivotB - pivotA;
             float dot = math.dot(direction, axis);

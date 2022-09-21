@@ -286,7 +286,7 @@ namespace Unity.Physics.Editor
                     m_HashedConvexParameters = currentConvexParameters;
                     m_HashedPoints.Dispose();
                     m_HashedPoints = new NativeArray<float3>(currentPoints.Length, Allocator.Persistent);
-                    m_HashedPoints.CopyFrom(currentPoints);
+                    m_HashedPoints.CopyFrom(currentPoints.AsArray());
                 }
 
                 if (shape.ShapeType != ShapeType.ConvexHull && shape.ShapeType != ShapeType.Mesh)
@@ -326,7 +326,7 @@ namespace Unity.Physics.Editor
                 var pointsArray = new NativeArray<float3>(
                     pointCloud.Length, Allocator.Persistent, NativeArrayOptions.UninitializedMemory
                 );
-                pointsArray.CopyFrom(pointCloud);
+                pointsArray.CopyFrom(pointCloud.AsArray());
 
                 // TODO: if there is still an active job with the same input data hash, then just set it to be most recently scheduled job
                 return new CreateTempHullJob
@@ -350,11 +350,11 @@ namespace Unity.Physics.Editor
                 var pointsArray = new NativeArray<float3>(
                     points.Length, Allocator.Persistent, NativeArrayOptions.UninitializedMemory
                 );
-                pointsArray.CopyFrom(points);
+                pointsArray.CopyFrom(points.AsArray());
                 var triangleArray = new NativeArray<int3>(
                     triangles.Length, Allocator.Persistent, NativeArrayOptions.UninitializedMemory
                 );
-                triangleArray.CopyFrom(triangles);
+                triangleArray.CopyFrom(triangles.AsArray());
 
                 // TODO: if there is still an active job with the same input data hash, then just set it to be most recently scheduled job
                 return new CreateTempMeshJob

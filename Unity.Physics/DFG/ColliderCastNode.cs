@@ -12,7 +12,7 @@ namespace Unity.Physics
         public struct KernelDefs : IKernelPortDefinition
         {
             public DataInput<ColliderCastNode, ColliderCastInput> Input;
-            public DataInput<ColliderCastNode, CollisionWorldProxy> CollisionWorld;
+            public DataInput<ColliderCastNode, PhysicsWorldSingleton> PhysicsWorld;
 
             public DataOutput<ColliderCastNode, ColliderCastHit> Hit;
             public DataOutput<ColliderCastNode, bool> HitSuccess;
@@ -27,14 +27,8 @@ namespace Unity.Physics
         {
             public void Execute(RenderContext ctx, in KernelData data, ref KernelDefs ports)
             {
-                var collisionWorldProxy = ctx.Resolve(ports.CollisionWorld);
-                if (!collisionWorldProxy.IsCreated)
-                {
-                    ctx.Resolve(ref ports.HitSuccess) = false;
-                    return;
-                }
-
-                var collisionWorld = collisionWorldProxy.ToCollisionWorld();
+                var physicsWorld = ctx.Resolve(ports.PhysicsWorld);
+                var collisionWorld = physicsWorld.CollisionWorld;
 
                 if (collisionWorld.NumBodies > 0)
                 {

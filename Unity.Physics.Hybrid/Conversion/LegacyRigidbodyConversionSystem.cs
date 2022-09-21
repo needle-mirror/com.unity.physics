@@ -12,7 +12,7 @@ using LegacySphere = UnityEngine.SphereCollider;
 namespace Unity.Physics.Authoring
 {
     [UpdateAfter(typeof(PhysicsBodyConversionSystem))]
-    public sealed class LegacyRigidbodyConversionSystem : GameObjectConversionSystem
+    public partial class LegacyRigidbodyConversionSystem : GameObjectConversionSystem
     {
         protected override void OnUpdate()
         {
@@ -25,7 +25,7 @@ namespace Unity.Physics.Authoring
                     if (DstEntityManager.HasComponent<PhysicsVelocity>(entity))
                         return;
 
-                    DstEntityManager.AddSharedComponentData(entity, new PhysicsWorldIndex());
+                    DstEntityManager.AddSharedComponent(entity, new PhysicsWorldIndex());
 
                     DstEntityManager.PostProcessTransformComponents(
                         entity, body.transform,
@@ -74,10 +74,11 @@ namespace Unity.Physics.Authoring
                     else
                         DstEntityManager.AddOrSetComponent(entity, new PhysicsGravityFactor { Value = 0 });
                 }
-            );
+                ).WithStructuralChanges().Run();
 
             Entities
-                .WithAny<LegacyCollider, LegacyBox, LegacySphere, LegacyCapsule, LegacyMesh>()
+                .WithAny<LegacyCollider, LegacyBox, LegacySphere>()
+                .WithAny<LegacyCapsule, LegacyMesh>()
                 .WithNone<LegacyRigidBody>()
                 .ForEach((Transform transform) =>
                 {
@@ -85,9 +86,9 @@ namespace Unity.Physics.Authoring
                     var entity = GetPrimaryEntity(transform.gameObject);
                     if (DstEntityManager.HasComponent<PhysicsCollider>(entity))
                     {
-                        DstEntityManager.AddSharedComponentData(entity, new PhysicsWorldIndex());
+                        DstEntityManager.AddSharedComponent(entity, new PhysicsWorldIndex());
                     }
-                });
+                }).WithStructuralChanges().Run();
         }
     }
 }

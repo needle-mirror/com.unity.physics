@@ -7,7 +7,7 @@ namespace Unity.Physics
     {
         // 4 transposed 3D vertices
         [Serializable]
-        public struct FourTransposedPoints
+        internal struct FourTransposedPoints
         {
             private float4x3 m_TransposedPoints;
 

@@ -1,19 +1,78 @@
-# Overriding intermediate simulation results
+---
+uid: simulation-modification
 
-> **Note:** Hooks for simulation modification are a work in progress. They may be incomplete and the interfaces are very likely to change between releases. The [Unity Physics Samples](https://github.com/Unity-Technologies/EntityComponentSystemSamples/blob/master/UnityPhysicsSamples/Documentation/samples.md) project has one scene for each type of modification and it may be best to refer to those in order to see how the current interface behaves and what the API is.
+---
+
+# Overriding intermediate simulation results
 
 You can usually consider the physics simulation as a monolithic process whose inputs are components described in [core components](core_components.md) and outputs are updated `Translation`, `Rotation` and `PhysicsVelocity` components. However, internally, the Physics step is actually broken down into smaller subsections, the output of each becomes the input to the next. Unity Physics currently gives you the ability to read and modify this data, if it is necessary for your gameplay use cases.
 
-This works by injecting jobs into the task dependencies for the physics world step. To make this easy to do without modifying the physics code, Unity Physics allows you to request a delegate to be called when physics is setting up the jobs. For each type of simulation result you wish to read or modify, you should implement the `Physics.SimulationCallbacks.Callback` delegate. This function receives a reference to all previously scheduled physics tasks as well as a reference to the simulation interface. In here, you should schedule any jobs you need and return the combined `JobHandles` of any jobs you schedule – this will prevent future physics tasks from processing data before you are done with it.
+You can do that in two ways:
+- Directly modify 'PhysicsWorld'
+- Modify simulation results at specific points
 
-Then, before _every step_ you should inform the physics simulation that you wish your function to be called; you do this by calling `Unity.Physics.Systems.StepPhysicsWorld.EnqueueCallback()`, passing the time you wish your function to be called (which affects the kind of data you can access) where it will later be called at an appropriate time. The reason why Unity Physics requires you to do this every frame is that you might have some modifications you wish to enable temporarily, based on the presence or properties of some other gameplay component.
+Regardless of the way you wish to use, to modify intermediate simulation results, your system needs to update after [PhysicsInitializeGroup](interacting_with_physics.md) and before [PhysicsSimulationGroup](interacting_with_physics.md) (your system needs `[UpdateAfter(typeof(PhysicsInitializeGroup))] [UpdateBefore(PhysicsSimulationGroup)]`), or it needs to update in [PhysicsSimulationGroup](interacting_with_physics.md).
 
-# Simulation phases
+# Directly modifying 'PhysicsWorld'
 
-This section briefly describes the phases of the simulation and what you can access and change.
+After [PhysicsInitializeGroup](interacting_with_physics.md) has finished, you are free to modify the resulting `PhysicsWorld`. Note that for modification purposes, you should retrieve the world using (`SystemBase|SystemAPI|EntityQuery`).GetSingletonRW<`PhysicsWorldSingleton`>(), instead of just (`SystemBase|SystemAPI|EntityQuery`).GetSingleton<`PhysicsWorldSingleton`>(), since the latter is the read-only version.
+This is a suitable place to modify simulation data to implement additional simulation features (driving the car, custom friction...).
+There are useful methods in the `PhysicsWorldExtensions` class which enable this, such as: `ApplyImpulse(), GetEffectiveMass(), GetCenterOfMass(), SetAngularVelocity()` etc.
+In the code below, we will apply an impulse to the RigidBody with index 3
 
-### Phase 1 – _PostCreateDispatchPairs_
-`Unity.Physics.SimulationCallbacks.Phase.PostCreateDispatchPairs`
+```csharp
+// After the PhysicsInitialzeGroup has finished, PhysicsWorld will be created.
+[UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
+[UpdateAfter(typeof(PhysicsInitializeGroup))]
+[UpdateBefore(typeof(PhysicsSimulationGroup))]
+[BurstCompile]
+public partial struct ApplyImpulseSystem : ISystem
+{
+    [BurstCompile]
+    public void OnCreate(ref SystemState state){}
+    [BurstCompile]
+    public void OnDestroy(ref SystemState state){}
+
+    [BurstCompile]
+    public partial struct ApplyImpulseJob : IJob
+    {
+        PhysicsWorld World;
+        public void Execute()
+        {
+            // values randomly selected
+            World.ApplyImpulse(3, new float3(1, 0, 0), new float3(1, 1, 1));
+        }
+    }
+    
+    [BurstCompile]
+    public void OnUpdate(ref SystemState state)
+    {        
+        PhysicsWorldSingleton worldSingleton = SystemAPI.GetSingletonRW<PhysicsWorldSingleton>(); // Note that it is neccessary to call GetSingletonRW (not just GetSingleton), since you are writing to the world.
+        state.Dependency = new ApplyImpulseJob
+        {
+            World = worldSingleton.PhysicsWorld
+        }.Schedule(state.Dependency);
+
+        // If you want to modify world immediately, complete dependency
+        state.CompleteDependency();
+        worldSingleton.PhysicsWorld.ApplyImpulse(3, new float3(1, 0, 0), new float3(1, 1, 1));
+    }
+}
+```
+
+# Modifying simulation results
+
+[PhysicsSimulationGroup](interacting_with_physics.md) consists of four subgroups (`PhysicsCreateBodyPairsGroup`, `PhysicsCreateContactsGroup`, `PhysicsCreateJacobiansGroup`, `PhysicsSolveAndIntegrateGroup`).
+After a subgroup is finished (and before the next one starts), it is possible to modify its output. In previous versions, this was done using simulation callbacks, which are now removed.
+To modify simulation results, you need to:
+- Create a system
+- Set its update attribute to be `[UpdateInGroup(typeof(PhysicsSimulationGroup))]`, and between two consecutive subgroups (for example, `[UpdateAfter(typeof(PhysicsSimulationGroup))` `[UpdateBefore(typeof(PhysicsCreateContactsGroup))]`)
+- Implement one of the specialised jobs (see below for examples)
+- Schedule the specialised job
+
+Specialised jobs require [SimulationSingleton](interacting_with_physics.md#simulationsingleton) and `PhysicsWorld` for scheduling. Retrieve those using `(SystemBase|SystemAPI|EntityQuery)`.GetSingletonRW<>().
+
+### Modification point 1 – After _PhysicsCreateBodyPairsGroup_ and _PhysicsCreateContactsGroup_
 
 **Status** – At this point, the simulation has generated the list of _potentially_ interacting objects, based on joints and the overlaps at the _broadphase_ level. It has also performed some sorting, making the pairs of interacting objects suitable for multithreading.
 
@@ -21,16 +80,142 @@ This section briefly describes the phases of the simulation and what you can acc
 
 >**Note:** from both a performance and debugging perspective, it is preferable to disable pairs using a collision filter.
 
-### Phase 2 – _PostCreateContacts_
-`Unity.Physics.SimulationCallbacks.Phase.PostCreateContacts`
+**Example:**
+```csharp
+[UpdateInGroup(typeof(PhysicsSimulationGroup))]
+[UpdateAfter(typeof(PhysicsCreateBodyPairsGroup))]
+[UpdateBefore(typeof(PhysicsCreateContactsGroup))]
+[BurstCompile]
+public partial struct DisableDynamicDynamicPairsSystem : ISystem
+{
+    [BurstCompile]
+    public void OnCreate(ref SystemState state){}
+    [BurstCompile]
+    public void OnDestroy(ref SystemState state){}
+
+    [BurstCompile]
+    struct DisableDynamicDynamicPairsJob : IBodyPairsJob
+    {
+        public int NumDynamicBodies;
+
+        public unsafe void Execute(ref ModifiableBodyPair pair)
+        {
+            // Disable the pair if it's dynamic-dynamic
+            bool isDynamicDynamic = pair.BodyIndexA < NumDynamicBodies && pair.BodyIndexB < NumDynamicBodies;
+            if (isDynamicDynamic)
+            {
+                pair.Disable();
+            }
+        }
+    }
+    
+    [BurstCompile]
+    public void OnUpdate(ref SystemState state)
+    {        
+        PhysicsWorldSingleton worldSingleton = SystemAPI.GetSingletonRW<PhysicsWorldSingleton>();
+        SimulationSingleton simulationSingleton = SystemAPI.GetSingletonRW<SimulationSingleton>();
+
+        state.Dependency = new DisableDynamicDynamicPairsJob
+        {
+            NumDynamicBodies = worldSingleton.PhysicsWorld.NumDynamicBodies
+        }.Schedule(simulationSingleton, ref worldSingleton.PhysicsWorld, state.Dependency);
+    }
+}
+```
+
+### Modification point 2 – After _PhysicsCreateContactsGroup_ and before _PhysicsCreateJacobiansGroup_
 
 **Status** – At this point, the simulation has performed the low-level collision information between every pair of bodies by inspecting their colliders.
 
 **What you can do** – At this point you can schedule an implementation of `IContactsJob` to access that information. The data is in the format of a `ModifiableContactHeader` containing some shared properties, followed by a number (`ModifiableContactHeader.NumContacts`) of `ModifiableContactPoint` contact points. You can modify or disable the contacts, for example you can change the separating normal or the contact positions and distances.
 
-### Phase 3 – _PostCreateContactJacobians_
-`Unity.Physics.SimulationCallbacks.Phase.PostCreateContactJacobians`
+**Example:**
+```csharp
+[UpdateInGroup(typeof(PhysicsSimulationGroup))]
+[UpdateAfter(typeof(PhysicsCreateContactsGroup))]
+[UpdateBefore(typeof(PhysicsCreateJacobiansGroup))]
+[BurstCompile]
+public partial struct EnableSurfaceVelocitySystem : ISystem
+{
+    [BurstCompile]
+    public void OnCreate(ref SystemState state){}
+    [BurstCompile]
+    public void OnDestroy(ref SystemState state){}
 
-**Status** – Now, the joint data from your Joint components and contact data from the previous step has been converted to data which is suitable for consumption by the constraint solver. It represents the same as it did before, but has been transformed into a form which optimizes the simulation's ability to solve the constraints accurately – so, the data appears to be significantly more abstract and harder to manipulate.
+    // This sets some data on the contact, to get propagated to the jacobian
+    // for processing in our jacobian modifier job. This is necessary because some flags require extra data to
+    // be allocated along with the jacobian (e.g., SurfaceVelocity data typically does not exist).
+    [BurstCompile]
+    public partial struct EnableSurfaceVelocityJob : IContactsJob
+    {
+        public void Execute(ref ModifiableContactHeader manifold, ref ModifiableContactPoint contact)
+        {
+            manifold.JacobianFlags |= JacobianFlags.EnableSurfaceVelocity;
+        }
+    }
+
+    [BurstCompile]
+    public void OnUpdate(ref SystemState state)
+    {
+        state.Dependency = new EnableSurfaceVelocityJob()
+            .Schedule(SystemAPI.GetSingletonRW<SimulationSingleton>(), ref SystemAPI.GetSingletonRW<PhysicsWorldSingleton>().PhysicsWorld, state.Dependency);
+    }
+}
+```
+
+### Modification point 3 – After _PhysicsCreateJacobiansGroup_ and before _PhysicsSolveAndIntegrateGroup_
+
+**Status** – Now, the joint data from your Joint components and contact data from the step has been converted to data which is suitable for consumption by the constraint solver. It represents the same as it did before, but has been transformed into a form which optimizes the simulation's ability to solve the constraints accurately – so, the data appears to be significantly more abstract and harder to manipulate.
 
 **What you can do** – You can schedule an implementation of `IJacobiansJob` to get access to each of the jacobian datas. Since the data is harder to manage, Unity Physics provides some accessors to perform many reasonable modifications. For these, it is best to consult the sample scene.
+
+**Example:**
+```csharp
+[BurstCompile]
+[UpdateInGroup(typeof(PhysicsSimulationGroup))]
+[UpdateAfter(typeof(PhysicsCreateJacobiansGroup))]
+[UpdateBefore(typeof(PhysicsSolveAndIntegrateGroup))]
+public partial struct SetFrictionToZeroSystem : ISystem
+{
+    [BurstCompile]
+    public void OnCreate(ref SystemState state){}
+    [BurstCompile]
+    public void OnDestroy(ref SystemState state){}
+    
+    [BurstCompile]
+    public partial struct SetFrictionToZeroJob : IJacobiansJob // Note: there are much more performant ways of setting friction to zero, this is just for demonstration purposes
+    {
+        // Don't do anything for triggers
+        public void Execute(ref ModifiableJacobianHeader h, ref ModifiableTriggerJacobian j) {}
+        
+        [BurstCompile]
+        public void Execute(ref ModifiableJacobianHeader jacHeader, ref ModifiableContactJacobian contactJacobian)
+        {
+            var friction0 = contactJacobian.Friction0;
+            friction0.AngularA = 0.0f;
+            friction0.AngularB = 0.0f;
+            contactJacobian.Friction0 = friction0;
+
+            var friction1 = contactJacobian.Friction1;
+            friction1.AngularA = 0.0f;
+            friction1.AngularB = 0.0f;
+            contactJacobian.Friction1 = friction1;
+
+            var angularFriction = contactJacobian.AngularFriction;
+            angularFriction.AngularA = 0.0f;
+            angularFriction.AngularB = 0.0f;
+            contactJacobian.AngularFriction = angularFriction;
+        }
+    }
+
+    [BurstCompile]
+    public void OnUpdate(ref SystemState state)
+    {
+        state.Dependency = new SetFrictionToZeroJob()
+            .Schedule(SystemAPI.GetSingletonRW<SimulationSingleton>(), ref SystemAPI.GetSingletonRW<PhysicsWorldSingleton>().PhysicsWorld, state.Dependency);
+    }    
+}
+```
+
+
+[Back to Index](index.md)

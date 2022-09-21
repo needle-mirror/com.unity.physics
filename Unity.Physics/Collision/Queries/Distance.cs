@@ -1,4 +1,4 @@
-using System;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine.Assertions;
@@ -7,26 +7,43 @@ using static Unity.Physics.Math;
 
 namespace Unity.Physics
 {
-    // The input to point distance queries
+    /// <summary>   The input to point distance queries. </summary>
     public struct PointDistanceInput
     {
+        /// <summary>   The point from which to calculate distance. </summary>
         public float3 Position;
+        /// <summary>   The maximum distance. </summary>
         public float MaxDistance;
+        /// <summary>   Specifies the filter. </summary>
         public CollisionFilter Filter;
 
         internal QueryContext QueryContext;
     }
 
-    // The input to collider distance queries
+    /// <summary>   The input to collider distance queries. </summary>
     public struct ColliderDistanceInput
     {
+        /// <summary>   Gets the collider used to calculate distance from. </summary>
+        ///
+        /// <value> The collider to calculate distance from. </value>
+        [NativeDisableUnsafePtrRestriction]
         public unsafe Collider* Collider;
+        /// <summary>   The transform of the collider. </summary>
         public RigidTransform Transform;
+        /// <summary>   The scale of the collider. </summary>
+        public float Scale;
+        /// <summary>   The maximum distance. </summary>
         public float MaxDistance;
 
         internal QueryContext QueryContext;
 
-        public ColliderDistanceInput(BlobAssetReference<Collider> collider, RigidTransform transform, float maxDistance)
+        /// <summary>   Constructor. </summary>
+        ///
+        /// <param name="collider">     The collider used to calculate distance from. </param>
+        /// <param name="maxDistance">  The maximum distance. </param>
+        /// <param name="transform">    The transform. of the collider </param>
+        /// <param name="uniformScale"> (Optional) The uniform scale of the collider. </param>
+        public ColliderDistanceInput(BlobAssetReference<Collider> collider, float maxDistance, RigidTransform transform, float uniformScale = 1.0f)
         {
             unsafe
             {
@@ -35,68 +52,68 @@ namespace Unity.Physics
             Transform = transform;
             MaxDistance = maxDistance;
             QueryContext = default;
+            Scale = uniformScale;
+        }
+
+        internal void InitScale()
+        {
+            QueryContext.InitScale();
+            Scale = math.select(1.0f, Scale, Scale != 0.0f);
         }
     }
 
-    // A hit from a distance query
+    /// <summary>   A hit from a distance query. </summary>
     public struct DistanceHit : IQueryResult
     {
         /// <summary>
-        /// Fraction in distance queries represents the actual distance where the hit occurred,
-        /// NOT the percentage of max distance
+        /// Fraction in distance queries represents the actual distance where the hit occurred, NOT the
+        /// percentage of max distance.
         /// </summary>
+        ///
         /// <value> Distance at which the hit occurred. </value>
         public float Fraction { get; set; }
 
-        /// <summary>
+        /// <summary>   Gets or sets the zero-based index of the rigid body. </summary>
         ///
-        /// </summary>
-        /// <value> Returns RigidBodyIndex of queried body.</value>
+        /// <value> Returns RigidBodyIndex of queried body. </value>
         public int RigidBodyIndex { get; set; }
 
-        /// <summary>
+        /// <summary>   Gets or sets the collider key. </summary>
         ///
-        /// </summary>
-        /// <value> Returns ColliderKey of queried leaf collider</value>
+        /// <value> Returns ColliderKey of queried leaf collider. </value>
         public ColliderKey ColliderKey { get; set; }
 
-        /// <summary>
+        /// <summary>   Gets or sets the material. </summary>
         ///
-        /// </summary>
-        /// <value> Returns Material of queried leaf collider</value>
+        /// <value> Returns Material of queried leaf collider. </value>
         public Material Material { get; set; }
 
-        /// <summary>
+        /// <summary>   Gets or sets the entity. </summary>
         ///
-        /// </summary>
-        /// <value> Returns Entity of queried body</value>
+        /// <value> Returns Entity of queried body. </value>
         public Entity Entity { get; set; }
 
-        /// <summary>
-        /// The point in query space where the hit occurred.
-        /// </summary>
+        /// <summary>   The point in query space where the hit occurred. </summary>
+        ///
         /// <value> Returns the position of the point where the hit occurred. </value>
         public float3 Position { get; set; }
 
-        /// <summary>
+        /// <summary>   Gets or sets the surface normal. </summary>
         ///
-        /// </summary>
         /// <value> Returns the normal of the point where the hit occurred. </value>
         public float3 SurfaceNormal { get; set; }
 
-        /// <summary>
+        /// <summary>   Gets the distance. </summary>
         ///
-        /// </summary>
         /// <value> Distance at which the hit occurred. </value>
         public float Distance => Fraction;
 
-        /// <summary>
-        /// Collider key of the query collider
-        /// </summary>
-        /// <value>
-        /// If the query input uses composite collider, this field will have the collider key of it's leaf which participated in the hit,
-        /// otherwise the value will be undefined.
-        /// </value>
+        /// <summary>   Collider key of the query collider. </summary>
+        ///
+        /// ### <returns>
+        /// If the query input uses composite collider, this field will have the collider key of it's
+        /// leaf which participated in the hit, otherwise the value will be undefined.
+        /// </returns>
         public ColliderKey QueryColliderKey;
     }
 
@@ -107,19 +124,24 @@ namespace Unity.Physics
             out FlippedColliderDistanceQueryCollector<T> flippedQueryCollector)
             where T : struct, ICollector<DistanceHit>
         {
-            MTransform targetFromQuery = new MTransform(input.Transform);
+            ScaledMTransform targetFromQuery = new ScaledMTransform(input.Transform, input.QueryContext.InvTargetScale * input.Scale);
 
             var worldFromQuery = Mul(input.QueryContext.WorldFromLocalTransform, targetFromQuery);
-            var queryFromTarget = math.inverse(input.Transform);
+            var queryFromTarget = Inverse(targetFromQuery);
 
-            input.QueryContext.WorldFromLocalTransform = worldFromQuery;
-            input.Transform = queryFromTarget;
+            input.Transform = new RigidTransform(new quaternion(queryFromTarget.Rotation), queryFromTarget.Translation);
 
             flippedQueryCollector = new FlippedColliderDistanceQueryCollector<T>(ref collector, input.QueryContext.ColliderKey, target->Material);
 
             input.QueryContext.ColliderKey = ColliderKey.Empty;
             input.QueryContext.NumColliderKeyBits = 0;
             input.Collider = (Collider*)target;
+            input.QueryContext.IsFlipped = true;
+
+            float queryScale = input.Scale;
+            input.Scale = input.QueryContext.TargetScale;
+            input.QueryContext.InvTargetScale = 1.0f / queryScale;
+            input.QueryContext.WorldFromLocalTransform = worldFromQuery;
         }
 
         #region QueryImplementation
@@ -363,7 +385,6 @@ namespace Unity.Physics
             float3 sphereCenter, float sphereRadius,
             MTransform aFromB)
         {
-            // Sphere center in A-space (TODO.ma should probably work in sphere space, typical for triangle verts to be far from the origin in its local space)
             float3 pointB = Mul(aFromB, sphereCenter);
 
             // Calculate triangle edges and edge planes
@@ -543,15 +564,24 @@ namespace Unity.Physics
         }
 
         // Dispatch any pair of convex colliders
-        public static unsafe Result ConvexConvex(Collider* convexA, Collider* convexB, MTransform aFromB)
+        public static unsafe Result ConvexConvex(Collider* convexA, Collider* convexB, MTransform aFromB, float uniformScaleB = 1.0f)
         {
             Result result;
             bool flip = false;
-            switch (convexA->Type)
+            ColliderType typeA = convexA->Type;
+            ColliderType typeB = convexB->Type;
+
+            // If uniform scale is applied, enforce the convex - convex path
+            if (!IsApproximatelyEqual(uniformScaleB, 1.0f))
+            {
+                typeA = typeB = ColliderType.Convex;
+            }
+
+            switch (typeA)
             {
                 case ColliderType.Sphere:
                     SphereCollider* sphereA = (SphereCollider*)convexA;
-                    switch (convexB->Type)
+                    switch (typeB)
                     {
                         case ColliderType.Sphere:
                             result = SphereSphere(sphereA, (SphereCollider*)convexB, aFromB);
@@ -590,7 +620,7 @@ namespace Unity.Physics
                     break;
                 case ColliderType.Capsule:
                     CapsuleCollider* capsuleA = (CapsuleCollider*)convexA;
-                    switch (convexB->Type)
+                    switch (typeB)
                     {
                         case ColliderType.Sphere:
                             SphereCollider* sphereB = (SphereCollider*)convexB;
@@ -615,7 +645,7 @@ namespace Unity.Physics
                     break;
                 case ColliderType.Triangle:
                     PolygonCollider* triangleA = (PolygonCollider*)convexA;
-                    switch (convexB->Type)
+                    switch (typeB)
                     {
                         case ColliderType.Sphere:
                             SphereCollider* sphereB = (SphereCollider*)convexB;
@@ -641,7 +671,7 @@ namespace Unity.Physics
                     break;
                 case ColliderType.Box:
                     BoxCollider* boxA = (BoxCollider*)convexA;
-                    switch (convexB->Type)
+                    switch (typeB)
                     {
                         case ColliderType.Sphere:
                             result = BoxSphere(boxA, (SphereCollider*)convexB, aFromB);
@@ -662,7 +692,23 @@ namespace Unity.Physics
                 case ColliderType.Quad:
                 case ColliderType.Cylinder:
                 case ColliderType.Convex:
-                    result = ConvexConvex(ref ((ConvexCollider*)convexA)->ConvexHull, ref ((ConvexCollider*)convexB)->ConvexHull, aFromB);
+
+                    ref ConvexHull hullA = ref ((ConvexCollider*)convexA)->ConvexHull;
+                    ref ConvexHull hullB = ref ((ConvexCollider*)convexB)->ConvexHull;
+
+                    float3* vertexPtrB = hullB.VerticesPtr;
+                    float convexRadiusB = hullB.ConvexRadius;
+
+                    if (!IsApproximatelyEqual(uniformScaleB, 1.0f))
+                    {
+                        float3* scaledVertexPtrB = stackalloc float3[hullB.NumVertices];
+                        hullB.ScaleVerticesAndRadius(scaledVertexPtrB, uniformScaleB, out convexRadiusB);
+                        vertexPtrB = scaledVertexPtrB;
+                    }
+
+                    result = ConvexConvex(hullA.VerticesPtr, hullA.NumVertices,
+                        hullA.ConvexRadius, vertexPtrB, hullB.NumVertices,
+                        convexRadiusB, aFromB);
                     break;
                 default:
                     SafetyChecks.ThrowNotImplementedException();
@@ -682,7 +728,7 @@ namespace Unity.Physics
 
         public static unsafe bool PointCollider<T>(PointDistanceInput input, Collider* target, ref T collector) where T : struct, ICollector<DistanceHit>
         {
-            if (!CollisionFilter.IsCollisionEnabled(input.Filter, target->Filter))
+            if (!CollisionFilter.IsCollisionEnabled(input.Filter, target->GetCollisionFilter()))
             {
                 return false;
             }
@@ -739,12 +785,14 @@ namespace Unity.Physics
                     return default;
             }
 
-            if (result.Distance < collector.MaxFraction)
+            float scaledDistance = result.Distance * math.abs(input.QueryContext.TargetScale);
+            if (scaledDistance < collector.MaxFraction)
             {
+                float3 normal = math.select(-result.NormalInA, result.NormalInA, input.QueryContext.TargetScale < 0.0f);
                 var hit = new DistanceHit
                 {
-                    Fraction = result.Distance,
-                    SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, -result.NormalInA),
+                    Fraction = scaledDistance,
+                    SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, normal),
                     Position = Mul(input.QueryContext.WorldFromLocalTransform, result.PositionOnAinA),
                     ColliderKey = input.QueryContext.ColliderKey,
                     QueryColliderKey = ColliderKey.Empty,
@@ -760,7 +808,7 @@ namespace Unity.Physics
 
         public static unsafe bool ColliderCollider<T>(ColliderDistanceInput input, Collider* target, ref T collector) where T : struct, ICollector<DistanceHit>
         {
-            if (!CollisionFilter.IsCollisionEnabled(input.Collider->Filter, target->Filter))
+            if (!CollisionFilter.IsCollisionEnabled(input.Collider->GetCollisionFilter(), target->GetCollisionFilter()))
             {
                 return false;
             }
@@ -769,6 +817,8 @@ namespace Unity.Physics
             {
                 input.QueryContext = QueryContext.DefaultContext;
             }
+
+            input.Scale = math.select(input.Scale, 1.0f, input.Scale == 0.0f);
 
             switch (input.Collider->CollisionType)
             {
@@ -783,14 +833,19 @@ namespace Unity.Physics
                         case ColliderType.Box:
                         case ColliderType.Cylinder:
 
-                            MTransform targetFromQuery = new MTransform(input.Transform);
-                            Result result = ConvexConvex(target, input.Collider, targetFromQuery);
-                            if (result.Distance < collector.MaxFraction)
+                            ScaledMTransform targetFromQuery = new ScaledMTransform(input.Transform,
+                                input.Scale * input.QueryContext.InvTargetScale);
+
+                            Result result = ConvexConvex(target, input.Collider, targetFromQuery.Transform, targetFromQuery.Scale);
+
+                            float scaledDistance = result.Distance * math.abs(input.QueryContext.TargetScale);
+                            if (scaledDistance < collector.MaxFraction)
                             {
+                                float3 normal = math.select(-result.NormalInA, result.NormalInA, input.QueryContext.TargetScale < 0.0f);
                                 var hit = new DistanceHit
                                 {
-                                    Fraction = result.Distance,
-                                    SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, -result.NormalInA),
+                                    Fraction = scaledDistance,
+                                    SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, normal),
                                     Position = Mul(input.QueryContext.WorldFromLocalTransform, result.PositionOnAinA),
                                     RigidBodyIndex = input.QueryContext.RigidBodyIndex,
                                     QueryColliderKey = ColliderKey.Empty,
@@ -890,6 +945,7 @@ namespace Unity.Physics
             where T : struct, ICollector<DistanceHit>
         {
             Assert.IsTrue(input.Collider->CollisionType == CollisionType.Convex);
+            Assert.IsTrue(input.QueryContext.IsFlipped);
 
             if (!input.QueryContext.IsInitialized)
             {
@@ -905,14 +961,18 @@ namespace Unity.Physics
                 case ColliderType.Box:
                 case ColliderType.Cylinder:
 
-                    MTransform targetFromQuery = new MTransform(input.Transform);
-                    Result result = ConvexConvex(target, input.Collider, targetFromQuery);
-                    if (result.Distance < collector.MaxFraction)
+                    ScaledMTransform targetFromQuery = new ScaledMTransform(input.Transform, input.Scale * input.QueryContext.InvTargetScale);
+                    Result result = ConvexConvex(target, input.Collider, targetFromQuery.Transform, targetFromQuery.Scale);
+
+                    float scaledDistance = result.Distance * math.abs(input.QueryContext.TargetScale);
+                    if (scaledDistance < collector.MaxFraction)
                     {
+                        float3 normal = math.select(-result.NormalInA, result.NormalInA, input.QueryContext.TargetScale < 0.0f);
                         var hit = new DistanceHit
                         {
-                            Fraction = result.Distance,
-                            SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, -result.NormalInA),
+                            Fraction = scaledDistance,
+                            SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, normal),
+
                             Position = Mul(input.QueryContext.WorldFromLocalTransform, result.PositionOnAinA),
                             RigidBodyIndex = input.QueryContext.RigidBodyIndex,
                             ColliderKey = input.QueryContext.ColliderKey,
@@ -988,15 +1048,30 @@ namespace Unity.Physics
             {
                 ref ConvexHull inputHull = ref ((ConvexCollider*)input.Collider)->ConvexHull;
 
-                Result result = ConvexConvex(polygon->ConvexHull.VerticesPtr, polygon->ConvexHull.NumVertices, 0.0f, inputHull.VerticesPtr,
-                    inputHull.NumVertices, inputHull.ConvexRadius, TargetFromQuery);
-                if (result.Distance < collector.MaxFraction)
+                var targetFromQuery = new ScaledMTransform(TargetFromQuery, input.Scale * input.QueryContext.InvTargetScale);
+                float3* inputVertexPtr = inputHull.VerticesPtr;
+                float inputConvexRadius = inputHull.ConvexRadius;
+
+                if (!IsApproximatelyEqual(targetFromQuery.Scale, 1.0f))
                 {
+                    float3* scaledVertexPtr = stackalloc float3[inputHull.NumVertices];
+                    inputHull.ScaleVerticesAndRadius(scaledVertexPtr, targetFromQuery.Scale, out inputConvexRadius);
+
+                    inputVertexPtr = scaledVertexPtr;
+                }
+
+                Result result = ConvexConvex(polygon->ConvexHull.VerticesPtr, polygon->ConvexHull.NumVertices, 0.0f,
+                    inputVertexPtr, inputHull.NumVertices, inputConvexRadius, targetFromQuery.Transform);
+
+                float scaledDistance = result.Distance * math.abs(input.QueryContext.TargetScale);
+                if (scaledDistance < collector.MaxFraction)
+                {
+                    float3 normal = math.select(-result.NormalInA, result.NormalInA, input.QueryContext.TargetScale < 0.0f);
                     var hit = new DistanceHit
                     {
-                        Fraction = result.Distance,
+                        Fraction = scaledDistance,
                         Position = Mul(input.QueryContext.WorldFromLocalTransform, result.PositionOnAinA),
-                        SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, -result.NormalInA),
+                        SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, normal),
                         RigidBodyIndex = input.QueryContext.RigidBodyIndex,
                         ColliderKey = input.QueryContext.SetSubKey(numColliderKeyBits, subKey),
                         Material = polygon->Material,
@@ -1032,7 +1107,7 @@ namespace Unity.Physics
                 m_Mesh->GetPrimitive(primitiveKey, out float3x4 vertices, out Mesh.PrimitiveFlags flags, out CollisionFilter filter, out Material material);
 
                 // Todo: work with filters
-                if (!CollisionFilter.IsCollisionEnabled(input.Collider->Filter, filter)) // TODO: could do this check within GetPrimitive()
+                if (!CollisionFilter.IsCollisionEnabled(input.Collider->GetCollisionFilter(), filter)) // TODO: could do this check within GetPrimitive()
                 {
                     return false;
                 }
@@ -1108,13 +1183,15 @@ namespace Unity.Physics
                             input.Position, 0.0f, MTransform.Identity);
                     }
 
-                    if (result.Distance < collector.MaxFraction)
+                    float scaledDistance = result.Distance * math.abs(input.QueryContext.TargetScale);
+                    if (scaledDistance < collector.MaxFraction)
                     {
+                        float3 normal = math.select(-result.NormalInA, result.NormalInA, input.QueryContext.TargetScale < 0.0f);
                         var hit = new DistanceHit
                         {
-                            Fraction = result.Distance,
+                            Fraction = scaledDistance,
                             Position = Mul(input.QueryContext.WorldFromLocalTransform, result.PositionOnAinA),
-                            SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, -result.NormalInA),
+                            SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, normal),
                             RigidBodyIndex = input.QueryContext.RigidBodyIndex,
                             ColliderKey = input.QueryContext.SetSubKey(m_NumColliderKeyBits, (uint)(primitiveKey << 1 | polygonIndex)),
                             Material = material,
@@ -1167,7 +1244,7 @@ namespace Unity.Physics
             {
                 ref CompoundCollider.Child child = ref m_CompoundCollider->Children[leafData];
 
-                if (!CollisionFilter.IsCollisionEnabled(input.Filter, child.Collider->Filter))
+                if (!CollisionFilter.IsCollisionEnabled(input.Filter, child.Collider->GetCollisionFilter()))
                 {
                     return false;
                 }
@@ -1180,7 +1257,7 @@ namespace Unity.Physics
                     inputLs.Position = Math.Mul(childFromCompound, input.Position);
                     inputLs.QueryContext.ColliderKey = input.QueryContext.PushSubKey(m_CompoundCollider->NumColliderKeyBits, (uint)leafData);
                     inputLs.QueryContext.NumColliderKeyBits = input.QueryContext.NumColliderKeyBits;
-                    inputLs.QueryContext.WorldFromLocalTransform = Mul(inputLs.QueryContext.WorldFromLocalTransform, compoundFromChild);
+                    inputLs.QueryContext.WorldFromLocalTransform = ScaledMTransform.Mul(input.QueryContext.WorldFromLocalTransform, compoundFromChild);
                 }
 
                 return child.Collider->CalculateDistance(inputLs, ref collector);
@@ -1231,7 +1308,7 @@ namespace Unity.Physics
             {
                 ref CompoundCollider.Child child = ref m_CompoundCollider->Children[leafData];
 
-                if (!CollisionFilter.IsCollisionEnabled(input.Collider->Filter, child.Collider->Filter))
+                if (!CollisionFilter.IsCollisionEnabled(input.Collider->GetCollisionFilter(), child.Collider->GetCollisionFilter()))
                 {
                     return false;
                 }
@@ -1240,7 +1317,7 @@ namespace Unity.Physics
 
                 inputLs.QueryContext.ColliderKey = input.QueryContext.PushSubKey(m_CompoundCollider->NumColliderKeyBits, (uint)leafData);
                 inputLs.QueryContext.NumColliderKeyBits = input.QueryContext.NumColliderKeyBits;
-                inputLs.QueryContext.WorldFromLocalTransform = Mul(input.QueryContext.WorldFromLocalTransform, new MTransform(child.CompoundFromChild));
+                inputLs.QueryContext.WorldFromLocalTransform = ScaledMTransform.Mul(inputLs.QueryContext.WorldFromLocalTransform, new MTransform(child.CompoundFromChild));
 
                 // Transform the query into child space
                 inputLs.Transform = math.mul(math.inverse(child.CompoundFromChild), input.Transform);
@@ -1289,9 +1366,9 @@ namespace Unity.Physics
             where T : struct, ICollector<DistanceHit>
         {
             ref var terrain = ref terrainCollider->Terrain;
-            CollisionFilter filter = terrainCollider->Filter;
+            CollisionFilter filter = terrainCollider->GetCollisionFilter();
 
-            if (!CollisionFilter.IsCollisionEnabled(filter, input.Collider->Filter))
+            if (!CollisionFilter.IsCollisionEnabled(filter, input.Collider->GetCollisionFilter()))
             {
                 return false;
             }
@@ -1303,7 +1380,8 @@ namespace Unity.Physics
             var aabbT = new FourTransposedAabbs();
             Terrain.QuadTreeWalker walker;
             {
-                Aabb colliderAabb = input.Collider->CalculateAabb(input.Transform);
+                Aabb colliderAabb = input.Collider->CalculateAabb(input.Transform,
+                    input.QueryContext.InvTargetScale * input.Scale);
                 Aabb aabb = new Aabb
                 {
                     Min = colliderAabb.Min * terrain.InverseScale,
@@ -1318,7 +1396,7 @@ namespace Unity.Physics
                 };
                 walker = new Terrain.QuadTreeWalker(&terrainCollider->Terrain, queryAabb);
             }
-            float maxDistanceSquared = collector.MaxFraction * collector.MaxFraction;
+            float maxDistanceSquared = collector.MaxFraction * collector.MaxFraction * input.QueryContext.InvTargetScale * input.QueryContext.InvTargetScale;
 
             D dispatcher = new D();
             dispatcher.Init(input.Transform);
@@ -1373,7 +1451,9 @@ namespace Unity.Physics
 
             // Get the point in heightfield space
             float3 position = input.Position * terrain.InverseScale;
-            float maxDistanceSquared = collector.MaxFraction * collector.MaxFraction;
+            var invScaleSq = input.QueryContext.InvTargetScale;
+            invScaleSq *= invScaleSq;
+            float maxDistanceSquared = collector.MaxFraction * collector.MaxFraction * invScaleSq;
             Terrain.QuadTreeWalker walker;
             {
                 var queryAabb = new Aabb
@@ -1409,13 +1489,15 @@ namespace Unity.Physics
                             polygon.SetAsTriangle(a, b, c);
                             float3 triangleNormal = math.normalize(math.cross(b - a, c - a));
                             Result result = TriangleSphere(a, b, c, triangleNormal, input.Position, 0.0f, MTransform.Identity);
-                            if (result.Distance < collector.MaxFraction)
+                            float scaledDistance = result.Distance * math.abs(input.QueryContext.TargetScale);
+                            if (scaledDistance < collector.MaxFraction)
                             {
+                                float3 normal = math.select(-result.NormalInA, result.NormalInA, input.QueryContext.TargetScale < 0.0f);
                                 var hit = new DistanceHit
                                 {
-                                    Fraction = result.Distance,
+                                    Fraction = scaledDistance,
                                     Position = Mul(input.QueryContext.WorldFromLocalTransform, result.PositionOnAinA),
-                                    SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, -result.NormalInA),
+                                    SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, normal),
                                     RigidBodyIndex = input.QueryContext.RigidBodyIndex,
                                     ColliderKey = input.QueryContext.SetSubKey(terrain.NumColliderKeyBits, terrain.GetSubKey(quadIndex, iTriangle)),
                                     Material = material,

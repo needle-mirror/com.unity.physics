@@ -5,7 +5,7 @@ using Unity.Physics.GraphicsIntegration;
 namespace Unity.Physics.Authoring
 {
     [UpdateAfter(typeof(EndColliderConversionSystem))]
-    public sealed class PhysicsBodyConversionSystem : GameObjectConversionSystem
+    public partial class PhysicsBodyConversionSystem : GameObjectConversionSystem
     {
         protected override void OnUpdate()
         {
@@ -15,17 +15,17 @@ namespace Unity.Physics.Authoring
                     var entity = GetPrimaryEntity(staticOptimized.gameObject);
                     if (DstEntityManager.HasComponent<PhysicsCollider>(entity))
                     {
-                        DstEntityManager.AddSharedComponentData(entity, new PhysicsWorldIndex());
+                        DstEntityManager.AddSharedComponent(entity, new PhysicsWorldIndex());
 
                         DstEntityManager.PostProcessTransformComponents(entity, staticOptimized.transform, BodyMotionType.Static);
                     }
                 }
-            );
+                ).WithStructuralChanges().Run();
             Entities.ForEach(
                 (PhysicsBodyAuthoring body) =>
                 {
                     var entity = GetPrimaryEntity(body.gameObject);
-                    DstEntityManager.AddSharedComponentData(entity, new PhysicsWorldIndex(body.WorldIndex));
+                    DstEntityManager.AddSharedComponent(entity, new PhysicsWorldIndex(body.WorldIndex));
 
                     DstEntityManager.PostProcessTransformComponents(entity, body.transform, body.MotionType);
 
@@ -96,7 +96,7 @@ namespace Unity.Physics.Authoring
                         }
                     }
                 }
-            );
+                ).WithStructuralChanges().Run();
             Entities.ForEach(
                 (PhysicsShapeAuthoring shape) =>
                 {
@@ -109,9 +109,9 @@ namespace Unity.Physics.Authoring
                     var entity = GetPrimaryEntity(shape.gameObject);
                     if (DstEntityManager.HasComponent<PhysicsCollider>(entity))
                     {
-                        DstEntityManager.AddSharedComponentData(entity, new PhysicsWorldIndex());
+                        DstEntityManager.AddSharedComponent(entity, new PhysicsWorldIndex());
                     }
-                });
+                }).WithStructuralChanges().Run();
         }
     }
 }

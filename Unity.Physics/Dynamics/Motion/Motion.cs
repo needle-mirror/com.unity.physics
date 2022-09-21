@@ -3,17 +3,21 @@ using Unity.Mathematics;
 
 namespace Unity.Physics
 {
-    // Describes how mass is distributed within an object
-    // Represented by a transformed box inertia of unit mass.
+    /// <summary>
+    /// Describes how mass is distributed within an object Represented by a transformed box inertia
+    /// of unit mass.
+    /// </summary>
     public struct MassDistribution
     {
-        // The center of mass and the orientation to principal axis space
+        /// <summary>   The center of mass and the orientation to principal axis space. </summary>
         public RigidTransform Transform;
 
-        // Diagonalized inertia tensor for a unit mass
+        /// <summary>   Diagonalized inertia tensor for a unit mass. </summary>
         public float3 InertiaTensor;
 
-        // Get the inertia as a 3x3 matrix
+        /// <summary>   Get the inertia as a 3x3 matrix. </summary>
+        ///
+        /// <value> The inertia matrix. </value>
         public float3x3 InertiaMatrix
         {
             get
@@ -25,21 +29,23 @@ namespace Unity.Physics
         }
     }
 
-    // The mass properties of an object.
+    /// <summary>   The mass properties of an object. </summary>
     public struct MassProperties
     {
-        // The distribution of a unit mass throughout the object.
+        /// <summary>   The distribution of a unit mass throughout the object. </summary>
         public MassDistribution MassDistribution;
 
-        // The volume of the object.
+        /// <summary>   The volume of the object. </summary>
         public float Volume;
 
-        // Upper bound on the rate of change of the object's extent in any direction,
-        // with respect to angular speed around its center of mass.
-        // Used to determine how much to expand a rigid body's AABB to enclose its swept volume.
+        /// <summary>
+        /// Upper bound on the rate of change of the object's extent in any direction, with respect to
+        /// angular speed around its center of mass. Used to determine how much to expand a rigid body's
+        /// AABB to enclose its swept volume.
+        /// </summary>
         public float AngularExpansionFactor;
 
-        // The mass properties of a unit sphere
+        /// <summary>   (Immutable) The mass properties of a unit sphere. </summary>
         public static readonly MassProperties UnitSphere = new MassProperties
         {
             MassDistribution = new MassDistribution
@@ -52,19 +58,23 @@ namespace Unity.Physics
         };
     }
 
-    // A dynamic rigid body's "cold" motion data, used during Jacobian building and integration.
+    /// <summary>
+    /// A dynamic rigid body's "cold" motion data, used during Jacobian building and integration.
+    /// </summary>
     public struct MotionData
     {
-        // Center of mass and inertia orientation in world space
+        /// <summary>   Center of mass and inertia orientation in world space. </summary>
         public RigidTransform WorldFromMotion;
 
-        // Center of mass and inertia orientation in rigid body space
+        /// <summary>   Center of mass and inertia orientation in rigid body space. </summary>
         public RigidTransform BodyFromMotion;
 
-        // Damping applied to the motion during each simulation step
+        /// <summary>   Linear damping applied to the motion during each simulation step. </summary>
         public float LinearDamping;
+        /// <summary>   Angular damping applied to the motion during each simulation step. </summary>
         public float AngularDamping;
 
+        /// <summary>   The Zero Motion Data. All transforms are identites, all dampings are zero. </summary>
         public static readonly MotionData Zero = new MotionData
         {
             WorldFromMotion = RigidTransform.identity,
@@ -74,22 +84,39 @@ namespace Unity.Physics
         };
     }
 
-    // A dynamic rigid body's "hot" motion data, used during solving.
+    /// <summary>   A dynamic rigid body's "hot" motion data, used during solving. </summary>
     public struct MotionVelocity
     {
-        public float3 LinearVelocity;   // world space
-        public float3 AngularVelocity;  // motion space
+        /// <summary>  Linear velocity in  World space. </summary>
+        public float3 LinearVelocity;
+        /// <summary>  Angular velocity in Motion space. </summary>
+        public float3 AngularVelocity;
+        /// <summary>   The inverse inertia. </summary>
         public float3 InverseInertia;
+        /// <summary>   The inverse mass. </summary>
         public float InverseMass;
+        /// <summary>   The angular expansion factor. </summary>
         public float AngularExpansionFactor;
 
-        // A multiplier applied to the simulation step's gravity vector
+        /// <summary>   A multiplier applied to the simulation step's gravity vector. </summary>
         public float GravityFactor;
 
+        /// <summary>   Gets a value indicating whether this object has infinite mass. </summary>
+        ///
+        /// <value> True if this object has infinite mass, false if not. </value>
         public bool HasInfiniteMass => InverseMass == 0.0f;
+
+        /// <summary>   Gets a value indicating whether this object has infinite inertia. </summary>
+        ///
+        /// <value> True if this object has infinite inertia, false if not. </value>
         public bool HasInfiniteInertia => !math.any(InverseInertia);
+
+        /// <summary>   Gets a value indicating whether this object is kinematic. </summary>
+        ///
+        /// <value> True if this object is kinematic, false if not. </value>
         public bool IsKinematic => HasInfiniteMass && HasInfiniteInertia;
 
+        /// <summary>   The zero Motion Velocity. All fields are initialized to zero. </summary>
         public static readonly MotionVelocity Zero = new MotionVelocity
         {
             LinearVelocity = new float3(0),
@@ -100,14 +127,18 @@ namespace Unity.Physics
             GravityFactor = 0.0f
         };
 
-        // Apply a linear impulse (in world space)
+        /// <summary>   Apply a linear impulse (in world space) </summary>
+        ///
+        /// <param name="impulse">  The impulse. </param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ApplyLinearImpulse(float3 impulse)
         {
             LinearVelocity += impulse * InverseMass;
         }
 
-        // Apply an angular impulse (in motion space)
+        /// <summary>   Apply an angular impulse (in motion space) </summary>
+        ///
+        /// <param name="impulse">  The impulse. </param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ApplyAngularImpulse(float3 impulse)
         {
@@ -146,13 +177,20 @@ namespace Unity.Physics
             Max = math.max(aabb.Max, aabb.Max + Linear) + Uniform,
             Min = math.min(aabb.Min, aabb.Min + Linear) - Uniform
         };
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static implicit operator MotionExpansion(float4 motionExpansion) => new MotionExpansion { Linear = motionExpansion.xyz, Uniform = motionExpansion.w };
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static implicit operator float4(MotionExpansion motionExpansion) => new float4(motionExpansion.Linear, motionExpansion.Uniform);
     }
 
-    // A linear and angular velocity
-    public struct Velocity
+    internal struct Velocity
     {
-        public float3 Linear;   // world space
-        public float3 Angular;  // motion space
+        /// <summary>   World space linear velocity. </summary>
+        public float3 Linear;
+        /// <summary>   Motion space angular velocity. </summary>
+        public float3 Angular;
 
         public static readonly Velocity Zero = new Velocity
         {

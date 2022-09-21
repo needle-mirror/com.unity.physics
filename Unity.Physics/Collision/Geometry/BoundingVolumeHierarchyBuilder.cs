@@ -11,7 +11,7 @@ using static Unity.Physics.Math;
 namespace Unity.Physics
 {
     // Utilities for building bounding volume hierarchies
-    public partial struct BoundingVolumeHierarchy
+    internal partial struct BoundingVolumeHierarchy
     {
         public struct Constants
         {
@@ -415,7 +415,7 @@ namespace Unity.Physics
         }
 
         public unsafe JobHandle ScheduleBuildJobs(
-            NativeArray<PointAndIndex> points, NativeArray<Aabb> aabbs, NativeArray<CollisionFilter> bodyFilters, NativeArray<int> shouldDoWork,
+            NativeArray<PointAndIndex> points, NativeArray<Aabb> aabbs, NativeArray<CollisionFilter> bodyFilters, NativeReference<int>.ReadOnly shouldDoWork,
             int numThreadsHint, JobHandle inputDeps, int numNodes, NativeArray<Builder.Range> ranges, NativeArray<int> numBranches)
         {
             JobHandle handle = inputDeps;
@@ -767,7 +767,7 @@ namespace Unity.Physics
             public NativeArray<int> BranchNodeOffsets;
             public NativeArray<int> BranchCount;
             public NativeArray<int> OldBranchCount;
-            public NativeArray<int> ShouldDoWork;
+            public NativeReference<int>.ReadOnly ShouldDoWork;
 
             public int ThreadCount;
 
@@ -776,7 +776,7 @@ namespace Unity.Physics
                 // Save old branch count for finalize tree job
                 OldBranchCount[0] = BranchCount[0];
 
-                if (ShouldDoWork[0] == 0)
+                if (ShouldDoWork.Value == 0)
                 {
                     // If we need to to skip tree building tasks, than set BranchCount to zero so
                     // that BuildBranchesJob also gets early out in runtime.
@@ -827,7 +827,7 @@ namespace Unity.Physics
             [ReadOnly][DeallocateOnJobCompletion] public NativeArray<Aabb> Aabbs;
             [ReadOnly][DeallocateOnJobCompletion] public NativeArray<int> BranchNodeOffsets;
             [ReadOnly] public NativeArray<CollisionFilter> LeafFilters;
-            [ReadOnly] public NativeArray<int> ShouldDoWork;
+            public NativeReference<int>.ReadOnly ShouldDoWork;
             [NativeDisableUnsafePtrRestriction]
             public Node* Nodes;
             [NativeDisableUnsafePtrRestriction]
@@ -838,7 +838,7 @@ namespace Unity.Physics
 
             public void Execute()
             {
-                if (ShouldDoWork[0] == 0)
+                if (ShouldDoWork.Value == 0)
                 {
                     // Restore original branch count
                     BranchCount[0] = OldBranchCount[0];

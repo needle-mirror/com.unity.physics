@@ -33,7 +33,7 @@ namespace Unity.Physics.Authoring
         public bool DrawTriggerEvents = false;
         public bool DrawJoints = false;
 
-        private PhysicsDebugDisplayData AsComponent => new PhysicsDebugDisplayData
+        internal PhysicsDebugDisplayData AsComponent => new PhysicsDebugDisplayData
         {
             DrawColliders = DrawColliders ? 1 : 0,
             DrawColliderEdges = DrawColliderEdges ? 1 : 0,
@@ -68,6 +68,14 @@ namespace Unity.Physics.Authoring
             {
                 m_ConvertedEntityManager.SetComponentData(m_ConvertedEntity, AsComponent);
             }
+        }
+    }
+
+    public class PhysicsDebugDisplayDataBaker : Baker<PhysicsDebugDisplayAuthoring>
+    {
+        public override void Bake(PhysicsDebugDisplayAuthoring authoring)
+        {
+            AddComponent(authoring.AsComponent);
         }
     }
 }

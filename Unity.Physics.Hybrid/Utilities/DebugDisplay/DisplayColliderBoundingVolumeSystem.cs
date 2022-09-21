@@ -11,68 +11,54 @@ namespace Unity.Physics.Authoring
 {
     /// Job to iterate over all the bodies in a scene, for any
     /// which have a collider, calculate the bounding box and
-    /// write it to a debug stream.
+    /// display it.
     [BurstCompile]
-    public unsafe struct DisplayColliderAabbsJob : IJob //<todo.eoin.udebug This can be a parallelfor job
+    public struct DisplayColliderAabbsJob : IJobParallelFor
     {
-        public DebugStream.Context OutputStream;
         [ReadOnly] public NativeArray<RigidBody> Bodies;
 
-        public void Execute()
+        public void Execute(int b)
         {
-            OutputStream.Begin(0);
-
-            for (int b = 0; b < Bodies.Length; b++)
+            if (Bodies[b].Collider.IsCreated)
             {
-                if (Bodies[b].Collider.IsCreated)
-                {
-                    Aabb aabb = Bodies[b].Collider.Value.CalculateAabb(Bodies[b].WorldFromBody);
-
-                    float3 center = aabb.Center;
-                    OutputStream.Box(aabb.Extents, center, Quaternion.identity, DebugDisplay.ColorIndex.BrightRed);
-                }
+                Aabb aabb = Bodies[b].CalculateAabb();
+                float3 center = aabb.Center;
+                PhysicsDebugDisplaySystem.Box(aabb.Extents, center, Quaternion.identity, DebugDisplay.ColorIndex.BrightRed);
             }
-            OutputStream.End();
         }
     }
 
     /// Create a DisplayColliderAabbsJob
-    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
-    [UpdateAfter(typeof(BuildPhysicsWorld)), UpdateBefore(typeof(StepPhysicsWorld))]
-    public partial class DisplayColliderAabbsSystem : SystemBase
+    [RequireMatchingQueriesForUpdate]
+    [UpdateInGroup(typeof(PhysicsSimulationGroup))]
+    [UpdateAfter(typeof(PhysicsCreateBodyPairsGroup)), UpdateBefore(typeof(PhysicsCreateContactsGroup))]
+    [BurstCompile]
+    internal partial struct DisplayColliderAabbsSystem : ISystem
     {
-        BuildPhysicsWorld m_BuildPhysicsWorldSystem;
-        StepPhysicsWorld m_StepPhysicsWorld;
-        DebugStream m_DebugStreamSystem;
+        [BurstCompile]
+        public void OnCreate(ref SystemState state) {}
 
-        protected override void OnCreate()
-        {
-            m_BuildPhysicsWorldSystem = World.GetOrCreateSystem<BuildPhysicsWorld>();
-            m_StepPhysicsWorld = World.GetOrCreateSystem<StepPhysicsWorld>();
-            m_DebugStreamSystem = World.GetOrCreateSystem<DebugStream>();
-        }
+        [BurstCompile]
+        public void OnDestroy(ref SystemState state) {}
 
-        protected override void OnUpdate()
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
         {
-            if (!(HasSingleton<PhysicsDebugDisplayData>() && GetSingleton<PhysicsDebugDisplayData>().DrawColliderAabbs != 0))
+#if UNITY_EDITOR
+            if (!SystemAPI.TryGetSingleton(out PhysicsDebugDisplayData debugDisplay) || debugDisplay.DrawColliderAabbs == 0)
+                return;
+
+            var world = SystemAPI.GetSingleton<PhysicsWorldSingleton>().PhysicsWorld;
+            if (world.NumBodies == 0)
             {
                 return;
             }
 
-            if (m_BuildPhysicsWorldSystem.PhysicsWorld.NumBodies == 0)
+            state.Dependency = new DisplayColliderAabbsJob()
             {
-                return;
-            }
-
-            SimulationCallbacks.Callback callback = (ref ISimulation simulation, ref PhysicsWorld world, JobHandle deps) =>
-            {
-                return new DisplayColliderAabbsJob
-                {
-                    OutputStream = m_DebugStreamSystem.GetContext(1),
-                    Bodies = m_BuildPhysicsWorldSystem.PhysicsWorld.Bodies
-                }.Schedule(deps);
-            };
-            m_StepPhysicsWorld.EnqueueCallback(SimulationCallbacks.Phase.PostCreateDispatchPairs, callback);
+                Bodies = world.Bodies
+            }.Schedule(world.NumBodies, 16, state.Dependency);
+#endif
         }
     }
 }

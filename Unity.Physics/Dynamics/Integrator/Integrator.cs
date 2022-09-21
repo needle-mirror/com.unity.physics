@@ -6,9 +6,14 @@ using Unity.Mathematics;
 
 namespace Unity.Physics
 {
+    /// <summary>   Integrates world's motions. </summary>
     public static class Integrator
     {
-        // Integrate the world's motions forward by the given time step.
+        /// <summary>   Integrate the world's motions forward by the given time step. </summary>
+        ///
+        /// <param name="motionDatas">      The motion datas. </param>
+        /// <param name="motionVelocities"> The motion velocities. </param>
+        /// <param name="timeStep">         The time step. </param>
         public static void Integrate(NativeArray<MotionData> motionDatas, NativeArray<MotionVelocity> motionVelocities, float timeStep)
         {
             for (int i = 0; i < motionDatas.Length; i++)
@@ -17,7 +22,11 @@ namespace Unity.Physics
             }
         }
 
-        // Integrate a single transform for the provided velocity and time
+        /// <summary>   Integrate a single transform for the provided velocity and time. </summary>
+        ///
+        /// <param name="transform">        [in,out] The transform. </param>
+        /// <param name="motionVelocity">   The motion velocity. </param>
+        /// <param name="timeStep">         The time step. </param>
         public static void Integrate(ref RigidTransform transform, in MotionVelocity motionVelocity, in float timeStep)
         {
             // center of mass

@@ -151,7 +151,8 @@ namespace Unity.Physics.Tests.Joints
         delegate Joint GenerateJoint(ref Random rnd);
 
         unsafe static void SolveSingleJoint(Joint jointData, int numIterations, float timestep,
-            ref MotionVelocity velocityA, ref MotionVelocity velocityB, ref MotionData motionA, ref MotionData motionB, out NativeStream jacobiansOut)
+            ref MotionVelocity velocityA, ref MotionVelocity velocityB, ref MotionData motionA,
+            ref MotionData motionB, out NativeStream jacobiansOut, NativeStream impulseEventStream = default)
         {
             var stepInput = new Solver.StepInput
             {
@@ -171,6 +172,7 @@ namespace Unity.Physics.Tests.Joints
             }
 
             var eventWriter = new NativeStream.Writer(); // no events expected
+            NativeStream.Writer impulseEventWriter = impulseEventStream.IsCreated ? impulseEventStream.AsWriter() : default;
 
             // Solve the joint
             for (int iIteration = 0; iIteration < numIterations; iIteration++)
@@ -178,12 +180,19 @@ namespace Unity.Physics.Tests.Joints
                 stepInput.IsLastIteration = (iIteration == numIterations - 1);
                 NativeStream.Reader jacobianReader = jacobiansOut.AsReader();
                 var jacIterator = new JacobianIterator(jacobianReader, 0);
+
+                if (impulseEventStream.IsCreated && iIteration == (numIterations - 1))
+                    impulseEventWriter.BeginForEachIndex(0);
+
                 while (jacIterator.HasJacobiansLeft())
                 {
                     ref JacobianHeader header = ref jacIterator.ReadJacobianHeader();
-                    header.Solve(ref velocityA, ref velocityB, stepInput, ref eventWriter, ref eventWriter,
+                    header.Solve(ref velocityA, ref velocityB, stepInput, ref eventWriter, ref eventWriter, ref impulseEventWriter,
                         false, Solver.MotionStabilizationInput.Default, Solver.MotionStabilizationInput.Default);
                 }
+
+                if (impulseEventStream.IsCreated && iIteration == (numIterations - 1))
+                    impulseEventWriter.EndForEachIndex();
             }
 
             // After solving, integrate motions
@@ -299,8 +308,88 @@ namespace Unity.Physics.Tests.Joints
         {
             AFromJoint = joint.BodyAFromJoint.AsMTransform(),
             BFromJoint = joint.BodyBFromJoint.AsMTransform(),
-            Constraints = joint.GetConstraints()
+            Constraints = joint.m_Constraints
         };
+
+        [Test]
+        public void FireImpulseEventTest()
+        {
+            var bodyAFromJoint = BodyFrame.Identity;
+            bodyAFromJoint.Position = new float3(0, 0.5f, 0);
+            var bodyBFromJoint = BodyFrame.Identity;
+            bodyBFromJoint.Position = new float3(0, 0.5f, 0);
+
+            var constraint = new Constraint
+            {
+                ConstrainedAxes = new bool3(true),
+                Type = ConstraintType.Linear,
+                Min = 0.5f,
+                Max = 2.0f,
+                SpringFrequency = Constraint.DefaultSpringFrequency,
+                SpringDamping = Constraint.DefaultSpringDamping,
+                MaxImpulse = float3.zero,
+                EnableImpulseEvents = true
+            };
+
+            ConstraintBlock3 constraintblock = new ConstraintBlock3
+            {
+                A = constraint,
+                Length = 1
+            };
+
+            var jointData = new Joint
+            {
+                AFromJoint = bodyAFromJoint.AsMTransform(),
+                BFromJoint = bodyBFromJoint.AsMTransform(),
+                Constraints = constraintblock
+            };
+
+            MotionVelocity velocityA = new MotionVelocity
+            {
+                LinearVelocity = new float3(10),
+                AngularVelocity = new float3(10),
+                InverseInertia = new float3(1),
+                InverseMass = 1
+            };
+            MotionVelocity velocityB = new MotionVelocity
+            {
+                LinearVelocity = float3.zero,
+                AngularVelocity = float3.zero,
+                InverseInertia = float3.zero,
+                InverseMass = 0.0f
+            };
+
+            MotionData motionData = new MotionData
+            {
+                WorldFromMotion = RigidTransform.identity,
+                BodyFromMotion = RigidTransform.identity
+            };
+
+            // Build input
+            const float timestep = 1.0f / 50.0f;
+            const int numFrames = 15;
+            float3 gravity = new float3(0.0f, -9.81f, 0.0f);
+
+            // Simulate N frames
+            for (int frame = 0; frame < numFrames; frame++)
+            {
+                using (var impulseEventStream = new NativeStream(1, Allocator.Temp))
+                {
+                    // Before solving, apply gravity
+                    applyGravity(ref velocityA, ref motionData, gravity, timestep);
+                    applyGravity(ref velocityB, ref motionData, gravity, timestep);
+
+                    // Solve and integrate
+                    SolveSingleJoint(jointData, 4, timestep, ref velocityA, ref velocityB, ref motionData, ref motionData, out NativeStream jacobians, impulseEventStream);
+
+                    // We expect 1 event to be in the stream
+                    Assert.AreEqual(1, impulseEventStream.Count());
+
+                    // Cleanup
+                    jacobians.Dispose();
+                }
+            }
+        }
 
         [Test]
         public unsafe void BallAndSocketTest()
@@ -447,7 +536,8 @@ namespace Unity.Physics.Tests.Joints
                         AFromJoint = MTransform.Identity,
                         BFromJoint = MTransform.Identity
                     };
-                    jointData.Constraints.Add(Constraint.Twist(i, new FloatRange(minLimit, maxLimit)));
+                    jointData.Constraints.A = Constraint.Twist(i, new FloatRange(minLimit, maxLimit));
+                    jointData.Constraints.Length = 1;
                     SolveSingleJoint(jointData, 4, 1.0f, ref velocityA, ref velocityB, ref motionA, ref motionB, out NativeStream jacobians);
 
                     quaternion expectedOrientation = quaternion.AxisAngle(axis, minLimit + maxLimit);

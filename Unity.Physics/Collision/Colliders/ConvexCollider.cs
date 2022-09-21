@@ -7,6 +7,7 @@ using UnityEngine.Assertions;
 
 namespace Unity.Physics
 {
+    /// <summary>   Convex hull generation parameters. </summary>
     [Serializable]
     public struct ConvexHullGenerationParameters : IEquatable<ConvexHullGenerationParameters>
     {
@@ -17,6 +18,7 @@ namespace Unity.Physics
         const float k_DefaultBevelRadius = 0.05f;
         const float k_DefaultMinAngle = 2.5f * math.PI / 180f; // 2.5 degrees
 
+        /// <summary>   Default convex hull generation parameters. </summary>
         public static readonly ConvexHullGenerationParameters Default = new ConvexHullGenerationParameters
         {
             SimplificationTolerance = k_DefaultSimplificationTolerance,
@@ -24,33 +26,54 @@ namespace Unity.Physics
             MinimumAngle = k_DefaultMinAngle
         };
 
+        /// <summary>   Specifies maximum distance that any input point may be moved when simplifying convex hull. </summary>
+        ///
+        /// <value> The simplification tolerance. </value>
         public float SimplificationTolerance { get => m_SimplificationTolerance; set => m_SimplificationTolerance = value; }
         [UnityEngine.Tooltip("Specifies maximum distance that any input point may be moved when simplifying convex hull.")]
         [UnityEngine.SerializeField]
         float m_SimplificationTolerance;
 
+        /// <summary>   Gets or sets the bevel radius. </summary>
+        ///
+        /// <value> The bevel radius. </value>
         public float BevelRadius { get => m_BevelRadius; set => m_BevelRadius = value; }
         [UnityEngine.Tooltip(k_BevelRadiusTooltip)]
         [UnityEngine.SerializeField]
         float m_BevelRadius;
 
+        /// <summary>   Specifies the angle between adjacent faces below which they should be made coplanar.. </summary>
+        ///
+        /// <value> The minimum angle. </value>
         public float MinimumAngle { get => m_MinimumAngle; set => m_MinimumAngle = value; }
         [UnityEngine.Tooltip("Specifies the angle between adjacent faces below which they should be made coplanar.")]
         [UnityEngine.SerializeField]
         float m_MinimumAngle;
 
+        /// <summary>
+        /// Tests if this ConvexHullGenerationParameters is considered equal to another.
+        /// </summary>
+        ///
+        /// <param name="other">    The convex hull generation parameters to compare to this object. </param>
+        ///
+        /// <returns>   True if the objects are considered equal, false if they are not. </returns>
         public bool Equals(ConvexHullGenerationParameters other) =>
             m_SimplificationTolerance == other.m_SimplificationTolerance
             && m_BevelRadius == other.m_BevelRadius
             && m_MinimumAngle == other.m_MinimumAngle;
 
+        /// <summary>   Calculates a hash code for this object. </summary>
+        ///
+        /// <returns>   A hash code for this object. </returns>
         public override int GetHashCode() =>
             unchecked((int)math.hash(new float3(m_SimplificationTolerance, m_BevelRadius, m_MinimumAngle)));
     }
 
-    // A collider in the shape of an arbitrary convex hull.
-    // Warning: This is just the header, it is followed by variable sized data in memory.
-    // Therefore this struct must always be passed by reference, never by value.
+    /// <summary>
+    /// A collider in the shape of an arbitrary convex hull. Warning: This is just the header, it is
+    /// followed by variable sized data in memory. Therefore this struct must always be passed by
+    /// reference, never by value.
+    /// </summary>
     public struct ConvexCollider : IConvexCollider
     {
         // Header
@@ -65,17 +88,37 @@ namespace Unity.Physics
 
         #region Construction
 
-        // Create a convex collider from the given point cloud.
+        /// <summary>   Create a convex collider from the given point cloud. </summary>
+        ///
+        /// <param name="points">               The points. </param>
+        /// <param name="generationParameters"> Options for controlling the generation. </param>
+        ///
+        /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
         public static BlobAssetReference<Collider> Create(
             NativeArray<float3> points, ConvexHullGenerationParameters generationParameters
         ) =>
             Create(points, generationParameters, CollisionFilter.Default, Material.Default);
 
+        /// <summary>   Creates a convex collider from the given point cloud </summary>
+        ///
+        /// <param name="points">               The points. </param>
+        /// <param name="generationParameters"> Options for controlling the generation. </param>
+        /// <param name="filter">               Specifies the filter. </param>
+        ///
+        /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
         public static BlobAssetReference<Collider> Create(
             NativeArray<float3> points, ConvexHullGenerationParameters generationParameters, CollisionFilter filter
         ) =>
             Create(points, generationParameters, filter, Material.Default);
 
+        /// <summary>   Creates a convex collider from the given point cloud</summary>
+        ///
+        /// <param name="points">               The points. </param>
+        /// <param name="generationParameters"> Options for controlling the generation. </param>
+        /// <param name="filter">               Specifies the filter. </param>
+        /// <param name="material">             The material. </param>
+        ///
+        /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
         public static BlobAssetReference<Collider> Create(
             NativeArray<float3> points, ConvexHullGenerationParameters generationParameters, CollisionFilter filter, Material material
         ) =>
@@ -272,13 +315,13 @@ namespace Unity.Physics
                                 byte vertexIndex = vertexIndexMap[builder.StartVertex(edge)];
                                 FaceVertexIndices.Add(vertexIndex);
 
-                                var hullEdge = new ConvexHull.Edge { FaceIndex = (short)edge.Current.TriangleIndex, EdgeIndex = (byte)edge.Current.EdgeIndex }; // will be mapped to the output hull below
+                                var hullEdge = new ConvexHull.Edge { FaceIndex = (short)edge.Current.TriangleIndex, EdgeIndex = (byte)edge.Current.EdgeIndex };             // will be mapped to the output hull below
                                 edgeMap.TryAdd(hullEdge, new ConvexHull.Edge { FaceIndex = (short)Faces.Length, EdgeIndex = numEdges });
 
                                 VertexEdges[vertexIndex] = hullEdge;
 
                                 ConvexHullBuilder.Edge linkedEdge = builder.GetLinkedEdge(edge);
-                                FaceLinks.Add(new ConvexHull.Edge { FaceIndex = (short)linkedEdge.TriangleIndex, EdgeIndex = (byte)linkedEdge.EdgeIndex }); // will be mapped to the output hull below
+                                FaceLinks.Add(new ConvexHull.Edge { FaceIndex = (short)linkedEdge.TriangleIndex, EdgeIndex = (byte)linkedEdge.EdgeIndex });             // will be mapped to the output hull below
 
                                 ConvexHullBuilder.Triangle linkedTriangle = builder.Triangles[linkedEdge.TriangleIndex];
                                 Plane linkedPlane = builder.Planes[linkedTriangle.FaceIndex];
@@ -347,7 +390,7 @@ namespace Unity.Physics
                             for (int i = 2; i < Vertices.Length; i++)
                             {
                                 cross = math.cross(edge0, Vertices[i] - Vertices[0]);
-                                if (math.lengthsq(cross) > 1e-8f) // take the first cross product good enough to calculate a normal
+                                if (math.lengthsq(cross) > 1e-8f)             // take the first cross product good enough to calculate a normal
                                 {
                                     break;
                                 }
@@ -382,142 +425,549 @@ namespace Unity.Physics
 
         #region IConvexCollider
 
+        /// <summary>   Gets the type. </summary>
+        ///
+        /// <value> The type. </value>
         public ColliderType Type => m_Header.Type;
+
+        /// <summary>   Gets the collision type. </summary>
+        ///
+        /// <value> The collision type. </value>
         public CollisionType CollisionType => m_Header.CollisionType;
+
+        /// <summary>   Gets the memory size of this collider. </summary>
+        ///
+        /// <value> The memory size of this collider. </value>
         public int MemorySize { get; private set; }
 
-        public CollisionFilter Filter { get => m_Header.Filter; set { if (!m_Header.Filter.Equals(value)) { m_Header.Version += 1; m_Header.Filter = value; } } }
+        /// <summary>   Gets the collision filter. </summary>
+        ///
+        /// <returns>   The collision filter. </returns>
+        public CollisionFilter GetCollisionFilter() => m_Header.Filter;
+
+        /// <summary>   Sets the collision filter. </summary>
+        ///
+        /// <param name="filter">   Specifies the filter. </param>
+        public void SetCollisionFilter(CollisionFilter filter)
+        {
+            if (!m_Header.Filter.Equals(filter)) { m_Header.Version++; m_Header.Filter = filter; }
+        }
+
         internal bool RespondsToCollision => m_Header.Material.CollisionResponse != CollisionResponsePolicy.None;
-        public Material Material { get => m_Header.Material; set { if (!m_Header.Material.Equals(value)) { m_Header.Version += 1; m_Header.Material = value; } } }
+
+        /// <summary>   Gets or sets the material. </summary>
+        ///
+        /// <value> The material. </value>
+        public Material Material { get => m_Header.Material; set { if (!m_Header.Material.Equals(value)) { m_Header.Version++; m_Header.Material = value; } } }
+
+        /// <summary>   Gets the mass properties. </summary>
+        ///
+        /// <value> The mass properties. </value>
         public MassProperties MassProperties { get; private set; }
+
+        internal void SetMaterialField(Material material, Material.MaterialField option)
+        {
+            m_Header.Version++;
+            m_Header.Material.SetMaterialField(material, option);
+        }
 
         internal float CalculateBoundingRadius(float3 pivot)
         {
             return ConvexHull.CalculateBoundingRadius(pivot);
         }
 
+        /// <summary>   Calculates the aabb. </summary>
+        ///
+        /// <returns>   The calculated aabb. </returns>
         public Aabb CalculateAabb()
         {
             return CalculateAabb(RigidTransform.identity);
         }
 
-        public Aabb CalculateAabb(RigidTransform transform)
+        /// <summary>   Calculates the aabb. </summary>
+        ///
+        /// <param name="transform">    The transform. </param>
+        /// <param name="uniformScale"> (Optional) The uniform scale. </param>
+        ///
+        /// <returns>   The calculated aabb. </returns>
+        public Aabb CalculateAabb(RigidTransform transform, float uniformScale = 1.0f)
         {
             BlobArray.Accessor<float3> vertices = ConvexHull.Vertices;
             float3 min = math.rotate(transform, vertices[0]);
             float3 max = min;
+
             for (int i = 1; i < vertices.Length; ++i)
             {
                 float3 v = math.rotate(transform, vertices[i]);
                 min = math.min(min, v);
                 max = math.max(max, v);
             }
+
+            min = (min - new float3(ConvexHull.ConvexRadius)) * uniformScale + transform.pos;
+            max = (max + new float3(ConvexHull.ConvexRadius)) * uniformScale + transform.pos;
+
             return new Aabb
             {
-                Min = min + transform.pos - new float3(ConvexHull.ConvexRadius),
-                Max = max + transform.pos + new float3(ConvexHull.ConvexRadius)
+                Min = math.min(min, max),
+                Max = math.max(min, max)
             };
         }
 
-        // Cast a ray against this collider.
-        public bool CastRay(RaycastInput input) => QueryWrappers.RayCast(ref this, input);
-        public bool CastRay(RaycastInput input, out RaycastHit closestHit) => QueryWrappers.RayCast(ref this, input, out closestHit);
-        public bool CastRay(RaycastInput input, ref NativeList<RaycastHit> allHits) => QueryWrappers.RayCast(ref this, input, ref allHits);
-        public unsafe bool CastRay<T>(RaycastInput input, ref T collector) where T : struct, ICollector<RaycastHit>
+        /// <summary>   Cast a ray against this collider. </summary>
+        ///
+        /// <param name="input">    The input. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
+        public bool CastRay(RaycastInput input) => QueryWrappers.RayCast(in this, input);
+
+        /// <summary>   Cast ray. </summary>
+        ///
+        /// <param name="input">        The input. </param>
+        /// <param name="closestHit">   [out] The closest hit. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
+        public bool CastRay(RaycastInput input, out RaycastHit closestHit) => QueryWrappers.RayCast(in this, input, out closestHit);
+
+        /// <summary>   Cast ray. </summary>
+        ///
+        /// <param name="input">    The input. </param>
+        /// <param name="allHits">  [in,out] all hits. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
+        public bool CastRay(RaycastInput input, ref NativeList<RaycastHit> allHits) => QueryWrappers.RayCast(in this, input, ref allHits);
+
+        /// <summary>   Cast ray. </summary>
+        ///
+        /// <typeparam name="T">    Generic type parameter. </typeparam>
+        /// <param name="input">        The input. </param>
+        /// <param name="collector">    [in,out] The collector. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
+        public bool CastRay<T>(RaycastInput input, ref T collector) where T : struct, ICollector<RaycastHit>
         {
-            fixed(ConvexCollider* target = &this)
+            unsafe
             {
-                return RaycastQueries.RayCollider(input, (Collider*)target, ref collector);
+                fixed(ConvexCollider* target = &this)
+                {
+                    return RaycastQueries.RayCollider(input, (Collider*)target, ref collector);
+                }
             }
         }
 
-        // Cast another collider against this one.
-        public bool CastCollider(ColliderCastInput input) => QueryWrappers.ColliderCast(ref this, input);
-        public bool CastCollider(ColliderCastInput input, out ColliderCastHit closestHit) => QueryWrappers.ColliderCast(ref this, input, out closestHit);
-        public bool CastCollider(ColliderCastInput input, ref NativeList<ColliderCastHit> allHits) => QueryWrappers.ColliderCast(ref this, input, ref allHits);
-        public unsafe bool CastCollider<T>(ColliderCastInput input, ref T collector) where T : struct, ICollector<ColliderCastHit>
+        /// <summary>   Cast another collider against this one. </summary>
+        ///
+        /// <param name="input">    The input. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
+        public bool CastCollider(ColliderCastInput input) => QueryWrappers.ColliderCast(in this, input);
+
+        /// <summary>   Cast collider. </summary>
+        ///
+        /// <param name="input">        The input. </param>
+        /// <param name="closestHit">   [out] The closest hit. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
+        public bool CastCollider(ColliderCastInput input, out ColliderCastHit closestHit) => QueryWrappers.ColliderCast(in this, input, out closestHit);
+
+        /// <summary>   Cast collider. </summary>
+        ///
+        /// <param name="input">    The input. </param>
+        /// <param name="allHits">  [in,out] all hits. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
+        public bool CastCollider(ColliderCastInput input, ref NativeList<ColliderCastHit> allHits) => QueryWrappers.ColliderCast(in this, input, ref allHits);
+
+        /// <summary>   Cast collider. </summary>
+        ///
+        /// <typeparam name="T">    Generic type parameter. </typeparam>
+        /// <param name="input">        The input. </param>
+        /// <param name="collector">    [in,out] The collector. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
+        public bool CastCollider<T>(ColliderCastInput input, ref T collector) where T : struct, ICollector<ColliderCastHit>
         {
-            fixed(ConvexCollider* target = &this)
+            unsafe
             {
-                return ColliderCastQueries.ColliderCollider(input, (Collider*)target, ref collector);
+                fixed(ConvexCollider* target = &this)
+                {
+                    return ColliderCastQueries.ColliderCollider(input, (Collider*)target, ref collector);
+                }
             }
         }
 
-        // Calculate the distance from a point to this collider.
-        public bool CalculateDistance(PointDistanceInput input) => QueryWrappers.CalculateDistance(ref this, input);
-        public bool CalculateDistance(PointDistanceInput input, out DistanceHit closestHit) => QueryWrappers.CalculateDistance(ref this, input, out closestHit);
-        public bool CalculateDistance(PointDistanceInput input, ref NativeList<DistanceHit> allHits) => QueryWrappers.CalculateDistance(ref this, input, ref allHits);
-        public unsafe bool CalculateDistance<T>(PointDistanceInput input, ref T collector) where T : struct, ICollector<DistanceHit>
+        /// <summary>   Calculate the distance from a point to this collider. </summary>
+        ///
+        /// <param name="input">    The input. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
+        public bool CalculateDistance(PointDistanceInput input) => QueryWrappers.CalculateDistance(in this, input);
+
+        /// <summary>   Calculates the distance. </summary>
+        ///
+        /// <param name="input">        The input. </param>
+        /// <param name="closestHit">   [out] The closest hit. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
+        public bool CalculateDistance(PointDistanceInput input, out DistanceHit closestHit) => QueryWrappers.CalculateDistance(in this, input, out closestHit);
+
+        /// <summary>   Calculates the distance. </summary>
+        ///
+        /// <param name="input">    The input. </param>
+        /// <param name="allHits">  [in,out] all hits. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
+        public bool CalculateDistance(PointDistanceInput input, ref NativeList<DistanceHit> allHits) => QueryWrappers.CalculateDistance(in this, input, ref allHits);
+
+        /// <summary>   Calculates the distance. </summary>
+        ///
+        /// <typeparam name="T">    Generic type parameter. </typeparam>
+        /// <param name="input">        The input. </param>
+        /// <param name="collector">    [in,out] The collector. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
+        public bool CalculateDistance<T>(PointDistanceInput input, ref T collector) where T : struct, ICollector<DistanceHit>
         {
-            fixed(ConvexCollider* target = &this)
+            unsafe
             {
-                return DistanceQueries.PointCollider(input, (Collider*)target, ref collector);
+                fixed(ConvexCollider* target = &this)
+                {
+                    return DistanceQueries.PointCollider(input, (Collider*)target, ref collector);
+                }
             }
         }
 
-        // Calculate the distance from another collider to this one.
-        public bool CalculateDistance(ColliderDistanceInput input) => QueryWrappers.CalculateDistance(ref this, input);
-        public bool CalculateDistance(ColliderDistanceInput input, out DistanceHit closestHit) => QueryWrappers.CalculateDistance(ref this, input, out closestHit);
-        public bool CalculateDistance(ColliderDistanceInput input, ref NativeList<DistanceHit> allHits) => QueryWrappers.CalculateDistance(ref this, input, ref allHits);
-        public unsafe bool CalculateDistance<T>(ColliderDistanceInput input, ref T collector) where T : struct, ICollector<DistanceHit>
+        /// <summary>   Calculate the distance from another collider to this one. </summary>
+        ///
+        /// <param name="input">    The input. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
+        public bool CalculateDistance(ColliderDistanceInput input) => QueryWrappers.CalculateDistance(in this, input);
+
+        /// <summary>   Calculates the distance. </summary>
+        ///
+        /// <param name="input">        The input. </param>
+        /// <param name="closestHit">   [out] The closest hit. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
+        public bool CalculateDistance(ColliderDistanceInput input, out DistanceHit closestHit) => QueryWrappers.CalculateDistance(in this, input, out closestHit);
+
+        /// <summary>   Calculates the distance. </summary>
+        ///
+        /// <param name="input">    The input. </param>
+        /// <param name="allHits">  [in,out] all hits. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
+        public bool CalculateDistance(ColliderDistanceInput input, ref NativeList<DistanceHit> allHits) => QueryWrappers.CalculateDistance(in this, input, ref allHits);
+
+        /// <summary>   Calculates the distance. </summary>
+        ///
+        /// <typeparam name="T">    Generic type parameter. </typeparam>
+        /// <param name="input">        The input. </param>
+        /// <param name="collector">    [in,out] The collector. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
+        public bool CalculateDistance<T>(ColliderDistanceInput input, ref T collector) where T : struct, ICollector<DistanceHit>
         {
-            fixed(ConvexCollider* target = &this)
+            unsafe
             {
-                return DistanceQueries.ColliderCollider(input, (Collider*)target, ref collector);
+                fixed(ConvexCollider* target = &this)
+                {
+                    return DistanceQueries.ColliderCollider(input, (Collider*)target, ref collector);
+                }
             }
         }
 
         #region GO API Queries
 
-        // Interfaces that represent queries that exist in the GameObjects world.
-
+        /// <summary>  Checks if a sphere overlaps this collider. </summary>
+        ///
+        /// <param name="position">         The position. </param>
+        /// <param name="radius">           The radius. </param>
+        /// <param name="filter">           Specifies the filter. </param>
+        /// <param name="queryInteraction"> (Optional) The query interaction. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
         public bool CheckSphere(float3 position, float radius, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default)
-            => QueryWrappers.CheckSphere(ref this, position, radius, filter, queryInteraction);
+            => QueryWrappers.CheckSphere(in this, position, radius, filter, queryInteraction);
+
+        /// <summary>   Overlap sphere. </summary>
+        ///
+        /// <param name="position">         The position. </param>
+        /// <param name="radius">           The radius. </param>
+        /// <param name="outHits">          [in,out] The out hits. </param>
+        /// <param name="filter">           Specifies the filter. </param>
+        /// <param name="queryInteraction"> (Optional) The query interaction. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
         public bool OverlapSphere(float3 position, float radius, ref NativeList<DistanceHit> outHits, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default)
-            => QueryWrappers.OverlapSphere(ref this, position, radius, ref outHits, filter, queryInteraction);
+            => QueryWrappers.OverlapSphere(in this, position, radius, ref outHits, filter, queryInteraction);
+
+        /// <summary>   Overlap sphere custom. </summary>
+        ///
+        /// <typeparam name="T">    Generic type parameter. </typeparam>
+        /// <param name="position">         The position. </param>
+        /// <param name="radius">           The radius. </param>
+        /// <param name="collector">        [in,out] The collector. </param>
+        /// <param name="filter">           Specifies the filter. </param>
+        /// <param name="queryInteraction"> (Optional) The query interaction. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
         public bool OverlapSphereCustom<T>(float3 position, float radius, ref T collector, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default) where T : struct, ICollector<DistanceHit>
-            => QueryWrappers.OverlapSphereCustom(ref this, position, radius, ref collector, filter, queryInteraction);
+            => QueryWrappers.OverlapSphereCustom(in this, position, radius, ref collector, filter, queryInteraction);
 
+        /// <summary>   Check capsule. </summary>
+        ///
+        /// <param name="point1">           The first point in capsule definition. </param>
+        /// <param name="point2">           The second point in capsule definition. </param>
+        /// <param name="radius">           The radius. </param>
+        /// <param name="filter">           Specifies the filter. </param>
+        /// <param name="queryInteraction"> (Optional) The query interaction. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
         public bool CheckCapsule(float3 point1, float3 point2, float radius, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default)
-            => QueryWrappers.CheckCapsule(ref this, point1, point2, radius, filter, queryInteraction);
+            => QueryWrappers.CheckCapsule(in this, point1, point2, radius, filter, queryInteraction);
+
+        /// <summary>   Overlap capsule. </summary>
+        ///
+        /// <param name="point1">           The first point in capsule definition. </param>
+        /// <param name="point2">           The second point in capsule definition. </param>
+        /// <param name="radius">           The radius. </param>
+        /// <param name="outHits">          [in,out] The out hits. </param>
+        /// <param name="filter">           Specifies the filter. </param>
+        /// <param name="queryInteraction"> (Optional) The query interaction. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
         public bool OverlapCapsule(float3 point1, float3 point2, float radius, ref NativeList<DistanceHit> outHits, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default)
-            => QueryWrappers.OverlapCapsule(ref this, point1, point2, radius, ref outHits, filter, queryInteraction);
+            => QueryWrappers.OverlapCapsule(in this, point1, point2, radius, ref outHits, filter, queryInteraction);
+
+        /// <summary>   Overlap capsule custom. </summary>
+        ///
+        /// <typeparam name="T">    Generic type parameter. </typeparam>
+        /// <param name="point1">           The first point in capsule definition. </param>
+        /// <param name="point2">           The second point in capsule definition. </param>
+        /// <param name="radius">           The radius. </param>
+        /// <param name="collector">        [in,out] The collector. </param>
+        /// <param name="filter">           Specifies the filter. </param>
+        /// <param name="queryInteraction"> (Optional) The query interaction. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
         public bool OverlapCapsuleCustom<T>(float3 point1, float3 point2, float radius, ref T collector, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default) where T : struct, ICollector<DistanceHit>
-            => QueryWrappers.OverlapCapsuleCustom(ref this, point1, point2, radius, ref collector, filter, queryInteraction);
+            => QueryWrappers.OverlapCapsuleCustom(in this, point1, point2, radius, ref collector, filter, queryInteraction);
 
+        /// <summary>   Check box. </summary>
+        ///
+        /// <param name="center">           The center. </param>
+        /// <param name="orientation">      The orientation. </param>
+        /// <param name="halfExtents">      Half extents of the box. </param>
+        /// <param name="filter">           Specifies the filter. </param>
+        /// <param name="queryInteraction"> (Optional) The query interaction. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
         public bool CheckBox(float3 center, quaternion orientation, float3 halfExtents, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default)
-            => QueryWrappers.CheckBox(ref this, center, orientation, halfExtents, filter, queryInteraction);
+            => QueryWrappers.CheckBox(in this, center, orientation, halfExtents, filter, queryInteraction);
+
+        /// <summary>   Overlap box. </summary>
+        ///
+        /// <param name="center">           The center. </param>
+        /// <param name="orientation">      The orientation. </param>
+        /// <param name="halfExtents">      Half extents of the box. </param>
+        /// <param name="outHits">          [in,out] The out hits. </param>
+        /// <param name="filter">           Specifies the filter. </param>
+        /// <param name="queryInteraction"> (Optional) The query interaction. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
         public bool OverlapBox(float3 center, quaternion orientation, float3 halfExtents, ref NativeList<DistanceHit> outHits, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default)
-            => QueryWrappers.OverlapBox(ref this, center, orientation, halfExtents, ref outHits, filter, queryInteraction);
+            => QueryWrappers.OverlapBox(in this, center, orientation, halfExtents, ref outHits, filter, queryInteraction);
+
+        /// <summary>   Overlap box custom. </summary>
+        ///
+        /// <typeparam name="T">    Generic type parameter. </typeparam>
+        /// <param name="center">           The center. </param>
+        /// <param name="orientation">      The orientation. </param>
+        /// <param name="halfExtents">      Half extents of the box. </param>
+        /// <param name="collector">        [in,out] The collector. </param>
+        /// <param name="filter">           Specifies the filter. </param>
+        /// <param name="queryInteraction"> (Optional) The query interaction. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
         public bool OverlapBoxCustom<T>(float3 center, quaternion orientation, float3 halfExtents, ref T collector, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default) where T : struct, ICollector<DistanceHit>
-            => QueryWrappers.OverlapBoxCustom(ref this, center, orientation, halfExtents, ref collector, filter, queryInteraction);
+            => QueryWrappers.OverlapBoxCustom(in this, center, orientation, halfExtents, ref collector, filter, queryInteraction);
 
+        /// <summary>   Sphere cast. </summary>
+        ///
+        /// <param name="origin">           The origin. </param>
+        /// <param name="radius">           The radius. </param>
+        /// <param name="direction">        The direction. </param>
+        /// <param name="maxDistance">      The maximum distance. </param>
+        /// <param name="filter">           Specifies the filter. </param>
+        /// <param name="queryInteraction"> (Optional) The query interaction. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
         public bool SphereCast(float3 origin, float radius, float3 direction, float maxDistance, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default)
-            => QueryWrappers.SphereCast(ref this, origin, radius, direction, maxDistance, filter, queryInteraction);
+            => QueryWrappers.SphereCast(in this, origin, radius, direction, maxDistance, filter, queryInteraction);
+
+        /// <summary>   Sphere cast. </summary>
+        ///
+        /// <param name="origin">           The origin. </param>
+        /// <param name="radius">           The radius. </param>
+        /// <param name="direction">        The direction. </param>
+        /// <param name="maxDistance">      The maximum distance. </param>
+        /// <param name="hitInfo">          [out] Information describing the hit. </param>
+        /// <param name="filter">           Specifies the filter. </param>
+        /// <param name="queryInteraction"> (Optional) The query interaction. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
         public bool SphereCast(float3 origin, float radius, float3 direction, float maxDistance, out ColliderCastHit hitInfo, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default)
-            => QueryWrappers.SphereCast(ref this, origin, radius, direction, maxDistance, out hitInfo, filter, queryInteraction);
+            => QueryWrappers.SphereCast(in this, origin, radius, direction, maxDistance, out hitInfo, filter, queryInteraction);
+
+        /// <summary>   Sphere cast all. </summary>
+        ///
+        /// <param name="origin">           The origin. </param>
+        /// <param name="radius">           The radius. </param>
+        /// <param name="direction">        The direction. </param>
+        /// <param name="maxDistance">      The maximum distance. </param>
+        /// <param name="outHits">          [in,out] The out hits. </param>
+        /// <param name="filter">           Specifies the filter. </param>
+        /// <param name="queryInteraction"> (Optional) The query interaction. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
         public bool SphereCastAll(float3 origin, float radius, float3 direction, float maxDistance, ref NativeList<ColliderCastHit> outHits, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default)
-            => QueryWrappers.SphereCastAll(ref this, origin, radius, direction, maxDistance, ref outHits, filter, queryInteraction);
+            => QueryWrappers.SphereCastAll(in this, origin, radius, direction, maxDistance, ref outHits, filter, queryInteraction);
+
+        /// <summary>   Sphere cast custom. </summary>
+        ///
+        /// <typeparam name="T">    Generic type parameter. </typeparam>
+        /// <param name="origin">           The origin. </param>
+        /// <param name="radius">           The radius. </param>
+        /// <param name="direction">        The direction. </param>
+        /// <param name="maxDistance">      The maximum distance. </param>
+        /// <param name="collector">        [in,out] The collector. </param>
+        /// <param name="filter">           Specifies the filter. </param>
+        /// <param name="queryInteraction"> (Optional) The query interaction. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
         public bool SphereCastCustom<T>(float3 origin, float radius, float3 direction, float maxDistance, ref T collector, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default) where T : struct, ICollector<ColliderCastHit>
-            => QueryWrappers.SphereCastCustom(ref this, origin, radius, direction, maxDistance, ref collector, filter, queryInteraction);
+            => QueryWrappers.SphereCastCustom(in this, origin, radius, direction, maxDistance, ref collector, filter, queryInteraction);
 
+        /// <summary>   Box cast. </summary>
+        ///
+        /// <param name="center">           The center. </param>
+        /// <param name="orientation">      The orientation. </param>
+        /// <param name="halfExtents">      Half extents of the box. </param>
+        /// <param name="direction">        The direction. </param>
+        /// <param name="maxDistance">      The maximum distance. </param>
+        /// <param name="filter">           Specifies the filter. </param>
+        /// <param name="queryInteraction"> (Optional) The query interaction. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
         public bool BoxCast(float3 center, quaternion orientation, float3 halfExtents, float3 direction, float maxDistance, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default)
-            => QueryWrappers.BoxCast(ref this, center, orientation, halfExtents, direction, maxDistance, filter, queryInteraction);
-        public bool BoxCast(float3 center, quaternion orientation, float3 halfExtents, float3 direction, float maxDistance, out ColliderCastHit hitInfo, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default)
-            => QueryWrappers.BoxCast(ref this, center, orientation, halfExtents, direction, maxDistance, out hitInfo, filter, queryInteraction);
-        public bool BoxCastAll(float3 center, quaternion orientation, float3 halfExtents, float3 direction, float maxDistance, ref NativeList<ColliderCastHit> outHits, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default)
-            => QueryWrappers.BoxCastAll(ref this, center, orientation, halfExtents, direction, maxDistance, ref outHits, filter, queryInteraction);
-        public bool BoxCastCustom<T>(float3 center, quaternion orientation, float3 halfExtents, float3 direction, float maxDistance, ref T collector, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default) where T : struct, ICollector<ColliderCastHit>
-            => QueryWrappers.BoxCastCustom(ref this, center, orientation, halfExtents, direction, maxDistance, ref collector, filter, queryInteraction);
+            => QueryWrappers.BoxCast(in this, center, orientation, halfExtents, direction, maxDistance, filter, queryInteraction);
 
+        /// <summary>   Box cast. </summary>
+        ///
+        /// <param name="center">           The center. </param>
+        /// <param name="orientation">      The orientation. </param>
+        /// <param name="halfExtents">      Half extents of the box. </param>
+        /// <param name="direction">        The direction. </param>
+        /// <param name="maxDistance">      The maximum distance. </param>
+        /// <param name="hitInfo">          [out] Information describing the hit. </param>
+        /// <param name="filter">           Specifies the filter. </param>
+        /// <param name="queryInteraction"> (Optional) The query interaction. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
+        public bool BoxCast(float3 center, quaternion orientation, float3 halfExtents, float3 direction, float maxDistance, out ColliderCastHit hitInfo, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default)
+            => QueryWrappers.BoxCast(in this, center, orientation, halfExtents, direction, maxDistance, out hitInfo, filter, queryInteraction);
+
+        /// <summary>   Box cast all. </summary>
+        ///
+        /// <param name="center">           The center. </param>
+        /// <param name="orientation">      The orientation. </param>
+        /// <param name="halfExtents">      Half extents of the box. </param>
+        /// <param name="direction">        The direction. </param>
+        /// <param name="maxDistance">      The maximum distance. </param>
+        /// <param name="outHits">          [in,out] The out hits. </param>
+        /// <param name="filter">           Specifies the filter. </param>
+        /// <param name="queryInteraction"> (Optional) The query interaction. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
+        public bool BoxCastAll(float3 center, quaternion orientation, float3 halfExtents, float3 direction, float maxDistance, ref NativeList<ColliderCastHit> outHits, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default)
+            => QueryWrappers.BoxCastAll(in this, center, orientation, halfExtents, direction, maxDistance, ref outHits, filter, queryInteraction);
+
+        /// <summary>   Box cast custom. </summary>
+        ///
+        /// <typeparam name="T">    Generic type parameter. </typeparam>
+        /// <param name="center">           The center. </param>
+        /// <param name="orientation">      The orientation. </param>
+        /// <param name="halfExtents">      Half extents of the box. </param>
+        /// <param name="direction">        The direction. </param>
+        /// <param name="maxDistance">      The maximum distance. </param>
+        /// <param name="collector">        [in,out] The collector. </param>
+        /// <param name="filter">           Specifies the filter. </param>
+        /// <param name="queryInteraction"> (Optional) The query interaction. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
+        public bool BoxCastCustom<T>(float3 center, quaternion orientation, float3 halfExtents, float3 direction, float maxDistance, ref T collector, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default) where T : struct, ICollector<ColliderCastHit>
+            => QueryWrappers.BoxCastCustom(in this, center, orientation, halfExtents, direction, maxDistance, ref collector, filter, queryInteraction);
+
+        /// <summary>   Capsule cast. </summary>
+        ///
+        /// <param name="point1">           The first point in capsule definition. </param>
+        /// <param name="point2">           The second point in capsule definition. </param>
+        /// <param name="radius">           The radius. </param>
+        /// <param name="direction">        The direction. </param>
+        /// <param name="maxDistance">      The maximum distance. </param>
+        /// <param name="filter">           Specifies the filter. </param>
+        /// <param name="queryInteraction"> (Optional) The query interaction. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
         public bool CapsuleCast(float3 point1, float3 point2, float radius, float3 direction, float maxDistance, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default)
-            => QueryWrappers.CapsuleCast(ref this, point1, point2, radius, direction, maxDistance, filter, queryInteraction);
+            => QueryWrappers.CapsuleCast(in this, point1, point2, radius, direction, maxDistance, filter, queryInteraction);
+
+        /// <summary>   Capsule cast. </summary>
+        ///
+        /// <param name="point1">           The first point in capsule definition. </param>
+        /// <param name="point2">           The second point in capsule definition. </param>
+        /// <param name="radius">           The radius. </param>
+        /// <param name="direction">        The direction. </param>
+        /// <param name="maxDistance">      The maximum distance. </param>
+        /// <param name="hitInfo">          [out] Information describing the hit. </param>
+        /// <param name="filter">           Specifies the filter. </param>
+        /// <param name="queryInteraction"> (Optional) The query interaction. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
         public bool CapsuleCast(float3 point1, float3 point2, float radius, float3 direction, float maxDistance, out ColliderCastHit hitInfo, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default)
-            => QueryWrappers.CapsuleCast(ref this, point1, point2, radius, direction, maxDistance, out hitInfo, filter, queryInteraction);
+            => QueryWrappers.CapsuleCast(in this, point1, point2, radius, direction, maxDistance, out hitInfo, filter, queryInteraction);
+
+        /// <summary>   Capsule cast all. </summary>
+        ///
+        /// <param name="point1">           The first point in capsule definition. </param>
+        /// <param name="point2">           The second point in capsule definition. </param>
+        /// <param name="radius">           The radius. </param>
+        /// <param name="direction">        The direction. </param>
+        /// <param name="maxDistance">      The maximum distance. </param>
+        /// <param name="outHits">          [in,out] The out hits. </param>
+        /// <param name="filter">           Specifies the filter. </param>
+        /// <param name="queryInteraction"> (Optional) The query interaction. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
         public bool CapsuleCastAll(float3 point1, float3 point2, float radius, float3 direction, float maxDistance, ref NativeList<ColliderCastHit> outHits, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default)
-            => QueryWrappers.CapsuleCastAll(ref this, point1, point2, radius, direction, maxDistance, ref outHits, filter, queryInteraction);
+            => QueryWrappers.CapsuleCastAll(in this, point1, point2, radius, direction, maxDistance, ref outHits, filter, queryInteraction);
+
+        /// <summary>   Capsule cast custom. </summary>
+        ///
+        /// <typeparam name="T">    Generic type parameter. </typeparam>
+        /// <param name="point1">           The first point in capsule definition. </param>
+        /// <param name="point2">           The second point in capsule definition. </param>
+        /// <param name="radius">           The radius. </param>
+        /// <param name="direction">        The direction. </param>
+        /// <param name="maxDistance">      The maximum distance. </param>
+        /// <param name="collector">        [in,out] The collector. </param>
+        /// <param name="filter">           Specifies the filter. </param>
+        /// <param name="queryInteraction"> (Optional) The query interaction. </param>
+        ///
+        /// <returns>   True if there is a hit, false otherwise. </returns>
         public bool CapsuleCastCustom<T>(float3 point1, float3 point2, float radius, float3 direction, float maxDistance, ref T collector, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default) where T : struct, ICollector<ColliderCastHit>
-            => QueryWrappers.CapsuleCastCustom(ref this, point1, point2, radius, direction, maxDistance, ref collector, filter, queryInteraction);
+            => QueryWrappers.CapsuleCastCustom(in this, point1, point2, radius, direction, maxDistance, ref collector, filter, queryInteraction);
 
         #endregion
 

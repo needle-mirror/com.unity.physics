@@ -30,18 +30,21 @@ namespace Unity.DebugDisplay
             m_TextBufferAllocations = m_TextBuffer.AllocateAll();      // clear out all the tex boxes
             m_GraphBufferAllocations = m_GraphBuffer.AllocateAll();  // clear out all the graphs
             m_LineBufferAllocations = m_LineBuffer.AllocateAll(); // clear out all the lines
+            m_TriangleBufferAllocations = m_TriangleBuffer.AllocateAll();
         }
 
         internal Unit       m_TextBufferAllocations;
         internal Unit       m_LineBufferAllocations;
         internal Unit       m_GraphBufferAllocations;
         internal Unit       m_GraphDataBufferAllocations;
+        internal Unit       m_TriangleBufferAllocations;
 
         internal TextBuffer  m_TextBuffer;
         internal GraphBuffer m_GraphBuffer;
         internal LineBuffer  m_LineBuffer;
         internal LogBuffer   m_LogBuffer;
         internal EightK      m_EightK;
+        internal TriangleBuffer m_TriangleBuffer;
 
         internal const int kMaxColors = 256;
 
@@ -126,6 +129,8 @@ namespace Unity.DebugDisplay
                 m_TextBuffer.Initialize();
                 m_GraphBuffer.Initialize();
                 m_LineBuffer.Initialize();
+                m_TriangleBuffer.Initialize();
+
                 m_LogBuffer = new LogBuffer(new int2(128, 4096));
                 m_LogBuffer.m_Fg = ColorIndex.Yellow;
                 m_LogBuffer.m_Bg = ColorIndex.Blue;
@@ -133,6 +138,8 @@ namespace Unity.DebugDisplay
                 m_GraphBufferAllocations = m_GraphBuffer.AllocateAll();
                 m_GraphDataBufferAllocations = m_GraphBuffer.ReserveAllData();
                 m_LineBufferAllocations = m_LineBuffer.AllocateAll();
+                m_TriangleBufferAllocations = m_TriangleBuffer.AllocateAll();
+
                 initialized = true;
             }
         }
@@ -145,6 +152,8 @@ namespace Unity.DebugDisplay
                 m_LineBuffer.Dispose();
                 m_GraphBuffer.Dispose();
                 m_TextBuffer.Dispose();
+                m_TriangleBuffer.Dispose();
+
                 m_ColorData.Dispose();
                 initialized = false;
             }
@@ -161,6 +170,7 @@ namespace Unity.DebugDisplay
             internal Material textMaterial;
             internal Material graphMaterial;
             internal Material lineMaterial;
+            internal Material meshMaterial;
             internal TextAsset wide;
         }
         internal Objects resources;
@@ -179,6 +189,7 @@ namespace Unity.DebugDisplay
         private static Material debugTextMaterial;
         private static Material graphMaterial;
         private static Material lineMaterial;
+        private static Material meshMaterial;
         private static TextAsset wideTestAsset;
         private bool resourcesLoaded = false;
 #endif
@@ -189,6 +200,7 @@ namespace Unity.DebugDisplay
             debugTextMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(debugDirName, "DebugTextMaterial.mat"));
             graphMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(debugDirName, "GraphMaterial.mat"));
             lineMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(debugDirName, "LineMaterial.mat"));
+            meshMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(debugDirName, "MeshMaterial.mat"));
             wideTestAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(Path.Combine(debugDirName, "wide.bytes"));
             resourcesLoaded = true;
 #endif
@@ -202,6 +214,7 @@ namespace Unity.DebugDisplay
             resources.textMaterial = debugTextMaterial;
             resources.graphMaterial = graphMaterial;
             resources.lineMaterial = lineMaterial;
+            resources.meshMaterial = meshMaterial;
             resources.wide = wideTestAsset;
 
             Stream s = new MemoryStream(resources.wide.bytes);
@@ -239,6 +252,7 @@ namespace Unity.DebugDisplay
                 resources.textMaterial.SetBuffer("colorBuffer", m_ColorBuffer);
                 resources.graphMaterial.SetBuffer("colorBuffer", m_ColorBuffer);
                 resources.lineMaterial.SetBuffer("colorBuffer", m_ColorBuffer);
+                resources.meshMaterial.SetBuffer("colorBuffer", m_ColorBuffer);
             }
 
             if (m_TextCellBuffer == null || m_TextCellBuffer.count != Unmanaged.Instance.Data.m_TextBuffer.m_Screen.m_Cell.Length)
@@ -279,6 +293,20 @@ namespace Unity.DebugDisplay
                 resources.lineMaterial.SetBuffer("positionBuffer", m_LineVertexBuffer);
             }
 
+            if (m_TriangleInstanceBuffer == null ||
+                m_TriangleInstanceBuffer.count != Unmanaged.Instance.Data.m_TriangleBuffer.m_Instance.Length)
+            {
+                if (m_TriangleInstanceBuffer != null)
+                {
+                    m_TriangleInstanceBuffer.Release();
+                    m_TriangleInstanceBuffer = null;
+                }
+
+                m_TriangleInstanceBuffer = new ComputeBuffer(Unmanaged.Instance.Data.m_TriangleBuffer.m_Instance.Length,
+                    UnsafeUtility.SizeOf<TriangleBuffer.Instance>());
+                resources.meshMaterial.SetBuffer("meshBuffer", m_TriangleInstanceBuffer);
+            }
+
             if (m_GraphSampleBuffer == null || m_GraphSampleBuffer.count != Unmanaged.Instance.Data.m_GraphBuffer.m_Data.Length)
             {
                 if (m_GraphSampleBuffer != null)
@@ -313,15 +341,18 @@ namespace Unity.DebugDisplay
             m_NumGraphsToDraw = Unmanaged.Instance.Data.m_GraphBufferAllocations.Filled;
             m_NumTextBoxesToDraw = Unmanaged.Instance.Data.m_TextBufferAllocations.Filled;
             m_NumLinesToDraw = Unmanaged.Instance.Data.m_LineBufferAllocations.Filled;
+            m_NumTrianglesToDraw = Unmanaged.Instance.Data.m_TriangleBufferAllocations.Filled;
 
             m_GraphInstanceBuffer.SetData(Unmanaged.Instance.Data.m_GraphBuffer.m_Instance.ToNativeArray(), 0, 0, m_NumGraphsToDraw);
             m_TextInstanceBuffer.SetData(Unmanaged.Instance.Data.m_TextBuffer.m_Instance.ToNativeArray(), 0, 0, m_NumTextBoxesToDraw);
             m_LineVertexBuffer.SetData(Unmanaged.Instance.Data.m_LineBuffer.m_Instance.ToNativeArray(), 0, 0, m_NumLinesToDraw);
+            m_TriangleInstanceBuffer.SetData(Unmanaged.Instance.Data.m_TriangleBuffer.m_Instance.ToNativeArray(), 0, 0, m_NumTrianglesToDraw);
 
             var scales = new float4(1.0f / FractionalCellsWide, 1.0f / FractionalCellsTall, 1.0f / PixelsWide, 1.0f / PixelsTall);
             resources.textMaterial.SetVector("scales", scales);
             resources.graphMaterial.SetVector("scales", scales);
             resources.lineMaterial.SetVector("scales", scales);
+            resources.meshMaterial.SetVector("scales", scales);
         }
 
         internal void Clear()
@@ -332,6 +363,8 @@ namespace Unity.DebugDisplay
 
         internal void Render()
         {
+            resources.meshMaterial.SetPass(0);
+            Graphics.DrawProceduralNow(MeshTopology.Triangles, m_NumTrianglesToDraw * 3, 1);
             resources.lineMaterial.SetPass(0);
             Graphics.DrawProceduralNow(MeshTopology.Lines, m_NumLinesToDraw * 2, 1);
             resources.textMaterial.SetPass(0);
@@ -343,12 +376,14 @@ namespace Unity.DebugDisplay
         int m_NumTextBoxesToDraw = 0;
         int m_NumGraphsToDraw = 0;
         int m_NumLinesToDraw = 0;
+        int m_NumTrianglesToDraw = 0;
 
         ComputeBuffer m_GraphSampleBuffer; // one big 1D array of floats
         ComputeBuffer m_GraphInstanceBuffer; // one thing for each graph to display
         ComputeBuffer m_TextCellBuffer; // one big 2D array of character cells
         ComputeBuffer m_TextInstanceBuffer; // one thing for each text box to display
         ComputeBuffer m_LineVertexBuffer; // one big 1D array of line vertex positions.
+        ComputeBuffer m_TriangleInstanceBuffer;
 
         ComputeBuffer m_ColorBuffer;
 
@@ -392,6 +427,7 @@ namespace Unity.DebugDisplay
             m_TextInstanceBuffer?.Dispose();
             m_LineVertexBuffer?.Dispose();
             m_ColorBuffer?.Dispose();
+            m_TriangleInstanceBuffer?.Dispose();
 
             m_GraphSampleBuffer = null;
             m_GraphInstanceBuffer = null;
@@ -399,6 +435,7 @@ namespace Unity.DebugDisplay
             m_TextInstanceBuffer = null;
             m_LineVertexBuffer = null;
             m_ColorBuffer = null;
+            m_TriangleInstanceBuffer = null;
 
             Unmanaged.Instance.Data.Dispose();
             if (instance == this)

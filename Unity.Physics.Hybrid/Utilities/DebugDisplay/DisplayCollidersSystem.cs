@@ -1,174 +1,292 @@
-using System;
-using System.Collections.Generic;
 using Unity.Physics.Systems;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
+using Unity.Jobs;
+using Unity.Burst;
+using static Unity.Physics.Math;
 
 namespace Unity.Physics.Authoring
 {
-    /// A system to display debug geometry for all body colliders
-    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
-    [UpdateAfter(typeof(StepPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
-    public partial class DisplayBodyColliders : SystemBase
+    [BurstCompile]
+    internal struct CalculateNumberOfPrimitiveCollidersJob : IJob
     {
-        BuildPhysicsWorld m_BuildPhysicsWorldSystem;
+        public NativeReference<int> NumPrimitiveColliders;
 
-        //<todo.eoin.udebug This is not great; we weren't able to reuse any of the DebugStream
-        //< system or jobify this system, since we couldn't guarantee the lifetime of the debug
-        //< display objects. Caching those objects across frames should allow for improving this
-        //< and some reuse of the DebugDraw code.
-        unsafe class DrawComponent : MonoBehaviour
+        [ReadOnly]
+        public NativeArray<RigidBody> Bodies;
+
+        private unsafe int CalcNumPrimitiveCollidersRecursive(Collider* colliderPtr)
         {
-            public NativeArray<RigidBody> Bodies;
-            public int NumDynamicBodies;
-            public int EnableColliders;
+            int numPrimitive = 0;
 
-            protected static UnityEngine.Mesh ReferenceSphere => GetReferenceMesh(ref CachedReferenceSphere, PrimitiveType.Sphere);
-            protected static UnityEngine.Mesh ReferenceCylinder => GetReferenceMesh(ref CachedReferenceCylinder, PrimitiveType.Cylinder);
-
-            protected static UnityEngine.Mesh CachedReferenceSphere;
-            protected static UnityEngine.Mesh CachedReferenceCylinder;
-
-            static UnityEngine.Mesh GetReferenceMesh(ref UnityEngine.Mesh cache, PrimitiveType type)
+            if (colliderPtr->Type == ColliderType.Box || colliderPtr->Type == ColliderType.Sphere ||
+                colliderPtr->Type == ColliderType.Capsule || colliderPtr->Type == ColliderType.Cylinder)
             {
-                if (cache == null)
-                {
-                    cache = CreateReferenceMesh(type);
-                }
-                return cache;
+                numPrimitive = 1;
             }
-
-            static UnityEngine.Mesh CreateReferenceMesh(PrimitiveType type)
+            else if (colliderPtr->Type == ColliderType.Compound)
             {
-                switch (type)
+                CompoundCollider* compound = (CompoundCollider*)colliderPtr;
+                for (int i = 0; i < compound->NumChildren; i++)
                 {
-                    case PrimitiveType.Cylinder:
-                        return Resources.GetBuiltinResource<UnityEngine.Mesh>("New-Cylinder.fbx");
-                    case PrimitiveType.Sphere:
-                        return Resources.GetBuiltinResource<UnityEngine.Mesh>("New-Sphere.fbx");
-                    default:
-                        throw new NotImplementedException($"No reference mesh specified for {type}");
+                    numPrimitive += CalcNumPrimitiveCollidersRecursive(compound->Children[i].Collider);
                 }
             }
 
-            // Combination mesh+scale, to enable sharing spheres
-            public class DisplayResult
+            return numPrimitive;
+        }
+
+        public void Execute()
+        {
+            unsafe
             {
-                public UnityEngine.Mesh Mesh;
-                public Vector3 Scale;
-                public Vector3 Position;
-                public Quaternion Orientation;
-
-                [Preserve]
-                public float4x4 Transform => float4x4.TRS(Position, Orientation, Scale);
-            }
-
-            private static void AppendConvex(ref ConvexHull hull, RigidTransform worldFromCollider, ref List<DisplayResult> results)
-            {
-                int totalNumVertices = 0;
-                for (int f = 0; f < hull.NumFaces; f++)
+                for (int i = 0; i < Bodies.Length; i++)
                 {
-                    totalNumVertices += hull.Faces[f].NumVertices + 1;
-                }
-
-                Vector3[] vertices = new Vector3[totalNumVertices];
-                Vector3[] normals = new Vector3[totalNumVertices];
-                int[] triangles = new int[(totalNumVertices - hull.NumFaces) * 3];
-
-                int startVertexIndex = 0;
-                int curTri = 0;
-                for (int f = 0; f < hull.NumFaces; f++)
-                {
-                    Vector3 avgFace = Vector3.zero;
-                    Vector3 faceNormal = hull.Planes[f].Normal;
-
-                    for (int fv = 0; fv < hull.Faces[f].NumVertices; fv++)
+                    if (Bodies[i].Collider.IsCreated)
                     {
-                        int origV = hull.FaceVertexIndices[hull.Faces[f].FirstIndex + fv];
-                        vertices[startVertexIndex + fv] = hull.Vertices[origV];
-                        normals[startVertexIndex + fv] = faceNormal;
-
-                        Vector3 v = hull.Vertices[origV];
-                        avgFace += v;
-
-                        triangles[curTri * 3 + 0] = startVertexIndex + fv;
-                        triangles[curTri * 3 + 1] = startVertexIndex + (fv + 1) % hull.Faces[f].NumVertices;
-                        triangles[curTri * 3 + 2] = startVertexIndex + hull.Faces[f].NumVertices;
-                        curTri++;
+                        NumPrimitiveColliders.Value += CalcNumPrimitiveCollidersRecursive((Collider*)Bodies[i].Collider.GetUnsafePtr());
                     }
-                    avgFace *= 1.0f / hull.Faces[f].NumVertices;
-                    vertices[startVertexIndex + hull.Faces[f].NumVertices] = avgFace;
-                    normals[startVertexIndex + hull.Faces[f].NumVertices] = faceNormal;
-
-                    startVertexIndex += hull.Faces[f].NumVertices + 1;
                 }
+            }
+        }
+    }
 
-                var mesh = new UnityEngine.Mesh
-                {
-                    hideFlags = HideFlags.HideAndDontSave,
-                    vertices = vertices,
-                    normals = normals,
-                    triangles = triangles
-                };
-
-                results.Add(new DisplayResult
-                {
-                    Mesh = mesh,
-                    Scale = Vector3.one,
-                    Position = worldFromCollider.pos,
-                    Orientation = worldFromCollider.rot
-                });
+    /// A system to display debug geometry for all body colliders
+    [RequireMatchingQueriesForUpdate]
+    [UpdateInGroup(typeof(AfterPhysicsSystemGroup))]
+    internal partial class DisplayBodyColliders : SystemBase
+    {
+        public struct PrimitiveInfo
+        {
+            public enum PrimitiveFlags : byte
+            {
+                Sphere = 1 << 0,
+                Capsule = 1 << 1,
+                Cylinder = 1 << 2,
+                Box = 1 << 3,
+                Dynamic = 1 << 4
             }
 
-            public static void AppendSphere(SphereCollider* sphere, RigidTransform worldFromCollider, ref List<DisplayResult> results)
+            public float4x4 Trs;
+            public PrimitiveFlags Flags;
+        }
+
+        [BurstCompile(FloatPrecision.Low, FloatMode.Fast)]
+        public unsafe struct DisplayColliderFacesJob : IJobParallelFor
+        {
+            [ReadOnly] public NativeArray<RigidBody> Bodies;
+            [ReadOnly] public int DynamicBodies;
+            public NativeList<PrimitiveInfo>.ParallelWriter PrimitiveWriter;
+
+            public void Execute(int i)
             {
-                float r = sphere->Radius;
-                results.Add(new DisplayResult
+                var body = Bodies[i];
+                var collider = body.Collider;
+
+                if (collider.IsCreated)
                 {
-                    Mesh = ReferenceSphere,
-                    Scale = new Vector4(r * 2.0f, r * 2.0f, r * 2.0f),
-                    Position = math.transform(worldFromCollider, sphere->Center),
-                    Orientation = worldFromCollider.rot,
-                });
+                    DrawColliderFaces(collider, body.WorldFromBody, i < DynamicBodies, body.Scale);
+                }
             }
 
-            public static void AppendCapsule(CapsuleCollider* capsule, RigidTransform worldFromCollider, ref List<DisplayResult> results)
+            private unsafe void DrawColliderFaces(BlobAssetReference<Collider> collider, RigidTransform worldFromCollider,
+                bool isDynamic, float uniformScale = 1.0f)
             {
-                float r = capsule->Radius;
-                results.Add(new DisplayResult
-                {
-                    Mesh = ReferenceSphere,
-                    Scale = new Vector4(r * 2.0f, r * 2.0f, r * 2.0f),
-                    Position = math.transform(worldFromCollider, capsule->Vertex0),
-                    Orientation = worldFromCollider.rot
-                });
-                results.Add(new DisplayResult
-                {
-                    Mesh = ReferenceSphere,
-                    Scale = new Vector4(r * 2.0f, r * 2.0f, r * 2.0f),
-                    Position = math.transform(worldFromCollider, capsule->Vertex1),
-                    Orientation = worldFromCollider.rot
-                });
-                results.Add(new DisplayResult
-                {
-                    Mesh = ReferenceCylinder,
-                    Scale = new Vector4(r * 2.0f, math.length(capsule->Vertex1 - capsule->Vertex0) * 0.5f, r * 2.0f),
-                    Position = math.transform(worldFromCollider, (capsule->Vertex0 + capsule->Vertex1) * 0.5f),
-                    Orientation = math.mul(worldFromCollider.rot, Quaternion.FromToRotation(new float3(0, 1, 0), math.normalizesafe(capsule->Vertex1 - capsule->Vertex0)))
-                });
+                DrawColliderFaces((Collider*)collider.GetUnsafePtr(), worldFromCollider, isDynamic, uniformScale);
             }
 
-            public static void AppendMesh(MeshCollider* meshCollider, RigidTransform worldFromCollider, ref List<DisplayResult> results)
+            private unsafe void DrawColliderFaces(Collider* collider, RigidTransform worldFromCollider,
+                bool isDynamic, float uniformScale = 1.0f)
             {
-                var vertices = new List<Vector3>();
-                var normals = new List<Vector3>();
-                var triangles = new List<int>();
-                int vertexIndex = 0;
+                quaternion colliderOrientation;
+                float3 colliderPosition;
+                float radius;
+                float adjustScale = 0.01f;  //so that scale of collider face != collider > rendering doesn't flicker
+                float3 newScale;
+                Matrix4x4 trs;
 
+                switch (collider->Type)
+                {
+                    case ColliderType.Cylinder:
+                        radius = ((CylinderCollider*)collider)->Radius;
+                        var height = ((CylinderCollider*)collider)->Height;
+
+                        // Cylinder collider needs an extra rotation because the collider is built in the z-axis, but is
+                        // baked along the y-axis. Apply a rotation in the x-axis to transform between them
+                        colliderOrientation = Quaternion.Euler(-90, 0, 0);
+                        colliderOrientation = math.mul(((CylinderCollider*)collider)->Orientation, colliderOrientation);
+                        colliderOrientation = math.mul(worldFromCollider.rot, colliderOrientation);
+
+                        colliderPosition = worldFromCollider.pos + math.mul(worldFromCollider.rot, uniformScale * ((CylinderCollider*)collider)->Center);
+                        newScale = (uniformScale * new float3(2.0f * radius, 0.5f * height, 2.0f * radius)) + adjustScale;
+
+                        trs = float4x4.TRS(colliderPosition, colliderOrientation, newScale);
+                        PrimitiveWriter.AddNoResize(new PrimitiveInfo
+                        {
+                            Trs = trs,
+                            Flags = PrimitiveInfo.PrimitiveFlags.Cylinder | (isDynamic ? PrimitiveInfo.PrimitiveFlags.Dynamic : 0)
+                        });
+                        break;
+
+                    case ColliderType.Box:
+                        colliderOrientation = math.mul(worldFromCollider.rot, ((BoxCollider*)collider)->Orientation);
+                        colliderPosition = worldFromCollider.pos + math.mul(worldFromCollider.rot, uniformScale * ((BoxCollider*)collider)->Center);
+                        newScale = (uniformScale * ((BoxCollider*)collider)->Size) + adjustScale;
+
+                        trs = float4x4.TRS(colliderPosition, colliderOrientation, newScale);
+                        PrimitiveWriter.AddNoResize(new PrimitiveInfo
+                        {
+                            Trs = trs,
+                            Flags = PrimitiveInfo.PrimitiveFlags.Box | (isDynamic ? PrimitiveInfo.PrimitiveFlags.Dynamic : 0)
+                        });
+                        break;
+
+                    case ColliderType.Triangle:
+                    case ColliderType.Quad:
+                    case ColliderType.Convex:
+                        DrawConvexFaces(ref ((ConvexCollider*)collider)->ConvexHull, worldFromCollider, DrawColliderUtility.GetColorIndex(isDynamic), uniformScale);
+                        break;
+
+                    case ColliderType.Sphere:
+                        radius = uniformScale * (2.0f * ((SphereCollider*)collider)->Radius) + adjustScale;
+                        newScale = radius * new float3(1.0f, 1.0f, 1.0f);
+                        colliderPosition = worldFromCollider.pos + math.mul(worldFromCollider.rot, uniformScale * ((SphereCollider*)collider)->Center);
+
+                        trs = float4x4.TRS(colliderPosition, worldFromCollider.rot, newScale);
+                        PrimitiveWriter.AddNoResize(new PrimitiveInfo
+                        {
+                            Trs = trs,
+                            Flags = PrimitiveInfo.PrimitiveFlags.Sphere | (isDynamic ? PrimitiveInfo.PrimitiveFlags.Dynamic : 0)
+                        });
+                        break;
+
+                    case ColliderType.Capsule:
+                        radius = uniformScale * ((CapsuleCollider*)collider)->Radius;
+                        var vertex0 = math.transform(worldFromCollider, uniformScale * ((CapsuleCollider*)collider)->Vertex0);
+                        var vertex1 = math.transform(worldFromCollider, uniformScale * ((CapsuleCollider*)collider)->Vertex1);
+
+                        var axis = vertex1 - vertex0; //axis in wfc-space
+                        colliderOrientation = Quaternion.FromToRotation(Vector3.up, -axis);
+                        newScale = new float3(2.0f * radius, 0.5f * math.length(axis) + radius, 2.0f * radius) + adjustScale;
+
+                        trs = float4x4.TRS(-0.5f * axis + vertex1, colliderOrientation, newScale);
+                        PrimitiveWriter.AddNoResize(new PrimitiveInfo
+                        {
+                            Trs = trs,
+                            Flags = PrimitiveInfo.PrimitiveFlags.Capsule | (isDynamic ? PrimitiveInfo.PrimitiveFlags.Dynamic : 0)
+                        });
+
+                        break;
+
+                    case ColliderType.Mesh:
+                        DrawMeshColliderFaces((MeshCollider*)collider, worldFromCollider, DrawColliderUtility.GetColorIndex(isDynamic), uniformScale);
+                        break;
+
+                    case ColliderType.Compound:
+                        DrawCompoundColliderFaces((CompoundCollider*)collider, worldFromCollider, isDynamic, uniformScale);
+                        break;
+
+                    case ColliderType.Terrain:
+                        //TODO [#3792]: Terrain should use DebugDraw rather than Gizmos and add uniform scale support.
+                        //AppendMeshColliders.GetMeshes.AppendTerrain((TerrainCollider*)collider, worldFromCollider, ref results);
+                        break;
+                }
+            }
+
+            // Covers: collider->Type = Box, Triangle, Quad, Convex, Cylinder(before started using primitives)
+            private static void DrawConvexFaces(ref ConvexHull hull, RigidTransform worldFromCollider,
+                DebugDisplay.ColorIndex ci, float uniformScale = 1.0f)
+            {
+                for (var f = 0; f < hull.NumFaces; f++)
+                {
+                    var countVert = hull.Faces[f].NumVertices;
+
+                    if (countVert == 3) // A triangle
+                    {
+                        var vertices = new NativeArray<float3>(3, Allocator.Temp);
+                        for (var fv = 0; fv < countVert; fv++)
+                        {
+                            var origVertexIndex = hull.FaceVertexIndices[hull.Faces[f].FirstIndex + fv];
+                            vertices[fv] = uniformScale * hull.Vertices[origVertexIndex];
+                        }
+                        DrawColliderUtility.DrawTriangle(vertices[0], vertices[1], vertices[2], worldFromCollider, ci);
+                        vertices.Dispose();
+                    }
+                    else if (countVert == 4) // A quad: break into two triangles
+                    {
+                        var vertices = new NativeArray<float3>(4, Allocator.Temp);
+                        for (var fv = 0; fv < countVert; fv++)
+                        {
+                            var origVertexIndex = hull.FaceVertexIndices[hull.Faces[f].FirstIndex + fv];
+                            vertices[fv] = uniformScale * hull.Vertices[origVertexIndex];
+                        }
+                        DrawColliderUtility.DrawTriangle(vertices[0], vertices[2], vertices[1], worldFromCollider, ci);
+                        DrawColliderUtility.DrawTriangle(vertices[2], vertices[0], vertices[3], worldFromCollider, ci);
+                        vertices.Dispose();
+                    }
+                    else // find the average vertex and then use to break into triangles
+                    {
+                        var faceCentroid = float3.zero;
+                        var scaledVertices = new NativeArray<float3>(countVert, Allocator.Temp);
+                        for (var i = 0; i < countVert; i++)
+                        {
+                            var origVertexIndex = hull.FaceVertexIndices[hull.Faces[f].FirstIndex + i];
+                            scaledVertices[i] = uniformScale * hull.Vertices[origVertexIndex];
+
+                            faceCentroid += scaledVertices[i];
+                        }
+                        faceCentroid /= countVert;
+
+                        for (var j = 0; j < countVert; j++)
+                        {
+                            var vertices = new NativeArray<float3>(3, Allocator.Temp);
+                            if (j < countVert - 1)
+                            {
+                                vertices[0] = scaledVertices[j];
+                                vertices[1] = scaledVertices[j + 1];
+                            }
+                            else //close the circle of triangles
+                            {
+                                vertices[0] = scaledVertices[j];
+                                vertices[1] = scaledVertices[0];
+                            }
+                            vertices[2] = faceCentroid;
+                            DrawColliderUtility.DrawTriangle(vertices[0], vertices[2], vertices[1], worldFromCollider, ci);
+                            vertices.Dispose();
+                        }
+                        scaledVertices.Dispose();
+                    }
+                }
+            }
+
+            private unsafe void DrawCompoundColliderFaces(CompoundCollider* compoundCollider, RigidTransform worldFromCollider,
+                bool isDynamic, float uniformScale = 1.0f)
+            {
+                for (var i = 0; i < compoundCollider->Children.Length; i++)
+                {
+                    ref CompoundCollider.Child child = ref compoundCollider->Children[i];
+
+                    ScaledMTransform mWorldFromCompound = new ScaledMTransform(worldFromCollider, uniformScale);
+                    ScaledMTransform mWorldFromChild = ScaledMTransform.Mul(mWorldFromCompound, new MTransform(child.CompoundFromChild));
+                    RigidTransform worldFromChild = new RigidTransform(mWorldFromChild.Rotation, mWorldFromChild.Translation);
+
+                    DrawColliderFaces(child.Collider, worldFromChild, isDynamic, uniformScale);
+                }
+            }
+
+            private static unsafe void DrawMeshColliderFaces(MeshCollider* meshCollider, RigidTransform worldFromCollider,
+                DebugDisplay.ColorIndex ci, float uniformScale = 1.0f)
+            {
                 ref Mesh mesh = ref meshCollider->Mesh;
 
+                float4x4 worldMatrix = new float4x4(worldFromCollider);
+                worldMatrix.c0 *= uniformScale;
+                worldMatrix.c1 *= uniformScale;
+                worldMatrix.c2 *= uniformScale;
+
+                var nothing = new RigidTransform();
                 for (int sectionIndex = 0; sectionIndex < mesh.Sections.Length; sectionIndex++)
                 {
                     ref Mesh.Section section = ref mesh.Sections[sectionIndex];
@@ -176,271 +294,62 @@ namespace Unity.Physics.Authoring
                     {
                         Mesh.PrimitiveVertexIndices vertexIndices = section.PrimitiveVertexIndices[primitiveIndex];
                         Mesh.PrimitiveFlags flags = section.PrimitiveFlags[primitiveIndex];
-                        int numTriangles = flags.HasFlag(Mesh.PrimitiveFlags.IsTrianglePair) ? 2 : 1;
+                        var numTriangles = 1;
+                        if ((flags & Mesh.PrimitiveFlags.IsTrianglePair) != 0)
+                        {
+                            numTriangles = 2;
+                        }
 
                         float3x4 v = new float3x4(
-                            section.Vertices[vertexIndices.A],
-                            section.Vertices[vertexIndices.B],
-                            section.Vertices[vertexIndices.C],
-                            section.Vertices[vertexIndices.D]);
+                            math.transform(worldMatrix, section.Vertices[vertexIndices.A]),
+                            math.transform(worldMatrix, section.Vertices[vertexIndices.B]),
+                            math.transform(worldMatrix, section.Vertices[vertexIndices.C]),
+                            math.transform(worldMatrix, section.Vertices[vertexIndices.D]));
 
                         for (int triangleIndex = 0; triangleIndex < numTriangles; triangleIndex++)
                         {
-                            float3 a = v[0];
-                            float3 b = v[1 + triangleIndex];
-                            float3 c = v[2 + triangleIndex];
-                            vertices.Add(a);
-                            vertices.Add(b);
-                            vertices.Add(c);
-
-                            triangles.Add(vertexIndex++);
-                            triangles.Add(vertexIndex++);
-                            triangles.Add(vertexIndex++);
-
-                            float3 n = math.normalize(math.cross((b - a), (c - a)));
-                            normals.Add(n);
-                            normals.Add(n);
-                            normals.Add(n);
-                        }
-                    }
-                }
-
-                var displayMesh = new UnityEngine.Mesh
-                {
-                    hideFlags = HideFlags.HideAndDontSave,
-                    indexFormat = vertices.Count > UInt16.MaxValue
-                        ? UnityEngine.Rendering.IndexFormat.UInt32
-                        : UnityEngine.Rendering.IndexFormat.UInt16
-                };
-                displayMesh.SetVertices(vertices);
-                displayMesh.SetNormals(normals);
-                displayMesh.SetTriangles(triangles, 0);
-
-                results.Add(new DisplayResult
-                {
-                    Mesh = displayMesh,
-                    Scale = Vector3.one,
-                    Position = worldFromCollider.pos,
-                    Orientation = worldFromCollider.rot
-                });
-            }
-
-            public static void AppendCompound(CompoundCollider* compoundCollider, RigidTransform worldFromCollider, ref List<DisplayResult> results)
-            {
-                for (int i = 0; i < compoundCollider->Children.Length; i++)
-                {
-                    ref CompoundCollider.Child child = ref compoundCollider->Children[i];
-                    RigidTransform worldFromChild = math.mul(worldFromCollider, child.CompoundFromChild);
-                    AppendCollider(child.Collider, worldFromChild, ref results);
-                }
-            }
-
-            public static void AppendTerrain(TerrainCollider* terrainCollider, RigidTransform worldFromCollider, ref List<DisplayResult> results)
-            {
-                ref var terrain = ref terrainCollider->Terrain;
-
-                var numVertices = (terrain.Size.x - 1) * (terrain.Size.y - 1) * 6;
-                var vertices = new List<Vector3>(numVertices);
-                var normals = new List<Vector3>(numVertices);
-                var triangles = new List<int>(numVertices);
-
-                int vertexIndex = 0;
-                for (int i = 0; i < terrain.Size.x - 1; i++)
-                {
-                    for (int j = 0; j < terrain.Size.y - 1; j++)
-                    {
-                        int i0 = i;
-                        int i1 = i + 1;
-                        int j0 = j;
-                        int j1 = j + 1;
-                        float3 v0 = new float3(i0, terrain.Heights[i0 + terrain.Size.x * j0], j0) * terrain.Scale;
-                        float3 v1 = new float3(i1, terrain.Heights[i1 + terrain.Size.x * j0], j0) * terrain.Scale;
-                        float3 v2 = new float3(i0, terrain.Heights[i0 + terrain.Size.x * j1], j1) * terrain.Scale;
-                        float3 v3 = new float3(i1, terrain.Heights[i1 + terrain.Size.x * j1], j1) * terrain.Scale;
-                        float3 n0 = math.normalize(new float3(v0.y - v1.y, 1.0f, v0.y - v2.y));
-                        float3 n1 = math.normalize(new float3(v2.y - v3.y, 1.0f, v1.y - v3.y));
-
-                        vertices.Add(v1);
-                        vertices.Add(v0);
-                        vertices.Add(v2);
-                        vertices.Add(v1);
-                        vertices.Add(v2);
-                        vertices.Add(v3);
-
-                        normals.Add(n0);
-                        normals.Add(n0);
-                        normals.Add(n0);
-                        normals.Add(n1);
-                        normals.Add(n1);
-                        normals.Add(n1);
-
-                        triangles.Add(vertexIndex++);
-                        triangles.Add(vertexIndex++);
-                        triangles.Add(vertexIndex++);
-                        triangles.Add(vertexIndex++);
-                        triangles.Add(vertexIndex++);
-                        triangles.Add(vertexIndex++);
-                    }
-                }
-
-                var displayMesh = new UnityEngine.Mesh
-                {
-                    hideFlags = HideFlags.HideAndDontSave,
-                    indexFormat = vertices.Count > UInt16.MaxValue
-                        ? UnityEngine.Rendering.IndexFormat.UInt32
-                        : UnityEngine.Rendering.IndexFormat.UInt16
-                };
-                displayMesh.SetVertices(vertices);
-                displayMesh.SetNormals(normals);
-                displayMesh.SetTriangles(triangles, 0);
-
-                results.Add(new DisplayResult
-                {
-                    Mesh = displayMesh,
-                    Scale = Vector3.one,
-                    Position = worldFromCollider.pos,
-                    Orientation = worldFromCollider.rot
-                });
-            }
-
-            public static void AppendCollider(Collider* collider, RigidTransform worldFromCollider, ref List<DisplayResult> results)
-            {
-                switch (collider->Type)
-                {
-                    case ColliderType.Box:
-                    case ColliderType.Triangle:
-                    case ColliderType.Quad:
-                    case ColliderType.Cylinder:
-                    case ColliderType.Convex:
-                        AppendConvex(ref ((ConvexCollider*)collider)->ConvexHull, worldFromCollider, ref results);
-                        break;
-                    case ColliderType.Sphere:
-                        AppendSphere((SphereCollider*)collider, worldFromCollider, ref results);
-                        break;
-                    case ColliderType.Capsule:
-                        AppendCapsule((CapsuleCollider*)collider, worldFromCollider, ref results);
-                        break;
-                    case ColliderType.Mesh:
-                        AppendMesh((MeshCollider*)collider, worldFromCollider, ref results);
-                        break;
-                    case ColliderType.Compound:
-                        AppendCompound((CompoundCollider*)collider, worldFromCollider, ref results);
-                        break;
-                    case ColliderType.Terrain:
-                        AppendTerrain((TerrainCollider*)collider, worldFromCollider, ref results);
-                        break;
-                }
-            }
-
-            static List<DisplayResult> BuildDebugDisplayMesh(BlobAssetReference<Collider> collider) =>
-                BuildDebugDisplayMesh((Collider*)collider.GetUnsafePtr());
-
-            static List<DisplayResult> BuildDebugDisplayMesh(Collider* collider)
-            {
-                List<DisplayResult> results = new List<DisplayResult>();
-                AppendCollider(collider, RigidTransform.identity, ref results);
-                return results;
-            }
-
-            public void OnDrawGizmos()
-            {
-                if (EnableColliders == 0)
-                    return;
-
-                if (!Bodies.IsCreated)
-                    return;
-
-                for (int b = 0; b < Bodies.Length; b++)
-                {
-                    var body = Bodies[b];
-                    if (!body.Collider.IsCreated)
-                        continue;
-
-                    // Draw collider
-                    {
-                        List<DisplayResult> displayResults = BuildDebugDisplayMesh(body.Collider);
-                        if (displayResults.Count == 0)
-                            continue;
-
-                        if (b < NumDynamicBodies)
-                        {
-                            Gizmos.color = new UnityEngine.Color(1.0f, 0.7f, 0.0f);
-                        }
-                        else
-                        {
-                            Gizmos.color = new UnityEngine.Color(0.7f, 0.7f, 0.7f);
-                        }
-
-                        foreach (DisplayResult dr in displayResults)
-                        {
-                            if (EnableColliders != 0)
-                            {
-                                Vector3 position = math.transform(body.WorldFromBody, dr.Position);
-                                Quaternion orientation = math.mul(body.WorldFromBody.rot, dr.Orientation);
-                                Gizmos.DrawMesh(dr.Mesh, position, orientation, dr.Scale);
-                            }
-                            if (dr.Mesh != CachedReferenceCylinder && dr.Mesh != CachedReferenceSphere)
-                            {
-                                // Cleanup any meshes that are not our cached ones
-                                Destroy(dr.Mesh);
-                            }
+                            DrawColliderUtility.DrawTriangle(v[0], v[1 + triangleIndex], v[2 + triangleIndex], nothing, ci);
                         }
                     }
                 }
             }
-        }
-
-#pragma warning disable 618
-        DrawComponent m_DrawComponent;
-#pragma warning restore 618
-
-        protected override void OnCreate()
-        {
-            base.OnCreate();
-            m_BuildPhysicsWorldSystem = World.GetOrCreateSystem<BuildPhysicsWorld>();
         }
 
         protected override void OnDestroy()
         {
-            if (m_DrawComponent != null)
-            {
-                m_DrawComponent.Bodies = default;
-            }
-
-            m_BuildPhysicsWorldSystem = null;
-            base.OnDestroy();
-        }
-
-        protected override void OnStartRunning()
-        {
-            base.OnStartRunning();
-            this.RegisterPhysicsRuntimeSystemReadOnly();
+            AppendMeshColliders.GetMeshes.ClearReferenceMeshes();
         }
 
         protected override void OnUpdate()
         {
-            if (!HasSingleton<PhysicsDebugDisplayData>())
+#if UNITY_EDITOR
+            if (!TryGetSingleton<PhysicsDebugDisplayData>(out PhysicsDebugDisplayData debugDisplay) || debugDisplay.DrawColliders == 0)
                 return;
 
-            if (m_BuildPhysicsWorldSystem.PhysicsWorld.NumBodies == 0)
+            var world = GetSingleton<PhysicsWorldSingleton>().PhysicsWorld;
+            if (world.NumBodies == 0)
                 return;
 
-            int drawColliders = GetSingleton<PhysicsDebugDisplayData>().DrawColliders;
+            CompleteDependency();
+            NativeReference<int> NumPrimitiveColliders = new NativeReference<int>(0, Allocator.TempJob);
+            new CalculateNumberOfPrimitiveCollidersJob { NumPrimitiveColliders = NumPrimitiveColliders, Bodies = world.Bodies }.Run();
+            NativeList<PrimitiveInfo> primitives = new NativeList<PrimitiveInfo>(NumPrimitiveColliders.Value, Allocator.TempJob);
+            NumPrimitiveColliders.Dispose();
 
-            if (m_DrawComponent == null)
+            // Gather the TRS data. If collider is a cached primitive type, it will write to the NativeList
+            var colliderJobHandle = new DisplayColliderFacesJob
             {
-                // Need to make a GO and attach our DrawComponent MonoBehaviour
-                // so that the rendering can happen on the main thread.
-                GameObject drawObject = new GameObject();
-#pragma warning disable 618
-                m_DrawComponent = drawObject.AddComponent<DrawComponent>();
-#pragma warning restore 618
-                drawObject.name = "DebugColliderDisplay";
-            }
+                Bodies = world.Bodies,
+                DynamicBodies = world.NumDynamicBodies,
+                PrimitiveWriter = primitives.AsParallelWriter()
+            }.Schedule(world.Bodies.Length, 16, Dependency);
 
-            m_DrawComponent.Bodies = m_BuildPhysicsWorldSystem.PhysicsWorld.Bodies;
-            m_DrawComponent.NumDynamicBodies = m_BuildPhysicsWorldSystem.PhysicsWorld.NumDynamicBodies;
-            m_DrawComponent.EnableColliders = drawColliders;
+            colliderJobHandle.Complete();
+
+            // Push the TRS NativeList to a C# List for later rendering:
+            DrawMeshUtility.SaveTRSList(primitives);
+            primitives.Dispose();
+#endif
         }
     }
 }

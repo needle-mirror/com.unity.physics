@@ -65,7 +65,7 @@ namespace Unity.Physics.Authoring
         [Tooltip("Specifies whether to update the collision world after the step for more precise queries.")]
         bool m_SynchronizeCollisionWorld = Default.SynchronizeCollisionWorld > 0 ? true : false;
 
-        PhysicsStep AsComponent => new PhysicsStep
+        internal PhysicsStep AsComponent => new PhysicsStep
         {
             SimulationType = SimulationType,
             Gravity = Gravity,
@@ -107,6 +107,14 @@ namespace Unity.Physics.Authoring
             {
                 m_ConvertedEntityManager.SetComponentData(m_ConvertedEntity, AsComponent);
             }
+        }
+    }
+
+    internal class PhysicsStepBaker : Baker<PhysicsStepAuthoring>
+    {
+        public override void Bake(PhysicsStepAuthoring authoring)
+        {
+            AddComponent(authoring.AsComponent);
         }
     }
 }

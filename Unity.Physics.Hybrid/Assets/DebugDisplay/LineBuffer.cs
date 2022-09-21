@@ -70,7 +70,7 @@ namespace Unity.DebugDisplay
             m_Instance[index] = new Instance {};
         }
 
-        public  void Dispose()
+        public void Dispose()
         {
             m_Instance.Dispose();
         }

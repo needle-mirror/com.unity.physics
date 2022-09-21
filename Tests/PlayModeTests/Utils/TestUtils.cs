@@ -836,8 +836,11 @@ namespace Unity.Physics.Tests.Utils
         // Random generation
         //
 
-        public static BlobAssetReference<Collider> GenerateRandomMesh(ref Random rnd)
+        // Assumes scale >= 1
+        public static BlobAssetReference<Collider> GenerateRandomMesh(ref Random rnd, float scale, CollisionFilter filter, Material material)
         {
+            Assert.IsTrue(scale >= 1.0f);
+
             int numTriangles = rnd.NextInt(1, 250);
             var vertices = new NativeArray<float3>(numTriangles * 3, Allocator.Temp);
             var triangles = new NativeArray<int3>(numTriangles, Allocator.Temp);
@@ -862,7 +865,7 @@ namespace Unity.Physics.Tests.Utils
                             float3 center = rnd.NextFloat3(-10.0f, 10.0f);
                             for (int j = 0; j < 3; j++)
                             {
-                                vertices[nextIndex++] = center + rnd.NextFloat3(-size, size);
+                                vertices[nextIndex++] = (center + rnd.NextFloat3(-size, size)) * scale;
                             }
                         }
                         break;
@@ -879,15 +882,15 @@ namespace Unity.Physics.Tests.Utils
                             Math.CalculatePerpendicularNormalized(math.normalize(arm), out axis, out unused);
                         }
                         float arc = rnd.NextFloat(0.1f, 2.0f * (float)math.PI);
-                        arc = math.min(arc, featureTriangles * (float)math.PI / 2.0f); // avoid degenerate triangles
-                        featureTriangles = math.min(featureTriangles, (int)(arc / 0.025f)); // avoid degenerate triangles
+                        arc = math.min(arc, featureTriangles * (float)math.PI / 2.0f);     // avoid degenerate triangles
+                        featureTriangles = math.min(featureTriangles, (int)(arc / 0.025f));     // avoid degenerate triangles
                         quaternion q = Unity.Mathematics.quaternion.AxisAngle(axis, arc / numTriangles);
                         for (int i = 0; i < featureTriangles; i++)
                         {
-                            vertices[nextIndex++] = center;
-                            vertices[nextIndex++] = center + arm;
+                            vertices[nextIndex++] = center * scale;
+                            vertices[nextIndex++] = (center + arm) * scale;
                             arm = math.mul(q, arm);
-                            vertices[nextIndex++] = center + arm;
+                            vertices[nextIndex++] = (center + arm) * scale;
                         }
                         break;
                     }
@@ -907,9 +910,9 @@ namespace Unity.Physics.Tests.Utils
                             float3 v2 = v0 + rnd.NextFloat(0.25f, 0.5f) * dir;
                             dir = math.mul(Unity.Mathematics.quaternion.AxisAngle(rnd.NextFloat3Direction(), rnd.NextFloat(0.0f, 0.3f)), dir);
 
-                            vertices[nextIndex++] = v0;
-                            vertices[nextIndex++] = v1;
-                            vertices[nextIndex++] = v2;
+                            vertices[nextIndex++] = v0 * scale;
+                            vertices[nextIndex++] = v1 * scale;
+                            vertices[nextIndex++] = v2 * scale;
 
                             v0 = v1;
                             v1 = v2;
@@ -923,7 +926,7 @@ namespace Unity.Physics.Tests.Utils
                         int quads = featureTriangles / 2;
                         if (quads == 0)
                         {
-                            featureTriangles = 0; // Too small, try again for a different feature
+                            featureTriangles = 0;     // Too small, try again for a different feature
                             break;
                         }
 
@@ -939,13 +942,13 @@ namespace Unity.Physics.Tests.Utils
                         {
                             for (int j = 0; j < cols; j++)
                             {
-                                vertices[nextIndex++] = origin + x * (i + 0) + y * (j + 0);
-                                vertices[nextIndex++] = origin + x * (i + 0) + y * (j + 1);
-                                vertices[nextIndex++] = origin + x * (i + 1) + y * (j + 1);
+                                vertices[nextIndex++] = (origin + x * (i + 0) + y * (j + 0)) * scale;
+                                vertices[nextIndex++] = (origin + x * (i + 0) + y * (j + 1)) * scale;
+                                vertices[nextIndex++] = (origin + x * (i + 1) + y * (j + 1)) * scale;
 
-                                vertices[nextIndex++] = origin + x * (i + 0) + y * (j + 0);
-                                vertices[nextIndex++] = origin + x * (i + 1) + y * (j + 1);
-                                vertices[nextIndex++] = origin + x * (i + 0) + y * (j + 1);
+                                vertices[nextIndex++] = (origin + x * (i + 0) + y * (j + 0)) * scale;
+                                vertices[nextIndex++] = (origin + x * (i + 1) + y * (j + 1)) * scale;
+                                vertices[nextIndex++] = (origin + x * (i + 0) + y * (j + 1)) * scale;
                             }
                         }
 
@@ -961,17 +964,22 @@ namespace Unity.Physics.Tests.Utils
                 triangles[i] = new int3(3 * i, 3 * i + 1, 3 * i + 2);
             }
 
-            var ret = MeshCollider.Create(vertices, triangles);
+            var ret = MeshCollider.Create(vertices, triangles, filter, material);
 
             vertices.Dispose();
             triangles.Dispose();
             return ret;
         }
 
-        public static BlobAssetReference<Collider> GenerateRandomTerrain(ref Random rnd)
+        public static BlobAssetReference<Collider> GenerateRandomMesh(ref Random rnd, float scale) => GenerateRandomMesh(ref rnd, scale, CollisionFilter.Default, Material.Default);
+
+        // Assumes scale >= 1
+        public static BlobAssetReference<Collider> GenerateRandomTerrain(ref Random rnd, float uniformScale)
         {
+            Assert.IsTrue(uniformScale >= 1.0f);
+
             int2 size = rnd.NextInt2(2, 50);
-            float3 scale = rnd.NextFloat3(0.1f, new float3(1, 10, 1));
+            float3 scale = rnd.NextFloat3(0.1f, new float3(1, 10, 1)) * uniformScale;
 
             int numSamples = size.x * size.y;
             var heights = new NativeArray<float>(numSamples, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
@@ -985,8 +993,11 @@ namespace Unity.Physics.Tests.Utils
             return TerrainCollider.Create(heights, size, scale, TerrainCollider.CollisionMethod.Triangles);
         }
 
-        public static BlobAssetReference<Collider> GenerateRandomCompound(ref Random rnd)
+        // Assumes scale >=1
+        public static BlobAssetReference<Collider> GenerateRandomCompound(ref Random rnd, float scale)
         {
+            Assert.IsTrue(scale >= 1.0f);
+
             int numChildren = rnd.NextInt(1, 10);
             var children = new NativeArray<CompoundCollider.ColliderBlobInstance>(numChildren, Allocator.Temp);
             for (int i = 0; i < numChildren; i++)
@@ -995,37 +1006,41 @@ namespace Unity.Physics.Tests.Utils
                 {
                     CompoundFromChild = new RigidTransform
                     {
-                        pos = (rnd.NextInt(10) > 0) ? rnd.NextFloat3(-5.0f, 5.0f) : float3.zero,
+                        pos = (rnd.NextInt(10) > 0) ? (rnd.NextFloat3(-5.0f, 5.0f)) * scale : float3.zero,
                         rot = (rnd.NextInt(10) > 0) ? rnd.NextQuaternionRotation() : quaternion.identity
                     },
-                    Collider = GenerateRandomCollider(ref rnd)
+                    Collider = GenerateRandomCollider(ref rnd, scale)
                 };
             }
 
             return CompoundCollider.Create(children);
         }
 
-        public static BlobAssetReference<Collider> GenerateRandomConvex(ref Random rnd)
+        // Assumes scale >= 1
+        public static BlobAssetReference<Collider> GenerateRandomConvex(ref Random rnd, float scale, CollisionFilter filter, Material material)
         {
+            Assert.IsTrue(scale >= 1.0f);
+
             ColliderType colliderType = (ColliderType)rnd.NextInt((int)ColliderType.Cylinder + 1);
-            float convexRadius = (rnd.NextInt(4) > 0) ? rnd.NextFloat(0.5f) : 0.0f;
+
+            float scaledConvexRadius = scale * ((rnd.NextInt(4) > 0) ? rnd.NextFloat(0.5f) : 0.0f);
             switch (colliderType)
             {
                 case ColliderType.Convex:
                 {
                     int numPoints = rnd.NextInt(1, 16);
-                    if (numPoints == 3) // TODO - hull builder doesn't build faces for flat shapes, work around it for now to run the test
+                    if (numPoints == 3)     // TODO - hull builder doesn't build faces for flat shapes, work around it for now to run the test
                     {
                         numPoints++;
                     }
                     var points = new NativeArray<float3>(numPoints, Allocator.TempJob);
                     for (int i = 0; i < numPoints; i++)
                     {
-                        points[i] = rnd.NextFloat3(-1.0f, 1.0f);
+                        points[i] = rnd.NextFloat3(-1.0f, 1.0f) * scale;
                     }
                     var generationParameters = ConvexHullGenerationParameters.Default;
-                    generationParameters.BevelRadius = convexRadius;
-                    var collider = ConvexCollider.Create(points, generationParameters, CollisionFilter.Default);
+                    generationParameters.BevelRadius = scaledConvexRadius;
+                    var collider = ConvexCollider.Create(points, generationParameters, filter, material);
                     points.Dispose();
                     return collider;
                 }
@@ -1034,26 +1049,26 @@ namespace Unity.Physics.Tests.Utils
                 {
                     return SphereCollider.Create(new SphereGeometry
                     {
-                        Center = (rnd.NextInt(4) > 0) ? float3.zero : rnd.NextFloat3(-0.5f, 0.5f),
-                        Radius = rnd.NextFloat(0.01f, 0.5f)
-                    });
+                        Center = scale * ((rnd.NextInt(4) > 0) ? float3.zero : rnd.NextFloat3(-0.5f, 0.5f)),
+                        Radius = scale * rnd.NextFloat(0.01f, 0.5f)
+                    }, filter, material);
                 }
 
                 case ColliderType.Capsule:
                 {
-                    float3 point0 = rnd.NextFloat3(0.0f, 1.0f);
-                    float3 point1 = (rnd.NextInt(4) > 0) ? -point0 : rnd.NextFloat3(-1.0f, 1.0f);
+                    float3 point0 = scale * rnd.NextFloat3(0.0f, 1.0f);
+                    float3 point1 = (rnd.NextInt(4) > 0) ? -point0 : rnd.NextFloat3(-1.0f, 1.0f) * scale;
                     return CapsuleCollider.Create(new CapsuleGeometry
                     {
                         Vertex0 = point0,
                         Vertex1 = point1,
-                        Radius = rnd.NextFloat(0.01f, 0.5f)
-                    });
+                        Radius = rnd.NextFloat(0.01f, 0.5f) * scale
+                    }, filter, material);
                 }
 
                 case ColliderType.Triangle:
                 {
-                    return PolygonCollider.CreateTriangle(rnd.NextFloat3(-1.0f, 1.0f), rnd.NextFloat3(-1.0f, 1.0f), rnd.NextFloat3(-1.0f, 1.0f));
+                    return PolygonCollider.CreateTriangle(rnd.NextFloat3(-1.0f, 1.0f) * scale, rnd.NextFloat3(-1.0f, 1.0f) * scale, rnd.NextFloat3(-1.0f, 1.0f) * scale, filter, material);
                 }
 
                 case ColliderType.Quad:
@@ -1069,41 +1084,41 @@ namespace Unity.Physics.Tests.Utils
                     float3 b = math.lerp(point3, point3 + point3 - point0, t0);
                     float3 point2 = math.lerp(a, b, t1);
 
-                    return PolygonCollider.CreateQuad(point0, point1, point2, point3);
+                    return PolygonCollider.CreateQuad(point0 * scale, point1 * scale, point2 * scale, point3 * scale, filter, material);
                 }
 
                 case ColliderType.Box:
                 {
-                    float minSize = 0.05f; // TODO - work around hull builder problems with small faces, sometimes doesn't extend 1D->2D based on face area
+                    float minSize = 0.05f;     // TODO - work around hull builder problems with small faces, sometimes doesn't extend 1D->2D based on face area
                     var boxGeometry = new BoxGeometry
                     {
-                        Center = (rnd.NextInt(4) > 0) ? float3.zero : rnd.NextFloat3(-0.5f, 0.5f),
+                        Center = ((rnd.NextInt(4) > 0) ? float3.zero : rnd.NextFloat3(-0.5f, 0.5f)) * scale,
                         Orientation = (rnd.NextInt(4) > 0) ? quaternion.identity : rnd.NextQuaternionRotation(),
-                        Size = rnd.NextFloat3(minSize, 1.0f)
+                        Size = rnd.NextFloat3(minSize, 1.0f) * scale
                     };
 
-                    float maxBevelRadius = math.max(math.cmin((boxGeometry.Size - minSize) / (2.0f * (1.0f + float.Epsilon))), 0.0f);
-                    boxGeometry.BevelRadius = math.min(maxBevelRadius, convexRadius);
+                    float maxBevelRadius = math.max(math.cmin((boxGeometry.Size - minSize * scale) / (2.0f * (1.0f + float.Epsilon))), 0.0f);
+                    boxGeometry.BevelRadius = math.min(maxBevelRadius, scaledConvexRadius);
 
-                    return BoxCollider.Create(boxGeometry);
+                    return BoxCollider.Create(boxGeometry, filter, material);
                 }
 
                 case ColliderType.Cylinder:
                 {
-                    float minSize = 0.01f; // TODO - cylinder gets degenerate faces if radius-convexRadius=0 or height/2-convexRadius=0, decide how to handle this in CylinderCollider
+                    float minSize = 0.01f;     // TODO - cylinder gets degenerate faces if radius-convexRadius=0 or height/2-convexRadius=0, decide how to handle this in CylinderCollider
                     var cylinderGeometry = new CylinderGeometry
                     {
-                        Center = (rnd.NextInt(4) > 0) ? float3.zero : rnd.NextFloat3(-0.5f, 0.5f),
+                        Center = (rnd.NextInt(4) > 0) ? float3.zero : rnd.NextFloat3(-0.5f, 0.5f) * scale,
                         Orientation = (rnd.NextInt(4) > 0) ? quaternion.identity : rnd.NextQuaternionRotation(),
-                        Height = rnd.NextFloat(2.0f * minSize, 1f),
-                        Radius = rnd.NextFloat(minSize, 1.0f),
+                        Height = rnd.NextFloat(2.0f * minSize, 1f) * scale,
+                        Radius = rnd.NextFloat(minSize, 1.0f) * scale,
                         SideCount = 20
                     };
 
-                    var maxBevelRadius = math.max(math.min(cylinderGeometry.Height / 2, cylinderGeometry.Radius) - minSize, 0.0f);
-                    cylinderGeometry.BevelRadius = math.min(maxBevelRadius, convexRadius);
+                    var maxBevelRadius = math.max(math.min(cylinderGeometry.Height / 2, cylinderGeometry.Radius) - minSize * scale, 0.0f);
+                    cylinderGeometry.BevelRadius = math.min(maxBevelRadius, scaledConvexRadius);
 
-                    return CylinderCollider.Create(cylinderGeometry);
+                    return CylinderCollider.Create(cylinderGeometry, filter, material);
                 }
 
                 default:
@@ -1111,24 +1126,30 @@ namespace Unity.Physics.Tests.Utils
             }
         }
 
-        public static BlobAssetReference<Collider> GenerateRandomCollider(ref Random rnd)
+        public static BlobAssetReference<Collider> GenerateRandomConvex(ref Random rnd, float scale) => GenerateRandomConvex(ref rnd, scale, CollisionFilter.Default, Material.Default);
+
+
+        // Assumes scale >=1
+        public static BlobAssetReference<Collider> GenerateRandomCollider(ref Random rnd, float scale)
         {
+            Assert.IsTrue(scale >= 1.0f);
+
             if (rnd.NextInt(10) > 0)
             {
-                return GenerateRandomConvex(ref rnd); // 90% convex
+                return GenerateRandomConvex(ref rnd, scale); // 90% convex
             }
             else if (rnd.NextInt(4) > 0)
             {
                 if (rnd.NextInt(2) > 0)
                 {
-                    return GenerateRandomMesh(ref rnd); // 3.25% mesh
+                    return GenerateRandomMesh(ref rnd, scale); // 3.25% mesh
                 }
                 else
                 {
-                    return GenerateRandomTerrain(ref rnd); // 3.25% terrain
+                    return GenerateRandomTerrain(ref rnd, scale); // 3.25% terrain
                 }
             }
-            return GenerateRandomCompound(ref rnd); // 2.5% compound
+            return GenerateRandomCompound(ref rnd, scale); // 2.5% compound
         }
 
         public static unsafe PhysicsWorld GenerateRandomWorld(ref Random rnd, int numBodies, float size, int numThreadsHint)
@@ -1138,8 +1159,17 @@ namespace Unity.Physics.Tests.Utils
 
             // Create bodies
             NativeArray<RigidBody> bodies = world.StaticBodies;
+
             for (int i = 0; i < numBodies; i++)
             {
+                float scale = rnd.NextBool() ? 1 : math.pow(10.0f, rnd.NextFloat(-2f, 2f));
+                scale = scale > 1.0f ? 1.0f / scale : scale;
+                float colliderCreationScale = 1.0f / scale;
+                if (scale != 1.0f)
+                {
+                    scale = rnd.NextBool() ? scale : -scale;
+                }
+
                 bodies[i] = new RigidBody
                 {
                     WorldFromBody = new RigidTransform
@@ -1147,7 +1177,8 @@ namespace Unity.Physics.Tests.Utils
                         pos = rnd.NextFloat3(-size, size),
                         rot = (rnd.NextInt(10) > 0) ? rnd.NextQuaternionRotation() : quaternion.identity
                     },
-                    Collider = GenerateRandomCollider(ref rnd),   // Not safe, could be garbage collected
+                    Scale = scale,
+                    Collider = GenerateRandomCollider(ref rnd, colliderCreationScale),   // Not safe, could be garbage collected
                     Entity = Entity.Null,
                     CustomTags = 0
                 };
@@ -1161,8 +1192,7 @@ namespace Unity.Physics.Tests.Utils
             }
             else
             {
-                var buildStaticTree = new NativeArray<int>(1, Allocator.TempJob);
-                buildStaticTree[0] = 1;
+                var buildStaticTree = new NativeReference<int>(1, Allocator.TempJob);
                 world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, timeStep: 1.0f, gravity: -9.81f * math.up(),
                     buildStaticTree, inputDeps: new JobHandle(), numThreadsHint > 0).Complete();
                 buildStaticTree.Dispose();

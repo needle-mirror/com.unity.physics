@@ -141,7 +141,7 @@ namespace Unity.Physics
         /// <summary>
         /// Schedule a set of jobs to build the broadphase based on the given world.
         /// </summary>
-        public JobHandle ScheduleBuildJobs(ref PhysicsWorld world, float timeStep, float3 gravity, NativeArray<int> buildStaticTree, JobHandle inputDeps, bool multiThreaded = true)
+        public JobHandle ScheduleBuildJobs(ref PhysicsWorld world, float timeStep, float3 gravity, NativeReference<int>.ReadOnly buildStaticTree, JobHandle inputDeps, bool multiThreaded = true)
         {
             if (!multiThreaded)
             {
@@ -171,7 +171,7 @@ namespace Unity.Physics
         /// Schedule a set of jobs to build the static tree of the broadphase based on the given world.
         /// </summary>
         public JobHandle ScheduleStaticTreeBuildJobs(
-            ref PhysicsWorld world, int numThreadsHint, NativeArray<int> shouldDoWork, JobHandle inputDeps)
+            ref PhysicsWorld world, int numThreadsHint, NativeReference<int>.ReadOnly shouldDoWork, JobHandle inputDeps)
         {
             Assert.AreEqual(world.NumStaticBodies, m_StaticTree.NumBodies);
             if (world.NumStaticBodies == 0)
@@ -182,7 +182,7 @@ namespace Unity.Physics
             var aabbs = new NativeArray<Aabb>(world.NumStaticBodies, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
             var points = new NativeArray<PointAndIndex>(world.NumStaticBodies, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
 
-            var numStaticBodiesArray = new NativeArray<int>(1, Allocator.TempJob);
+            var numStaticBodiesArray = new NativeReference<int>(Allocator.TempJob);
             JobHandle handle = new PrepareNumStaticBodiesJob
             {
                 NumStaticBodies = world.NumStaticBodies,
@@ -198,13 +198,16 @@ namespace Unity.Physics
                 FiltersOut = m_StaticTree.BodyFilters,
                 RespondsToCollisionOut = m_StaticTree.RespondsToCollision,
                 AabbMargin = world.CollisionWorld.CollisionTolerance * 0.5f, // each body contributes half
-            }.ScheduleUnsafeIndex0(numStaticBodiesArray, 32, handle);
+            }.ScheduleUnsafe(numStaticBodiesArray, 32, handle);
 
             var buildHandle = m_StaticTree.BoundingVolumeHierarchy.ScheduleBuildJobs(
                 points, aabbs, m_StaticTree.BodyFilters, shouldDoWork, numThreadsHint, handle,
                 m_StaticTree.Nodes.Length, m_StaticTree.Ranges, m_StaticTree.BranchCount);
 
-            return JobHandle.CombineDependencies(buildHandle, numStaticBodiesArray.Dispose(handle));
+            //@TODO: Switch to World allocator and remove Dispose job completely
+            var disposeJob = numStaticBodiesArray.Dispose(handle);
+
+            return JobHandle.CombineDependencies(buildHandle, disposeJob);
         }
 
         /// <summary>
@@ -235,13 +238,13 @@ namespace Unity.Physics
                 Gravity = gravity
             }.Schedule(world.NumDynamicBodies, 32, inputDeps);
 
-            var shouldDoWork = new NativeArray<int>(1, Allocator.TempJob);
-            shouldDoWork[0] = 1;
+            var shouldDoWork = new NativeReference<int>(1, Allocator.TempJob);
 
             handle = m_DynamicTree.BoundingVolumeHierarchy.ScheduleBuildJobs(
                 points, aabbs, m_DynamicTree.BodyFilters, shouldDoWork, numThreadsHint, handle,
                 m_DynamicTree.Nodes.Length, m_DynamicTree.Ranges, m_DynamicTree.BranchCount);
 
+            //@TODO: Remove this and replace with WorldAllocator
             return shouldDoWork.Dispose(handle);
         }
 
@@ -270,7 +273,7 @@ namespace Unity.Physics
             }
         }
 
-        // Schedule a set of jobs which will write all overlapping body pairs to the given steam,
+        // Schedule a set of jobs which will write all overlapping body pairs to the given stream,
         // where at least one of the bodies is dynamic. The results are unsorted.
         public SimulationJobHandles ScheduleFindOverlapsJobs(out NativeStream dynamicVsDynamicPairsStream, out NativeStream staticVsDynamicPairsStream,
             JobHandle inputDeps, bool multiThreaded = true)
@@ -344,6 +347,7 @@ namespace Unity.Physics
             // Dispose node pair lists
             var disposeOverlapPairs0 = dynamicVsDynamicNodePairIndices.Dispose(dynamicVsDynamicHandle);
             var disposeOverlapPairs1 = staticVsDynamicNodePairIndices.Dispose(staticVsDynamicHandle);
+
             returnHandles.FinalDisposeHandle = JobHandle.CombineDependencies(disposeOverlapPairs0, disposeOverlapPairs1);
             returnHandles.FinalExecutionHandle = JobHandle.CombineDependencies(dynamicVsDynamicHandle, staticVsDynamicHandle);
 
@@ -364,6 +368,7 @@ namespace Unity.Physics
             [NoAlias] public NativeArray<bool> RespondsToCollision; // A copy of the RespondsToCollision flag of each body
             [NoAlias] internal NativeArray<Builder.Range> Ranges; // Used during building
             [NoAlias] internal NativeArray<int> BranchCount; // Used during building
+
             internal Allocator Allocator;
 
             public BoundingVolumeHierarchy BoundingVolumeHierarchy => new BoundingVolumeHierarchy(Nodes, NodeFilters);
@@ -538,7 +543,7 @@ namespace Unity.Physics
             where T : struct, ICollector<ColliderCastHit>
         {
             Assert.IsTrue(input.Collider != null);
-            if (input.Collider->Filter.IsEmpty)
+            if (input.Collider->GetCollisionFilter().IsEmpty)
                 return false;
 
             var leafProcessor = new BvhLeafProcessor(rigidBodies);
@@ -572,7 +577,7 @@ namespace Unity.Physics
             where T : struct, ICollector<DistanceHit>
         {
             Assert.IsTrue(input.Collider != null);
-            if (input.Collider->Filter.IsEmpty)
+            if (input.Collider->GetCollisionFilter().IsEmpty)
                 return false;
             var leafProcessor = new BvhLeafProcessor(rigidBodies);
 
@@ -663,7 +668,7 @@ namespace Unity.Physics
             {
                 rigidBodyIndex += BaseRigidBodyIndex;
                 RigidBody body = m_Bodies[rigidBodyIndex];
-                if (body.Collider.IsCreated && CollisionFilter.IsCollisionEnabled(input.Filter, body.Collider.Value.Filter))
+                if (body.Collider.IsCreated && CollisionFilter.IsCollisionEnabled(input.Filter, body.Collider.Value.GetCollisionFilter()))
                 {
                     collector.AddRigidBodyIndices(&rigidBodyIndex, 1);
                 }
@@ -684,13 +689,13 @@ namespace Unity.Physics
             [ReadOnly] public float CollisionTolerance;
             [ReadOnly] public float TimeStep;
             [ReadOnly] public float3 Gravity;
-            [ReadOnly] public NativeArray<int> BuildStaticTree;
+            public NativeReference<int>.ReadOnly BuildStaticTree;
 
             public Broadphase Broadphase;
 
             public void Execute()
             {
-                Broadphase.Build(StaticBodies, DynamicBodies, MotionVelocities, CollisionTolerance, TimeStep, Gravity, BuildStaticTree[0] == 1);
+                Broadphase.Build(StaticBodies, DynamicBodies, MotionVelocities, CollisionTolerance, TimeStep, Gravity, BuildStaticTree.Value == 1);
             }
         }
 
@@ -765,10 +770,10 @@ namespace Unity.Physics
                     mv.LinearVelocity += gravity * timeStep * mv.GravityFactor;
 
                     MotionExpansion expansion = mv.CalculateExpansion(timeStep);
-                    aabb = expansion.ExpandAabb(body.Collider.Value.CalculateAabb(body.WorldFromBody));
+                    aabb = expansion.ExpandAabb(body.CalculateAabb());
                     aabb.Expand(aabbMargin);
 
-                    filtersOut[index] = body.Collider.Value.Filter;
+                    filtersOut[index] = body.Collider.Value.GetCollisionFilter();
                     respondsToCollisionOut[index] = body.Collider.Value.RespondsToCollision;
                 }
                 else
@@ -794,18 +799,18 @@ namespace Unity.Physics
         struct PrepareNumStaticBodiesJob : IJob
         {
             public int NumStaticBodies;
-            public NativeArray<int> BuildStaticTree;
-            public NativeArray<int> NumStaticBodiesArray;
+            public NativeReference<int>.ReadOnly BuildStaticTree;
+            public NativeReference<int> NumStaticBodiesArray;
 
             public void Execute()
             {
-                if (BuildStaticTree[0] == 1)
+                if (BuildStaticTree.Value == 1)
                 {
-                    NumStaticBodiesArray[0] = NumStaticBodies;
+                    NumStaticBodiesArray.Value = NumStaticBodies;
                 }
                 else
                 {
-                    NumStaticBodiesArray[0] = 0;
+                    NumStaticBodiesArray.Value = 0;
                 }
             }
         }
@@ -836,10 +841,10 @@ namespace Unity.Physics
                 Aabb aabb;
                 if (body.Collider.IsCreated)
                 {
-                    aabb = body.Collider.Value.CalculateAabb(body.WorldFromBody);
+                    aabb = body.CalculateAabb();
                     aabb.Expand(aabbMargin);
 
-                    filtersOut[index] = body.Collider.Value.Filter;
+                    filtersOut[index] = body.Collider.Value.GetCollisionFilter();
                     respondsToCollisionOut[index] = body.Collider.Value.RespondsToCollision;
                 }
                 else

@@ -17,45 +17,52 @@ using LegacySpring = UnityEngine.SpringJoint;
 
 namespace Unity.Physics.Authoring
 {
-    [AlwaysUpdateSystem]
     [UpdateAfter(typeof(BeginJointConversionSystem))]
     [UpdateBefore(typeof(EndJointConversionSystem))]
-    sealed class LegacyJointConversionSystem : GameObjectConversionSystem
+    partial class LegacyJointConversionSystem : GameObjectConversionSystem
     {
-        PhysicsJoint CreateConfigurableJoint(
+        struct CombinedJoint
+        {
+            public PhysicsJoint LinearJoint;
+            public PhysicsJoint AngularJoint;
+        }
+
+        CombinedJoint CreateConfigurableJoint(
             quaternion jointFrameOrientation,
-            LegacyJoint joint, bool3 linearLocks, bool3 linearLimited, SoftJointLimit linearLimit, SoftJointLimitSpring linearSpring, bool3 angularFree, bool3 angularLocks,
-            bool3 angularLimited, SoftJointLimit lowAngularXLimit, SoftJointLimit highAngularXLimit, SoftJointLimitSpring angularXLimitSpring, SoftJointLimit angularYLimit,
+            LegacyJoint joint, bool3 linearLocks, bool3 linearLimited, SoftJointLimit linearLimit,
+            SoftJointLimitSpring linearSpring, bool3 angularFree, bool3 angularLocks,
+            bool3 angularLimited, SoftJointLimit lowAngularXLimit, SoftJointLimit highAngularXLimit,
+            SoftJointLimitSpring angularXLimitSpring, SoftJointLimit angularYLimit,
             SoftJointLimit angularZLimit, SoftJointLimitSpring angularYZLimitSpring)
         {
-            var constraints = new FixedList128Bytes<Constraint>();
+            var linearConstraints = new FixedList512Bytes<Constraint>();
+            var angularConstraints = new FixedList512Bytes<Constraint>();
+
+            bool angularBreakable = joint.breakTorque == float.PositiveInfinity ? false : true;
+            bool LinearBreakable = joint.breakForce == float.PositiveInfinity ? false : true;
 
             if (angularLimited[0])
             {
-                constraints.Add(Constraint.Twist(
-                    0,
-                    math.radians(new FloatRange(-highAngularXLimit.limit, -lowAngularXLimit.limit).Sorted()),
-                    CalculateSpringFrequencyFromSpringConstant(angularXLimitSpring.spring),
-                    angularXLimitSpring.damper)
-                );
+                Constraint constraint = Constraint.Twist(0, math.radians(new FloatRange(-highAngularXLimit.limit, -lowAngularXLimit.limit).Sorted()),
+                    joint.breakTorque * SystemAPI.Time.fixedDeltaTime, CalculateSpringFrequencyFromSpringConstant(angularXLimitSpring.spring), angularXLimitSpring.damper);
+                constraint.EnableImpulseEvents = angularBreakable;
+                angularConstraints.Add(constraint);
             }
 
             if (angularLimited[1])
             {
-                constraints.Add(Constraint.Twist(
-                    1,
-                    math.radians(new FloatRange(-angularYLimit.limit, angularYLimit.limit).Sorted()),
-                    CalculateSpringFrequencyFromSpringConstant(angularYZLimitSpring.spring),
-                    angularYZLimitSpring.damper));
+                Constraint constraint = Constraint.Twist(1, math.radians(new FloatRange(-angularYLimit.limit, angularYLimit.limit).Sorted()),
+                    joint.breakTorque * SystemAPI.Time.fixedDeltaTime, CalculateSpringFrequencyFromSpringConstant(angularYZLimitSpring.spring), angularYZLimitSpring.damper);
+                constraint.EnableImpulseEvents = angularBreakable;
+                angularConstraints.Add(constraint);
             }
 
             if (angularLimited[2])
             {
-                constraints.Add(Constraint.Twist(
-                    2,
-                    math.radians(new FloatRange(-angularZLimit.limit, angularZLimit.limit).Sorted()),
-                    CalculateSpringFrequencyFromSpringConstant(angularYZLimitSpring.spring),
-                    angularYZLimitSpring.damper));
+                Constraint constraint = Constraint.Twist(2, math.radians(new FloatRange(-angularZLimit.limit, angularZLimit.limit).Sorted()),
+                    joint.breakTorque * SystemAPI.Time.fixedDeltaTime, CalculateSpringFrequencyFromSpringConstant(angularYZLimitSpring.spring), angularYZLimitSpring.damper);
+                constraint.EnableImpulseEvents = angularBreakable;
+                angularConstraints.Add(constraint);
             }
 
             if (math.any(linearLimited))
@@ -69,40 +76,46 @@ namespace Unity.Physics.Authoring
                     damping = linearSpring.damper;
                 }
 
-                constraints.Add(new Constraint
+                linearConstraints.Add(new Constraint
                 {
                     ConstrainedAxes = linearLimited,
                     Type = ConstraintType.Linear,
                     Min = 0f,
-                    Max = linearLimit.limit,  //allow movement up to limit from anchor
+                    Max = linearLimit.limit, //allow movement up to limit from anchor
                     SpringFrequency = CalculateSpringFrequencyFromSpringConstant(spring),
-                    SpringDamping = damping
+                    SpringDamping = damping,
+                    MaxImpulse = joint.breakForce * SystemAPI.Time.fixedDeltaTime,
+                    EnableImpulseEvents = LinearBreakable
                 });
             }
 
             if (math.any(linearLocks))
             {
-                constraints.Add(new Constraint
+                linearConstraints.Add(new Constraint
                 {
                     ConstrainedAxes = linearLocks,
                     Type = ConstraintType.Linear,
-                    Min = linearLimit.limit,    //lock at distance from anchor
+                    Min = linearLimit.limit, //lock at distance from anchor
                     Max = linearLimit.limit,
                     SpringFrequency =  Constraint.DefaultSpringFrequency, //stiff spring
-                    SpringDamping = 1.0f //critically damped
+                    SpringDamping = 1.0f, //critically damped
+                    MaxImpulse = joint.breakForce * SystemAPI.Time.fixedDeltaTime,
+                    EnableImpulseEvents = LinearBreakable
                 });
             }
 
             if (math.any(angularLocks))
             {
-                constraints.Add(new Constraint
+                angularConstraints.Add(new Constraint
                 {
                     ConstrainedAxes = angularLocks,
                     Type = ConstraintType.Angular,
                     Min = 0,
                     Max = 0,
                     SpringFrequency = Constraint.DefaultSpringFrequency, //stiff spring
-                    SpringDamping = 1.0f //critically damped
+                    SpringDamping = 1.0f, //critically damped
+                    MaxImpulse = joint.breakTorque * SystemAPI.Time.fixedDeltaTime,
+                    EnableImpulseEvents = angularBreakable
                 });
             }
 
@@ -132,13 +145,15 @@ namespace Unity.Physics.Authoring
                 Position = math.mul(bFromBSource, new float4(joint.connectedAnchor, 1f)).xyz
             };
 
-            var jointData = new PhysicsJoint
-            {
-                BodyAFromJoint = bodyAFromJoint,
-                BodyBFromJoint = bodyBFromJoint
-            };
-            jointData.SetConstraints(constraints);
-            return jointData;
+            var combinedJoint = new CombinedJoint();
+            combinedJoint.LinearJoint.SetConstraints(linearConstraints);
+            combinedJoint.LinearJoint.BodyAFromJoint = bodyAFromJoint;
+            combinedJoint.LinearJoint.BodyBFromJoint = bodyBFromJoint;
+            combinedJoint.AngularJoint.SetConstraints(angularConstraints);
+            combinedJoint.AngularJoint.BodyAFromJoint = bodyAFromJoint;
+            combinedJoint.AngularJoint.BodyBFromJoint = bodyBFromJoint;
+
+            return combinedJoint;
         }
 
         float CalculateSpringFrequencyFromSpringConstant(float springConstant)
@@ -180,7 +195,12 @@ namespace Unity.Physics.Authoring
                 joint.lowAngularXLimit, joint.highAngularXLimit, joint.angularXLimitSpring, joint.angularYLimit,
                 joint.angularZLimit, joint.angularYZLimitSpring);
 
-            m_EndJointConversionSystem.CreateJointEntity(joint, GetConstrainedBodyPair(joint), jointData);
+
+            using (var joints = new NativeArray<PhysicsJoint>(2, Allocator.Temp) { [0] = jointData.LinearJoint, [1] = jointData.AngularJoint })
+            using (var jointEntities = new NativeList<Entity>(2, Allocator.Temp))
+            {
+                m_EndJointConversionSystem.CreateJointEntities(joint, GetConstrainedBodyPair(joint), joints, jointEntities);
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -211,7 +231,11 @@ namespace Unity.Physics.Authoring
                 joint.lowTwistLimit, joint.highTwistLimit, joint.twistLimitSpring,
                 joint.swing1Limit, joint.swing2Limit, joint.swingLimitSpring);
 
-            m_EndJointConversionSystem.CreateJointEntity(joint, GetConstrainedBodyPair(joint), jointData);
+            using (var joints = new NativeArray<PhysicsJoint>(2, Allocator.Temp) { [0] = jointData.LinearJoint, [1] = jointData.AngularJoint })
+            using (var jointEntities = new NativeList<Entity>(2, Allocator.Temp))
+            {
+                m_EndJointConversionSystem.CreateJointEntities(joint, GetConstrainedBodyPair(joint), joints, jointEntities);
+            }
         }
 
         void ConvertSpringJoint(LegacySpring joint)
@@ -224,7 +248,9 @@ namespace Unity.Physics.Authoring
                 Min = distanceRange.Min,
                 Max = distanceRange.Max,
                 SpringFrequency = CalculateSpringFrequencyFromSpringConstant(joint.spring),
-                SpringDamping = joint.damper
+                SpringDamping = joint.damper,
+                MaxImpulse = joint.breakForce * SystemAPI.Time.fixedDeltaTime,
+                EnableImpulseEvents = joint.breakForce == float.PositiveInfinity ? false : true
             };
 
             var jointFrameA = BodyFrame.Identity;
@@ -246,13 +272,13 @@ namespace Unity.Physics.Authoring
                 BodyAFromJoint = jointFrameA,
                 BodyBFromJoint = jointFrameB
             };
-            jointData.SetConstraints(new FixedList128Bytes<Constraint>
+            jointData.SetConstraints(new FixedList512Bytes<Constraint>
             {
                 Length = 1,
                 [0] = constraint
             });
 
-            m_EndJointConversionSystem.CreateJointEntity(joint, GetConstrainedBodyPair(joint), jointData);
+            Entity entity = m_EndJointConversionSystem.CreateJointEntity(joint, GetConstrainedBodyPair(joint), jointData);
         }
 
         void ConvertFixedJoint(LegacyFixed joint)
@@ -272,6 +298,26 @@ namespace Unity.Physics.Authoring
             var bodyBFromJoint = new BodyFrame(math.mul(math.inverse(worldFromBodyB), legacyWorldFromJointA));
 
             var jointData = PhysicsJoint.CreateFixed(bodyAFromJoint, bodyBFromJoint);
+
+            bool LinearBreakable = joint.breakForce == float.PositiveInfinity ? false : true;
+            bool angularBreakable = joint.breakTorque == float.PositiveInfinity ? false : true;
+            var constraints = jointData.GetConstraints();
+            for (int i = 0; i < constraints.Length; ++i)
+            {
+                ref Constraint constraint = ref constraints.ElementAt(i);
+                switch (constraint.Type)
+                {
+                    case ConstraintType.Linear:
+                        constraint.MaxImpulse = joint.breakForce * SystemAPI.Time.fixedDeltaTime;
+                        constraint.EnableImpulseEvents = LinearBreakable;
+                        break;
+                    case ConstraintType.Angular:
+                        constraint.MaxImpulse = joint.breakTorque * SystemAPI.Time.fixedDeltaTime;
+                        constraint.EnableImpulseEvents = angularBreakable;
+                        break;
+                }
+            }
+            jointData.SetConstraints(constraints);
 
             m_EndJointConversionSystem.CreateJointEntity(joint, GetConstrainedBodyPair(joint), jointData);
         }
@@ -311,6 +357,26 @@ namespace Unity.Physics.Authoring
                 ? PhysicsJoint.CreateLimitedHinge(bodyAFromJoint, bodyBFromJoint, limits)
                 : PhysicsJoint.CreateHinge(bodyAFromJoint, bodyBFromJoint);
 
+            bool LinearBreakable = joint.breakForce == float.PositiveInfinity ? false : true;
+            bool angularBreakable = joint.breakTorque == float.PositiveInfinity ? false : true;
+            var constraints = jointData.GetConstraints();
+            for (int i = 0; i < constraints.Length; ++i)
+            {
+                ref Constraint constraint = ref constraints.ElementAt(i);
+                switch (constraint.Type)
+                {
+                    case ConstraintType.Linear:
+                        constraint.MaxImpulse = joint.breakForce * SystemAPI.Time.fixedDeltaTime;
+                        constraint.EnableImpulseEvents = LinearBreakable;
+                        break;
+                    case ConstraintType.Angular:
+                        constraint.MaxImpulse = joint.breakTorque * SystemAPI.Time.fixedDeltaTime;
+                        constraint.EnableImpulseEvents = angularBreakable;
+                        break;
+                }
+            }
+            jointData.SetConstraints(constraints);
+
             m_EndJointConversionSystem.CreateJointEntity(joint, GetConstrainedBodyPair(joint), jointData);
         }
 
@@ -320,7 +386,7 @@ namespace Unity.Physics.Authoring
         {
             base.OnCreate();
 
-            m_EndJointConversionSystem = World.GetOrCreateSystem<EndJointConversionSystem>();
+            m_EndJointConversionSystem = World.GetOrCreateSystemManaged<EndJointConversionSystem>();
         }
 
         static readonly List<LegacyCharacter> s_CharacterJointInstances = new List<CharacterJoint>(8);
@@ -336,31 +402,31 @@ namespace Unity.Physics.Authoring
                 joint.gameObject.GetComponents(s_CharacterJointInstances);
                 foreach (var instance in s_CharacterJointInstances)
                     ConvertCharacterJoint(instance);
-            });
+            }).WithoutBurst().Run();
             Entities.ForEach((LegacyConfigurable joint) =>
             {
                 joint.gameObject.GetComponents(s_ConfigurableJointInstances);
                 foreach (var instance in s_ConfigurableJointInstances)
                     ConvertConfigurableJoint(instance);
-            });
+            }).WithoutBurst().Run();
             Entities.ForEach((LegacyFixed joint) =>
             {
                 joint.gameObject.GetComponents(s_FixedJointInstances);
                 foreach (var instance in s_FixedJointInstances)
                     ConvertFixedJoint(instance);
-            });
+            }).WithoutBurst().Run();
             Entities.ForEach((LegacyHinge joint) =>
             {
                 joint.gameObject.GetComponents(s_HingeJointInstances);
                 foreach (var instance in s_HingeJointInstances)
                     ConvertHingeJoint(instance);
-            });
+            }).WithoutBurst().Run();
             Entities.ForEach((LegacySpring joint) =>
             {
                 joint.gameObject.GetComponents(s_SpringJointInstances);
                 foreach (var instance in s_SpringJointInstances)
                     ConvertSpringJoint(instance);
-            });
+            }).WithoutBurst().Run();
 
             s_CharacterJointInstances.Clear();
             s_ConfigurableJointInstances.Clear();

@@ -276,6 +276,37 @@ namespace Unity.DebugDisplay
         }
     }
 
+    //------
+    internal struct Triangles : IDisposable
+    {
+        Unit m_Unit;
+        internal Triangles(int count)
+        {
+            DebugDisplay.Instantiate();
+            m_Unit = Unmanaged.Instance.Data.m_TriangleBufferAllocations.AllocateAtomic(count);
+        }
+
+        internal void Draw(float3 vertex0, float3 vertex1, float3 vertex2, float3 normal, Unity.DebugDisplay.ColorIndex color)
+        {
+            if (m_Unit.m_Next < m_Unit.m_End)
+                Unmanaged.Instance.Data.m_TriangleBuffer.SetTriangle(vertex0, vertex1, vertex2, normal, color, m_Unit.m_Next++);
+        }
+
+        public void Dispose()
+        {
+            while (m_Unit.m_Next < m_Unit.m_End)
+                Unmanaged.Instance.Data.m_TriangleBuffer.ClearTriangle(m_Unit.m_Next++);
+        }
+    }
+    internal struct Triangle
+    {
+        internal static void Draw(float3 vertex0, float3 vertex1, float3 vertex2, float3 normal, Unity.DebugDisplay.ColorIndex color)
+        {
+            new Triangles(1).Draw(vertex0, vertex1, vertex2, normal, color);
+        }
+    }
+    //----
+
     internal struct TextBox
     {
         internal static void Draw(int2 xy, int2 wh)
@@ -472,6 +503,16 @@ namespace Unity.DebugDisplay
         internal static void Clear()
         {
             Managed.Instance.Clear();
+        }
+
+        [BurstDiscard]
+        internal static void Reinstantiate()
+        {
+            if (Managed.Instance != null)
+            {
+                Managed.Instance.Dispose();
+            }
+            Managed.Instance = new Managed();
         }
 
         [BurstDiscard]

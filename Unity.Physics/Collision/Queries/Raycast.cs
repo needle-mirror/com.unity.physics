@@ -42,9 +42,9 @@ namespace Unity.Physics
     /// </summary>
     public struct RaycastInput
     {
-        /// <summary>
-        /// The Start position of a Ray.
-        /// </summary>
+        /// <summary>   The starting position of a Ray. </summary>
+        ///
+        /// <value> The starting position of a Ray. </value>
         public float3 Start
         {
             get => Ray.Origin;
@@ -56,9 +56,10 @@ namespace Unity.Physics
                 Assert.IsTrue(math.all(math.abs(Ray.Displacement) < Math.Constants.MaxDisplacement3F), "RayCast length is very long. This would lead to floating point inaccuracies and invalid results.");
             }
         }
-        /// <summary>
-        /// The End position of a Ray.
-        /// </summary>
+
+        /// <summary>   The ending position of a Ray. </summary>
+        ///
+        /// <value> The ending position of a ray. </value>
         public float3 End
         {
             get => Ray.Origin + Ray.Displacement;
@@ -68,6 +69,7 @@ namespace Unity.Physics
                 Assert.IsTrue(math.all(math.abs(Ray.Displacement) < Math.Constants.MaxDisplacement3F), "RayCast length is very long. This would lead to floating point inaccuracies and invalid results.");
             }
         }
+
         /// <summary>
         /// The CollisionFilter is used to determine what objects the Ray is and isn't going to hit.
         /// </summary>
@@ -76,58 +78,55 @@ namespace Unity.Physics
         internal Ray Ray;
         internal QueryContext QueryContext;
 
+        /// <summary>   Convert this object into a string representation. </summary>
+        ///
+        /// <returns>   A string that represents this object. </returns>
         public override string ToString() =>
             $"RaycastInput {{ Start = {Start}, End = {End}, Filter = {Filter} }}";
     }
 
     // A hit from a ray cast query
-    /// <summary>
-    /// A struct representing the hit from a RaycastQuery.
-    /// </summary>
+    /// <summary>   A struct representing the hit from a RaycastQuery. </summary>
     public struct RaycastHit : IQueryResult
     {
-        /// <summary>
-        /// Fraction of the distance along the Ray where the hit occurred.
-        /// </summary>
+        /// <summary>   Fraction of the distance along the Ray where the hit occurred. </summary>
+        ///
         /// <value> Returns a value between 0 and 1. </value>
         public float Fraction { get; set; }
 
-        /// <summary>
+        /// <summary>   Gets or sets the zero-based index of the rigid body. </summary>
         ///
-        /// </summary>
-        /// <value> Returns RigidBodyIndex of queried body.</value>
+        /// <value> Returns RigidBodyIndex of queried body. </value>
         public int RigidBodyIndex { get; set; }
 
-        /// <summary>
+        /// <summary>   Gets or sets the collider key. </summary>
         ///
-        /// </summary>
-        /// <value> Returns ColliderKey of queried leaf collider</value>
+        /// <value> Returns ColliderKey of queried leaf collider. </value>
         public ColliderKey ColliderKey { get; set; }
 
-        /// <summary>
+        /// <summary>   Gets or sets the material. </summary>
         ///
-        /// </summary>
-        /// <value> Returns Material of queried leaf collider</value>
+        /// <value> Returns Material of queried leaf collider. </value>
         public Material Material { get; set; }
 
-        /// <summary>
+        /// <summary>   Gets or sets the entity. </summary>
         ///
-        /// </summary>
-        /// <value> Returns Entity of queried body</value>
+        /// <value> Returns Entity of queried body. </value>
         public Entity Entity { get; set; }
 
-        /// <summary>
-        /// The point in query space where the hit occurred.
-        /// </summary>
+        /// <summary>   The point in query space where the hit occurred. </summary>
+        ///
         /// <value> Returns the position of the point where the hit occurred. </value>
         public float3 Position { get; set; }
 
-        /// <summary>
+        /// <summary>   Gets or sets the surface normal. </summary>
         ///
-        /// </summary>
         /// <value> Returns the normal of the point where the hit occurred. </value>
         public float3 SurfaceNormal { get; set; }
 
+        /// <summary>   Convert this object into a string representation. </summary>
+        ///
+        /// <returns>   A string that represents this object. </returns>
         public override string ToString() =>
             $"RaycastHit {{ Fraction = {Fraction}, RigidBodyIndex = {RigidBodyIndex}, ColliderKey = {ColliderKey}, Entity = {Entity}, Position = {Position}, SurfaceNormal = {SurfaceNormal} }}";
     }
@@ -395,7 +394,7 @@ namespace Unity.Physics
 
         public static unsafe bool RayCollider<T>(RaycastInput input, Collider* collider, ref T collector) where T : struct, ICollector<RaycastHit>
         {
-            if (!CollisionFilter.IsCollisionEnabled(input.Filter, collider->Filter))
+            if (!CollisionFilter.IsCollisionEnabled(input.Filter, collider->GetCollisionFilter()))
             {
                 return false;
             }
@@ -456,10 +455,11 @@ namespace Unity.Physics
 
             if (hadHit)
             {
+                normal = math.select(normal, -normal, input.QueryContext.TargetScale < 0.0f);
                 var hit = new RaycastHit
                 {
                     Fraction = fraction,
-                    Position = Mul(input.QueryContext.WorldFromLocalTransform, input.Ray.Origin + (input.Ray.Displacement * fraction)),
+                    Position = Mul(input.QueryContext.WorldFromLocalTransform, input.Ray.Origin + input.Ray.Displacement * fraction),
                     SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, normal),
                     RigidBodyIndex = input.QueryContext.RigidBodyIndex,
                     ColliderKey = input.QueryContext.ColliderKey,
@@ -516,6 +516,8 @@ namespace Unity.Physics
                     {
                         var normalizedNormal = math.normalize(unnormalizedNormal);
 
+                        normalizedNormal = math.select(normalizedNormal, -normalizedNormal, input.QueryContext.TargetScale < 0.0f);
+
                         var hit = new RaycastHit
                         {
                             Fraction = fraction,
@@ -555,7 +557,7 @@ namespace Unity.Physics
             {
                 ref CompoundCollider.Child child = ref m_CompoundCollider->Children[leafData];
 
-                if (!CollisionFilter.IsCollisionEnabled(input.Filter, child.Collider->Filter))
+                if (!CollisionFilter.IsCollisionEnabled(input.Filter, child.Collider->GetCollisionFilter()))
                 {
                     return false;
                 }
@@ -570,7 +572,7 @@ namespace Unity.Physics
                     inputLs.Ray.Displacement = math.mul(childFromCompound.Rotation, input.Ray.Displacement);
                     inputLs.QueryContext.ColliderKey = input.QueryContext.PushSubKey(m_CompoundCollider->NumColliderKeyBits, (uint)leafData);
                     inputLs.QueryContext.NumColliderKeyBits = input.QueryContext.NumColliderKeyBits;
-                    inputLs.QueryContext.WorldFromLocalTransform = Mul(input.QueryContext.WorldFromLocalTransform, compoundFromChild);
+                    inputLs.QueryContext.WorldFromLocalTransform = ScaledMTransform.Mul(inputLs.QueryContext.WorldFromLocalTransform, compoundFromChild);
                 }
 
                 return child.Collider->CastRay(inputLs, ref collector);
@@ -579,7 +581,7 @@ namespace Unity.Physics
 
         private static unsafe bool RayCompound<T>(RaycastInput input, CompoundCollider* compoundCollider, ref T collector) where T : struct, ICollector<RaycastHit>
         {
-            if (!CollisionFilter.IsCollisionEnabled(input.Filter, compoundCollider->Filter))
+            if (!CollisionFilter.IsCollisionEnabled(input.Filter, compoundCollider->GetCollisionFilter()))
             {
                 return false;
             }

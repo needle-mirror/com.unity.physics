@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -8,22 +7,35 @@ using static Unity.Physics.Math;
 
 namespace Unity.Physics
 {
+    /// <summary>   Interface for query results. </summary>
     public interface IQueryResult
     {
-        // For casts this is fraction of the query at which the hit occurred.
-        // For distance queries, this is a distance from the query object
+        /// <summary>
+        /// For casts this is fraction of the query at which the hit occurred. For distance queries, this
+        /// is a distance from the query object.
+        /// </summary>
+        ///
+        /// <value> The fraction. </value>
         float Fraction { get; }
 
-        // Index of the hit body in the CollisionWorld's rigid body array
+        /// <summary>   Index of the hit body in the CollisionWorld's rigid body array. </summary>
+        ///
+        /// <value> The rigid body index. </value>
         int RigidBodyIndex { get; }
 
-        // ColliderKey of the hit leaf collider
+        /// <summary>   ColliderKey of the hit leaf collider. </summary>
+        ///
+        /// <value> The collider key. </value>
         ColliderKey ColliderKey { get; }
 
-        // Material of the hit leaf collider
+        /// <summary>   Material of the hit leaf collider. </summary>
+        ///
+        /// <value> The material. </value>
         Material Material { get; }
 
-        // Entity of the hit body
+        /// <summary>   Entity of the hit body. </summary>
+        ///
+        /// <value> The entity. </value>
         Entity Entity { get; }
     }
 
@@ -33,12 +45,21 @@ namespace Unity.Physics
         public ColliderKey ColliderKey;
         public Entity Entity;
         public uint NumColliderKeyBits;
-        public MTransform WorldFromLocalTransform;
+        public ScaledMTransform WorldFromLocalTransform;
         public bool IsInitialized;
+        public float InvTargetScale;
 
-        // Needed only in ColliderCast queries with non convex input, where it is used to
-        // handle penetration cases properly.
+        // Needed only in ColliderCast queries with non convex input,
+        // where it is used to handle penetration cases properly.
         public bool IsFlipped;
+
+        public float TargetScale => WorldFromLocalTransform.Scale;
+
+        public void InitScale()
+        {
+            InvTargetScale = 1.0f;
+            WorldFromLocalTransform.Scale = 1.0f;
+        }
 
         public static QueryContext DefaultContext => new QueryContext
         {
@@ -46,7 +67,8 @@ namespace Unity.Physics
             ColliderKey = ColliderKey.Empty,
             Entity = Entity.Null,
             NumColliderKeyBits = 0,
-            WorldFromLocalTransform = MTransform.Identity,
+            WorldFromLocalTransform = ScaledMTransform.Identity,
+            InvTargetScale = 1.0f,
             IsInitialized = true,
             IsFlipped = false
         };
@@ -69,32 +91,62 @@ namespace Unity.Physics
         }
     }
 
-    // Interface for collecting hits during a collision query
+    /// <summary>   Interface for collecting hits during a collision query. </summary>
+    ///
+    /// <typeparam name="T">    Generic type parameter. </typeparam>
     public interface ICollector<T> where T : struct, IQueryResult
     {
-        // Whether to exit the query as soon as any hit has been accepted
+        /// <summary>   Whether to exit the query as soon as any hit has been accepted. </summary>
+        ///
+        /// <value> True if early out on first hit, false if not. </value>
         bool EarlyOutOnFirstHit { get; }
 
-        // The maximum fraction of the query within which to check for hits
-        // For casts, this is a fraction along the ray
-        // For distance queries, this is a distance from the query object
+        /// <summary>
+        /// The maximum fraction of the query within which to check for hits For casts, this is a
+        /// fraction along the ray For distance queries, this is a distance from the query object.
+        /// </summary>
+        ///
+        /// <value> The maximum fraction. </value>
         float MaxFraction { get; }
 
-        // The number of hits that have been collected
+        /// <summary>   The number of hits that have been collected. </summary>
+        ///
+        /// <value> The total number of hits. </value>
         int NumHits { get; }
 
-        // Called when the query hits something
-        // Return true to accept the hit, or false to ignore it
+        /// <summary>
+        /// Called when the query hits something.
+        /// </summary>
+        ///
+        /// <param name="hit">  The hit. </param>
+        ///
+        /// <returns>   True to accept the hit, or false to ignore it. </returns>
         bool AddHit(T hit);
     }
 
-    // A collector which exits the query as soon as any hit is detected.
+    /// <summary>   A collector which exits the query as soon as any hit is detected. </summary>
+    ///
+    /// <typeparam name="T">    Generic type parameter. </typeparam>
     public struct AnyHitCollector<T> : ICollector<T> where T : struct, IQueryResult
     {
+        /// <summary>   Gets a value indicating whether the early out on first hit. </summary>
+        ///
+        /// <value> True. </value>
         public bool EarlyOutOnFirstHit => true;
+
+        /// <summary>   Gets the maximum fraction. </summary>
+        ///
+        /// <value> The maximum fraction. </value>
         public float MaxFraction { get; }
+
+        /// <summary>   Gets the number of hits. </summary>
+        ///
+        /// <value> The total number of hits. </value>
         public int NumHits => 0;
 
+        /// <summary>   Constructor. </summary>
+        ///
+        /// <param name="maxFraction">  The maximum fraction. </param>
         public AnyHitCollector(float maxFraction)
         {
             MaxFraction = maxFraction;
@@ -102,6 +154,11 @@ namespace Unity.Physics
 
         #region ICollector
 
+        /// <summary>   Adds a hit. </summary>
+        ///
+        /// <param name="hit">  The hit. </param>
+        ///
+        /// <returns>   True. </returns>
         public bool AddHit(T hit)
         {
             Assert.IsTrue(hit.Fraction <= MaxFraction);
@@ -111,16 +168,36 @@ namespace Unity.Physics
         #endregion
     }
 
-    // A collector which stores only the closest hit.
+    /// <summary>   A collector which stores only the closest hit. </summary>
+    ///
+    /// <typeparam name="T">    Generic type parameter. </typeparam>
     public struct ClosestHitCollector<T> : ICollector<T> where T : struct, IQueryResult
     {
+        /// <summary>   Gets a value indicating whether the early out on first hit. </summary>
+        ///
+        /// <value> False. </value>
         public bool EarlyOutOnFirstHit => false;
+
+        /// <summary>   Gets or sets the maximum fraction. </summary>
+        ///
+        /// <value> The maximum fraction. </value>
         public float MaxFraction { get; private set; }
+
+        /// <summary>   Gets  the number of hits. </summary>
+        ///
+        /// <value> The total number of hits (0 or 1). </value>
         public int NumHits { get; private set; }
 
         private T m_ClosestHit;
+
+        /// <summary>   Gets the closest hit. </summary>
+        ///
+        /// <value> The closest hit. </value>
         public T ClosestHit => m_ClosestHit;
 
+        /// <summary>   Constructor. </summary>
+        ///
+        /// <param name="maxFraction">  The maximum fraction. </param>
         public ClosestHitCollector(float maxFraction)
         {
             MaxFraction = maxFraction;
@@ -130,6 +207,11 @@ namespace Unity.Physics
 
         #region ICollector
 
+        /// <summary>   Adds a hit. </summary>
+        ///
+        /// <param name="hit">  The hit. </param>
+        ///
+        /// <returns>   True. </returns>
         public bool AddHit(T hit)
         {
             Assert.IsTrue(hit.Fraction <= MaxFraction);
@@ -142,15 +224,33 @@ namespace Unity.Physics
         #endregion
     }
 
-    // A collector which stores every hit.
+    /// <summary>   A collector which stores every hit. </summary>
+    ///
+    /// <typeparam name="T">    Generic type parameter. </typeparam>
     public struct AllHitsCollector<T> : ICollector<T> where T : unmanaged, IQueryResult
     {
+        /// <summary>   Gets a value indicating whether the early out on first hit. </summary>
+        ///
+        /// <value> False. </value>
         public bool EarlyOutOnFirstHit => false;
+
+        /// <summary>   Gets the maximum fraction. </summary>
+        ///
+        /// <value> The maximum fraction. </value>
         public float MaxFraction { get; }
+
+        /// <summary>   Gets the number of hits. </summary>
+        ///
+        /// <value> The total number of hits. </value>
         public int NumHits => AllHits.Length;
 
+        /// <summary>   All hits. </summary>
         public NativeList<T> AllHits;
 
+        /// <summary>   Constructor. </summary>
+        ///
+        /// <param name="maxFraction">  The maximum fraction. </param>
+        /// <param name="allHits">      [in,out] all hits. </param>
         public AllHitsCollector(float maxFraction, ref NativeList<T> allHits)
         {
             MaxFraction = maxFraction;
@@ -159,6 +259,11 @@ namespace Unity.Physics
 
         #region ICollector
 
+        /// <summary>   Adds a hit. </summary>
+        ///
+        /// <param name="hit">  The hit. </param>
+        ///
+        /// <returns>   True. </returns>
         public bool AddHit(T hit)
         {
             Assert.IsTrue(hit.Fraction <= MaxFraction);
@@ -170,7 +275,7 @@ namespace Unity.Physics
         #endregion
     }
 
-    // A collector used to provide filtering for QueryInteraction enum
+    // A collector used to provide filtering for QueryInteraction enum and a specified entity (usually used for self-hit filtering).
     // This is a wrapper of the user provided collector, which serves to enable
     // filtering based on the QueryInteraction parameter.
     internal unsafe struct QueryInteractionCollector<T, C> : ICollector<T>
@@ -190,15 +295,19 @@ namespace Unity.Physics
 
         // This must be a void ptr, since C# doesn't allow generic type pointers
         private void* m_CollectorPtr;
+        private bool m_IgnoreTriggers;
+        private Entity m_EntityToIgnore;
 
-        public QueryInteractionCollector(ref C collector)
+        public QueryInteractionCollector(ref C collector, bool ignoreTriggers, Entity entityToIgnore)
         {
             m_CollectorPtr = UnsafeUtility.AddressOf(ref collector);
+            m_EntityToIgnore = entityToIgnore;
+            m_IgnoreTriggers = ignoreTriggers;
         }
 
         public bool AddHit(T hit)
         {
-            if (hit.Material.CollisionResponse == CollisionResponsePolicy.RaiseTriggerEvents)
+            if ((m_IgnoreTriggers && (hit.Material.CollisionResponse == CollisionResponsePolicy.RaiseTriggerEvents)) || (hit.Entity == m_EntityToIgnore))
             {
                 return false;
             }

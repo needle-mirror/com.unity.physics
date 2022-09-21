@@ -25,7 +25,8 @@ namespace Unity.Physics.Authoring
     }
 
     /// <summary>
-    /// Describes how a rigid body's motion in its graphics representation should be smoothed when the rendering framerate is greater than the fixed step rate used by physics.
+    /// Describes how a rigid body's motion in its graphics representation should be smoothed when
+    /// the rendering framerate is greater than the fixed step rate used by physics.
     /// </summary>
     public enum BodySmoothing
     {
@@ -48,6 +49,7 @@ namespace Unity.Physics.Authoring
         Extrapolation
     }
 
+    /// <summary>   The physics body authoring. This class cannot be inherited. </summary>
     [AddComponentMenu("DOTS/Physics/Physics Body")]
     [DisallowMultipleComponent]
     [HelpURL(HelpURLs.PhysicsBodyAuthoring)]

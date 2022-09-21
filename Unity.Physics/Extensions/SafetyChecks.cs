@@ -97,6 +97,20 @@ namespace Unity.Physics
         }
 
         [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        public static void CheckMaterialGetterValid(ColliderType type, ColliderKey colliderKey, in FixedString32Bytes methodName)
+        {
+            if (type == ColliderType.Compound && colliderKey == ColliderKey.Empty)
+                throw new InvalidOperationException($"Calling {methodName}() on a CompoundCollider requires a non-empty ColliderKey!");
+        }
+
+        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        public static void CheckSimulationStageAndThrow(SimulationScheduleStage currentStage, SimulationScheduleStage expectedStage)
+        {
+            if (currentStage != expectedStage)
+                throw new Exception($"It is not possible to do the operation in {currentStage} simulation stage. Required stage is {expectedStage}");
+        }
+
+        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
         public static unsafe void Check4ByteAlignmentAndThrow(void* data, in FixedString32Bytes paramName)
         {
             if (((long)data & 0x3) != 0)
@@ -129,6 +143,13 @@ namespace Unity.Physics
         {
             if (index < min || index >= length)
                 throw new IndexOutOfRangeException($"Index {index} is out of range [{min}, {length}].");
+        }
+
+        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        public static void CheckLengthSmallerThanCapacityAndThrow(int length, int capacity)
+        {
+            if (length > capacity)
+                throw new ArgumentOutOfRangeException($"Length {length} is above max capacity of {capacity}");
         }
 
         [Conditional(CompilationSymbols.SafetyChecksSymbol)]

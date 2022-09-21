@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -47,6 +48,7 @@ namespace Unity.Physics
         internal BlobArray FaceLinksBlob;
         internal BlobArray VertexEdgesBlob;
 
+        public int NumPlanes => FacePlanesBlob.Length;
         public int NumVertices => VerticesBlob.Length;
         public int NumFaces => FacesBlob.Length;
 
@@ -60,15 +62,26 @@ namespace Unity.Physics
 
         public unsafe float3* VerticesPtr => (float3*)((byte*)UnsafeUtility.AddressOf(ref VerticesBlob.Offset) + VerticesBlob.Offset);
         public unsafe byte* FaceVertexIndicesPtr => (byte*)UnsafeUtility.AddressOf(ref FaceVertexIndicesBlob.Offset) + FaceVertexIndicesBlob.Offset;
+        public unsafe Plane* PlanesPtr => (Plane*)((byte*)UnsafeUtility.AddressOf(ref FacePlanesBlob.Offset) + FacePlanesBlob.Offset);
 
         // Returns the index of the face with maximum normal dot direction
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int GetSupportingFace(float3 direction)
         {
-            int bestIndex = 0;
-            float bestDot = math.dot(direction, Planes[0].Normal);
-            for (int i = 1; i < NumFaces; i++)
+            unsafe
             {
-                float dot = math.dot(direction, Planes[i].Normal);
+                return GetSupportingFace(direction, PlanesPtr, NumFaces);
+            }
+        }
+
+        // Returns the index of the face with maximum normal dot direction
+        public unsafe static int GetSupportingFace(float3 direction, Plane* planes, int numFaces)
+        {
+            int bestIndex = 0;
+            float bestDot = math.dot(direction, planes[0].Normal);
+            for (int i = 1; i < numFaces; i++)
+            {
+                float dot = math.dot(direction, planes[i].Normal);
                 if (dot > bestDot)
                 {
                     bestDot = dot;
@@ -79,13 +92,13 @@ namespace Unity.Physics
         }
 
         // Returns the index of the best supporting face that contains supportingVertex
-        public int GetSupportingFace(float3 direction, int supportingVertexIndex)
+        public unsafe int GetSupportingFace(float3 direction, int supportingVertexIndex, Plane* planes)
         {
             // Special case for for polygons or colliders without connectivity.
             // Polygons don't need to search edges because both faces contain all vertices.
             if (Faces.Length == 2 || VertexEdges.Length == 0 || FaceLinks.Length == 0)
             {
-                return GetSupportingFace(direction);
+                return ConvexHull.GetSupportingFace(direction, planes, NumFaces);
             }
 
             // Search the edges that contain supportingVertexIndex for the one that is most perpendicular to direction
@@ -125,8 +138,8 @@ namespace Unity.Physics
             Edge bestEdge = FaceLinks[bestEdgeIndex];
             int faceIndex0 = bestEdge.FaceIndex;
             int faceIndex1 = FaceLinks[Faces[faceIndex0].FirstIndex + bestEdge.EdgeIndex].FaceIndex;
-            float3 normal0 = Planes[faceIndex0].Normal;
-            float3 normal1 = Planes[faceIndex1].Normal;
+            float3 normal0 = planes[faceIndex0].Normal;
+            float3 normal1 = planes[faceIndex1].Normal;
             return math.select(faceIndex0, faceIndex1, math.dot(direction, normal1) > math.dot(direction, normal0));
         }
 
@@ -141,6 +154,32 @@ namespace Unity.Physics
                 maxDistanceSq = math.max(maxDistanceSq, distanceSq);
             }
             return math.sqrt(maxDistanceSq) + ConvexRadius;
+        }
+
+        internal unsafe void CalculateScalingData(float3* scaledVerticesOut, Plane* scaledPlanesOut, float uniformScale, out float scaledConvexRadius)
+        {
+            ScaleVerticesAndRadius(scaledVerticesOut, uniformScale, out scaledConvexRadius);
+            ScalePlanes(scaledPlanesOut, uniformScale);
+        }
+
+        internal unsafe void ScalePlanes(Plane* planesOut, float uniformScale)
+        {
+            int numPlanes = FacePlanesBlob.Length;
+            float4 planeScale = new float4(new float3(math.sign(uniformScale)), math.abs(uniformScale));
+            for (int i = 0; i < numPlanes; i++)
+            {
+                planesOut[i] = Planes[i] * planeScale;
+            }
+        }
+
+        internal unsafe void ScaleVerticesAndRadius(float3* scaledVerticesOut, float uniformScale, out float scaledConvexRadius)
+        {
+            int numVertices = NumVertices;
+            for (int i = 0; i < numVertices; i++)
+            {
+                scaledVerticesOut[i] = Vertices[i] * uniformScale;
+            }
+            scaledConvexRadius = ConvexRadius * math.abs(uniformScale);
         }
     }
 }

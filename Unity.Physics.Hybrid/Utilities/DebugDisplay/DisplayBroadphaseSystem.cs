@@ -8,13 +8,11 @@ using Unity.Physics.Systems;
 
 namespace Unity.Physics.Authoring
 {
-    /// Job which walks the broadphase tree and writes the
-    /// bounding box of leaf nodes to a DebugStream.
+    /// Job which walks the broadphase tree and displays the
+    /// bounding box of leaf nodes.
     [BurstCompile]
-    public struct DisplayBroadphaseJob : IJob //<todo.eoin.udebug This can be a parallelfor job
+    internal struct DisplayBroadphaseJob : IJob
     {
-        public DebugStream.Context OutputStream;
-
         [ReadOnly]
         public NativeArray<BoundingVolumeHierarchy.Node> StaticNodes;
 
@@ -32,7 +30,7 @@ namespace Unity.Physics.Authoring
                     {
                         Aabb aabb = nodes[nodeIndex].Bounds.GetAabb(l);
                         float3 center = aabb.Center;
-                        OutputStream.Box(aabb.Extents, center, quaternion.identity, color);
+                        PhysicsDebugDisplaySystem.Box(aabb.Extents, center, quaternion.identity, color);
                     }
                 }
 
@@ -50,48 +48,38 @@ namespace Unity.Physics.Authoring
 
         public void Execute()
         {
-            OutputStream.Begin(0);
             DrawLeavesRecursive(StaticNodes, Unity.DebugDisplay.ColorIndex.Yellow, 1);
             DrawLeavesRecursive(DynamicNodes, Unity.DebugDisplay.ColorIndex.Red, 1);
-            OutputStream.End();
         }
     }
 
     // Creates DisplayBroadphaseJobs
-    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
-    [UpdateAfter(typeof(BuildPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
-    public partial class DisplayBroadphaseAabbsSystem : SystemBase
+    [RequireMatchingQueriesForUpdate]
+    [UpdateInGroup(typeof(AfterPhysicsSystemGroup))]
+    [BurstCompile]
+    internal partial struct DisplayBroadphaseAabbsSystem : ISystem
     {
-        BuildPhysicsWorld m_BuildPhysicsWorldSystem;
-        DebugStream m_DebugStreamSystem;
+        [BurstCompile]
+        public void OnCreate(ref SystemState state) {}
 
-        protected override void OnCreate()
-        {
-            m_BuildPhysicsWorldSystem = World.GetOrCreateSystem<BuildPhysicsWorld>();
-            m_DebugStreamSystem = World.GetOrCreateSystem<DebugStream>();
-        }
+        [BurstCompile]
+        public void OnDestroy(ref SystemState state) {}
 
-        protected override void OnStartRunning()
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
         {
-            base.OnStartRunning();
-            this.RegisterPhysicsRuntimeSystemReadOnly();
-        }
-
-        protected override void OnUpdate()
-        {
-            if (!(HasSingleton<PhysicsDebugDisplayData>() && GetSingleton<PhysicsDebugDisplayData>().DrawBroadphase != 0))
-            {
+#if UNITY_EDITOR
+            if (!SystemAPI.TryGetSingleton(out PhysicsDebugDisplayData debugDisplay) || debugDisplay.DrawBroadphase == 0)
                 return;
-            }
 
-            ref Broadphase broadphase = ref m_BuildPhysicsWorldSystem.PhysicsWorld.CollisionWorld.Broadphase;
+            Broadphase broadphase = SystemAPI.GetSingleton<PhysicsWorldSingleton>().CollisionWorld.Broadphase;
 
-            Dependency = new DisplayBroadphaseJob
+            state.Dependency = new DisplayBroadphaseJob
             {
-                OutputStream = m_DebugStreamSystem.GetContext(1),
                 StaticNodes = broadphase.StaticTree.Nodes,
                 DynamicNodes = broadphase.DynamicTree.Nodes,
-            }.Schedule(Dependency);
+            }.Schedule(state.Dependency);
+#endif
         }
     }
 }

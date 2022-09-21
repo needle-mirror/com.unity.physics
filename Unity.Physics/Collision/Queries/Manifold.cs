@@ -1,4 +1,3 @@
-using System;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -22,11 +21,13 @@ namespace Unity.Physics
         // followed by NumContacts * ContactPoint
     }
 
-    // A contact point in a manifold. All contacts share the same normal.
+    /// <summary>   A contact point in a manifold. All contacts share the same normal. </summary>
     public struct ContactPoint
     {
-        public float3 Position; // world space position on object B
-        public float Distance;  // separating distance along the manifold normal
+        /// <summary>   World space position on object B. </summary>
+        public float3 Position;
+        /// <summary>   Separating distance along the manifold normal. </summary>
+        public float Distance;
     }
 
     // Contact manifold stream generation functions
@@ -39,6 +40,8 @@ namespace Unity.Physics
             public CustomTagsPair BodyCustomTags;
             public bool BothMotionsAreKinematic;
             public NativeStream.Writer* ContactWriter;  // cannot be passed by value
+            public float ScaleA;
+            public float ScaleB;
         }
 
         // Write a set of contact manifolds for a pair of bodies to the given stream.
@@ -48,7 +51,7 @@ namespace Unity.Physics
             var colliderA = (Collider*)rigidBodyA.Collider.GetUnsafePtr();
             var colliderB = (Collider*)rigidBodyB.Collider.GetUnsafePtr();
 
-            if (colliderA == null || colliderB == null || !CollisionFilter.IsCollisionEnabled(colliderA->Filter, colliderB->Filter))
+            if (colliderA == null || colliderB == null || !CollisionFilter.IsCollisionEnabled(colliderA->GetCollisionFilter(), colliderB->GetCollisionFilter()))
             {
                 return;
             }
@@ -70,7 +73,9 @@ namespace Unity.Physics
                 BodyIndices = pair,
                 BodyCustomTags = new CustomTagsPair { CustomTagsA = rigidBodyA.CustomTags, CustomTagsB = rigidBodyB.CustomTags },
                 BothMotionsAreKinematic = motionVelocityA.IsKinematic && motionVelocityB.IsKinematic,
-                ContactWriter = (NativeStream.Writer*)UnsafeUtility.AddressOf(ref contactWriter)
+                ContactWriter = (NativeStream.Writer*)UnsafeUtility.AddressOf(ref contactWriter),
+                ScaleA = rigidBodyA.Scale,
+                ScaleB = rigidBodyB.Scale
             };
 
             var worldFromA = new MTransform(rigidBodyA.WorldFromBody);
@@ -234,10 +239,20 @@ namespace Unity.Physics
             MTransform aFromB = Mul(Inverse(worldFromA), worldFromB);
 
             ConvexConvexManifoldQueries.Manifold contactManifold;
-            switch (convexColliderA->Type)
+
+            ColliderType typeA = convexColliderA->Type;
+            ColliderType typeB = convexColliderB->Type;
+
+            //If scale is applied, enforce ConvexConvex case
+            if ((!IsApproximatelyEqual(context.ScaleA, 1.0f)) || (!IsApproximatelyEqual(context.ScaleB, 1.0f)))
+            {
+                typeA = typeB = ColliderType.Convex;
+            }
+
+            switch (typeA)
             {
                 case ColliderType.Sphere:
-                    switch (convexColliderB->Type)
+                    switch (typeB)
                     {
                         case ColliderType.Sphere:
                             ConvexConvexManifoldQueries.SphereSphere(
@@ -275,7 +290,7 @@ namespace Unity.Physics
                     }
                     break;
                 case ColliderType.Box:
-                    switch (convexColliderB->Type)
+                    switch (typeB)
                     {
                         case ColliderType.Sphere:
                             ConvexConvexManifoldQueries.BoxSphere(
@@ -306,7 +321,7 @@ namespace Unity.Physics
                     }
                     break;
                 case ColliderType.Capsule:
-                    switch (convexColliderB->Type)
+                    switch (typeB)
                     {
                         case ColliderType.Sphere:
                             ConvexConvexManifoldQueries.CapsuleSphere(
@@ -337,7 +352,7 @@ namespace Unity.Physics
                     }
                     break;
                 case ColliderType.Triangle:
-                    switch (convexColliderB->Type)
+                    switch (typeB)
                     {
                         case ColliderType.Sphere:
                             ConvexConvexManifoldQueries.TriangleSphere(
@@ -372,9 +387,42 @@ namespace Unity.Physics
                 case ColliderType.Quad:
                 case ColliderType.Cylinder:
                 case ColliderType.Convex:
+
+                    ref ConvexHull convexHullA = ref ((ConvexCollider*)convexColliderA)->ConvexHull;
+                    ref ConvexHull convexHullB = ref ((ConvexCollider*)convexColliderB)->ConvexHull;
+
+                    float3* vertexPtrA = convexHullA.VerticesPtr;
+                    float3* vertexPtrB = convexHullB.VerticesPtr;
+                    Plane* planesA = convexHullA.PlanesPtr;
+                    Plane* planesB = convexHullB.PlanesPtr;
+                    float convexRadiusA = convexHullA.ConvexRadius;
+                    float convexRadiusB = convexHullB.ConvexRadius;
+
+                    if (!IsApproximatelyEqual(context.ScaleA, 1.0f))
+                    {
+                        float3* scaledVertexPtrA = stackalloc float3[convexHullA.NumVertices];
+                        Plane* scaledPlanePtrA = stackalloc Plane[convexHullA.NumPlanes];
+
+                        convexHullA.CalculateScalingData(scaledVertexPtrA, scaledPlanePtrA, context.ScaleA, out convexRadiusA);
+                        vertexPtrA = scaledVertexPtrA;
+                        planesA = scaledPlanePtrA;
+                    }
+
+                    if (!IsApproximatelyEqual(context.ScaleB, 1.0f))
+                    {
+                        float3* scaledVertexPtrB = stackalloc float3[convexHullB.NumVertices];
+                        Plane* scaledPlanePtrB = stackalloc Plane[convexHullB.NumPlanes];
+
+                        convexHullB.CalculateScalingData(scaledVertexPtrB, scaledPlanePtrB, context.ScaleB, out convexRadiusB);
+                        vertexPtrB = scaledVertexPtrB;
+                        planesB = scaledPlanePtrB;
+                    }
+
                     ConvexConvexManifoldQueries.ConvexConvex(
-                        ref ((ConvexCollider*)convexColliderA)->ConvexHull, ref ((ConvexCollider*)convexColliderB)->ConvexHull,
-                        worldFromA, aFromB, maxDistance, out contactManifold);
+                        vertexPtrA, vertexPtrB, planesA, planesB, convexRadiusA, convexRadiusB, ref ((ConvexCollider*)convexColliderA)->ConvexHull,
+                        ref ((ConvexCollider*)convexColliderB)->ConvexHull, worldFromA, aFromB, maxDistance, out contactManifold,
+                        context.ScaleA < 0.0f, context.ScaleB < 0.0f);
+
                     break;
                 default:
                     SafetyChecks.ThrowNotImplementedException();
@@ -387,7 +435,7 @@ namespace Unity.Physics
         private static unsafe void ConvexComposite(
             Context context, ColliderKey convexKeyA,
             [NoAlias] Collider* convexColliderA, [NoAlias] Collider* compositeColliderB, [NoAlias] in MTransform worldFromA, [NoAlias] in MTransform worldFromB,
-            MotionExpansion expansion, bool flipped)
+            MotionExpansion expansionWS, bool flipped)
         {
             Material materialA = ((ConvexColliderHeader*)convexColliderA)->Material;
 
@@ -397,19 +445,32 @@ namespace Unity.Physics
                 return;
             }
 
-            // Calculate swept AABB of A in B
-            MTransform bFromWorld = Inverse(worldFromB);
-            MTransform bFromA = Mul(bFromWorld, worldFromA);
-            expansion.Linear = math.mul(bFromWorld.Rotation, expansion.Linear);
-            var transform = new RigidTransform(new quaternion(bFromA.Rotation), bFromA.Translation); // TODO: avoid this conversion to and back from float3x3
-            Aabb aabbAinB = expansion.ExpandAabb(convexColliderA->CalculateAabb(transform));
+            ScaledMTransform scaledWorldFromB = new ScaledMTransform(worldFromB, context.ScaleB);
+            ScaledMTransform bFromWorld = Inverse(scaledWorldFromB);
+
+            ScaledMTransform scaledWorldFromA = new ScaledMTransform(worldFromA, context.ScaleA);
+            ScaledMTransform bFromA = Mul(bFromWorld, scaledWorldFromA);
+
+            expansionWS.Linear = math.mul(bFromA.Rotation, expansionWS.Linear);
+
+            // Calculate swept AABB of A in B - divide by B's scale to get from WS to B space
+            var expansionInB = expansionWS;
+            if (!IsApproximatelyEqual(context.ScaleB, 1.0f))
+            {
+                expansionInB = new float4(expansionInB) / math.abs(context.ScaleB);
+            }
+
+            var transform = new RigidTransform(new quaternion(bFromA.Rotation), bFromA.Translation);
+            Aabb aabbAinB = expansionInB.ExpandAabb(convexColliderA->CalculateAabb(transform, bFromA.Scale));
 
             // Do the midphase query and build manifolds for any overlapping leaf colliders
-            var input = new OverlapAabbInput { Aabb = aabbAinB, Filter = convexColliderA->Filter };
+            var input = new OverlapAabbInput { Aabb = aabbAinB, Filter = convexColliderA->GetCollisionFilter()};
+
+            // Collector expects MaxDistance in WS
             var collector = new ConvexCompositeOverlapCollector(
                 context,
                 convexColliderA, convexKeyA, compositeColliderB,
-                worldFromA, worldFromB, expansion.MaxDistance, flipped);
+                worldFromA, worldFromB, expansionWS.MaxDistance, context.ScaleB, flipped);
             OverlapQueries.AabbCollider(input, compositeColliderB, ref collector);
         }
 
@@ -420,6 +481,10 @@ namespace Unity.Physics
         {
             // Flip the relevant inputs and call convex-vs-composite
             expansion.Linear *= -1.0f;
+            float tmp = context.ScaleA;
+            context.ScaleA = context.ScaleB;
+            context.ScaleB = tmp;
+
             ConvexComposite(context, ColliderKey.Empty,
                 convexColliderB, compositeColliderA, worldFromB, worldFromA, expansion, !flipped);
         }
@@ -440,7 +505,7 @@ namespace Unity.Physics
             public ConvexCompositeOverlapCollector(
                 Context context,
                 Collider* convexCollider, ColliderKey convexColliderKey, Collider* compositeCollider,
-                MTransform worldFromA, MTransform worldFromB, float collisionTolerance, bool flipped)
+                MTransform worldFromA, MTransform worldFromB, float collisionTolerance, float compositeScale, bool flipped)
             {
                 m_Context = context;
                 m_ConvexColliderA = convexCollider;
@@ -458,7 +523,7 @@ namespace Unity.Physics
             public void AddColliderKeys([NoAlias] ColliderKey* keys, int count)
             {
                 var colliderKeys = new ColliderKeyPair { ColliderKeyA = m_ConvexColliderKey, ColliderKeyB = m_ConvexColliderKey };
-                CollisionFilter filter = m_ConvexColliderA->Filter;
+                CollisionFilter filter = m_ConvexColliderA->GetCollisionFilter();
 
                 // Collide the convex A with all overlapping leaves of B
                 switch (m_CompositeColliderB->Type)
@@ -514,7 +579,7 @@ namespace Unity.Physics
                         {
                             ColliderKey compositeKey = m_CompositeColliderKeyPath.GetLeafKey(keys[i]);
                             m_CompositeColliderB->GetLeaf(compositeKey, out ChildCollider leaf);
-                            if (CollisionFilter.IsCollisionEnabled(filter, leaf.Collider->Filter))  // TODO: shouldn't be needed if/when filtering is done fully by the BVH query
+                            if (CollisionFilter.IsCollisionEnabled(filter, leaf.Collider->GetCollisionFilter()))  // TODO: shouldn't be needed if/when filtering is done fully by the BVH query
                             {
                                 if (m_Flipped)
                                 {
@@ -525,18 +590,20 @@ namespace Unity.Physics
                                     colliderKeys.ColliderKeyB = compositeKey;
                                 }
 
-                                MTransform worldFromLeafB = Mul(m_WorldFromB, new MTransform(leaf.TransformFromChild));
+                                // Need to apply scale in order to get the proper translation in WS
+                                ScaledMTransform worldFromLeafB = ScaledMTransform.Mul(new ScaledMTransform(m_WorldFromB, m_Context.ScaleB), new MTransform(leaf.TransformFromChild));
+
                                 switch (leaf.Collider->CollisionType)
                                 {
                                     case CollisionType.Convex:
                                         ConvexConvex(
                                             m_Context, colliderKeys, m_ConvexColliderA, leaf.Collider,
-                                            m_WorldFromA, worldFromLeafB, m_CollisionTolerance, m_Flipped);
+                                            m_WorldFromA, worldFromLeafB.Transform, m_CollisionTolerance, m_Flipped);
                                         break;
                                     case CollisionType.Terrain:
                                         ConvexTerrain(
                                             m_Context, colliderKeys, m_ConvexColliderA, leaf.Collider,
-                                            m_WorldFromA, worldFromLeafB, m_CollisionTolerance, m_Flipped);
+                                            m_WorldFromA, worldFromLeafB.Transform, m_CollisionTolerance, m_Flipped);
                                         break;
                                     default: // GetLeaf() may not return a composite collider
                                         SafetyChecks.ThrowNotImplementedException();
@@ -575,6 +642,10 @@ namespace Unity.Physics
                 MTransform t = worldFromA;
                 worldFromA = worldFromB;
                 worldFromB = t;
+
+                float tmp = context.ScaleB;
+                context.ScaleB = context.ScaleA;
+                context.ScaleA = tmp;
 
                 expansion.Linear *= -1.0f;
                 flipped = !flipped;
@@ -617,17 +688,21 @@ namespace Unity.Physics
 
             public void AddLeaf(ColliderKey key, ref ChildCollider leaf)
             {
-                MTransform worldFromLeafA = Mul(m_WorldFromA, new MTransform(leaf.TransformFromChild));
+                ScaledMTransform worldFromLeafA = ScaledMTransform.Mul(new ScaledMTransform(m_WorldFromA, m_Context.ScaleA), new MTransform(leaf.TransformFromChild));
+
                 ConvexComposite(
                     m_Context, m_KeyPath.GetLeafKey(key), leaf.Collider, m_CompositeColliderB,
-                    worldFromLeafA, m_WorldFromB, m_Expansion, m_Flipped);
+                    worldFromLeafA.Transform, m_WorldFromB, m_Expansion, m_Flipped);
             }
 
             public void PushCompositeCollider(ColliderKeyPath compositeKey, MTransform parentFromComposite, out MTransform worldFromParent)
             {
                 m_KeyPath.PushChildKey(compositeKey);
                 worldFromParent = m_WorldFromA;
-                m_WorldFromA = Math.Mul(worldFromParent, parentFromComposite);
+
+                ScaledMTransform worldFromA = ScaledMTransform.Mul(new ScaledMTransform(worldFromParent, m_Context.ScaleA), parentFromComposite);
+
+                m_WorldFromA = worldFromA.Transform;
             }
 
             public void PopCompositeCollider(uint numCompositeKeyBits, MTransform worldFromParent)
@@ -667,6 +742,7 @@ namespace Unity.Physics
 
             // Get vertices from hull
             ref ConvexHull hull = ref ((ConvexCollider*)convexColliderA)->ConvexHull;
+            float convexRadius = hull.ConvexRadius;
             float3* capsuleVertices = stackalloc float3[8];
             float3* vertices;
             int numVertices = hull.NumVertices;
@@ -692,6 +768,24 @@ namespace Unity.Physics
                 vertices = hull.VerticesPtr;
             }
 
+            if (!IsApproximatelyEqual(context.ScaleA, 1.0f))
+            {
+                float3* scaledVerticesPtr = stackalloc float3[numVertices];
+                for (int i = 0; i < numVertices; i++)
+                {
+                    scaledVerticesPtr[i] = vertices[i] * context.ScaleA;
+                }
+                vertices = scaledVerticesPtr;
+                convexRadius *= math.abs(context.ScaleA);
+            }
+
+            float invTerrainUniformScale = 1.0f;
+
+            if (!IsApproximatelyEqual(context.ScaleB, 1.0f))
+            {
+                invTerrainUniformScale = math.rcp(context.ScaleB);
+            }
+
             // Create manifold(s)
             var manifold = new ConvexConvexManifoldQueries.Manifold();
             MTransform bFromA = Math.Mul(Math.Inverse(worldFromB), worldFromA);
@@ -699,11 +793,11 @@ namespace Unity.Physics
             {
                 float3 pointAInB = Math.Mul(bFromA, vertices[iVertex]);
                 float3 normalInB = float3.zero;
-                if (terrain.GetHeightAndGradient(pointAInB.xz, out float height, out float2 gradient))
+                if (terrain.GetHeightAndGradient(pointAInB.xz * invTerrainUniformScale, out float height, out float2 gradient))
                 {
                     float3 normal = math.normalize(new float3(gradient.x, 1.0f, gradient.y));
-                    float distance = (pointAInB.y - height) * normal.y;
-                    if (distance < maxDistance + hull.ConvexRadius)
+                    float distance = (pointAInB.y - height * context.ScaleB) * normal.y;
+                    if (distance < maxDistance + convexRadius)
                     {
                         // The current manifold must be flushed if it's full or the normals don't match
                         if (math.dot(normalInB, normal) < 1 - 1e-5f || manifold.NumContacts == ConvexConvexManifoldQueries.Manifold.k_MaxNumContacts)
@@ -719,7 +813,7 @@ namespace Unity.Physics
                         manifold[manifold.NumContacts++] = new ContactPoint
                         {
                             Position = Math.Mul(worldFromB, pointAInB - normal * distance),
-                            Distance = distance - hull.ConvexRadius
+                            Distance = distance - convexRadius
                         };
                     }
                 }
@@ -734,6 +828,10 @@ namespace Unity.Physics
             Collider* terrainColliderA, Collider* convexColliderB, MTransform worldFromA, MTransform worldFromB,
             float maxDistance, bool flipped)
         {
+            var tmp = context.ScaleA;
+            context.ScaleA = context.ScaleB;
+            context.ScaleB = tmp;
+
             ConvexTerrain(context, colliderKeys, convexColliderB, terrainColliderA, worldFromB, worldFromA, maxDistance, !flipped);
         }
 
@@ -782,7 +880,7 @@ namespace Unity.Physics
 
             public void AddLeaf(ColliderKey key, ref ChildCollider leaf)
             {
-                MTransform worldFromLeafA = Mul(m_WorldFromA, new MTransform(leaf.TransformFromChild));
+                ScaledMTransform worldFromLeafA = ScaledMTransform.Mul(new ScaledMTransform(m_WorldFromA, m_Context.ScaleA), new MTransform(leaf.TransformFromChild));
                 var colliderKeys = new ColliderKeyPair
                 {
                     ColliderKeyA = m_KeyPath.GetLeafKey(key),
@@ -791,7 +889,7 @@ namespace Unity.Physics
 
                 ConvexTerrain(
                     m_Context, colliderKeys, leaf.Collider, m_TerrainColliderB,
-                    worldFromLeafA, m_WorldFromB, m_MaxDistance, m_Flipped);
+                    worldFromLeafA.Transform, m_WorldFromB, m_MaxDistance, m_Flipped);
             }
 
             public void PushCompositeCollider(ColliderKeyPath compositeKey, MTransform parentFromComposite, out MTransform worldFromParent)

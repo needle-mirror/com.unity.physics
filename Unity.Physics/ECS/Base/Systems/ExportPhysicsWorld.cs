@@ -1,100 +1,134 @@
 using System;
 using Unity.Burst;
+using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Transforms;
+using UnityEngine.Assertions;
 
 namespace Unity.Physics.Systems
 {
-    // A system which copies transforms and velocities from the physics world back to the original entity components.
-    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
-    [UpdateAfter(typeof(StepPhysicsWorld)), UpdateBefore(typeof(EndFramePhysicsSystem))]
-    public partial class ExportPhysicsWorld : SystemBase
+    /// <summary>
+    /// A system which copies transforms and velocities from the physics world back to the original
+    /// entity components. The last system to run in <see cref="PhysicsSystemGroup"/>.
+    /// </summary>
+    [UpdateInGroup(typeof(PhysicsSystemGroup))]
+    [UpdateAfter(typeof(PhysicsSimulationGroup))]
+    [CreateAfter(typeof(BuildPhysicsWorld))]
+    [BurstCompile]
+    public partial struct ExportPhysicsWorld : ISystem
     {
-        BuildPhysicsWorld m_BuildPhysicsWorldSystem;
-
-        private PhysicsWorldExporter.SharedData m_SharedData;
-
-        protected override void OnCreate()
-        {
-            m_BuildPhysicsWorldSystem = World.GetOrCreateSystem<BuildPhysicsWorld>();
-
-            m_SharedData = PhysicsWorldExporter.SharedData.Create();
-        }
-
-        protected override void OnDestroy()
-        {
-            m_SharedData.Dispose();
-        }
-
-        protected override void OnStartRunning()
-        {
-            base.OnStartRunning();
-            this.RegisterPhysicsRuntimeSystemReadOnly();
-        }
-
-        protected override void OnUpdate()
-        {
-            JobHandle handle = Dependency;
+        private PhysicsWorldExporter.ExportPhysicsWorldTypeHandles m_ComponentTypeHandles;
 
 #if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
-            handle = CheckIntegrity(handle, m_BuildPhysicsWorldSystem.IntegrityCheckMap);
+        private IntegrityComponentHandles m_IntegrityCheckHandles;
 #endif
 
-            handle = PhysicsWorldExporter.SchedulePhysicsWorldExport(this, in m_BuildPhysicsWorldSystem.PhysicsWorld, handle, m_BuildPhysicsWorldSystem.PhysicsData.DynamicEntityGroup);
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
+        {
+            m_ComponentTypeHandles = new PhysicsWorldExporter.ExportPhysicsWorldTypeHandles(ref state);
 
-            handle = PhysicsWorldExporter.ScheduleCollisionWorldCopy(this, ref m_SharedData, in m_BuildPhysicsWorldSystem.PhysicsWorld,
-                handle, m_BuildPhysicsWorldSystem.CollisionWorldProxyGroup);
+#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
 
-            // Combine implicit output dependency with user one
-            Dependency = JobHandle.CombineDependencies(Dependency, handle);
+            m_IntegrityCheckHandles = new IntegrityComponentHandles(ref state);
+#endif
         }
 
-        [Obsolete("AddInputDependency() has been deprecated. Please call RegisterPhysicsRuntimeSystemReadWrite() or RegisterPhysicsRuntimeSystemReadOnly() in your system's OnStartRunning() to achieve the same effect. (RemovedAfter 2021-05-01)", true)]
-        public void AddInputDependency(JobHandle inputDep) {}
+        [BurstCompile]
+        public void OnDestroy(ref SystemState state)
+        {
+        }
 
-        [Obsolete("GetOutputDependency() has been deprecated. Please call RegisterPhysicsRuntimeSystemReadWrite() or RegisterPhysicsRuntimeSystemReadOnly() in your system's OnStartRunning() to achieve the same effect. (RemovedAfter 2021-05-01)", true)]
-        public JobHandle GetOutputDependency() => default;
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
+        {
+            // Register a ReadOnly deps on PhysicsWorldSingleton
+            SystemAPI.GetSingleton<PhysicsWorldSingleton>();
+
+            var bpw = state.WorldUnmanaged.GetExistingUnmanagedSystem<BuildPhysicsWorld>();
+
+            JobHandle handle = state.Dependency;
+
+#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
+            handle = CheckIntegrity(ref state, handle, bpw);
+#endif
+            var buildPhysicsData = state.EntityManager.GetComponentData<BuildPhysicsWorldData>(bpw);
+            handle = PhysicsWorldExporter.SchedulePhysicsWorldExport(ref state, ref m_ComponentTypeHandles, buildPhysicsData.PhysicsData.PhysicsWorld, handle, buildPhysicsData.PhysicsData.DynamicEntityGroup);
+
+            // Combine implicit output dependency with user one
+            state.Dependency = JobHandle.CombineDependencies(state.Dependency, handle);
+        }
 
         #region Integrity checks
 
-        internal JobHandle CheckIntegrity(JobHandle inputDeps, NativeParallelHashMap<uint, long> integrityCheckMap)
+#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
+
+        internal struct IntegrityComponentHandles
         {
-            var positionType = GetComponentTypeHandle<Translation>(true);
-            var rotationType = GetComponentTypeHandle<Rotation>(true);
-            var physicsColliderType = GetComponentTypeHandle<PhysicsCollider>(true);
-            var physicsVelocityType = GetComponentTypeHandle<PhysicsVelocity>(true);
+            public ComponentTypeHandle<Translation> PositionType;
+            public ComponentTypeHandle<Rotation> RotationType;
+            public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
+            public ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
+
+            public IntegrityComponentHandles(ref SystemState state)
+            {
+                PositionType = state.GetComponentTypeHandle<Translation>(true);
+                RotationType = state.GetComponentTypeHandle<Rotation>(true);
+                PhysicsColliderType = state.GetComponentTypeHandle<PhysicsCollider>(true);
+                PhysicsVelocityType = state.GetComponentTypeHandle<PhysicsVelocity>(true);
+            }
+
+            public void Update(ref SystemState state)
+            {
+                PositionType.Update(ref state);
+                RotationType.Update(ref state);
+                PhysicsColliderType.Update(ref state);
+                PhysicsVelocityType.Update(ref state);
+            }
+        }
+
+        internal JobHandle CheckIntegrity(ref SystemState state, JobHandle inputDeps, SystemHandle buildPhysicsWorld)
+        {
+            m_IntegrityCheckHandles.Update(ref state);
+
+            var positionType = m_IntegrityCheckHandles.PositionType;
+            var rotationType = m_IntegrityCheckHandles.RotationType;
+            var physicsColliderType = m_IntegrityCheckHandles.PhysicsColliderType;
+            var physicsVelocityType = m_IntegrityCheckHandles.PhysicsVelocityType;
+
+            var buildPhysicsData = state.EntityManager.GetComponentData<BuildPhysicsWorldData>(buildPhysicsWorld);
 
             var checkDynamicBodyIntegrity = new CheckDynamicBodyIntegrity
             {
-                IntegrityCheckMap = integrityCheckMap,
+                IntegrityCheckMap = buildPhysicsData.IntegrityCheckMap,
                 PositionType = positionType,
                 RotationType = rotationType,
                 PhysicsVelocityType = physicsVelocityType,
                 PhysicsColliderType = physicsColliderType
             };
 
-            inputDeps = checkDynamicBodyIntegrity.Schedule(m_BuildPhysicsWorldSystem.PhysicsData.DynamicEntityGroup, inputDeps);
+            inputDeps = checkDynamicBodyIntegrity.Schedule(buildPhysicsData.DynamicEntityGroup, inputDeps);
 
             var checkStaticBodyColliderIntegrity = new CheckColliderIntegrity
             {
-                IntegrityCheckMap = integrityCheckMap,
+                IntegrityCheckMap = buildPhysicsData.IntegrityCheckMap,
                 PhysicsColliderType = physicsColliderType
             };
 
-            inputDeps = checkStaticBodyColliderIntegrity.Schedule(m_BuildPhysicsWorldSystem.PhysicsData.StaticEntityGroup, inputDeps);
+            inputDeps = checkStaticBodyColliderIntegrity.Schedule(buildPhysicsData.StaticEntityGroup, inputDeps);
 
             var checkTotalIntegrity = new CheckTotalIntegrity
             {
-                IntegrityCheckMap = integrityCheckMap
+                IntegrityCheckMap = buildPhysicsData.IntegrityCheckMap
             };
 
             return checkTotalIntegrity.Schedule(inputDeps);
         }
 
         [BurstCompile]
-        internal struct CheckDynamicBodyIntegrity : IJobEntityBatch
+        internal struct CheckDynamicBodyIntegrity : IJobChunk
         {
             [ReadOnly] public ComponentTypeHandle<Translation> PositionType;
             [ReadOnly] public ComponentTypeHandle<Rotation> RotationType;
@@ -111,41 +145,43 @@ namespace Unity.Physics.Systems
                 }
             }
 
-            public void Execute(ArchetypeChunk batchInChunk, int batchIndex)
+            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
-                DecrementIfExists(IntegrityCheckMap, batchInChunk.GetOrderVersion());
-                DecrementIfExists(IntegrityCheckMap, batchInChunk.GetChangeVersion(PhysicsVelocityType));
-                if (batchInChunk.Has(PositionType))
+                Assert.IsFalse(useEnabledMask);
+                DecrementIfExists(IntegrityCheckMap, chunk.GetOrderVersion());
+                DecrementIfExists(IntegrityCheckMap, chunk.GetChangeVersion(PhysicsVelocityType));
+                if (chunk.Has(PositionType))
                 {
-                    DecrementIfExists(IntegrityCheckMap, batchInChunk.GetChangeVersion(PositionType));
+                    DecrementIfExists(IntegrityCheckMap, chunk.GetChangeVersion(PositionType));
                 }
-                if (batchInChunk.Has(RotationType))
+                if (chunk.Has(RotationType))
                 {
-                    DecrementIfExists(IntegrityCheckMap, batchInChunk.GetChangeVersion(RotationType));
+                    DecrementIfExists(IntegrityCheckMap, chunk.GetChangeVersion(RotationType));
                 }
-                if (batchInChunk.Has(PhysicsColliderType))
+                if (chunk.Has(PhysicsColliderType))
                 {
-                    DecrementIfExists(IntegrityCheckMap, batchInChunk.GetChangeVersion(PhysicsColliderType));
+                    DecrementIfExists(IntegrityCheckMap, chunk.GetChangeVersion(PhysicsColliderType));
 
-                    var colliders = batchInChunk.GetNativeArray(PhysicsColliderType);
+                    var colliders = chunk.GetNativeArray(PhysicsColliderType);
                     CheckColliderFilterIntegrity(colliders);
                 }
             }
         }
 
         [BurstCompile]
-        internal struct CheckColliderIntegrity : IJobEntityBatch
+        internal struct CheckColliderIntegrity : IJobChunk
         {
             [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
             public NativeParallelHashMap<uint, long> IntegrityCheckMap;
 
-            public void Execute(ArchetypeChunk batchInChunk, int batchIndex)
+            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
-                if (batchInChunk.Has(PhysicsColliderType))
+                Assert.IsFalse(useEnabledMask);
+                if (chunk.Has(PhysicsColliderType))
                 {
-                    CheckDynamicBodyIntegrity.DecrementIfExists(IntegrityCheckMap, batchInChunk.GetChangeVersion(PhysicsColliderType));
+                    CheckDynamicBodyIntegrity.DecrementIfExists(IntegrityCheckMap, chunk.GetChangeVersion(PhysicsColliderType));
 
-                    var colliders = batchInChunk.GetNativeArray(PhysicsColliderType);
+                    var colliders = chunk.GetNativeArray(PhysicsColliderType);
                     CheckColliderFilterIntegrity(colliders);
                 }
             }
@@ -188,12 +224,12 @@ namespace Unity.Physics.Systems
                     {
                         var compoundCollider = (CompoundCollider*)collider.ColliderPtr;
 
-                        var rootFilter = compoundCollider->Filter;
+                        var rootFilter = compoundCollider->GetCollisionFilter();
                         var combinedFilter = CollisionFilter.Zero;
-                        for (int childIndex = 0; childIndex < compoundCollider->Children.Length; childIndex++)
+
+                        for (int childIndex = 0; childIndex < compoundCollider->NumChildren; childIndex++)
                         {
-                            ref CompoundCollider.Child c = ref compoundCollider->Children[childIndex];
-                            combinedFilter = CollisionFilter.CreateUnion(combinedFilter, c.Collider->Filter);
+                            combinedFilter = CollisionFilter.CreateUnion(combinedFilter, compoundCollider->GetCollisionFilter(compoundCollider->ConvertChildIndexToColliderKey(childIndex)));
                         }
 
                         // GroupIndex has no concept of union. Creating one from children has no guarantees
@@ -212,6 +248,8 @@ namespace Unity.Physics.Systems
                 }
             }
         }
+
+#endif
 
         #endregion
     }

@@ -8,7 +8,7 @@ using Unity.Mathematics;
 namespace Unity.Physics
 {
     // A 4-way bounding volume hierarchy
-    public partial struct BoundingVolumeHierarchy
+    internal partial struct BoundingVolumeHierarchy
     {
         private readonly unsafe Node* m_Nodes;
         private readonly unsafe CollisionFilter* m_NodeFilters;
@@ -99,7 +99,7 @@ namespace Unity.Physics
 
         public unsafe void SelfBvhOverlap<T>(ref T pairWriter, int rootA = 1, int rootB = 1) where T : struct, ITreeOverlapCollector
         {
-            TreeOverlap(ref pairWriter, m_Nodes, m_Nodes, m_NodeFilters,  m_NodeFilters, rootA, rootB);
+            TreeOverlap(ref pairWriter, m_Nodes, m_Nodes, m_NodeFilters, m_NodeFilters, rootA, rootB);
         }
 
         public static unsafe void TreeOverlap<T>(
@@ -181,7 +181,7 @@ namespace Unity.Physics
             masks[2] = new bool4(false, false, false, true);
 
             int3 compressedCounts = int3.zero;
-            compressedCounts[0] = math.compress((int*)(compressedData)    , 0, nodeData, aabbT[0].Overlap1Vs4(ref nodeBounds) & masks[0]);
+            compressedCounts[0] = math.compress((int*)(compressedData + 0), 0, nodeData, aabbT[0].Overlap1Vs4(ref nodeBounds) & masks[0]);
             compressedCounts[1] = math.compress((int*)(compressedData + 1), 0, nodeData, aabbT[1].Overlap1Vs4(ref nodeBounds) & masks[1]);
             compressedCounts[2] = math.compress((int*)(compressedData + 2), 0, nodeData, aabbT[2].Overlap1Vs4(ref nodeBounds) & masks[2]);
 
@@ -405,7 +405,8 @@ namespace Unity.Physics
             float3 aabbExtents;
             Ray aabbRay;
             {
-                Aabb aabb = input.Collider->CalculateAabb(new RigidTransform(input.Orientation, input.Start));
+                Aabb aabb = input.Collider->CalculateAabb(new RigidTransform { pos = input.Start, rot = input.Orientation },
+                    input.QueryContext.InvTargetScale * input.QueryColliderScale);
                 aabbExtents = aabb.Extents;
                 aabbRay = input.Ray;
                 aabbRay.Origin = aabb.Min;
@@ -471,7 +472,9 @@ namespace Unity.Physics
             *stack++ = 1;
 
             var pointT = new Math.FourTransposedPoints(input.Position);
-            float4 maxDistanceSquared = new float4(collector.MaxFraction * collector.MaxFraction);
+            var invScaleSq = input.QueryContext.InvTargetScale;
+            invScaleSq *= invScaleSq;
+            float4 maxDistanceSquared = new float4(collector.MaxFraction * collector.MaxFraction * invScaleSq);
 
             do
             {
@@ -494,7 +497,7 @@ namespace Unity.Physics
                         }
                     }
 
-                    maxDistanceSquared = new float4(collector.MaxFraction * collector.MaxFraction);
+                    maxDistanceSquared = new float4(collector.MaxFraction * collector.MaxFraction * invScaleSq);
                 }
                 else
                 {
@@ -529,10 +532,15 @@ namespace Unity.Physics
             int* stack = binaryStack;
             *stack++ = 1;
 
-            Aabb aabb = input.Collider->CalculateAabb(input.Transform);
+            var invScaleSq = input.QueryContext.InvTargetScale;
+            invScaleSq *= invScaleSq;
+
+            Aabb aabb = input.Collider->CalculateAabb(input.Transform,
+                input.QueryContext.InvTargetScale * input.Scale);
+
             FourTransposedAabbs aabbT;
             (&aabbT)->SetAllAabbs(aabb);
-            float4 maxDistanceSquared = new float4(collector.MaxFraction * collector.MaxFraction);
+            float4 maxDistanceSquared = new float4(collector.MaxFraction * collector.MaxFraction * invScaleSq);
 
             do
             {
@@ -553,7 +561,7 @@ namespace Unity.Physics
                             return true;
                         }
 
-                        maxDistanceSquared = new float4(collector.MaxFraction * collector.MaxFraction);
+                        maxDistanceSquared = new float4(collector.MaxFraction * collector.MaxFraction * invScaleSq);
                     }
                 }
                 else

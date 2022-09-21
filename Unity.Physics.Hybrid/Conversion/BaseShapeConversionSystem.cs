@@ -103,9 +103,9 @@ namespace Unity.Physics.Authoring
 
             m_ShapeQuery = EntityManager.CreateEntityQuery(ComponentType.ReadOnly<T>());
 
-            m_BeginColliderConversionSystem = World.GetOrCreateSystem<BeginColliderConversionSystem>();
-            m_BuildCompoundsSystem = World.GetOrCreateSystem<BuildCompoundCollidersConversionSystem>();
-            m_EndColliderConversionSystem = World.GetOrCreateSystem<EndColliderConversionSystem>();
+            m_BeginColliderConversionSystem = World.GetOrCreateSystemManaged<BeginColliderConversionSystem>();
+            m_BuildCompoundsSystem = World.GetOrCreateSystemManaged<BuildCompoundCollidersConversionSystem>();
+            m_EndColliderConversionSystem = World.GetOrCreateSystemManaged<EndColliderConversionSystem>();
 
             // A map from leaf shape entities to their respective bodies
             m_AllBodiesByLeaf = new NativeParallelHashMap<Entity, Entity>(16, Allocator.Persistent);
@@ -246,7 +246,7 @@ namespace Unity.Physics.Authoring
 
             using (var blobAssets = new NativeArray<BlobAssetReference<Collider>>(shapeCount, Allocator.TempJob))
             {
-                CreateNewBlobAssets(m_ShapeComputationData, shapeIndicesNeedingNewBlobs, numNewBlobAssets, blobAssets);
+                CreateNewBlobAssets(m_ShapeComputationData.AsArray(), shapeIndicesNeedingNewBlobs, numNewBlobAssets, blobAssets);
 
                 for (var i = 0; i < numNewBlobAssets; i++)
                 {
@@ -284,7 +284,7 @@ namespace Unity.Physics.Authoring
             var count = m_ShapeComputationData.Length;
             var job = new GeneratePhysicsShapeHashesJob
             {
-                ComputationData = m_ShapeComputationData,
+                ComputationData = m_ShapeComputationData.AsArray(),
                 Hashes = hashes
             };
 
@@ -294,7 +294,7 @@ namespace Unity.Physics.Authoring
         void ConvertHullsAndMeshes()
         {
             var convexJob = ProduceConvexColliders(
-                m_ConvexColliderJobs, m_ConvexColliderPoints, out var convexColliders
+                m_ConvexColliderJobs, m_ConvexColliderPoints.AsArray(), out var convexColliders
             );
             convexJob = new DisposeContainerJob<Hash128>
             {

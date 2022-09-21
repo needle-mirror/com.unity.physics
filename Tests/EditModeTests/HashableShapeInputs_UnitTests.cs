@@ -42,7 +42,7 @@ namespace Unity.Physics.Tests.Authoring
                             blendWeights,
                             allBlendShapeWeights
                         )
-                    }, allIncludedIndices, allBlendShapeWeights
+                    }, allIncludedIndices.AsArray(), allBlendShapeWeights.AsArray()
                 );
         }
 
@@ -61,14 +61,14 @@ namespace Unity.Physics.Tests.Authoring
             var a = HashableShapeInputs.GetHash128(
                 0u, ConvexHullGenerationParameters.Default, Material.Default, CollisionFilter.Default, float4x4.identity,
                 new NativeArray<HashableShapeInputs>(1, Allocator.Temp) { [0] = default },
-                new NativeList<int>(0, Allocator.Temp),
-                new NativeList<float>(0, Allocator.Temp)
+                new NativeList<int>(0, Allocator.Temp).AsArray(),
+                new NativeList<float>(0, Allocator.Temp).AsArray()
             );
             var b = HashableShapeInputs.GetHash128(
                 0u, ConvexHullGenerationParameters.Default, Material.Default, CollisionFilter.Default, float4x4.identity,
                 new NativeArray<HashableShapeInputs>(1, Allocator.Temp) { [0] = default },
-                new NativeList<int>(0, Allocator.Temp),
-                new NativeList<float>(0, Allocator.Temp)
+                new NativeList<int>(0, Allocator.Temp).AsArray(),
+                new NativeList<float>(0, Allocator.Temp).AsArray()
             );
 
             Assert.That(a, Is.EqualTo(b));
@@ -114,7 +114,7 @@ namespace Unity.Physics.Tests.Authoring
         [TestCase(1.0001f, 1.0001f, 1.0001f, ExpectedResult = true, TestName = "Pretty close (equal)")]
         [TestCase(-1f, 1f, 1f, ExpectedResult = false, TestName = "Reflected X (not equal)")]
         [TestCase(1f, -1f, 1f, ExpectedResult = false, TestName = "Reflected Y (not equal)")]
-        [TestCase(1f, 1f, -1f, ExpectedResult = false, TestName = "Reflectex Z (not equal)")]
+        [TestCase(1f, 1f, -1f, ExpectedResult = false, TestName = "Reflected Z (not equal)")]
         [TestCase(1f, -1f, -1f, ExpectedResult = false, TestName = "(1f, -1f, -1f) (not equal)")]
         [TestCase(-1f, 1f, -1f, ExpectedResult = false, TestName = "(-1f, 1f, -1f) (not equal)")]
         [TestCase(-1f, -1f, 1f, ExpectedResult = false, TestName = "(-1f, -1f, 1f) (not equal)")]
@@ -216,7 +216,7 @@ namespace Unity.Physics.Tests.Authoring
                    })
                 {
                     a = HashableShapeInputs.GetHash128(
-                        default, default, default, default, float4x4.identity, inputs, allIndices, allWeights
+                        default, default, default, default, float4x4.identity, inputs.AsArray(), allIndices.AsArray(), allWeights.AsArray()
                     );
                 }
 
@@ -230,7 +230,7 @@ namespace Unity.Physics.Tests.Authoring
                    })
                 {
                     b = HashableShapeInputs.GetHash128(
-                        default, default, default, default, float4x4.identity, inputs, allIndices, allWeights
+                        default, default, default, default, float4x4.identity, inputs.AsArray(), allIndices.AsArray(), allWeights.AsArray()
                     );
                 }
 
@@ -254,7 +254,7 @@ namespace Unity.Physics.Tests.Authoring
                    })
                 {
                     a = HashableShapeInputs.GetHash128(
-                        default, default, default, default, float4x4.identity, inputs, allIndices, allWeights
+                        default, default, default, default, float4x4.identity, inputs.AsArray(), allIndices.AsArray(), allWeights.AsArray()
                     );
                 }
 
@@ -268,7 +268,7 @@ namespace Unity.Physics.Tests.Authoring
                    })
                 {
                     b = HashableShapeInputs.GetHash128(
-                        default, default, default, default, float4x4.identity, inputs, allIndices, allWeights
+                        default, default, default, default, float4x4.identity, inputs.AsArray(), allIndices.AsArray(), allWeights.AsArray()
                     );
                 }
 

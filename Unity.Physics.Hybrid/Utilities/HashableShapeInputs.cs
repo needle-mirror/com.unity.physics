@@ -82,13 +82,13 @@ namespace Unity.Physics.Authoring
                 if (includedIndices.Length > 0)
                 {
                     allIncludedIndices.ResizeUninitialized(tmpAllIndices.Length);
-                    allIncludedIndices.AddRange(tmpAllIndices);
+                    allIncludedIndices.AddRange(tmpAllIndices.AsArray());
                 }
 
                 if (blendShapeWeights.Length > 0)
                 {
                     allBlendShapeWeights.ResizeUninitialized(tmpAllBlendWeights.Length);
-                    allBlendShapeWeights.AddRange(tmpAllBlendWeights);
+                    allBlendShapeWeights.AddRange(tmpAllBlendWeights.AsArray());
                 }
 
                 tmpIndices.Dispose();
@@ -277,6 +277,82 @@ namespace Unity.Physics.Authoring
             bytes.Append(inputs);
             bytes.Append(allIncludedIndices);
             bytes.Append(allBlendShapeWeights);
+            return HashUtility.Hash128(bytes.GetUnsafeReadOnlyPtr(), bytes.Length);
+        }
+
+        public static unsafe Hash128 GetHash128(
+            uint uniqueIdentifier,
+            ConvexHullGenerationParameters hullGenerationParameters,
+            Material material,
+            CollisionFilter filter,
+            float4x4 bakeFromShape,
+            int meshID,
+            Bounds meshBounds
+        )
+        {
+            var bytes = new NativeList<byte>(Allocator.Temp);
+            bytes.Append(ref uniqueIdentifier);
+            bytes.Append(ref hullGenerationParameters);
+            bytes.Append(ref material);
+            bytes.Append(ref filter);
+            bytes.Append(ref bakeFromShape);
+            bytes.Append(ref meshID);
+            bytes.Append(ref meshBounds);
+            return HashUtility.Hash128(bytes.GetUnsafeReadOnlyPtr(), bytes.Length);
+        }
+
+        public static float3x3 GetScaleShear(Bounds meshBounds, float4x4 bakeFromShape, float4x4 childToShape)
+        {
+            var Bounds = new Aabb { Min = meshBounds.min, Max = meshBounds.max };
+
+            GetQuantizedTransformations(
+                childToShape, Bounds,
+                out var translation, out var orientation, out var scale, out var shear,
+                k_DefaultLinearPrecision
+            );
+
+            var BodyFromShape = math.mul(
+                new float4x4(new RigidTransform(orientation, translation)),
+                math.mul(new float4x4(shear, 0f), float4x4.Scale(scale))
+            );
+
+            // quantize shape-level transforms
+            var bounds = new Aabb { Min = float.MaxValue, Max = float.MinValue };
+            bounds.Include(math.mul(BodyFromShape, new float4(meshBounds.min, 1f)).xyz);
+            bounds.Include(math.mul(BodyFromShape, new float4(meshBounds.max, 1f)).xyz);
+
+            GetQuantizedTransformations(bakeFromShape, bounds, out var bakeMatrix, k_DefaultLinearPrecision);
+
+            // bakeFromShape only contains scale/shear information, so only the inner 3x3 needs to contribute to the hash
+            var scaleShear = new float3x3(bakeMatrix.c0.xyz, bakeMatrix.c1.xyz, bakeMatrix.c2.xyz);
+            return scaleShear;
+        }
+
+        public static unsafe Hash128 GetHash128(
+            uint uniqueIdentifier,
+            ConvexHullGenerationParameters hullGenerationParameters,
+            Material material,
+            CollisionFilter filter,
+            float4x4 bakeFromShape,
+            float4x4 childToShape,
+            int meshID,
+            Bounds meshBounds,
+            NativeArray<float3> vertices,
+            NativeArray<int3> indices
+        )
+        {
+            // bakeFromShape only contains scale/shear information, so only the inner 3x3 needs to contribute to the hash
+            var scaleShear = GetScaleShear(meshBounds, bakeFromShape, childToShape);
+
+            var bytes = new NativeList<byte>(Allocator.Temp);
+            bytes.Append(ref uniqueIdentifier);
+            bytes.Append(ref hullGenerationParameters);
+            bytes.Append(ref material);
+            bytes.Append(ref filter);
+            bytes.Append(ref scaleShear);
+            bytes.Append(ref meshID);
+            bytes.Append(vertices);
+            bytes.Append(indices);
             return HashUtility.Hash128(bytes.GetUnsafeReadOnlyPtr(), bytes.Length);
         }
     }

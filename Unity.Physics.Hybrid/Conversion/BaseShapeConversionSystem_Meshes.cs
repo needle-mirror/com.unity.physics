@@ -40,8 +40,8 @@ namespace Unity.Physics.Authoring
             {
                 InputKeys = inputs.GetKeyArray(Allocator.TempJob),
                 InputValues = inputs.GetValueArray(Allocator.TempJob),
-                AllVertices = vertices,
-                AllIndices = indices,
+                AllVertices = vertices.AsArray(),
+                AllIndices = indices.AsArray(),
                 Output = meshCollidersArray
             }.Schedule(inputs.Count(), arrayLength, inputDeps);
 

@@ -8,7 +8,7 @@
         "Unity.Mathematics",
         "Unity.Physics",
         "Unity.Physics.Hybrid",
-        "Unity.Rendering.Hybrid",
+        "Unity.Entities.Graphics",
         "Unity.Transforms",
         "Unity.Transforms.Hybrid"
     ],

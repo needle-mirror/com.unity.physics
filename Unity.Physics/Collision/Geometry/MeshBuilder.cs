@@ -146,11 +146,11 @@ namespace Unity.Physics
                         vertexIndices[i] = i;
                     }
 
-                    NativeList<float3> uniqueVertices = MeshConnectivityBuilder.WeldVertices(vertexIndices, new NativeArray<float3>(tmpVertices, Allocator.Temp));
+                    NativeList<float3> uniqueVertices = MeshConnectivityBuilder.WeldVertices(vertexIndices, new NativeArray<float3>(tmpVertices.AsArray(), Allocator.Temp));
 
                     if (uniqueVertices.Length < Mesh.Section.MaxNumVertices)
                     {
-                        BuildSectionGeometry(tempSections, primitives, nodeIndices, nodes, new NativeArray<float3>(uniqueVertices, Allocator.Temp));
+                        BuildSectionGeometry(tempSections, primitives, nodeIndices, nodes, new NativeArray<float3>(uniqueVertices.AsArray(), Allocator.Temp));
 
                         // Remove used indices
                         for (var i = 0; i < nodeIndices.Length; ++i)
@@ -1005,18 +1005,18 @@ namespace Unity.Physics
                         continue;
                     }
 
-                    if (IsEdgeConcaveOrFlat(edgeData.Edge, triangles, vertices, planes))
+                    if (IsEdgeConcaveOrFlat(edgeData.Edge, triangles, vertices.AsArray(), planes))
                     {
                         primitive.Flags |= PrimitiveFlags.DisableInternalEdge;
 
-                        if (IsTriangleConcaveOrFlat(edgeData.Edge, triangles, vertices, planes) &&
-                            IsTriangleConcaveOrFlat(linkEdge, triangles, vertices, planes))
+                        if (IsTriangleConcaveOrFlat(edgeData.Edge, triangles, vertices.AsArray(), planes) &&
+                            IsTriangleConcaveOrFlat(linkEdge, triangles, vertices.AsArray(), planes))
                         {
                             primitive.Flags |= PrimitiveFlags.DisableAllEdges;
                         }
                     }
 
-                    if (IsFlat(edgeData.Edge, triangles, vertices, planes))
+                    if (IsFlat(edgeData.Edge, triangles, vertices.AsArray(), planes))
                     {
                         primitive.Flags |= PrimitiveFlags.IsFlat;
                     }
@@ -1060,7 +1060,7 @@ namespace Unity.Physics
                     Flags = PrimitiveFlags.DefaultTriangleFlags
                 };
 
-                if (IsTriangleConcaveOrFlat(edge, triangles, vertices, planes))
+                if (IsTriangleConcaveOrFlat(edge, triangles, vertices.AsArray(), planes))
                 {
                     primitive.Flags |= PrimitiveFlags.DisableAllEdges;
                 }
@@ -1070,7 +1070,7 @@ namespace Unity.Physics
                 flags[edge.Triangle] = primitive.Flags;
             }
 
-            DisableEdgesOfAdjacentPrimitives(primitives, triangles, vertices, planes, flags, quadRoots, triangleRoots);
+            DisableEdgesOfAdjacentPrimitives(primitives, triangles, vertices.AsArray(), planes, flags, quadRoots, triangleRoots);
 
             return primitives;
         }

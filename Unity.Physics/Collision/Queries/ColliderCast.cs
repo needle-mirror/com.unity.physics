@@ -1,4 +1,3 @@
-using System;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Collections.LowLevel.Unsafe;
@@ -8,13 +7,25 @@ using Unity.Assertions;
 
 namespace Unity.Physics
 {
-    // The input to collider cast queries consists of a Collider and its initial orientation,
-    // and the Start & End positions of a line segment the Collider is to be swept along.
+    /// <summary>
+    /// The input to collider cast queries consists of a Collider and its initial orientation, and
+    /// the Start &amp; End positions of a line segment the Collider is to be swept along.
+    /// </summary>
     public struct ColliderCastInput
     {
+        /// <summary>   Gets or sets the collider used to cast with. </summary>
+        ///
+        /// <value> The collider to cast with. </value>
         [NativeDisableUnsafePtrRestriction] public unsafe Collider* Collider;
+
+        /// <summary>   Gets or sets the orientation of the collider used to cast with. </summary>
+        ///
+        /// <value> The orientation. </value>
         public quaternion Orientation { get; set; }
 
+        /// <summary>   Gets or sets the starting point of a cast. </summary>
+        ///
+        /// <value> The starting point. </value>
         public float3 Start
         {
             get => Ray.Origin;
@@ -26,6 +37,10 @@ namespace Unity.Physics
                 Assert.IsTrue(math.all(math.abs(Ray.Displacement) < Math.Constants.MaxDisplacement3F), "ColliderCast length is very long. This would lead to floating point inaccuracies and invalid results.");
             }
         }
+
+        /// <summary>   Gets or sets the ending point of a cast. </summary>
+        ///
+        /// <value> The ending point. </value>
         public float3 End
         {
             get => Ray.Origin + Ray.Displacement;
@@ -40,8 +55,31 @@ namespace Unity.Physics
         internal QueryContext QueryContext;
         internal ColliderType ColliderType { get { unsafe { return Collider->Type; } } }
 
-        public ColliderCastInput(BlobAssetReference<Collider> collider, float3 start, float3 end) : this(collider, start, end, quaternion.identity) {}
-        public ColliderCastInput(BlobAssetReference<Collider> collider, float3 start, float3 end, quaternion orientation)
+        /// <summary>   Gets or sets the query collider scale. </summary>
+        ///
+        /// <value> The query collider scale. </value>
+        public float QueryColliderScale { get; set; }
+        internal void InitScale()
+        {
+            QueryContext.InitScale();
+            QueryColliderScale = math.select(1.0f, QueryColliderScale, QueryColliderScale != 0.0f);
+        }
+
+        /// <summary>   Constructor. </summary>
+        ///
+        /// <param name="collider"> The collider to cast with. </param>
+        /// <param name="start">    The starting point. </param>
+        /// <param name="end">      The ending point. </param>
+        public ColliderCastInput(BlobAssetReference<Collider> collider, float3 start, float3 end) : this(collider, start, end, quaternion.identity, 1.0f) {}
+
+        /// <summary>   Constructor. </summary>
+        ///
+        /// <param name="collider">             The collider to cast with. </param>
+        /// <param name="start">                The starting point. </param>
+        /// <param name="end">                  The ending point. </param>
+        /// <param name="orientation">          The orientation of the collider. </param>
+        /// <param name="queryColliderScale">   (Optional) The collider scale. </param>
+        public ColliderCastInput(BlobAssetReference<Collider> collider, float3 start, float3 end, quaternion orientation, float queryColliderScale = 1.0f)
         {
             unsafe
             {
@@ -53,71 +91,70 @@ namespace Unity.Physics
 
             Ray.Origin = start;
             Ray.Displacement = end - start;
+            QueryColliderScale = queryColliderScale;
         }
 
+        /// <summary>   Convert this object into a string representation. </summary>
+        ///
+        /// <returns>   A string that represents this object. </returns>
         public override string ToString()
         {
             unsafe
             {
-                return $"RaycastInput {{ Start = {Start}, End = {End}, Collider = {Collider->CollisionType}, Orientation = {Orientation} }}";
+                return $"ColliderCastInput {{ Start = {Start}, End = {End}, Collider = {Collider->CollisionType}, Orientation = {Orientation}, QueryColliderScale = {QueryColliderScale} }}";
             }
         }
     }
 
-    // A hit from a collider cast query
+    /// <summary>   A hit from a collider cast query. </summary>
     public struct ColliderCastHit : IQueryResult
     {
-        /// <summary>
-        /// Fraction of the distance along the Ray where the hit occurred.
-        /// </summary>
+        /// <summary>   Fraction of the distance along the Ray where the hit occurred. </summary>
+        ///
         /// <value> Returns a value between 0 and 1. </value>
         public float Fraction { get; set; }
 
-        /// <summary>
+        /// <summary>   Gets or sets the zero-based index of the rigid body. </summary>
         ///
-        /// </summary>
-        /// <value> Returns RigidBodyIndex of queried body.</value>
+        /// <value> Returns RigidBodyIndex of queried body. </value>
         public int RigidBodyIndex { get; set; }
 
-        /// <summary>
+        /// <summary>   Gets or sets the collider key. </summary>
         ///
-        /// </summary>
-        /// <value> Returns ColliderKey of queried leaf collider</value>
+        /// <value> Returns ColliderKey of queried leaf collider. </value>
         public ColliderKey ColliderKey { get; set; }
 
-        /// <summary>
+        /// <summary>   Gets or sets the material. </summary>
         ///
-        /// </summary>
-        /// <value> Returns Material of queried leaf collider</value>
+        /// <value> Returns Material of queried leaf collider. </value>
         public Material Material { get; set; }
 
-        /// <summary>
+        /// <summary>   Gets or sets the entity. </summary>
         ///
-        /// </summary>
-        /// <value> Returns Entity of queried body</value>
+        /// <value> Returns Entity of queried body. </value>
         public Entity Entity { get; set; }
 
-        /// <summary>
-        /// The point in query space where the hit occurred.
-        /// </summary>
+        /// <summary>   The point in query space where the hit occurred. </summary>
+        ///
         /// <value> Returns the position of the point where the hit occurred. </value>
         public float3 Position { get; set; }
 
-        /// <summary>
+        /// <summary>   Gets or sets the surface normal. </summary>
         ///
-        /// </summary>
         /// <value> Returns the normal of the point where the hit occurred. </value>
         public float3 SurfaceNormal { get; set; }
 
-        /// <summary>
-        /// Collider key of the query collider.
-        /// </summary>
-        /// <value>
-        /// If the query input uses composite collider, this field will have the collider key of it's leaf which participated in the hit,
-        /// otherwise the value will be undefined.
-        /// </value>
+        /// <summary>   Collider key of the query collider. </summary>
+        ///
+        /// ### <returns>
+        /// If the query input uses composite collider, this field will have the collider key of it's
+        /// leaf which participated in the hit, otherwise the value will be undefined.
+        /// </returns>
         public ColliderKey QueryColliderKey;
 
+        /// <summary>   Convert this object into a string representation. </summary>
+        ///
+        /// <returns>   A string that represents this object. </returns>
         public override string ToString() =>
             $"ColliderCastHit {{ Fraction = {Fraction}, RigidBodyIndex = {RigidBodyIndex}, ColliderKey = {ColliderKey}, Entity = {Entity}, Position = {Position}, SurfaceNormal = {SurfaceNormal} }}";
     }
@@ -128,7 +165,7 @@ namespace Unity.Physics
         private static unsafe void FlipColliderCastQuery<T>(ref ColliderCastInput input, ConvexCollider* target, ref T collector, out FlippedColliderCastQueryCollector<T> flipQueryCollector)
             where T : struct, ICollector<ColliderCastHit>
         {
-            float3 worldFromDirection = math.rotate(new quaternion(input.QueryContext.WorldFromLocalTransform.Rotation), input.Ray.Displacement);
+            float3 worldFromDirection = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, input.Ray.Displacement * input.QueryContext.TargetScale);
 
             flipQueryCollector = new FlippedColliderCastQueryCollector<T>(ref collector, worldFromDirection, input.QueryContext.ColliderKey, target->Material);
 
@@ -138,25 +175,27 @@ namespace Unity.Physics
 
             input.Collider = (Collider*)target;
 
-            MTransform targetFromQuery = new MTransform(input.Orientation, input.Ray.Origin);
-
-            var worldFromQuery = Mul(input.QueryContext.WorldFromLocalTransform, targetFromQuery);
+            ScaledMTransform targetFromQuery = new ScaledMTransform(new RigidTransform(input.Orientation, input.Ray.Origin), input.QueryContext.InvTargetScale * input.QueryColliderScale);
 
             // Switch the transform, so that it points to the shape that is being cast as a 'target' shape
-            input.QueryContext.WorldFromLocalTransform = worldFromQuery;
-
             var displacement = input.Ray.Displacement;
 
             //Switch displacement from targetFromDisplacement to queryFromDisplacement, and inverse it's direction
-            displacement = math.rotate(math.inverse(new quaternion(targetFromQuery.Rotation)), displacement);
-            displacement *= -1;
+            displacement = math.mul(targetFromQuery.InverseRotation, displacement * input.QueryContext.TargetScale / input.QueryColliderScale);
+            displacement *= -1.0f;
 
             input.Ray.Displacement = displacement;
-
             var queryFromTarget = Inverse(targetFromQuery);
 
+            float queryScale = input.QueryColliderScale;
+
+            input.QueryColliderScale = input.QueryContext.TargetScale;
+            input.QueryContext.InvTargetScale = 1.0f / queryScale;
             input.Ray.Origin = queryFromTarget.Translation;
             input.Orientation = new quaternion(queryFromTarget.Rotation);
+
+            var worldFromQuery = Mul(input.QueryContext.WorldFromLocalTransform, targetFromQuery);
+            input.QueryContext.WorldFromLocalTransform = worldFromQuery;
             input.QueryContext.IsFlipped = true;
         }
 
@@ -164,7 +203,7 @@ namespace Unity.Physics
         {
             Assert.IsTrue(input.Collider->CollisionType == CollisionType.Convex);
 
-            if (!CollisionFilter.IsCollisionEnabled(input.Collider->Filter, target->Filter))
+            if (!CollisionFilter.IsCollisionEnabled(input.Collider->GetCollisionFilter(), target->GetCollisionFilter()))
             {
                 return false;
             }
@@ -202,7 +241,7 @@ namespace Unity.Physics
 
         public static unsafe bool ColliderCollider<T>(ColliderCastInput input, Collider* target, ref T collector) where T : struct, ICollector<ColliderCastHit>
         {
-            if (!CollisionFilter.IsCollisionEnabled(input.Collider->Filter, target->Filter))
+            if (!CollisionFilter.IsCollisionEnabled(input.Collider->GetCollisionFilter(), target->GetCollisionFilter()))
             {
                 return false;
             }
@@ -211,6 +250,8 @@ namespace Unity.Physics
             {
                 input.QueryContext = QueryContext.DefaultContext;
             }
+
+            input.QueryColliderScale = math.select(input.QueryColliderScale, 1.0f, input.QueryColliderScale == 0.0f);
 
             switch (input.Collider->CollisionType)
             {
@@ -317,12 +358,16 @@ namespace Unity.Physics
 
             // Get the current transform
             MTransform targetFromQuery = new MTransform(input.Orientation, input.Start);
+            float queryRelativeScale = input.QueryColliderScale * input.QueryContext.InvTargetScale;
 
             // Conservative advancement
             const float tolerance = 1e-3f;      // return if this close to a hit
             const float keepDistance = 1e-4f;   // avoid bad cases for GJK (penetration / exact hit)
             int iterations = 10;                // return after this many advances, regardless of accuracy
             float fraction = 0.0f;
+
+            float keepDistanceScaled = keepDistance * math.abs(input.QueryContext.InvTargetScale);
+            float toleranceScaled = tolerance * math.abs(input.QueryContext.InvTargetScale);
 
             while (true)
             {
@@ -333,13 +378,11 @@ namespace Unity.Physics
                 }
 
                 // Find the current distance
-                DistanceQueries.Result distanceResult = DistanceQueries.ConvexConvex(target, input.Collider, targetFromQuery);
+                DistanceQueries.Result distanceResult = DistanceQueries.ConvexConvex(target, input.Collider, targetFromQuery, queryRelativeScale);
 
                 // Check for a hit
-                if (distanceResult.Distance < tolerance || --iterations == 0)
+                if (distanceResult.Distance < toleranceScaled || --iterations == 0)
                 {
-                    targetFromQuery.Translation = input.Start;
-
                     // In case of penetration (fraction == 0) and non convex input (IsFlipped),
                     // hit position needs to be switched from the surface of the shape B to the surface of the shape A
                     if (input.QueryContext.IsFlipped && fraction == 0)
@@ -351,7 +394,8 @@ namespace Unity.Physics
                         hit.Position = Mul(input.QueryContext.WorldFromLocalTransform, distanceResult.PositionOnBinA);
                     }
 
-                    hit.SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, -distanceResult.NormalInA);
+                    float3 normal = math.select(-distanceResult.NormalInA, distanceResult.NormalInA, input.QueryContext.TargetScale < 0.0f);
+                    hit.SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, normal);
                     hit.Fraction = fraction;
                     hit.RigidBodyIndex = input.QueryContext.RigidBodyIndex;
                     hit.ColliderKey = input.QueryContext.ColliderKey;
@@ -371,7 +415,7 @@ namespace Unity.Physics
                 }
 
                 // Advance
-                fraction += (distanceResult.Distance - keepDistance) / dot;
+                fraction += (distanceResult.Distance - keepDistanceScaled) / dot;
                 if (fraction >= maxFraction)
                 {
                     // Exceeded the maximum fraction without a hit
@@ -454,7 +498,7 @@ namespace Unity.Physics
             {
                 m_Mesh->GetPrimitive(primitiveKey, out float3x4 vertices, out Mesh.PrimitiveFlags flags, out CollisionFilter filter, out Material material);
 
-                if (!CollisionFilter.IsCollisionEnabled(input.Collider->Filter, filter)) // TODO: could do this check within GetPrimitive()
+                if (!CollisionFilter.IsCollisionEnabled(input.Collider->GetCollisionFilter(), filter)) // TODO: could do this check within GetPrimitive()
                 {
                     return false;
                 }
@@ -549,7 +593,7 @@ namespace Unity.Physics
             {
                 ref CompoundCollider.Child child = ref m_CompoundCollider->Children[leafData];
 
-                if (!CollisionFilter.IsCollisionEnabled(input.Collider->Filter, child.Collider->Filter))
+                if (!CollisionFilter.IsCollisionEnabled(input.Collider->GetCollisionFilter(), child.Collider->GetCollisionFilter()))
                 {
                     return false;
                 }
@@ -562,7 +606,7 @@ namespace Unity.Physics
                 inputLs.Orientation = math.mul(childFromCompound.rot, input.Orientation);
                 inputLs.QueryContext.ColliderKey = input.QueryContext.PushSubKey(m_CompoundCollider->NumColliderKeyBits, (uint)leafData);
                 inputLs.QueryContext.NumColliderKeyBits = input.QueryContext.NumColliderKeyBits;
-                inputLs.QueryContext.WorldFromLocalTransform = Mul(input.QueryContext.WorldFromLocalTransform, new MTransform(child.CompoundFromChild));
+                inputLs.QueryContext.WorldFromLocalTransform = ScaledMTransform.Mul(input.QueryContext.WorldFromLocalTransform, new MTransform(child.CompoundFromChild));
 
                 D dispatcher = new D();
 
@@ -612,7 +656,8 @@ namespace Unity.Physics
             Ray aabbRay;
             Terrain.QuadTreeWalker walker;
             {
-                Aabb aabb = input.Collider->CalculateAabb(new RigidTransform(input.Orientation, input.Start));
+                Aabb aabb = input.Collider->CalculateAabb(new RigidTransform(input.Orientation, input.Start),
+                    input.QueryContext.InvTargetScale * input.QueryColliderScale);
                 Aabb aabbInTree = new Aabb
                 {
                     Min = aabb.Min * terrain.InverseScale,

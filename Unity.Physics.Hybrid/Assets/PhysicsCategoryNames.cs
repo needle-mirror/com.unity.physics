@@ -12,6 +12,7 @@ namespace Unity.Physics.Authoring
         PhysicsCategoryNames() {}
 
         IReadOnlyList<string> ITagNames.TagNames => CategoryNames;
+
         public IReadOnlyList<string> CategoryNames => m_CategoryNames;
         [SerializeField]
         string[] m_CategoryNames = Enumerable.Range(0, 32).Select(i => string.Empty).ToArray();

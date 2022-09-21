@@ -1,91 +1,92 @@
-using System;
 using Unity.Burst;
+using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Transforms;
+using UnityEngine.Assertions;
 
 namespace Unity.Physics.Systems
 {
-    // A system which builds the physics world based on the entity world.
-    // The world will contain a rigid body for every entity which has a rigid body component,
-    // and a joint for every entity which has a joint component.
-    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
-    [UpdateBefore(typeof(StepPhysicsWorld))]
-    [AlwaysUpdateSystem]
-    public partial class BuildPhysicsWorld : SystemBase
+    // Make sure that:
+    // 1. BuildPhysicsWorldDependencyResolver is always updated just before BuildPhysicsWorld
+    // 2. BuildPhysicsWorld is the last system to be updated in [PhysicsInitializeGroup]
+    // This is done to prevent race conditions if users put someting to UpdateIn[PhysicsInitializeGroup].
+    // They shouldn't be doing so, but it is nice to prevent unresolvable race conditions.
+    [UpdateInGroup(typeof(PhysicsInitializeGroup), OrderLast = true)]
+    internal class PhysicsInitializeGroupInternal : ComponentSystemGroup
     {
-        private JobHandle m_InputDependencyToComplete;
+    }
 
+    [UpdateInGroup(typeof(PhysicsInitializeGroupInternal), OrderFirst = true)]
+    [CreateAfter(typeof(BuildPhysicsWorld))]
+    [BurstCompile]
+    internal partial struct BuildPhysicsWorldDependencyResolver : ISystem
+    {
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
+        {
+            SystemAPI.GetSingletonRW<PhysicsWorldSingleton>();
+            SystemAPI.GetSingletonRW<SimulationSingleton>();
+        }
+
+        [BurstCompile]
+        public void OnDestroy(ref SystemState state)
+        {
+        }
+
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
+        {
+            ref var buildPhysicsData = ref state.EntityManager.GetComponentDataRW<BuildPhysicsWorldData>(state.WorldUnmanaged.GetExistingUnmanagedSystem<BuildPhysicsWorld>()).ValueRW;
+            buildPhysicsData.AddInputDependencyToComplete(state.Dependency);
+        }
+    }
+
+    /// <summary>
+    /// Public system data for this world's instance of a <see cref="BuildPhysicsWorld"/> system.
+    ///
+    /// Contains physics world data based on the entity world. The physics world data will contain a
+    /// rigid body for every entity which has a rigid body component, and a joint for every entity
+    /// which has a joint component.
+    /// </summary>
+    public struct BuildPhysicsWorldData : IComponentData
+    {
+        internal JobHandle m_InputDependencyToComplete;
+
+        /// <summary>
+        /// Information describing the <see cref="PhysicsWorldData"/>. Important : avoid using
+        /// BuildPhysicsWorldData.PhysicsWorldData.PhysicsWorld. Use <see cref="PhysicsWorldSingleton"/>
+        /// instead.
+        /// </summary>
         public PhysicsWorldData PhysicsData;
+
+        /// <summary>   A filter specifying the world. </summary>
         public PhysicsWorldIndex WorldFilter;
 
-        public ref PhysicsWorld PhysicsWorld => ref PhysicsData.PhysicsWorld;
+        /// <summary>   Gets the group the dynamic bodies belongs to. </summary>
+        ///
+        /// <value> The dynamic entity group. </value>
         public EntityQuery DynamicEntityGroup => PhysicsData.DynamicEntityGroup;
+
+        /// <summary>   Gets the group the static bodies belongs to. </summary>
+        ///
+        /// <value> The static entity group. </value>
         public EntityQuery StaticEntityGroup => PhysicsData.StaticEntityGroup;
+
+        /// <summary>   Gets the group the joints belongs to. </summary>
+        ///
+        /// <value> The joint entity group. </value>
         public EntityQuery JointEntityGroup => PhysicsData.JointEntityGroup;
 
-        public EntityQuery CollisionWorldProxyGroup { get; private set; }
+        /// <summary>   True if the static bodies have changed this frame. </summary>
+        ///
+        /// <value> The have static bodies changed flag. </value>
+        public NativeReference<int> HaveStaticBodiesChanged => PhysicsData.HaveStaticBodiesChanged;
 
 #if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
-        internal NativeParallelHashMap<uint, long> IntegrityCheckMap = new NativeParallelHashMap<uint, long>(4, Allocator.Persistent);
+        internal NativeParallelHashMap<uint, long> IntegrityCheckMap;
 #endif
-
-        protected override void OnCreate()
-        {
-            base.OnCreate();
-
-            WorldFilter = new PhysicsWorldIndex();
-            PhysicsData = new PhysicsWorldData(EntityManager, WorldFilter);
-
-            CollisionWorldProxyGroup = GetEntityQuery(ComponentType.ReadWrite<CollisionWorldProxy>());
-
-            // Make sure PhysicsRuntimeData is registered as singleton
-            {
-                var runtimeDataEntity = EntityManager.CreateEntity();
-                EntityManager.AddComponentData(runtimeDataEntity, new PhysicsSystemRuntimeData());
-            }
-        }
-
-        protected override void OnDestroy()
-        {
-            PhysicsData.Dispose();
-
-#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
-            IntegrityCheckMap.Dispose();
-#endif
-
-            base.OnDestroy();
-        }
-
-        protected override void OnStartRunning()
-        {
-            base.OnStartRunning();
-            this.RegisterPhysicsRuntimeSystemReadWrite();
-        }
-
-        protected override void OnUpdate()
-        {
-            // Make sure last frame's physics jobs are complete before any new ones start
-            m_InputDependencyToComplete.Complete();
-
-            float timeStep = Time.DeltaTime;
-
-            PhysicsStep stepComponent = PhysicsStep.Default;
-            if (HasSingleton<PhysicsStep>())
-            {
-                stepComponent = GetSingleton<PhysicsStep>();
-            }
-
-            Dependency = PhysicsWorldBuilder.SchedulePhysicsWorldBuild(this, ref PhysicsData,
-                Dependency, timeStep, stepComponent.MultiThreaded > 0, stepComponent.Gravity, LastSystemVersion);
-
-#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
-            RecordIntegrity(IntegrityCheckMap);
-#endif
-
-            m_InputDependencyToComplete = default;
-        }
 
         /// <summary>
         /// Adds the dependency that BuildPhysicsWorld will complete on the next OnUpdate() call.
@@ -93,23 +94,89 @@ namespace Unity.Physics.Systems
         /// BuildPhysicsWorld resets the PhysicsWorld immediately in the OnUpdate() method (not through jobs),
         /// so any jobs that rely on that data should use this to make sure their data is not ruined before they access it.
         /// </summary>
-        public void AddInputDependencyToComplete(JobHandle dependencyToComplete)
+        internal void AddInputDependencyToComplete(JobHandle dependencyToComplete)
         {
             m_InputDependencyToComplete = JobHandle.CombineDependencies(m_InputDependencyToComplete, dependencyToComplete);
         }
+    }
 
-        [Obsolete("AddInputDependency() has been deprecated. Please call RegisterPhysicsRuntimeSystemReadWrite() or RegisterPhysicsRuntimeSystemReadOnly() in your system's OnStartRunning() to achieve the same effect. (RemovedAfter 2021-05-01)", true)]
-        public void AddInputDependency(JobHandle inputDep) {}
+    /// <summary>
+    /// A system which builds the physics world based on the entity world. The world will contain a
+    /// rigid body for every entity which has a rigid body component, and a joint for every entity
+    /// which has a joint component.
+    /// </summary>
+    [BurstCompile]
+    [UpdateInGroup(typeof(PhysicsInitializeGroupInternal), OrderLast = true)]
+    public partial struct BuildPhysicsWorld : ISystem
+    {
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
+        {
+            var worldFilter = new PhysicsWorldIndex();
+            var physicsData = new PhysicsWorldData(ref state, worldFilter);
+            state.EntityManager.AddComponentData(state.SystemHandle, new BuildPhysicsWorldData
+            {
+                WorldFilter = worldFilter,
+                PhysicsData = physicsData,
+#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
+                IntegrityCheckMap = new NativeParallelHashMap<uint, long>(4, Allocator.Persistent),
+#endif
+            });
 
-        [Obsolete("GetOutputDependency() has been deprecated. Please call RegisterPhysicsRuntimeSystemReadWrite() or RegisterPhysicsRuntimeSystemReadOnly() in your system's OnStartRunning() to achieve the same effect. (RemovedAfter 2021-05-01)", true)]
-        public JobHandle GetOutputDependency() => default;
+            state.EntityManager.CreateSingleton(
+                new PhysicsWorldSingleton
+                {
+                    PhysicsWorld = physicsData.PhysicsWorld,
+                    PhysicsWorldIndex = worldFilter
+                });
+        }
+
+        [BurstCompile]
+        public void OnDestroy(ref SystemState state)
+        {
+            ref var buildPhysicsData = ref state.EntityManager.GetComponentDataRW<BuildPhysicsWorldData>(state.SystemHandle).ValueRW;
+            buildPhysicsData.PhysicsData.Dispose();
+
+#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
+            buildPhysicsData.IntegrityCheckMap.Dispose();
+#endif
+        }
+
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
+        {
+            ref var buildPhysicsData = ref state.EntityManager.GetComponentDataRW<BuildPhysicsWorldData>(state.SystemHandle).ValueRW;
+            buildPhysicsData.m_InputDependencyToComplete.Complete();
+
+            float timeStep = SystemAPI.Time.DeltaTime;
+
+            if (!SystemAPI.TryGetSingleton<PhysicsStep>(out PhysicsStep stepComponent))
+            {
+                stepComponent = PhysicsStep.Default;
+            }
+
+            state.Dependency = PhysicsWorldBuilder.SchedulePhysicsWorldBuild(ref state, ref buildPhysicsData.PhysicsData, state.Dependency,
+                timeStep, stepComponent.MultiThreaded > 0, stepComponent.Gravity, state.LastSystemVersion);
+
+            SystemAPI.SetSingleton(new PhysicsWorldSingleton
+            {
+                PhysicsWorld = buildPhysicsData.PhysicsData.PhysicsWorld,
+                PhysicsWorldIndex = buildPhysicsData.WorldFilter
+            });
+
+#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
+            RecordIntegrity(buildPhysicsData.IntegrityCheckMap, ref state);
+#endif
+
+            buildPhysicsData.m_InputDependencyToComplete = default;
+        }
 
         #region Integrity checks
 
         private static class Jobs
         {
             [BurstCompile]
-            internal struct RecordDynamicBodyIntegrity : IJobEntityBatch
+            internal struct RecordDynamicBodyIntegrity : IJobChunk
             {
                 [ReadOnly] public ComponentTypeHandle<Translation> PositionType;
                 [ReadOnly] public ComponentTypeHandle<Rotation> RotationType;
@@ -131,71 +198,115 @@ namespace Unity.Physics.Systems
                     }
                 }
 
-                public void Execute(ArchetypeChunk batchInChunk, int batchIndex)
+                public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
                 {
-                    AddOrIncrement(IntegrityCheckMap, batchInChunk.GetOrderVersion());
-                    AddOrIncrement(IntegrityCheckMap, batchInChunk.GetChangeVersion(PhysicsVelocityType));
-                    if (batchInChunk.Has(PositionType))
+                    Assert.IsFalse(useEnabledMask);
+                    AddOrIncrement(IntegrityCheckMap, chunk.GetOrderVersion());
+                    AddOrIncrement(IntegrityCheckMap, chunk.GetChangeVersion(PhysicsVelocityType));
+                    if (chunk.Has(PositionType))
                     {
-                        AddOrIncrement(IntegrityCheckMap, batchInChunk.GetChangeVersion(PositionType));
+                        AddOrIncrement(IntegrityCheckMap, chunk.GetChangeVersion(PositionType));
                     }
-                    if (batchInChunk.Has(RotationType))
+                    if (chunk.Has(RotationType))
                     {
-                        AddOrIncrement(IntegrityCheckMap, batchInChunk.GetChangeVersion(RotationType));
+                        AddOrIncrement(IntegrityCheckMap, chunk.GetChangeVersion(RotationType));
                     }
-                    if (batchInChunk.Has(PhysicsColliderType))
+                    if (chunk.Has(PhysicsColliderType))
                     {
-                        AddOrIncrement(IntegrityCheckMap, batchInChunk.GetChangeVersion(PhysicsColliderType));
+                        AddOrIncrement(IntegrityCheckMap, chunk.GetChangeVersion(PhysicsColliderType));
                     }
                 }
             }
 
             [BurstCompile]
-            internal struct RecordColliderIntegrity : IJobEntityBatch
+            internal struct RecordColliderIntegrity : IJobChunk
             {
                 [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
                 public NativeParallelHashMap<uint, long> IntegrityCheckMap;
 
-                public void Execute(ArchetypeChunk batchInChunk, int batchIndex)
+                public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
                 {
-                    if (batchInChunk.Has(PhysicsColliderType))
+                    Assert.IsFalse(useEnabledMask);
+                    if (chunk.Has(PhysicsColliderType))
                     {
-                        RecordDynamicBodyIntegrity.AddOrIncrement(IntegrityCheckMap, batchInChunk.GetChangeVersion(PhysicsColliderType));
+                        RecordDynamicBodyIntegrity.AddOrIncrement(IntegrityCheckMap, chunk.GetChangeVersion(PhysicsColliderType));
                     }
                 }
             }
         }
 
-        internal void RecordIntegrity(NativeParallelHashMap<uint, long> integrityCheckMap)
+        internal void RecordIntegrity(NativeParallelHashMap<uint, long> integrityCheckMap, ref SystemState state)
         {
-            var positionType = GetComponentTypeHandle<Translation>(true);
-            var rotationType = GetComponentTypeHandle<Rotation>(true);
-            var physicsColliderType = GetComponentTypeHandle<PhysicsCollider>(true);
-            var physicsVelocityType = GetComponentTypeHandle<PhysicsVelocity>(true);
-
             integrityCheckMap.Clear();
+
+            var buildPhysicsData = state.EntityManager.GetComponentData<BuildPhysicsWorldData>(state.SystemHandle);
 
             var dynamicBodyIntegrity = new Jobs.RecordDynamicBodyIntegrity
             {
                 IntegrityCheckMap = integrityCheckMap,
-                PositionType = positionType,
-                RotationType = rotationType,
-                PhysicsVelocityType = physicsVelocityType,
-                PhysicsColliderType = physicsColliderType
+                PositionType = buildPhysicsData.PhysicsData.ComponentHandles.PositionType,
+                RotationType = buildPhysicsData.PhysicsData.ComponentHandles.RotationType,
+                PhysicsVelocityType = buildPhysicsData.PhysicsData.ComponentHandles.PhysicsVelocityType,
+                PhysicsColliderType = buildPhysicsData.PhysicsData.ComponentHandles.PhysicsColliderType
             };
 
-            var handle = dynamicBodyIntegrity.Schedule(PhysicsData.DynamicEntityGroup, Dependency);
+            var handle = dynamicBodyIntegrity.Schedule(buildPhysicsData.PhysicsData.DynamicEntityGroup, state.Dependency);
 
             var staticBodyColliderIntegrity = new Jobs.RecordColliderIntegrity
             {
                 IntegrityCheckMap = integrityCheckMap,
-                PhysicsColliderType = physicsColliderType
+                PhysicsColliderType = buildPhysicsData.PhysicsData.ComponentHandles.PhysicsColliderType
             };
 
-            handle = staticBodyColliderIntegrity.Schedule(PhysicsData.StaticEntityGroup, handle);
-            Dependency = JobHandle.CombineDependencies(Dependency, handle);
+            handle = staticBodyColliderIntegrity.Schedule(buildPhysicsData.PhysicsData.StaticEntityGroup, handle);
+            state.Dependency = JobHandle.CombineDependencies(state.Dependency, handle);
         }
 
         #endregion
+    }
+
+    struct DummySimulationData : IComponentData
+    {
+        byte dummyData;  // Without data, the component is zero-sized, and accessing it will result in error
+        internal DummySimulation m_Simulation;
+
+        internal unsafe void DisableSystemChain(ref SystemState systemStateRef)
+        {
+            systemStateRef.Enabled = false;
+            m_Simulation.Dispose();
+        }
+
+        internal unsafe void EnableSystemChain(ref SystemState systemStateRef)
+        {
+            systemStateRef.Enabled = true;
+            m_Simulation = new DummySimulation();
+        }
+    }
+
+    [UpdateInGroup(typeof(PhysicsSimulationGroup))]
+    [BurstCompile]
+    internal struct DummySimulationSystem : ISystem
+    {
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
+        {
+            state.EntityManager.AddComponentData(state.SystemHandle, new DummySimulationData
+            {
+                // This one is enabled by default
+                m_Simulation = new DummySimulation(),
+            });
+        }
+
+        [BurstCompile]
+        public void OnDestroy(ref SystemState state)
+        {
+            state.EntityManager.GetComponentDataRW<DummySimulationData>(state.SystemHandle).ValueRW.m_Simulation.Dispose();
+        }
+
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
+        {
+            // do nothing;
+        }
     }
 }

@@ -38,6 +38,7 @@ namespace Unity.Physics.Authoring
     {
         [SoftRange(0f, 1f, TextFieldMax = float.MaxValue)]
         public float Value;
+
         public Material.CombinePolicy CombineMode;
     }
 

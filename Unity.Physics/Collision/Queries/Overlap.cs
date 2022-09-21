@@ -3,26 +3,47 @@ using Unity.Mathematics;
 
 namespace Unity.Physics
 {
-    // The input to AABB overlap queries
+    /// <summary>   The input to AABB overlap queries. </summary>
     public struct OverlapAabbInput
     {
+        /// <summary>   The aabb. </summary>
         public Aabb Aabb;
+        /// <summary>   Specifies the filter. </summary>
         public CollisionFilter Filter;
     }
 
-    // A hit from an overlap query
+    /// <summary>   A hit from an overlap query. </summary>
     public struct OverlapAabbHit
     {
+        /// <summary>   Zero-based index of the rigid body. </summary>
         public int RigidBodyIndex;
+        /// <summary>   The collider key. </summary>
         public ColliderKey ColliderKey;
     }
 
-    // Interface for collecting hits from overlap queries
+    /// <summary>   Interface for collecting hits from overlap queries. </summary>
     public interface IOverlapCollector
     {
+        /// <summary>   Adds rigid body indices to the collector. </summary>
+        ///
+        /// <param name="indices">  [in,out] If non-null, the rigid body indices. </param>
+        /// <param name="count">    Number of indices. </param>
         unsafe void AddRigidBodyIndices(int* indices, int count);
+
+        /// <summary>   Adds a collider keys to 'count'. </summary>
+        ///
+        /// <param name="keys">     [in,out] If non-null, the collider keys. </param>
+        /// <param name="count">    Number of collider keys. </param>
         unsafe void AddColliderKeys(ColliderKey* keys, int count);
+
+        /// <summary>   Pushes a composite collider. </summary>
+        ///
+        /// <param name="compositeKey"> The composite key. </param>
         void PushCompositeCollider(ColliderKeyPath compositeKey);
+
+        /// <summary>   Pops the composite collider described by numCompositeKeyBits. </summary>
+        ///
+        /// <param name="numCompositeKeyBits">  Number of composite key bits. </param>
         void PopCompositeCollider(uint numCompositeKeyBits);
     }
 
@@ -34,7 +55,7 @@ namespace Unity.Physics
         public static unsafe void AabbCollider<T>(OverlapAabbInput input, [NoAlias] Collider* collider, [NoAlias] ref T collector)
             where T : struct, IOverlapCollector
         {
-            if (!CollisionFilter.IsCollisionEnabled(input.Filter, collider->Filter))
+            if (!CollisionFilter.IsCollisionEnabled(input.Filter, collider->GetCollisionFilter()))
             {
                 return;
             }
@@ -138,7 +159,7 @@ namespace Unity.Physics
                 if (child.Collider->CollisionType == CollisionType.Composite)
                 {
                     OverlapAabbInput childInput = input;
-                    childInput.Aabb = Math.TransformAabb(math.inverse(child.CompoundFromChild), input.Aabb);
+                    childInput.Aabb = Math.TransformAabb(input.Aabb, math.inverse(child.CompoundFromChild));
 
                     collector.PushCompositeCollider(new ColliderKeyPath(childKey, m_NumColliderKeyBits));
                     AabbCollider(childInput, child.Collider, ref collector);

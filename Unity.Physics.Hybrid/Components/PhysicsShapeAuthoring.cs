@@ -9,7 +9,6 @@ using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering;
-using UnityComponent = UnityEngine.Component;
 using UnityMesh = UnityEngine.Mesh;
 
 namespace Unity.Physics.Authoring
@@ -19,10 +18,14 @@ namespace Unity.Physics.Authoring
         Box        =  0,
         Capsule    =  1,
         Sphere     =  2,
+
         [Description("Cylinder (Convex Hull)")]
         Cylinder   =  3,
+
         Plane      =  4,
+
         // extra space to accommodate other possible primitives in the future
+
         ConvexHull = 30,
         Mesh       = 31
     }
@@ -111,9 +114,11 @@ namespace Unity.Physics.Authoring
         }
 
         public bool OverrideCollisionResponse { get => m_Material.OverrideCollisionResponse; set => m_Material.OverrideCollisionResponse = value; }
+
         public CollisionResponsePolicy CollisionResponse { get => m_Material.CollisionResponse; set => m_Material.CollisionResponse = value; }
 
         public bool OverrideFriction { get => m_Material.OverrideFriction; set => m_Material.OverrideFriction = value; }
+
         public PhysicsMaterialCoefficient Friction { get => m_Material.Friction; set => m_Material.Friction = value; }
 
         public bool OverrideRestitution
@@ -121,6 +126,7 @@ namespace Unity.Physics.Authoring
             get => m_Material.OverrideRestitution;
             set => m_Material.OverrideRestitution = value;
         }
+
         public PhysicsMaterialCoefficient Restitution
         {
             get => m_Material.Restitution;
@@ -132,6 +138,7 @@ namespace Unity.Physics.Authoring
             get => m_Material.OverrideBelongsTo;
             set => m_Material.OverrideBelongsTo = value;
         }
+
         public PhysicsCategoryTags BelongsTo
         {
             get => m_Material.BelongsTo;
@@ -143,6 +150,7 @@ namespace Unity.Physics.Authoring
             get => m_Material.OverrideCollidesWith;
             set => m_Material.OverrideCollidesWith = value;
         }
+
         public PhysicsCategoryTags CollidesWith
         {
             get => m_Material.CollidesWith;
@@ -154,6 +162,7 @@ namespace Unity.Physics.Authoring
             get => m_Material.OverrideCustomTags;
             set => m_Material.OverrideCustomTags = value;
         }
+
         public CustomPhysicsMaterialTags CustomTags { get => m_Material.CustomTags; set => m_Material.CustomTags = value; }
 
         [SerializeField]
@@ -329,9 +338,9 @@ namespace Unity.Physics.Authoring
                         this, skinnedPoints, validate, skinnedInputs, allSkinIndices, allBlendShapeWeights
                     );
                     if (pointCloud.IsCreated)
-                        pointCloud.AddRange(skinnedPoints);
+                        pointCloud.AddRange(skinnedPoints.AsArray());
                     if (inputs.IsCreated)
-                        inputs.AddRange(skinnedInputs);
+                        inputs.AddRange(skinnedInputs.AsArray());
                 }
             }
         }
@@ -427,7 +436,7 @@ namespace Unity.Physics.Authoring
                         blendShapeWeights[i] = skin.GetBlendShapeWeight(i);
 
                     var data = HashableShapeInputs.FromSkinnedMesh(
-                        mesh, shapeFromSkin, includedIndices, allIncludedIndices, blendShapeWeights, allBlendShapeWeights
+                        mesh, shapeFromSkin, includedIndices.AsArray(), allIncludedIndices, blendShapeWeights, allBlendShapeWeights
                     );
                     inputs.Add(data);
                 }
@@ -642,7 +651,6 @@ namespace Unity.Physics.Authoring
             m_ShapeType = ShapeType.Cylinder;
             m_PrimitiveCenter = geometry.Center;
             m_PrimitiveOrientation = orientation;
-            m_CylinderSideCount = geometry.SideCount;
 
             geometry.Radius = math.max(0f, geometry.Radius);
             geometry.Height = math.max(0f, geometry.Height);
@@ -838,14 +846,20 @@ namespace Unity.Physics.Authoring
         }
 
         /// <summary>
-        /// Fit this shape to render geometry in its GameObject hierarchy.
-        /// Children in the hierarchy will influence the result if they have enabled MeshRenderer components or have vertices bound to them on a SkinnedMeshRenderer.
-        /// Children will only count as influences if this shape is the first ancestor shape in their hierarchy.
-        /// As such, you should add shape components to all GameObjects that should have them before you call this method on any of them.
+        /// Fit this shape to render geometry in its GameObject hierarchy. Children in the hierarchy will
+        /// influence the result if they have enabled MeshRenderer components or have vertices bound to
+        /// them on a SkinnedMeshRenderer. Children will only count as influences if this shape is the
+        /// first ancestor shape in their hierarchy. As such, you should add shape components to all
+        /// GameObjects that should have them before you call this method on any of them.
         /// </summary>
-        /// <param name="minimumSkinnedVertexWeight">
-        /// The minimum total weight that a vertex in a skinned mesh must have assigned to this object and/or any of its influencing children.
-        /// </param>
+        ///
+        /// <exception cref="UnimplementedShapeException"> Thrown when an Unimplemented Shape error
+        /// condition occurs. </exception>
+        ///
+        /// <param name="minimumSkinnedVertexWeight"> (Optional)
+        /// The minimum total weight that a vertex in a skinned mesh must have assigned to this object
+        /// and/or any of its influencing children. </param>
+
         public void FitToEnabledRenderMeshes(float minimumSkinnedVertexWeight = 0f)
         {
             var shapeType = m_ShapeType;
@@ -928,7 +942,7 @@ namespace Unity.Physics.Authoring
         {
             var pointCloud = new NativeList<float3>(65535, Allocator.Temp);
             GetConvexHullProperties(pointCloud, false, default, default, default, default);
-            m_ConvexHullGenerationParameters.InitializeToRecommendedAuthoringValues(pointCloud);
+            m_ConvexHullGenerationParameters.InitializeToRecommendedAuthoringValues(pointCloud.AsArray());
         }
     }
 }

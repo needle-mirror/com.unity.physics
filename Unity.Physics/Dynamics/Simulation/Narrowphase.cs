@@ -4,11 +4,18 @@ using Unity.Jobs;
 
 namespace Unity.Physics
 {
-    // Processes body pairs and creates contacts from them
-    public static class NarrowPhase
+    /// <summary>   Processes body pairs and creates contacts from them. </summary>
+    internal static class NarrowPhase
     {
-        // Iterates the provided dispatch pairs and creates contacts and based on them.
-        public static void CreateContacts(ref PhysicsWorld world, NativeArray<DispatchPairSequencer.DispatchPair> dispatchPairs, float timeStep,
+        /// <summary>
+        /// Iterates the provided dispatch pairs and creates contacts and based on them.
+        /// </summary>
+        ///
+        /// <param name="world">            [in,out] The world. </param>
+        /// <param name="dispatchPairs">    The dispatch pairs. </param>
+        /// <param name="timeStep">         The time step. </param>
+        /// <param name="contactsWriter">   [in,out] The contacts writer. </param>
+        internal static void CreateContacts(ref PhysicsWorld world, NativeArray<DispatchPairSequencer.DispatchPair> dispatchPairs, float timeStep,
             ref NativeStream.Writer contactsWriter)
         {
             contactsWriter.BeginForEachIndex(0);
@@ -18,7 +25,21 @@ namespace Unity.Physics
             contactsWriter.EndForEachIndex();
         }
 
-        // Schedules a set of jobs to iterate the provided dispatch pairs and create contacts based on them.
+        /// <summary>
+        /// Schedules a set of jobs to iterate the provided dispatch pairs and create contacts based on
+        /// them.
+        /// </summary>
+        ///
+        /// <param name="world">                [in,out] The world. </param>
+        /// <param name="timeStep">             The time step. </param>
+        /// <param name="contacts">             [in,out] The contacts. </param>
+        /// <param name="jacobians">            [in,out] The jacobians. </param>
+        /// <param name="dispatchPairs">        [in,out] The dispatch pairs. </param>
+        /// <param name="inputDeps">            The input deps. </param>
+        /// <param name="solverSchedulerInfo"> [in,out] Information describing the solver scheduler. </param>
+        /// <param name="multiThreaded">        (Optional) True if multi threaded. </param>
+        ///
+        /// <returns>   The SimulationJobHandles. </returns>
         internal static SimulationJobHandles ScheduleCreateContactsJobs(ref PhysicsWorld world, float timeStep,
             ref NativeStream contacts, ref NativeStream jacobians, ref NativeList<DispatchPairSequencer.DispatchPair> dispatchPairs,
             JobHandle inputDeps, ref DispatchPairSequencer.SolverSchedulerInfo solverSchedulerInfo, bool multiThreaded = true)
@@ -51,8 +72,6 @@ namespace Unity.Physics
                     SolverSchedulerInfo = solverSchedulerInfo,
                     ContactsWriter = contacts.AsWriter()
                 }.ScheduleUnsafeIndex0(numWorkItems, 1, JobHandle.CombineDependencies(contactsHandle, jacobiansHandle));
-
-
                 returnHandles.FinalExecutionHandle = processHandle;
             }
 

@@ -7,7 +7,7 @@ namespace Unity.Physics.Editor
 {
     static class IntegrityChecksMenuOption
     {
-        const string k_IntegrityChecksMenuItem = "DOTS/Physics/Enable Integrity Checks";
+        const string k_IntegrityChecksMenuItem = "Edit/Preferences/Entities/Unity Physics/Enable Integrity Checks";
         const string k_DisableIntegrityDefine = "UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS";
         const char k_defineSeparator = ';';
 

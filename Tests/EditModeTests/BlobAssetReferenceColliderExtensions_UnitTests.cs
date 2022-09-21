@@ -62,7 +62,7 @@ namespace Unity.Physics.Tests.Authoring
             unsafe
             {
                 var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                Mesh mesh = go.GetComponent<MeshFilter>().sharedMesh;
+                UnityEngine.Mesh mesh = go.GetComponent<MeshFilter>().sharedMesh;
 
                 var vertexBuff = mesh.vertices;
                 var indexBuff = mesh.triangles;

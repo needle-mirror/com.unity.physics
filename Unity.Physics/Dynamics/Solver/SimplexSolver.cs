@@ -4,28 +4,51 @@ using UnityEngine.Assertions;
 
 namespace Unity.Physics
 {
+    /// <summary>   Information about the surface constraint. </summary>
     public struct SurfaceConstraintInfo // TODO: Move into SimplexSolver
     {
         // Info of interest for the character
+
+        /// <summary>   The Plane. </summary>
         public Plane Plane;
+        /// <summary>   The velocity. </summary>
         public float3 Velocity;
 
         // Hit body info
+        /// <summary>   The rigid body index. </summary>
         public int RigidBodyIndex;
+        /// <summary>   The collider key. </summary>
         public ColliderKey ColliderKey;
+        /// <summary>   The hit position. </summary>
         public float3 HitPosition;
 
         // Internal state
+        /// <summary>   The priority. </summary>
         public int Priority;
+        /// <summary>   True if touched. </summary>
         public bool Touched;
+        /// <summary>   True if is too steep, false if not. </summary>
         public bool IsTooSteep;
+        /// <summary>   True if is maximum slope, false if not. </summary>
         public bool IsMaxSlope;
     }
 
+    /// <summary>   A simplex solver. </summary>
     public static class SimplexSolver
     {
         const float k_Epsilon = 0.0001f;
 
+        /// <summary>   Solves. </summary>
+        ///
+        /// <param name="deltaTime">                The delta time. </param>
+        /// <param name="minDeltaTime">             The minimum time delta time. </param>
+        /// <param name="up">                       The up vector. </param>
+        /// <param name="maxVelocity">              The maximum velocity. </param>
+        /// <param name="constraints">              The constraints. </param>
+        /// <param name="position">                 [in,out] The position. </param>
+        /// <param name="velocity">                 [in,out] The velocity. </param>
+        /// <param name="integratedTime">           [out] The integrated time. </param>
+        /// <param name="useConstraintVelocities">  (Optional) True to use constraint velocities. </param>
         public static unsafe void Solve(
             float deltaTime, float minDeltaTime, float3 up, float maxVelocity,
             NativeList<SurfaceConstraintInfo> constraints, ref float3 position, ref float3 velocity, out float integratedTime, bool useConstraintVelocities = true
@@ -112,6 +135,12 @@ namespace Unity.Physics
             integratedTime = currentTime;
         }
 
+        /// <summary>   Examine active planes. </summary>
+        ///
+        /// <param name="up">               The up vector. </param>
+        /// <param name="supportPlanes">    The support planes. </param>
+        /// <param name="numSupportPlanes"> [in,out] Number of support planes. </param>
+        /// <param name="velocity">         [in,out] The velocity. </param>
         public static unsafe void ExamineActivePlanes(float3 up, SurfaceConstraintInfo* supportPlanes, ref int numSupportPlanes, ref float3 velocity)
         {
             switch (numSupportPlanes)
@@ -225,6 +254,10 @@ namespace Unity.Physics
             }
         }
 
+        /// <summary>   Solve 1d. </summary>
+        ///
+        /// <param name="constraint">   The constraint. </param>
+        /// <param name="velocity">     [in,out] The velocity. </param>
         public static void Solve1d(SurfaceConstraintInfo constraint, ref float3 velocity)
         {
             float3 groundVelocity = constraint.Velocity;
@@ -235,6 +268,12 @@ namespace Unity.Physics
             velocity = relVel + groundVelocity;
         }
 
+        /// <summary>   Tests 1d. </summary>
+        ///
+        /// <param name="constraint">   The constraint. </param>
+        /// <param name="velocity">     The velocity. </param>
+        ///
+        /// <returns>   True if the test passes, false if the test fails. </returns>
         public static bool Test1d(SurfaceConstraintInfo constraint, float3 velocity)
         {
             float3 relVel = velocity - constraint.Velocity;
@@ -242,6 +281,12 @@ namespace Unity.Physics
             return planeVel < -k_Epsilon;
         }
 
+        /// <summary>   Solve 2D. </summary>
+        ///
+        /// <param name="up">           The up vector. </param>
+        /// <param name="constraint0">  The first constraint. </param>
+        /// <param name="constraint1">  The second constraint. </param>
+        /// <param name="velocity">     [in,out] The velocity. </param>
         public static void Solve2d(float3 up, SurfaceConstraintInfo constraint0, SurfaceConstraintInfo constraint1, ref float3 velocity)
         {
             float3 plane0 = constraint0.Plane.Normal;
@@ -297,6 +342,13 @@ namespace Unity.Physics
             velocity = groundVelocity + axis * axisProjVel;
         }
 
+        /// <summary>   Solve 3D. </summary>
+        ///
+        /// <param name="up">           The up vector. </param>
+        /// <param name="constraint0">  The first constraint. </param>
+        /// <param name="constraint1">  The second constraint. </param>
+        /// <param name="constraint2">  The third constraint. </param>
+        /// <param name="velocity">     [in,out] The velocity. </param>
         public static void Solve3d(float3 up, SurfaceConstraintInfo constraint0, SurfaceConstraintInfo constraint1, SurfaceConstraintInfo constraint2, ref float3 velocity)
         {
             float3 plane0 = constraint0.Plane.Normal;
@@ -335,6 +387,10 @@ namespace Unity.Physics
             velocity = pointVel;
         }
 
+        /// <summary>   Sort 2D. </summary>
+        ///
+        /// <param name="plane0">   The first plane. </param>
+        /// <param name="plane1">   The second plane. </param>
         public static void Sort2d(ref SurfaceConstraintInfo plane0, ref SurfaceConstraintInfo plane1)
         {
             int priority0 = plane0.Priority;
@@ -345,6 +401,11 @@ namespace Unity.Physics
             }
         }
 
+        /// <summary>   Sort 3D. </summary>
+        ///
+        /// <param name="plane0">   The first plane. </param>
+        /// <param name="plane1">   The second plane. </param>
+        /// <param name="plane2">   The third plane. </param>
         public static void Sort3d(ref SurfaceConstraintInfo plane0, ref SurfaceConstraintInfo plane1, ref SurfaceConstraintInfo plane2)
         {
             int priority0 = plane0.Priority;
@@ -389,6 +450,10 @@ namespace Unity.Physics
             }
         }
 
+        /// <summary>   Swap planes. </summary>
+        ///
+        /// <param name="plane0">   The first plane. </param>
+        /// <param name="plane1">   The second plane. </param>
         public static void SwapPlanes(ref SurfaceConstraintInfo plane0, ref SurfaceConstraintInfo plane1)
         {
             var temp = plane0;

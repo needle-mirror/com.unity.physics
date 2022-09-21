@@ -76,19 +76,6 @@ namespace Unity.Physics.Tests.Authoring
             AssetDatabase.DeleteAsset(TemporaryAssetsPath);
         }
 
-        [TearDown]
-        public void TearDown()
-        {
-            // clear out entities created by test
-            var world = World.DefaultGameObjectInjectionWorld;
-            if (world == default)
-                return;
-
-            var em = World.DefaultGameObjectInjectionWorld.EntityManager;
-            if (em != default)
-                em.DestroyEntity(em.UniversalQuery);
-        }
-
         string TestNameWithoutSpecialCharacters =>
             k_NonWords.Replace(TestContext.CurrentContext.Test.Name, string.Empty);
 
@@ -129,8 +116,7 @@ namespace Unity.Physics.Tests.Authoring
 
             // convert and load sub-scene
             var world = World.DefaultGameObjectInjectionWorld;
-            var sceneSystem = world.GetOrCreateSystem<SceneSystem>();
-            sceneSystem.LoadSceneAsync(subScene.SceneGUID, new SceneSystem.LoadParameters
+            var sceneEntity = SceneSystem.LoadSceneAsync(world.Unmanaged, subScene.SceneGUID, new SceneSystem.LoadParameters
             {
                 Flags = SceneLoadFlags.BlockOnImport | SceneLoadFlags.BlockOnStreamIn
             });
@@ -145,6 +131,8 @@ namespace Unity.Physics.Tests.Authoring
                 Assume.That(bodies[0].IsValid, Is.True);
                 Assert.That(bodies[0].Value.Value.Type, Is.EqualTo(expectedColliderType));
             }
+
+            SceneSystem.UnloadScene(world.Unmanaged, sceneEntity);
         }
 
         [Test]

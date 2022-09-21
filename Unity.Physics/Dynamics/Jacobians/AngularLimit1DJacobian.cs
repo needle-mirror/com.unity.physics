@@ -1,4 +1,6 @@
 using Unity.Burst;
+using Unity.Collections;
+using Unity.Entities;
 using Unity.Mathematics;
 using static Unity.Physics.Math;
 
@@ -19,6 +21,18 @@ namespace Unity.Physics
         public float MinAngle;
         public float MaxAngle;
 
+        // The max impulse that can be applied on this joint
+        public float3 MaxImpulse;
+
+        // Accumulated impulse applied over all steps
+        public float3 AccumulatedImpulse;
+
+        // The joint entity between the body pair
+        Entity JointEntity;
+
+        // When true, will send impulse events when max impulse is exceeded
+        public bool EnableImpulseEvents;
+
         // Relative orientation of the motions before solving
         public quaternion MotionBFromA;
 
@@ -37,7 +51,7 @@ namespace Unity.Physics
 
         // Build the Jacobian
         public void Build(
-            MTransform aFromConstraint, MTransform bFromConstraint,
+            Entity jointEntity, MTransform aFromConstraint, MTransform bFromConstraint,
             MotionVelocity velocityA, MotionVelocity velocityB,
             MotionData motionA, MotionData motionB,
             Constraint constraint, float tau, float damping)
@@ -47,6 +61,10 @@ namespace Unity.Physics
             AxisInMotionA = aFromConstraint.Rotation[AxisIndex];
             MinAngle = constraint.Min;
             MaxAngle = constraint.Max;
+            MaxImpulse = constraint.MaxImpulse;
+            EnableImpulseEvents = constraint.EnableImpulseEvents;
+            JointEntity = jointEntity;
+            AccumulatedImpulse = float3.zero;
             Tau = tau;
             Damping = damping;
             MotionBFromA = math.mul(math.inverse(motionB.WorldFromMotion.rot), motionA.WorldFromMotion.rot);
@@ -58,10 +76,10 @@ namespace Unity.Physics
         }
 
         // Solve the Jacobian
-        public void Solve(ref MotionVelocity velocityA, ref MotionVelocity velocityB, float timestep, float invTimestep)
+        public void Solve(ref JacobianHeader jacHeader, ref MotionVelocity velocityA, ref MotionVelocity velocityB, Solver.StepInput stepInput, ref NativeStream.Writer impulseEventsWriter)
         {
             // Predict the relative orientation at the end of the step
-            quaternion futureMotionBFromA = JacobianUtilities.IntegrateOrientationBFromA(MotionBFromA, velocityA.AngularVelocity, velocityB.AngularVelocity, timestep);
+            quaternion futureMotionBFromA = JacobianUtilities.IntegrateOrientationBFromA(MotionBFromA, velocityA.AngularVelocity, velocityB.AngularVelocity, stepInput.Timestep);
 
             // Calculate the effective mass
             float3 axisInMotionB = math.mul(futureMotionBFromA, -AxisInMotionA);
@@ -75,9 +93,23 @@ namespace Unity.Physics
             // Calculate the error, adjust by tau and damping, and apply an impulse to correct it
             float futureError = CalculateError(futureMotionBFromA);
             float solveError = JacobianUtilities.CalculateCorrection(futureError, InitialError, Tau, Damping);
-            float impulse = math.mul(effectiveMass, -solveError) * invTimestep;
+            float impulse = math.mul(effectiveMass, -solveError) * stepInput.InvTimestep;
             velocityA.ApplyAngularImpulse(impulse * AxisInMotionA);
             velocityB.ApplyAngularImpulse(impulse * axisInMotionB);
+
+            AccumulatedImpulse[AxisIndex] += impulse;
+
+            // if impulse exceeds max impulse, write back data
+            if (EnableImpulseEvents && stepInput.IsLastIteration && math.any(math.abs(AccumulatedImpulse) > MaxImpulse))
+            {
+                impulseEventsWriter.Write(new ImpulseEventData
+                {
+                    Type = ConstraintType.Angular,
+                    Impulse = AccumulatedImpulse,
+                    JointEntity = JointEntity,
+                    BodyIndices = jacHeader.BodyPair
+                });
+            }
         }
 
         // Helper function

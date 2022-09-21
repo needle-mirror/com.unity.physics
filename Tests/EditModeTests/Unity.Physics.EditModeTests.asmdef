@@ -1,5 +1,6 @@
 {
     "name": "Unity.Physics.EditModeTests",
+    "rootNamespace": "",
     "references": [
         "Unity.Burst",
         "Unity.Collections",
@@ -13,7 +14,9 @@
         "Unity.Scenes",
         "Unity.Scenes.Hybrid",
         "UnityEngine.TestRunner",
-        "UnityEditor.TestRunner"
+        "UnityEditor.TestRunner",
+        "Unity.Transforms",
+        "Unity.Entities.Tests"
     ],
     "includePlatforms": [
         "Editor"

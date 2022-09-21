@@ -7,33 +7,58 @@ using UnityEngine.Assertions;
 
 namespace Unity.Physics
 {
+    /// <summary>   Values that represent jacobian types. </summary>
     public enum JacobianType : byte
     {
         // Contact Jacobians
+        /// <summary>   An enum constant representing the contact jacobian. </summary>
         Contact,
+        /// <summary>   An enum constant representing the trigger jacobian. </summary>
         Trigger,
 
         // Joint Jacobians
+        /// <summary>   An enum constant representing the linear limit joint jacobian. </summary>
         LinearLimit,
+        /// <summary>   An enum constant representing the angular limit 1 d joint jacobian. </summary>
         AngularLimit1D,
+        /// <summary>   An enum constant representing the angular limit 2D joint jacobian. </summary>
         AngularLimit2D,
-        AngularLimit3D
+        /// <summary>   An enum constant representing the angular limit 3D joint jacobian. </summary>
+        AngularLimit3D,
+
+        // Motor Jacobians
+        /// <summary>   An enum constant representing the rotation motor jacobian. </summary>
+        RotationMotor,
+        /// <summary>   An enum constant representing the angular velocity motor jacobian. </summary>
+        AngularVelocityMotor,
+        /// <summary>   An enum constant representing the position motor jacobian. </summary>
+        PositionMotor,
+        /// <summary>   An enum constant representing the linear velocity motor jacobian. </summary>
+        LinearVelocityMotor
     }
 
-    // Flags which enable optional Jacobian behaviors
+    /// <summary>   Flags which enable optional Jacobian behaviors. </summary>
     [Flags]
     public enum JacobianFlags : byte
     {
         // These flags apply to all Jacobians
+        /// <summary>   A binary constant representing the disabled flag. Applies to all jacobians. </summary>
         Disabled = 1 << 0,
+        /// <summary>   A binary constant representing the enable mass factors flag. Applies to all jacobians.</summary>
         EnableMassFactors = 1 << 1,
+        /// <summary>   A binary constant representing the user flag 0 flag. Applies to all jacobians. </summary>
         UserFlag0 = 1 << 2,
+        /// <summary>   A binary constant representing the user flag 1 flag. Applies to all jacobians. </summary>
         UserFlag1 = 1 << 3,
+        /// <summary>   A binary constant representing the user flag 2 flag. Applies to all jacobians. </summary>
         UserFlag2 = 1 << 4,
 
         // These flags apply only to contact Jacobians
+        /// <summary>   A binary constant representing the is trigger flag. Apples only to contact jacobian. </summary>
         IsTrigger = 1 << 5,
+        /// <summary>   A binary constant representing the enable collision events flag. Apples only to contact jacobian. </summary>
         EnableCollisionEvents = 1 << 6,
+        /// <summary>   A binary constant representing the enable surface velocity flag. Apples only to contact jacobian. </summary>
         EnableSurfaceVelocity = 1 << 7
     }
 
@@ -97,7 +122,8 @@ namespace Unity.Physics
 
         // Solve the Jacobian
         public void Solve([NoAlias] ref MotionVelocity velocityA, [NoAlias] ref MotionVelocity velocityB, Solver.StepInput stepInput,
-            [NoAlias] ref NativeStream.Writer collisionEventsWriter, [NoAlias] ref NativeStream.Writer triggerEventsWriter, bool enableFrictionVelocitiesHeuristic,
+            [NoAlias] ref NativeStream.Writer collisionEventsWriter, [NoAlias] ref NativeStream.Writer triggerEventsWriter,
+            [NoAlias] ref NativeStream.Writer impulseEventsWriter, bool enableFrictionVelocitiesHeuristic,
             Solver.MotionStabilizationInput motionStabilizationSolverInputA, Solver.MotionStabilizationInput motionStabilizationSolverInputB)
         {
             if (Enabled)
@@ -112,16 +138,28 @@ namespace Unity.Physics
                         AccessBaseJacobian<TriggerJacobian>().Solve(ref this, ref velocityA, ref velocityB, stepInput, ref triggerEventsWriter);
                         break;
                     case JacobianType.LinearLimit:
-                        AccessBaseJacobian<LinearLimitJacobian>().Solve(ref velocityA, ref velocityB, stepInput.Timestep, stepInput.InvTimestep);
+                        AccessBaseJacobian<LinearLimitJacobian>().Solve(ref this, ref velocityA, ref velocityB, stepInput, ref impulseEventsWriter);
                         break;
                     case JacobianType.AngularLimit1D:
-                        AccessBaseJacobian<AngularLimit1DJacobian>().Solve(ref velocityA, ref velocityB, stepInput.Timestep, stepInput.InvTimestep);
+                        AccessBaseJacobian<AngularLimit1DJacobian>().Solve(ref this, ref velocityA, ref velocityB, stepInput, ref impulseEventsWriter);
                         break;
                     case JacobianType.AngularLimit2D:
-                        AccessBaseJacobian<AngularLimit2DJacobian>().Solve(ref velocityA, ref velocityB, stepInput.Timestep, stepInput.InvTimestep);
+                        AccessBaseJacobian<AngularLimit2DJacobian>().Solve(ref this, ref velocityA, ref velocityB, stepInput, ref impulseEventsWriter);
                         break;
                     case JacobianType.AngularLimit3D:
-                        AccessBaseJacobian<AngularLimit3DJacobian>().Solve(ref velocityA, ref velocityB, stepInput.Timestep, stepInput.InvTimestep);
+                        AccessBaseJacobian<AngularLimit3DJacobian>().Solve(ref this, ref velocityA, ref velocityB, stepInput, ref impulseEventsWriter);
+                        break;
+                    case JacobianType.RotationMotor:
+                        AccessBaseJacobian<RotationMotorJacobian>().Solve(ref velocityA, ref velocityB, stepInput);
+                        break;
+                    case JacobianType.AngularVelocityMotor:
+                        AccessBaseJacobian<AngularVelocityMotorJacobian>().Solve(ref velocityA, ref velocityB, stepInput);
+                        break;
+                    case JacobianType.PositionMotor:
+                        AccessBaseJacobian<PositionMotorJacobian>().Solve(ref velocityA, ref velocityB, stepInput);
+                        break;
+                    case JacobianType.LinearVelocityMotor:
+                        AccessBaseJacobian<LinearVelocityMotorJacobian>().Solve(ref velocityA, ref velocityB, stepInput);
                         break;
                     default:
                         SafetyChecks.ThrowNotImplementedException();
@@ -192,6 +230,14 @@ namespace Unity.Physics
                     return UnsafeUtility.SizeOf<AngularLimit2DJacobian>();
                 case JacobianType.AngularLimit3D:
                     return UnsafeUtility.SizeOf<AngularLimit3DJacobian>();
+                case JacobianType.RotationMotor:
+                    return UnsafeUtility.SizeOf<RotationMotorJacobian>();
+                case JacobianType.AngularVelocityMotor:
+                    return UnsafeUtility.SizeOf<AngularVelocityMotorJacobian>();
+                case JacobianType.PositionMotor:
+                    return UnsafeUtility.SizeOf<PositionMotorJacobian>();
+                case JacobianType.LinearVelocityMotor:
+                    return UnsafeUtility.SizeOf<LinearVelocityMotorJacobian>();
                 default:
                     SafetyChecks.ThrowNotImplementedException();
                     return default;
@@ -371,6 +417,8 @@ namespace Unity.Physics
         }
 
         // Returns the amount of error for the solver to correct, where initialError is the pre-integration error and predictedError is the expected post-integration error
+        // If (predicted > initial) HAVE overshot target = (Predicted - initial)*damping + initial*tau
+        // If (predicted < initial) HAVE NOT met target = predicted * tau (ie: damping not used if target not met)
         public static float CalculateCorrection(float predictedError, float initialError, float tau, float damping)
         {
             return math.max(predictedError - initialError, 0.0f) * damping + math.min(predictedError, initialError) * tau;
@@ -402,7 +450,7 @@ namespace Unity.Physics
             return math.csum(angA0 * angA1 * invInertiaA + angB0 * angB1 * invInertiaB);
         }
 
-        // Inverts a symmetrix 3x3 matrix with diag = (0, 0), (1, 1), (2, 2), offDiag = (0, 1), (0, 2), (1, 2) = (1, 0), (2, 0), (2, 1)
+        // Inverts a symmetric 3x3 matrix with diag = (0, 0), (1, 1), (2, 2), offDiag = (0, 1), (0, 2), (1, 2) = (1, 0), (2, 0), (2, 1)
         public static bool InvertSymmetricMatrix(float3 diag, float3 offDiag, out float3 invDiag, out float3 invOffDiag)
         {
             float3 offDiagSq = offDiag.zyx * offDiag.zyx;

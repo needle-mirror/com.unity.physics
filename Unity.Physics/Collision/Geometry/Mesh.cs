@@ -231,7 +231,7 @@ namespace Unity.Physics
             }
 
             short filterIndex = section.PrimitiveFilterIndices[0];
-            polygon.Filter = section.Filters[filterIndex];
+            polygon.SetCollisionFilter(section.Filters[filterIndex]);
 
             short materialIndex = section.PrimitiveMaterialIndices[0];
             polygon.Material = section.Materials[materialIndex];
@@ -300,7 +300,7 @@ namespace Unity.Physics
                 }
 
                 short filterIndex = section.PrimitiveFilterIndices[sectionPrimitiveIndex];
-                polygon.Filter = section.Filters[filterIndex];
+                polygon.SetCollisionFilter(section.Filters[filterIndex]);
 
                 short materialIndex = section.PrimitiveMaterialIndices[sectionPrimitiveIndex];
                 polygon.Material = section.Materials[materialIndex];

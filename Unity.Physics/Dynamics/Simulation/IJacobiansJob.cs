@@ -1,4 +1,5 @@
 using System;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -8,40 +9,94 @@ using Unity.Mathematics;
 
 namespace Unity.Physics
 {
-    // INTERNAL UnityPhysics interface for jobs that iterate through the list of Jacobians before they are solved
-    // Important: Only use inside UnityPhysics code! Jobs in other projects should implement IJacobiansJob.
+    /// <summary>
+    /// INTERNAL UnityPhysics interface for jobs that iterate through the list of Jacobians before
+    /// they are solved Important: Only use inside UnityPhysics code! Jobs in other projects should
+    /// implement IJacobiansJob.
+    /// </summary>
     [JobProducerType(typeof(IJacobiansJobExtensions.JacobiansJobProcess<>))]
     public interface IJacobiansJobBase
     {
-        // Note, multiple Jacobians can share the same header.
+        /// <summary>
+        /// Executes an operation on a header and a contact jacobian.
+        /// Note, multiple Jacobians can share the same header.
+        /// </summary>
+        ///
+        /// <param name="header">   [in,out] The header. </param>
+        /// <param name="jacobian"> [in,out] The jacobian. </param>
         void Execute(ref ModifiableJacobianHeader header, ref ModifiableContactJacobian jacobian);
+
+        /// <summary>   Executes an operation on a header and a trigger jacobian. </summary>
+        ///
+        /// <param name="header">   [in,out] The header. </param>
+        /// <param name="jacobian"> [in,out] The jacobian. </param>
         void Execute(ref ModifiableJacobianHeader header, ref ModifiableTriggerJacobian jacobian);
     }
 
 #if !HAVOK_PHYSICS_EXISTS
 
-    // Interface for jobs that iterate through the list of Jacobians before they are solved
+    /// <summary>
+    /// Interface for jobs that iterate through the list of Jacobians before they are solved.
+    /// </summary>
     public interface IJacobiansJob : IJacobiansJobBase
     {
     }
 
 #endif
 
+    /// <summary>   A modifiable jacobian header. </summary>
     public unsafe struct ModifiableJacobianHeader
     {
         internal JacobianHeader* m_Header;
+
+        /// <summary>   Gets a value indicating whether the modifiers was changed. </summary>
+        ///
+        /// <value> True if modifiers changed, false if not. </value>
+
         public bool ModifiersChanged { get; private set; }
+
+        /// <summary>   Gets a value indicating whether the angular was changed. </summary>
+        ///
+        /// <value> True if angular changed, false if not. </value>
+
         public bool AngularChanged { get; private set; }
 
         internal EntityPair EntityPair;
 
+        /// <summary>   Gets the entity b. </summary>
+        ///
+        /// <value> The entity b. </value>
+
         public Entity EntityB => EntityPair.EntityB;
+
+        /// <summary>   Gets the entity a. </summary>
+        ///
+        /// <value> The entity a. </value>
+
         public Entity EntityA => EntityPair.EntityA;
 
+        /// <summary>   Gets the body index b. </summary>
+        ///
+        /// <value> The body index b. </value>
+
         public int BodyIndexB => m_Header->BodyPair.BodyIndexB;
+
+        /// <summary>   Gets the body index a. </summary>
+        ///
+        /// <value> The body index a. </value>
+
         public int BodyIndexA => m_Header->BodyPair.BodyIndexA;
 
+        /// <summary>   Gets the Jacobian type. </summary>
+        ///
+        /// <value> The Jacobian type. </value>
+
         public JacobianType Type => m_Header->Type;
+
+        /// <summary>   Gets or sets the Jacobian flags. </summary>
+        ///
+        /// <value> The Jacobian flags. </value>
+
         public JacobianFlags Flags
         {
             get => m_Header->Flags;
@@ -62,7 +117,16 @@ namespace Unity.Physics
             }
         }
 
+        /// <summary>   Gets a value indicating whether this object has mass factors. </summary>
+        ///
+        /// <value> True if this object has mass factors, false if not. </value>
+
         public bool HasMassFactors => m_Header->HasMassFactors;
+
+        /// <summary>   Gets or sets the mass factors. </summary>
+        ///
+        /// <value> The mass factors. </value>
+
         public MassFactors MassFactors
         {
             get => m_Header->MassFactors;
@@ -73,7 +137,16 @@ namespace Unity.Physics
             }
         }
 
+        /// <summary>   Gets a value indicating whether this object has surface velocity. </summary>
+        ///
+        /// <value> True if this object has surface velocity, false if not. </value>
+
         public bool HasSurfaceVelocity => m_Header->HasSurfaceVelocity;
+
+        /// <summary>   Gets or sets the surface velocity. </summary>
+        ///
+        /// <value> The surface velocity. </value>
+
         public SurfaceVelocity SurfaceVelocity
         {
             get => m_Header->SurfaceVelocity;
@@ -84,10 +157,21 @@ namespace Unity.Physics
             }
         }
 
+        /// <summary>   Gets angular jacobian. </summary>
+        ///
+        /// <param name="i">    Zero-based index of the jacobian. </param>
+        ///
+        /// <returns>   The angular jacobian. </returns>
+
         public ContactJacAngAndVelToReachCp GetAngularJacobian(int i)
         {
             return m_Header->AccessAngularJacobian(i);
         }
+
+        /// <summary>   Sets angular jacobian. </summary>
+        ///
+        /// <param name="i">    Zero-based index of the jacobian. </param>
+        /// <param name="j">    A ContactJacAngAndVelToReachCp to set. </param>
 
         public void SetAngularJacobian(int i, ContactJacAngAndVelToReachCp j)
         {
@@ -96,13 +180,24 @@ namespace Unity.Physics
         }
     }
 
+    /// <summary>   A modifiable contact jacobian. </summary>
     public unsafe struct ModifiableContactJacobian
     {
         internal ContactJacobian* m_ContactJacobian;
+
+        /// <summary>   Gets a value indicating whether this object is modified. </summary>
+        ///
+        /// <value> True if modified, false if not. </value>
         public bool Modified { get; private set; }
 
+        /// <summary>   Gets the number of contacts. </summary>
+        ///
+        /// <value> The total number of contacts. </value>
         public int NumContacts => m_ContactJacobian->BaseJacobian.NumContacts;
 
+        /// <summary>   Gets or sets the normal. </summary>
+        ///
+        /// <value> The normal. </value>
         public float3 Normal
         {
             get => m_ContactJacobian->BaseJacobian.Normal;
@@ -113,6 +208,9 @@ namespace Unity.Physics
             }
         }
 
+        /// <summary>   Gets or sets the coefficient of friction. </summary>
+        ///
+        /// <value> The coefficient of friction. </value>
         public float CoefficientOfFriction
         {
             get => m_ContactJacobian->CoefficientOfFriction;
@@ -123,6 +221,9 @@ namespace Unity.Physics
             }
         }
 
+        /// <summary>   Gets or sets the friction 0. </summary>
+        ///
+        /// <value> The friction 0. </value>
         public ContactJacobianAngular Friction0
         {
             get => m_ContactJacobian->Friction0;
@@ -133,6 +234,9 @@ namespace Unity.Physics
             }
         }
 
+        /// <summary>   Gets or sets the friction 1. </summary>
+        ///
+        /// <value> The friction 1. </value>
         public ContactJacobianAngular Friction1
         {
             get => m_ContactJacobian->Friction1;
@@ -143,6 +247,9 @@ namespace Unity.Physics
             }
         }
 
+        /// <summary>   Gets or sets the angular friction. </summary>
+        ///
+        /// <value> The angular friction. </value>
         public ContactJacobianAngular AngularFriction
         {
             get => m_ContactJacobian->AngularFriction;
@@ -154,63 +261,87 @@ namespace Unity.Physics
         }
     }
 
+    /// <summary>   A modifiable trigger jacobian. </summary>
     public struct ModifiableTriggerJacobian
     {
         internal unsafe TriggerJacobian* m_TriggerJacobian;
     }
 
+    /// <summary>   The jacobians job extensions. </summary>
     public static class IJacobiansJobExtensions
     {
 #if !HAVOK_PHYSICS_EXISTS
-        // Default Schedule() implementation for IJacobiansJob.
-        public static unsafe JobHandle Schedule<T>(this T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)
+
+        /// <summary>   Default Schedule() implementation for IJacobiansJob. </summary>
+        ///
+        /// <typeparam name="T">    Generic type parameter. </typeparam>
+        /// <param name="jobData">              The jobData to act on. </param>
+        /// <param name="simulationSingleton">  The simulation singleton. </param>
+        /// <param name="world">                [in,out] The world. </param>
+        /// <param name="inputDeps">            The input deps. </param>
+        ///
+        /// <returns>   A JobHandle. </returns>
+        public static unsafe JobHandle Schedule<T>(this T jobData, SimulationSingleton simulationSingleton, ref PhysicsWorld world, JobHandle inputDeps)
             where T : struct, IJacobiansJobBase
         {
             // Should work only for UnityPhysics
-            if (simulation.Type != SimulationType.UnityPhysics)
+            if (simulationSingleton.Type != SimulationType.UnityPhysics)
             {
                 return inputDeps;
             }
 
-            return ScheduleUnityPhysicsJacobiansJob(jobData, simulation, ref world, inputDeps);
+            return ScheduleUnityPhysicsJacobiansJob(jobData, simulationSingleton.AsSimulation(), ref world, inputDeps);
         }
 
 #else
-        // In this case Schedule() implementation for IJacobiansJob is provided by the Havok.Physics assembly.
-        // This is a stub to catch when that assembly is missing.
-        //<todo.eoin.modifier Put in a link to documentation for this:
+
+        /// <summary>
+        /// In this case Schedule() implementation for IJacobiansJob is provided by the Havok.Physics
+        /// assembly.
+        ///  This is a stub to catch when that assembly is missing.
+        /// <todo.eoin.modifier Put in a link to documentation for this:
+        /// </summary>
+        ///
+        /// <typeparam name="T">    Generic type parameter. </typeparam>
+        /// <param name="jobData">              The jobData to act on. </param>
+        /// <param name="simulationSingleton">  The simulation singleton. </param>
+        /// <param name="world">                [in,out] The world. </param>
+        /// <param name="inputDeps">            The input deps. </param>
+        /// <param name="_causeCompileError">   (Optional) The cause compile error. </param>
+        ///
+        /// <returns>   A JobHandle. </returns>
         [Obsolete("This error occurs when HAVOK_PHYSICS_EXISTS is defined but Havok.Physics is missing from your package's asmdef references. (DoNotRemove)", true)]
-        public static unsafe JobHandle Schedule<T>(this T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps,
+        public static unsafe JobHandle Schedule<T>(this T jobData, SimulationSingleton simulationSingleton, ref PhysicsWorld world, JobHandle inputDeps,
             HAVOK_PHYSICS_MISSING_FROM_ASMDEF _causeCompileError = HAVOK_PHYSICS_MISSING_FROM_ASMDEF.HAVOK_PHYSICS_MISSING_FROM_ASMDEF)
             where T : struct, IJacobiansJobBase
         {
             return new JobHandle();
         }
 
+        /// <summary>   Values that represent havok physics missing from asmdefs. </summary>
         public enum HAVOK_PHYSICS_MISSING_FROM_ASMDEF
         {
             HAVOK_PHYSICS_MISSING_FROM_ASMDEF
         }
 #endif
 
-        internal static unsafe JobHandle ScheduleUnityPhysicsJacobiansJob<T>(T jobData, ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)
+        internal static unsafe JobHandle ScheduleUnityPhysicsJacobiansJob<T>(T jobData, Simulation simulation, ref PhysicsWorld world, JobHandle inputDeps)
             where T : struct, IJacobiansJobBase
         {
-            SafetyChecks.CheckAreEqualAndThrow(SimulationType.UnityPhysics, simulation.Type);
+            SafetyChecks.CheckSimulationStageAndThrow(simulation.m_SimulationScheduleStage, SimulationScheduleStage.PostCreateJacobians);
 
             var data = new JacobiansJobData<T>
             {
                 UserJobData = jobData,
-                StreamReader = ((Simulation)simulation).StepContext.Jacobians.AsReader(),
-                NumWorkItems = ((Simulation)simulation).StepContext.SolverSchedulerInfo.NumWorkItems,
+                StreamReader = simulation.StepContext.Jacobians.AsReader(),
+                NumWorkItems = simulation.StepContext.SolverSchedulerInfo.NumWorkItems,
                 Bodies = world.Bodies
             };
-            var parameters = new JobsUtility.JobScheduleParameters(
-#if UNITY_2020_2_OR_NEWER
-                UnsafeUtility.AddressOf(ref data), JacobiansJobProcess<T>.Initialize(), inputDeps, ScheduleMode.Single);
-#else
-                UnsafeUtility.AddressOf(ref data), JacobiansJobProcess<T>.Initialize(), inputDeps, ScheduleMode.Batched);
-#endif
+
+            var jobReflectionData = JacobiansJobProcess<T>.jobReflectionData.Data;
+            JacobiansJobProcess<T>.CheckReflectionDataCorrect(jobReflectionData);
+
+            var parameters = new JobsUtility.JobScheduleParameters(UnsafeUtility.AddressOf(ref data), jobReflectionData, inputDeps, ScheduleMode.Single);
             return JobsUtility.Schedule(ref parameters);
         }
 
@@ -260,19 +391,20 @@ namespace Unity.Physics
 
         internal struct JacobiansJobProcess<T> where T : struct, IJacobiansJobBase
         {
-            static IntPtr jobReflectionData;
+            internal static readonly SharedStatic<IntPtr> jobReflectionData = SharedStatic<IntPtr>.GetOrCreate<JacobiansJobProcess<T>>();
 
-            public static IntPtr Initialize()
+            [Preserve]
+            public static void Initialize()
             {
-                if (jobReflectionData == IntPtr.Zero)
-                {
-#if UNITY_2020_2_OR_NEWER
-                    jobReflectionData = JobsUtility.CreateJobReflectionData(typeof(JacobiansJobData<T>), typeof(T), (ExecuteJobFunction)Execute);
-#else
-                    jobReflectionData = JobsUtility.CreateJobReflectionData(typeof(JacobiansJobData<T>), typeof(T), JobType.Single, (ExecuteJobFunction)Execute);
-#endif
-                }
-                return jobReflectionData;
+                if (jobReflectionData.Data == IntPtr.Zero)
+                    jobReflectionData.Data = JobsUtility.CreateJobReflectionData(typeof(JacobiansJobData<T>), typeof(T), (ExecuteJobFunction)Execute);
+            }
+
+            [System.Diagnostics.Conditional("ENABLE_UNITY_COLLECTIONS_CHECK")]
+            internal static void CheckReflectionDataCorrect(IntPtr reflectionData)
+            {
+                if (reflectionData == IntPtr.Zero)
+                    SafetyChecks.ThrowInvalidOperationException("Reflection data was not set up by an Initialize() call");
             }
 
             public delegate void ExecuteJobFunction(ref JacobiansJobData<T> jobData, IntPtr additionalData,
@@ -314,6 +446,15 @@ namespace Unity.Physics
                     }
                 }
             }
+        }
+
+        /// <summary>   Early job initialize. </summary>
+        ///
+        /// <typeparam name="T">    Generic type parameter. </typeparam>
+        public static void EarlyJobInit<T>()
+            where T : struct, IJacobiansJobBase
+        {
+            JacobiansJobProcess<T>.Initialize();
         }
     }
 }

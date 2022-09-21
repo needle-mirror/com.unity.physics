@@ -1,4 +1,7 @@
-using System;
+#if UNITY_ANDROID && !UNITY_64
+#define UNITY_ANDROID_ARM7V 
+#endif
+
 using NUnit.Framework;
 using Unity.Mathematics;
 using Unity.Collections;
@@ -31,20 +34,22 @@ namespace Unity.Physics.Tests.Collision.Queries
             return best.xyz;
         }
 
-        static void ValidateDistanceResult(DistanceQueries.Result result, ref ConvexHull a, ref ConvexHull b, MTransform aFromB, float referenceDistance, string failureMessage)
+        static void ValidateDistanceResult(DistanceQueries.Result result, ref ConvexHull a, ref ConvexHull b, ScaledMTransform aFromB, float referenceDistance, float queryFromWorldScale, string failureMessage)
         {
             // Calculate the support distance along the separating normal
             float3 tempA = getSupport(ref a, -result.NormalInA);
             float3 supportQuery = tempA - result.NormalInA * a.ConvexRadius;
-            float3 tempB = Math.Mul(aFromB, getSupport(ref b, math.mul(aFromB.InverseRotation, result.NormalInA)));
-            float3 supportTarget = tempB + result.NormalInA * b.ConvexRadius;
+            float3 tempB = Mul(aFromB, getSupport(ref b, math.mul(aFromB.InverseRotation, math.sign(aFromB.Scale) * result.NormalInA)));
+
+            float absScale = math.abs(aFromB.Scale);
+            float3 supportTarget = tempB + result.NormalInA * b.ConvexRadius * absScale;
             float supportQueryDot = math.dot(supportQuery, result.NormalInA);
             float supportTargetDot = math.dot(supportTarget, result.NormalInA);
             float supportDistance = supportQueryDot - supportTargetDot;
 
             // Increase the tolerance in case of core penetration
             float adjustedTolerance = tolerance;
-            float zeroCoreDistance = -a.ConvexRadius - b.ConvexRadius; // Distance of shapes including radius at which core shapes are penetrating
+            float zeroCoreDistance = -a.ConvexRadius - b.ConvexRadius * absScale; // Distance of shapes including radius at which core shapes are penetrating
             if (result.Distance < zeroCoreDistance || referenceDistance < zeroCoreDistance || supportDistance < zeroCoreDistance)
             {
                 // Core shape penetration distances are less accurate, and error scales with the number of vertices (as well as shape size). See stopThreshold in ConvexConvexDistanceQueries.
@@ -53,13 +58,15 @@ namespace Unity.Physics.Tests.Collision.Queries
                 adjustedTolerance = 1e-2f + 1e-3f * (a.NumVertices + b.NumVertices);
             }
 
+            float toleranceInQuerySpace = adjustedTolerance * math.abs(queryFromWorldScale);
+
             // Check that the distance is consistent with the reference distance
-            Assert.AreEqual(result.Distance, referenceDistance, adjustedTolerance, failureMessage + ": incorrect distance");
+            Assert.AreEqual(result.Distance, referenceDistance, toleranceInQuerySpace, failureMessage + ": incorrect distance");
 
             // Check that the separating normal and closest point are consistent with the distance
-            Assert.AreEqual(result.Distance, supportDistance, adjustedTolerance, failureMessage + ": incorrect normal");
+            Assert.AreEqual(result.Distance, supportDistance, toleranceInQuerySpace, failureMessage + ": incorrect normal");
             float positionDot = math.dot(result.PositionOnAinA, result.NormalInA);
-            Assert.AreEqual(supportQueryDot, positionDot, adjustedTolerance, failureMessage + ": incorrect position");
+            Assert.AreEqual(supportQueryDot, positionDot, toleranceInQuerySpace, failureMessage + ": incorrect position");
         }
 
         //
@@ -148,7 +155,7 @@ namespace Unity.Physics.Tests.Collision.Queries
             // Do the query, API version and reference version, then validate the result
             DistanceQueries.Result result = DistanceQueries.ConvexConvex((Collider*)query, (Collider*)target, queryFromTarget);
             float referenceDistance = RefConvexConvexDistance(ref query->ConvexHull, ref target->ConvexHull, queryFromTarget);
-            ValidateDistanceResult(result, ref query->ConvexHull, ref target->ConvexHull, queryFromTarget, referenceDistance, failureMessage);
+            ValidateDistanceResult(result, ref query->ConvexHull, ref target->ConvexHull, new ScaledMTransform(queryFromTarget, 1.0f), referenceDistance, 1.0f, failureMessage);
         }
 
         // This test generates random shape pairs, queries the distance between them, and validates some properties of the results:
@@ -177,8 +184,8 @@ namespace Unity.Physics.Tests.Collision.Queries
                 uint state = rnd.state;
 
                 // Generate random query inputs
-                var target = TestUtils.GenerateRandomConvex(ref rnd);
-                var query = TestUtils.GenerateRandomConvex(ref rnd);
+                var target = TestUtils.GenerateRandomConvex(ref rnd, 1.0f);
+                var query = TestUtils.GenerateRandomConvex(ref rnd, 1.0f);
                 MTransform queryFromTarget = new MTransform(
                     (rnd.NextInt(10) > 0) ? rnd.NextQuaternionRotation() : quaternion.identity,
                     rnd.NextFloat3(-3.0f, 3.0f));
@@ -214,7 +221,7 @@ namespace Unity.Physics.Tests.Collision.Queries
                 uint shapeState = rnd.state;
 
                 // Generate a random collider
-                var collider = TestUtils.GenerateRandomConvex(ref rnd);
+                var collider = TestUtils.GenerateRandomConvex(ref rnd, 1.0f);
 
                 for (int iTest = 0; iTest < numTests; iTest++)
                 {
@@ -235,22 +242,28 @@ namespace Unity.Physics.Tests.Collision.Queries
             }
         }
 
-        static DistanceQueries.Result DistanceResultFromDistanceHit(DistanceHit hit, MTransform queryFromWorld)
+        static DistanceQueries.Result DistanceResultFromDistanceHit(DistanceHit hit, ScaledMTransform queryFromWorld)
         {
             return new DistanceQueries.Result
             {
-                PositionOnAinA = Math.Mul(queryFromWorld, hit.Position + hit.SurfaceNormal * hit.Distance),
-                NormalInA = math.mul(queryFromWorld.Rotation, hit.SurfaceNormal),
-                Distance = hit.Distance
+                PositionOnAinA = Mul(queryFromWorld, hit.Position + hit.SurfaceNormal * hit.Distance),
+                NormalInA = math.mul(queryFromWorld.Rotation, math.sign(queryFromWorld.Scale) * hit.SurfaceNormal),
+                Distance = hit.Distance * math.abs(queryFromWorld.Scale)
             };
         }
 
-        static unsafe void GetHitLeaf(ref Physics.PhysicsWorld world, int rigidBodyIndex, ColliderKey colliderKey, MTransform queryFromWorld, out ChildCollider leaf, out MTransform queryFromTarget)
+        static unsafe void GetQueryLeaf(Collider* root, ColliderKey colliderKey, RigidTransform worldFromRoot, float rootScale, out ScaledMTransform leafFromWorld, out ChildCollider leaf)
+        {
+            Collider.GetLeafCollider(out leaf, root, colliderKey, worldFromRoot, rootScale);
+            leafFromWorld = Inverse(new ScaledMTransform(leaf.TransformFromChild, rootScale));
+        }
+
+        static unsafe void GetHitLeaf(ref Physics.PhysicsWorld world, int rigidBodyIndex, ColliderKey colliderKey, ScaledMTransform queryFromWorld, out ChildCollider leaf, out ScaledMTransform queryFromTarget)
         {
             Physics.RigidBody body = world.Bodies[rigidBodyIndex];
-            Collider.GetLeafCollider((Collider*)body.Collider.GetUnsafePtr(), body.WorldFromBody, colliderKey, out leaf);
-            MTransform worldFromLeaf = new MTransform(leaf.TransformFromChild);
-            queryFromTarget = Math.Mul(queryFromWorld, worldFromLeaf);
+            Collider.GetLeafCollider(out leaf, (Collider*)body.Collider.GetUnsafePtr(), colliderKey, body.WorldFromBody, body.Scale);
+            ScaledMTransform worldFromLeaf = new ScaledMTransform(leaf.TransformFromChild, body.Scale);
+            queryFromTarget = Mul(queryFromWorld, worldFromLeaf);
         }
 
         // Does distance queries and checks some properties of the results:
@@ -266,34 +279,25 @@ namespace Unity.Physics.Tests.Collision.Queries
 
             // Check each hit and find the closest
             float closestDistance = float.MaxValue;
-            MTransform queryFromWorld = Math.Inverse(new MTransform(input.Transform));
+            ScaledMTransform queryFromWorld = Inverse(new ScaledMTransform(input.Transform, input.Scale));
+
             for (int iHit = 0; iHit < hits.Length; iHit++)
             {
                 DistanceHit hit = hits[iHit];
                 closestDistance = math.min(closestDistance, hit.Distance);
 
-                MTransform queryLeafFromWorld = queryFromWorld;
-                ConvexCollider* queryCollider = (ConvexCollider*)input.Collider;
-                ChildCollider queryLeaf;
+                // Fetch leaf collider of query shape
+                GetQueryLeaf(input.Collider, hit.QueryColliderKey, input.Transform, input.Scale, out ScaledMTransform queryLeafFromWorld, out ChildCollider queryLeaf);
 
-                // Fetch the leaf collider of query shape
-                if (input.Collider->CollisionType != CollisionType.Convex)
-                {
-                    Collider.GetLeafCollider(input.Collider, input.Transform, hit.QueryColliderKey, out queryLeaf);
-                    queryLeafFromWorld = Math.Inverse(new MTransform(queryLeaf.TransformFromChild));
-                    queryCollider = (ConvexCollider*)queryLeaf.Collider;
-                }
-
-                // Fetch the leaf colliders and query it directly
-                ChildCollider leaf;
-                MTransform queryFromTarget;
-                GetHitLeaf(ref world, hit.RigidBodyIndex, hit.ColliderKey, queryLeafFromWorld, out leaf, out queryFromTarget);
-                float referenceDistance = DistanceQueries.ConvexConvex((Collider*)queryCollider, leaf.Collider, queryFromTarget).Distance;
+                // Fetch leaf collider of target shape and query it directly
+                GetHitLeaf(ref world, hit.RigidBodyIndex, hit.ColliderKey, queryLeafFromWorld, out ChildCollider targetLeaf, out ScaledMTransform queryFromTarget);
+                float referenceDistance = DistanceQueries.ConvexConvex(queryLeaf.Collider, targetLeaf.Collider, queryFromTarget.Transform, queryFromTarget.Scale).Distance;
 
                 // Compare to the world query result
                 DistanceQueries.Result result = DistanceResultFromDistanceHit(hit, queryLeafFromWorld);
-                ValidateDistanceResult(result, ref queryCollider->ConvexHull, ref ((ConvexCollider*)leaf.Collider)->ConvexHull, queryFromTarget, referenceDistance,
-                    failureMessage + ", hits[" + iHit + "]");
+
+                ValidateDistanceResult(result, ref ((ConvexCollider*)queryLeaf.Collider)->ConvexHull, ref ((ConvexCollider*)targetLeaf.Collider)->ConvexHull, queryFromTarget, referenceDistance,
+                    queryLeafFromWorld.Scale, failureMessage + ", hits[" + iHit + "]");
             }
 
             //Do a closest - hit query and check that the distance matches
@@ -305,24 +309,18 @@ namespace Unity.Physics.Tests.Collision.Queries
             }
             else
             {
-                ChildCollider leaf;
-                ChildCollider queryLeaf;
-                MTransform queryFromTarget;
-                MTransform queryLeafFromWorld = queryFromWorld;
-                ConvexCollider* queryCollider = (ConvexCollider*)input.Collider;
+                // Fetch leaf collider of query shape
+                GetQueryLeaf(input.Collider, closestHit.QueryColliderKey, input.Transform, input.Scale, out ScaledMTransform queryLeafFromWorld, out ChildCollider queryLeaf);
 
-                if (input.Collider->CollisionType != CollisionType.Convex)
-                {
-                    Collider.GetLeafCollider(input.Collider, input.Transform, closestHit.QueryColliderKey, out queryLeaf);
-                    queryLeafFromWorld = Math.Inverse(new MTransform(queryLeaf.TransformFromChild));
-                    queryCollider = (ConvexCollider*)queryLeaf.Collider;
-                }
-
-                GetHitLeaf(ref world, closestHit.RigidBodyIndex, closestHit.ColliderKey, queryLeafFromWorld, out leaf, out queryFromTarget);
+                // Fetch leaf collider of target shape
+                GetHitLeaf(ref world, closestHit.RigidBodyIndex, closestHit.ColliderKey, queryLeafFromWorld, out ChildCollider leaf, out ScaledMTransform queryFromTarget);
 
                 DistanceQueries.Result result = DistanceResultFromDistanceHit(closestHit, queryLeafFromWorld);
-                ValidateDistanceResult(result, ref queryCollider->ConvexHull, ref ((ConvexCollider*)leaf.Collider)->ConvexHull, queryFromTarget, closestDistance,
-                    failureMessage + ", closestHit");
+
+                // Transform distance into query space
+                float scaledClosestDistance = closestDistance * math.abs(queryLeafFromWorld.Scale);
+                ValidateDistanceResult(result, ref ((ConvexCollider*)queryLeaf.Collider)->ConvexHull, ref ((ConvexCollider*)leaf.Collider)->ConvexHull, queryFromTarget, scaledClosestDistance,
+                    queryLeafFromWorld.Scale, failureMessage + ", closestHit");
             }
 
             // Do an any-hit query and check that it is consistent with the others
@@ -334,39 +332,31 @@ namespace Unity.Physics.Tests.Collision.Queries
 
         static unsafe void CheckColliderCastHit(ref Physics.PhysicsWorld world, ColliderCastInput input, ColliderCastHit hit, string failureMessage)
         {
-            // If the input doesn't contain a convex collider, fetch the leaf at the hit transform
-            MTransform worldFromQuery = new MTransform(input.Orientation, math.lerp(input.Start, input.End, hit.Fraction));
-            MTransform queryLeafFromWorld = Inverse(worldFromQuery);
-            ConvexCollider* queryCollider = (ConvexCollider*)input.Collider;
-            ChildCollider queryLeaf;
+            ScaledMTransform worldFromQuery = new ScaledMTransform(new RigidTransform(input.Orientation, math.lerp(input.Start, input.End, hit.Fraction)), input.QueryColliderScale);
 
-            if (input.Collider->CollisionType != CollisionType.Convex)
-            {
-                Collider.GetLeafCollider(input.Collider, new RigidTransform(worldFromQuery.Rotation, worldFromQuery.Translation), hit.QueryColliderKey, out queryLeaf);
-                queryLeafFromWorld = Inverse(new MTransform(queryLeaf.TransformFromChild));
-                queryCollider = (ConvexCollider*)queryLeaf.Collider;
-            }
+            // Fetch input leaf collider
+            GetQueryLeaf(input.Collider, hit.QueryColliderKey, new RigidTransform(worldFromQuery.Rotation, worldFromQuery.Translation), input.QueryColliderScale, out ScaledMTransform queryLeafFromWorld, out ChildCollider queryLeaf);
 
             // Fetch the leaf collider and convert the shape cast result into a distance result at the hit transform
-            ChildCollider leaf;
-            GetHitLeaf(ref world, hit.RigidBodyIndex, hit.ColliderKey, queryLeafFromWorld, out leaf, out MTransform queryFromTarget);
+            GetHitLeaf(ref world, hit.RigidBodyIndex, hit.ColliderKey, queryLeafFromWorld, out ChildCollider targetLeaf, out ScaledMTransform queryFromTarget);
+
             DistanceQueries.Result result = new DistanceQueries.Result
             {
-                PositionOnAinA = Math.Mul(queryLeafFromWorld, hit.Position),
-                NormalInA = math.mul(queryLeafFromWorld.Rotation, hit.SurfaceNormal),
+                PositionOnAinA = Mul(queryLeafFromWorld, hit.Position),
+                NormalInA = math.mul(queryLeafFromWorld.Rotation, math.sign(queryLeafFromWorld.Scale) * hit.SurfaceNormal),
                 Distance = 0.0f
             };
 
-            // If the fraction is zero then the shapes should penetrate, otherwise they should have zero distance
+            //If the fraction is zero then the shapes should penetrate, otherwise they should have zero distance
             if (hit.Fraction == 0.0f)
             {
                 // Do a distance query to verify initial penetration
-                result.Distance = DistanceQueries.ConvexConvex((Collider*)queryCollider, leaf.Collider, queryFromTarget).Distance;
-                Assert.Less(result.Distance, tolerance, failureMessage + ": zero fraction with positive distance");
+                result.Distance = DistanceQueries.ConvexConvex(queryLeaf.Collider, targetLeaf.Collider, queryFromTarget.Transform, queryFromTarget.Scale).Distance;
+                Assert.Less(result.Distance, tolerance * math.abs(queryLeafFromWorld.Scale), failureMessage + ": zero fraction with positive distance");
             }
 
             // Verify the distance at the hit transform
-            ValidateDistanceResult(result, ref queryCollider->ConvexHull, ref ((ConvexCollider*)leaf.Collider)->ConvexHull, queryFromTarget, result.Distance, failureMessage);
+            ValidateDistanceResult(result, ref ((ConvexCollider*)queryLeaf.Collider)->ConvexHull, ref ((ConvexCollider*)targetLeaf.Collider)->ConvexHull, queryFromTarget, result.Distance, queryLeafFromWorld.Scale, failureMessage);
         }
 
         // Does collider casts and checks some properties of the results:
@@ -385,6 +375,7 @@ namespace Unity.Physics.Tests.Collision.Queries
             {
                 ColliderCastHit hit = hits[iHit];
                 minFraction = math.min(minFraction, hit.Fraction);
+
                 CheckColliderCastHit(ref world, input, hit, failureMessage + ", hits[" + iHit + "]");
             }
 
@@ -411,32 +402,41 @@ namespace Unity.Physics.Tests.Collision.Queries
         static unsafe void CheckRaycastHit(ref Physics.PhysicsWorld world, RaycastInput input, RaycastHit hit, string failureMessage)
         {
             // Fetch the leaf collider
+            Physics.RigidBody body = world.Bodies[hit.RigidBodyIndex];
             ChildCollider leaf;
-            {
-                Physics.RigidBody body = world.Bodies[hit.RigidBodyIndex];
-                Collider.GetLeafCollider((Collider*)body.Collider.GetUnsafePtr(), body.WorldFromBody, hit.ColliderKey, out leaf);
-            }
+            Collider.GetLeafCollider(out leaf, (Collider*)body.Collider.GetUnsafePtr(), hit.ColliderKey, body.WorldFromBody, body.Scale);
 
             // Check that the hit position matches the fraction
             float3 hitPosition = math.lerp(input.Start, input.End, hit.Fraction);
             Assert.Less(math.length(hitPosition - hit.Position), tolerance, failureMessage + ": inconsistent fraction and position");
 
+            Math.ScaledMTransform worldFromChild = new ScaledMTransform(leaf.TransformFromChild, body.Scale);
+            var childFromWorld = Inverse(worldFromChild);
+
             // Query the hit position and check that it's on the surface of the shape
             PointDistanceInput pointInput = new PointDistanceInput
             {
-                Position = math.transform(math.inverse(leaf.TransformFromChild), hit.Position),
-                MaxDistance = float.MaxValue
+                Position = Mul(childFromWorld, hit.Position),
+                MaxDistance = float.MaxValue,
+                Filter = CollisionFilter.Default
             };
+
             DistanceHit distanceHit;
-            leaf.Collider->CalculateDistance(pointInput, out distanceHit);
-            if (((ConvexCollider*)leaf.Collider)->ConvexHull.ConvexRadius > 0.0f)
+
+            // Validate that the hit happens
+            Assert.IsTrue(leaf.Collider->CalculateDistance(pointInput, out distanceHit), failureMessage + ": hit not detected");
+
+            if (hit.Fraction != 0)
             {
-                // Convex raycast approximates radius, so it's possible that the hit position is not exactly on the shape, but must at least be outside
-                Assert.Greater(distanceHit.Distance, -tolerance, failureMessage);
-            }
-            else
-            {
-                Assert.AreEqual(distanceHit.Distance, 0.0f, tolerance, failureMessage);
+                if (((ConvexCollider*)leaf.Collider)->ConvexHull.ConvexRadius > 0.0f)
+                {
+                    // Convex raycast approximates radius, so it's possible that the hit position is not exactly on the shape, but must at least be outside
+                    Assert.Greater(distanceHit.Distance * math.abs(body.Scale), -tolerance, failureMessage);
+                }
+                else
+                {
+                    Assert.AreEqual(distanceHit.Distance * math.abs(body.Scale), 0.0f, tolerance, failureMessage);
+                }
             }
         }
 
@@ -483,6 +483,9 @@ namespace Unity.Physics.Tests.Collision.Queries
         // See WorldCalculateDistanceTest, WorldColliderCastTest, and WorldRaycastTest for details about each query.
         // If the test fails, it will report a pair of seeds.  Set dbgWorld to the first and dbgTest to the second to run the failing case alone.
         [Test]
+#if UNITY_ANDROID_ARM7V
+        [Ignore("This test causes out of memory crashes on armv7 builds, due to the memory restrictions on such devices.")]
+#endif
         public unsafe void WorldQueryTest()
         {
             // todo.papopov: switch the seed back to 0x12345678 when [UNI-281] is resolved
@@ -491,8 +494,8 @@ namespace Unity.Physics.Tests.Collision.Queries
             uint dbgTest = 0;
 
 #if UNITY_ANDROID
-            int numWorlds = 100;
-            int numTests = 2500;
+            int numWorlds = 50;
+            int numTests = 1250;
 #else
             int numWorlds = 200;
             int numTests = 5000;
@@ -534,7 +537,17 @@ namespace Unity.Physics.Tests.Collision.Queries
                         string failureMessage = iWorld + ", " + iTest + " (" + worldState.ToString() + ", " + testState.ToString() + ")";
 
                         // Generate common random query inputs, including composite/terrain colliders
-                        var collider = TestUtils.GenerateRandomCollider(ref rnd);
+
+                        // Create colliders with 1 / queryInputScale, so that the combination of the two leads to totalScale being 1
+                        float queryInputScale = rnd.NextBool() ? 1 : math.pow(10, rnd.NextFloat(-2f, 2f));
+                        queryInputScale = queryInputScale > 1.0f ? 1.0f / queryInputScale : queryInputScale;
+                        float colliderCreationScale = 1.0f / queryInputScale;
+                        if (queryInputScale != 1.0f)
+                        {
+                            queryInputScale = rnd.NextBool() ? queryInputScale : -queryInputScale;
+                        }
+
+                        var collider = TestUtils.GenerateRandomCollider(ref rnd, colliderCreationScale);
                         RigidTransform transform = new RigidTransform
                         {
                             pos = rnd.NextFloat3(-10.0f, 10.0f),
@@ -549,7 +562,8 @@ namespace Unity.Physics.Tests.Collision.Queries
                             {
                                 Collider = (Collider*)collider.GetUnsafePtr(),
                                 Transform = transform,
-                                MaxDistance = (rnd.NextInt(4) > 0) ? rnd.NextFloat(5.0f) : 0.0f
+                                MaxDistance = (rnd.NextInt(4) > 0) ? rnd.NextFloat(5.0f) : 0.0f,
+                                Scale = queryInputScale
                             };
                             WorldCalculateDistanceTest(ref world, input, ref distanceHits, "WorldQueryTest failed CalculateDistance " + failureMessage);
                         }
@@ -562,6 +576,7 @@ namespace Unity.Physics.Tests.Collision.Queries
                                 Start = startPos,
                                 End = endPos,
                                 Orientation = transform.rot,
+                                QueryColliderScale = queryInputScale
                             };
                             WorldColliderCastTest(ref world, input, ref colliderCastHits, "WorldQueryTest failed ColliderCast " + failureMessage);
                         }
@@ -694,8 +709,8 @@ namespace Unity.Physics.Tests.Collision.Queries
                             // Get the leaf shapes
                             ChildCollider leafA, leafB;
                             {
-                                Collider.GetLeafCollider((Collider*)bodyA.Collider.GetUnsafePtr(), bodyA.WorldFromBody, header.ColliderKeys.ColliderKeyA, out leafA);
-                                Collider.GetLeafCollider((Collider*)bodyB.Collider.GetUnsafePtr(), bodyB.WorldFromBody, header.ColliderKeys.ColliderKeyB, out leafB);
+                                Collider.GetLeafCollider(out leafA, (Collider*)bodyA.Collider.GetUnsafePtr(), header.ColliderKeys.ColliderKeyA , bodyA.WorldFromBody, bodyA.Scale);
+                                Collider.GetLeafCollider(out leafB, (Collider*)bodyB.Collider.GetUnsafePtr(), header.ColliderKeys.ColliderKeyB , bodyB.WorldFromBody, bodyB.Scale);
                             }
 
                             // Read each contact point
@@ -726,17 +741,19 @@ namespace Unity.Physics.Tests.Collision.Queries
                             if (!skipClosestPointTest)
                             {
                                 ContactPoint closestPoint = manifold[minIndex];
-                                RigidTransform aFromWorld = math.inverse(leafA.TransformFromChild);
+                                ScaledMTransform aFromWorld = Inverse(new ScaledMTransform(leafA.TransformFromChild, bodyA.Scale));
                                 DistanceQueries.Result result = new DistanceQueries.Result
                                 {
-                                    PositionOnAinA = math.transform(aFromWorld, closestPoint.Position + manifold.Normal * closestPoint.Distance),
-                                    NormalInA = math.mul(aFromWorld.rot, manifold.Normal),
-                                    Distance = closestPoint.Distance
+                                    PositionOnAinA = Mul(aFromWorld, closestPoint.Position + manifold.Normal * closestPoint.Distance),
+                                    NormalInA = math.mul(aFromWorld.Rotation, manifold.Normal),
+                                    Distance = closestPoint.Distance * aFromWorld.Scale
                                 };
 
-                                MTransform aFromB = new MTransform(math.mul(aFromWorld, leafB.TransformFromChild));
-                                float referenceDistance = DistanceQueries.ConvexConvex(leafA.Collider, leafB.Collider, aFromB).Distance;
-                                ValidateDistanceResult(result, ref ((ConvexCollider*)leafA.Collider)->ConvexHull, ref ((ConvexCollider*)leafB.Collider)->ConvexHull, aFromB, referenceDistance, failureMessage + " closest point");
+                                ScaledMTransform aFromB = Mul(aFromWorld, new ScaledMTransform(leafB.TransformFromChild, bodyB.Scale));
+
+                                float referenceDistance = DistanceQueries.ConvexConvex(leafA.Collider, leafB.Collider, aFromB.Transform, aFromB.Scale).Distance;
+
+                                ValidateDistanceResult(result, ref ((ConvexCollider*)leafA.Collider)->ConvexHull, ref ((ConvexCollider*)leafB.Collider)->ConvexHull, aFromB, referenceDistance, 1.0f, failureMessage + " closest point");
                             }
 
                             // Check that the manifold is flat

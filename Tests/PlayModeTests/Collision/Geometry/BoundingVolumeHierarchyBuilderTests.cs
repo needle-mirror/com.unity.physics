@@ -162,8 +162,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
             var branchNodeOffset = new NativeArray<int>(Constants.MaxNumTreeBranches, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
             var branchCount = new NativeArray<int>(1, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
 
-            var shouldDoWork = new NativeArray<int>(1, Allocator.Persistent);
-            shouldDoWork[0] = 1;
+            var shouldDoWork = new NativeReference<int>(1, Allocator.Persistent);
             NativeArray<int> oldBranchCount = new NativeArray<int>(1, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
 
             var handle = new BuildFirstNLevelsJob
@@ -238,8 +237,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
             }
 
             var branchNodeOffset = new NativeArray<int>(Constants.MaxNumTreeBranches, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-            var shouldDoWork = new NativeArray<int>(1, Allocator.Persistent);
-            shouldDoWork[0] = 1;
+            var shouldDoWork = new NativeReference<int>(1, Allocator.Persistent);
             NativeArray<int> oldBranchCount = new NativeArray<int>(1, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
 
             JobHandle handle = new BuildFirstNLevelsJob
@@ -286,13 +284,13 @@ namespace Unity.Physics.Tests.Collision.Geometry
             {
                 Ranges = tree.Ranges,
                 NumBranches = branchCount,
-                NodePairIndices = nodePairIndices
+                NodePairIndices = nodePairIndices.AsArray()
             }.Schedule();
 
             handle = new Broadphase.DynamicVsDynamicFindOverlappingPairsJob
             {
                 DynamicTree = tree,
-                NodePairIndices = nodePairIndices,
+                NodePairIndices = nodePairIndices.AsArray(),
                 PairWriter = collisionPairs.AsWriter()
             }.Schedule(nodePairIndices, numBranchOverlapPairs, handle);
 

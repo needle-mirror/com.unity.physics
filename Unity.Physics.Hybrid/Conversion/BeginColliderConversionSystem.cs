@@ -3,7 +3,6 @@ using Unity.Entities;
 
 namespace Unity.Physics.Authoring
 {
-    [AlwaysUpdateSystem]
     public sealed class BeginColliderConversionSystem : GameObjectConversionSystem
     {
         // TODO: move this to a ColliderConversionSystemGroup when groups are supported for GameObjectConversionSystems

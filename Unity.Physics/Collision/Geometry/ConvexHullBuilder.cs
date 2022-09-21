@@ -307,20 +307,38 @@ namespace Unity.Physics
         {
             // Compact the vertices array
             NativeArray<int> vertexRemap = new NativeArray<int>(Vertices.PeakCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-            if (Vertices.Compact((int*)vertexRemap.GetUnsafePtr()))
+            bool verticesRemapped = Vertices.Compact((int*)vertexRemap.GetUnsafePtr());
+
+            // Compact the triangles array
+            NativeArray<int> triangleRemap = new NativeArray<int>(Triangles.PeakCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+            bool trianglesRemapped = Triangles.Compact((int*)triangleRemap.GetUnsafePtr());
+
+            // Fixup triangles
+            if (verticesRemapped || trianglesRemapped)
             {
-                // Remap all of the vertices in triangles, then compact the triangles array
                 foreach (int t in Triangles.Indices)
                 {
                     Triangle tri = Triangles[t];
-                    tri.Vertex0 = vertexRemap[tri.Vertex0];
-                    tri.Vertex1 = vertexRemap[tri.Vertex1];
-                    tri.Vertex2 = vertexRemap[tri.Vertex2];
+
+                    if (verticesRemapped)
+                    {
+                        // Remap vertex indices in triangles
+                        tri.Vertex0 = vertexRemap[tri.Vertex0];
+                        tri.Vertex1 = vertexRemap[tri.Vertex1];
+                        tri.Vertex2 = vertexRemap[tri.Vertex2];
+                    }
+
+                    if (trianglesRemapped)
+                    {
+                        // Remap triangle indices in links
+                        tri.Link0 = new Edge(triangleRemap[tri.Link0.TriangleIndex], tri.Link0.EdgeIndex);
+                        tri.Link1 = new Edge(triangleRemap[tri.Link1.TriangleIndex], tri.Link1.EdgeIndex);
+                        tri.Link2 = new Edge(triangleRemap[tri.Link2.TriangleIndex], tri.Link2.EdgeIndex);
+                    }
+
                     Triangles.Set(t, tri);
                 }
             }
-
-            Triangles.Compact(null);
         }
 
         /// <summary>

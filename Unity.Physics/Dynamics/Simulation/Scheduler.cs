@@ -9,32 +9,37 @@ using UnityEngine.Assertions;
 
 namespace Unity.Physics
 {
-    // Builds phased pairs of interacting bodies, used to parallelize work items during the simulation step.
-    public class DispatchPairSequencer : IDisposable
+    /// <summary>
+    /// Builds phased pairs of interacting bodies, used to parallelize work items during the
+    /// simulation step.
+    /// </summary>
+    internal struct DispatchPairSequencer : IDisposable
     {
-        internal readonly BitLookupTableDynamicDynamicPairs m_PhaseLookupTableDynamicDynamicPairs;
-        internal readonly BitLookupTableDynamicStaticPairs m_PhaseLookupTableDynamicStaticPairs;
+        internal BitLookupTableDynamicDynamicPairs m_PhaseLookupTableDynamicDynamicPairs;
+        internal BitLookupTableDynamicStaticPairs m_PhaseLookupTableDynamicStaticPairs;
 
-        // A pair of interacting bodies (either potentially colliding, or constrained together using a Joint).
-        // The indices are compressed into a single 64 bit value, for deterministic sorting, as follows:
-        //
-        //        6         5         4         3         2         1
-        //    4321098765432109876543210987654321098765432109876543210987654321
-        // 0b_1111111111111111111111111111111111111111111111111111111111111111
-        //    [        BodyA-24      ][       BodyB-24       ]C[  Joint-15   ]
-        //
-        //
-        // This gives a limit of
-        //    16,777,216 Rigid bodies
-        //    32,767 Joints (1 bit used for Enable [C]ollisions flag)
-        //
-        // We additionally choose indices so that BodyIndexA < BodyIndexB. This has subtle side-effects:
-        // * If one body in the pair is static, it will be body B.
-        // * Indices used for jointed pairs are not necessarily the same as selected in the joint
-        // * For some body A, all it's static collisions will be contiguous.
-        //
+        /// <summary>
+        /// A pair of interacting bodies (either potentially colliding, or constrained together using a
+        /// Joint). The indices are compressed into a single 64 bit value, for deterministic sorting, as
+        /// follows:
+        ///
+        ///        6         5         4         3         2         1
+        ///    4321098765432109876543210987654321098765432109876543210987654321
+        /// 0b_1111111111111111111111111111111111111111111111111111111111111111
+        ///    [        BodyA-24      ][       BodyB-24       ]C[  Joint-15   ]
+        ///
+        ///
+        /// This gives a limit of
+        ///    16,777,216 Rigid bodies
+        ///    32,767 Joints (1 bit used for Enable [C]ollisions flag)
+        ///
+        /// We additionally choose indices so that BodyIndexA < BodyIndexB. This has subtle side-effects:
+        /// * If one body in the pair is static, it will be body B.
+        /// * Indices used for jointed pairs are not necessarily the same as selected in the joint
+        /// * For some body A, all it's static collisions will be contiguous.
+        /// </summary>
         [DebuggerDisplay("{IsContact ? \"Contact\" : \"Joint\"}, [{BodyIndexA}, {BodyIndexB}]")]
-        public struct DispatchPair
+        internal struct DispatchPair
         {
             private ulong m_Data;
 
@@ -51,12 +56,29 @@ namespace Unity.Physics
 
             private static readonly ulong k_EnableJointCollisionBit = ((ulong)k_InvalidJointIndex + 1) << k_JointIndexShift;
 
+            /// <summary>   Gets a value indicating whether this object is valid. </summary>
+            ///
+            /// <value> True if this object is valid, false if not. </value>
             public bool IsValid => m_Data != DispatchPair.Invalid.m_Data;
+
+            /// <summary>   Gets a value indicating whether this object is joint. </summary>
+            ///
+            /// <value> True if this object is joint, false if not. </value>
             public bool IsJoint => JointIndex != k_InvalidJointIndex;
+
+            /// <summary>   Gets a value indicating whether this object is contact. </summary>
+            ///
+            /// <value> True if this object is contact, false if not. </value>
             public bool IsContact => !(IsJoint);
 
+            /// <summary>   Gets the invalid dispatch pair. </summary>
+            ///
+            /// <value> The invalid. </value>
             public static DispatchPair Invalid => new DispatchPair { m_Data = ~(ulong)0x0 };
 
+            /// <summary>   Gets or sets the body index a. </summary>
+            ///
+            /// <value> The body index a. </value>
             public int BodyIndexA
             {
                 get => (int)((m_Data >> k_BodyIndexAShift) & k_InvalidBodyIndex);
@@ -67,6 +89,9 @@ namespace Unity.Physics
                 }
             }
 
+            /// <summary>   Gets the body index b. </summary>
+            ///
+            /// <value> The body index b. </value>
             public int BodyIndexB
             {
                 get => (int)((m_Data >> k_BodyIndexBShift) & k_InvalidBodyIndex);
@@ -77,6 +102,9 @@ namespace Unity.Physics
                 }
             }
 
+            /// <summary>   Getsthe zero-based index of the joint. </summary>
+            ///
+            /// <value> The joint index. </value>
             public int JointIndex
             {
                 get => (int)((m_Data >> k_JointIndexShift) & k_InvalidJointIndex);
@@ -92,6 +120,11 @@ namespace Unity.Physics
                 get => (m_Data & k_EnableJointCollisionBit) != 0;
             }
 
+            /// <summary>   Creates collision pair. </summary>
+            ///
+            /// <param name="pair"> The pair. </param>
+            ///
+            /// <returns>   The new dispatch pair representing collision pair. </returns>
             public static DispatchPair CreateCollisionPair(BodyIndexPair pair)
             {
                 // Note: The EnabledCollisions flag is set (1) deliberately.
@@ -100,6 +133,13 @@ namespace Unity.Physics
                 return Create(pair, (int)k_InvalidJointIndex, 1);
             }
 
+            /// <summary>   Creates a joint. </summary>
+            ///
+            /// <param name="pair">             The pair. </param>
+            /// <param name="jointIndex">       Zero-based index of the joint. </param>
+            /// <param name="allowCollision">   The allow collision. </param>
+            ///
+            /// <returns>   The new dispatch pair representing joint. </returns>
             public static DispatchPair CreateJoint(BodyIndexPair pair, int jointIndex, int allowCollision)
             {
                 Assert.IsTrue(jointIndex < k_InvalidJointIndex);
@@ -122,7 +162,9 @@ namespace Unity.Physics
             }
         }
 
-        // A phased set of dispatch pairs used to schedule solver jobs and distribute work between them.
+        /// <summary>
+        /// A phased set of dispatch pairs used to schedule solver jobs and distribute work between them.
+        /// </summary>
         [NoAlias]
         internal struct SolverSchedulerInfo : IDisposable
         {
@@ -237,20 +279,32 @@ namespace Unity.Physics
             }
         }
 
-        public DispatchPairSequencer()
+        internal static DispatchPairSequencer Create()
+        {
+            DispatchPairSequencer sequencer = new DispatchPairSequencer();
+            sequencer.Init();
+            return sequencer;
+        }
+
+        private void Init()
         {
             m_PhaseLookupTableDynamicDynamicPairs = new BitLookupTableDynamicDynamicPairs(numPhases: 16);
             m_PhaseLookupTableDynamicStaticPairs = new BitLookupTableDynamicStaticPairs(numPhases: 16);
         }
 
+        /// <summary>
+        /// Free internal memory.
+        /// </summary>
         public void Dispose()
         {
             m_PhaseLookupTableDynamicDynamicPairs.Dispose();
             m_PhaseLookupTableDynamicStaticPairs.Dispose();
         }
 
-        // Merge streams of body pairs and joints into an sorted array of dispatch pairs
-        public static void CreateDispatchPairs(
+        /// <summary>
+        /// Merge streams of body pairs and joints into an sorted array of dispatch pairs.
+        /// </summary>
+        internal static void CreateDispatchPairs(
             ref NativeStream dynamicVsDynamicBodyPairs, ref NativeStream staticVsDynamicBodyPairs,
             int numDynamicBodies, NativeArray<Joint> joints, ref NativeList<DispatchPair> dispatchPairs)
         {
@@ -271,8 +325,8 @@ namespace Unity.Physics
                 const int numPhases = 16;
                 NativeArray<SolverSchedulerInfo.SolvePhaseInfo> phaseInfo = new NativeArray<SolverSchedulerInfo.SolvePhaseInfo>(numPhases, Allocator.Temp);
                 CreateDispatchPairPhasesJob.CreateDispatchPairPhasesJobFunction(
-                    default, default, tempPairs, numDynamicBodies, numPhases,
-                    dispatchPairs, out int numActivePhases, out int numWorkItems, ref phaseInfo, false);
+                    default, default, tempPairs.AsArray(), numDynamicBodies, numPhases,
+                    dispatchPairs.AsArray(), out int numActivePhases, out int numWorkItems, ref phaseInfo, false);
 
                 int totalDispatchPairs = 0;
                 for (int i = 0; i < numActivePhases; i++)
@@ -288,7 +342,10 @@ namespace Unity.Physics
             }
         }
 
-        // Schedule a set of jobs to merge streams of body pairs and joints into an sorted array of dispatch pairs
+        /// <summary>
+        /// Schedule a set of jobs to merge streams of body pairs and joints into an sorted array of
+        /// dispatch pairs.
+        /// </summary>
         internal unsafe SimulationJobHandles ScheduleCreatePhasedDispatchPairsJob(
             ref PhysicsWorld world, ref NativeStream dynamicVsDynamicBroadphasePairsStream, ref NativeStream staticVsDynamicBroadphasePairStream,
             JobHandle inputDeps, ref NativeList<DispatchPair> dispatchPairs, out SolverSchedulerInfo solverSchedulerInfo,
@@ -312,6 +369,12 @@ namespace Unity.Physics
                     Joints = world.Joints,
                     NumDynamicBodies = world.NumDynamicBodies
                 }.Schedule(inputDeps);
+
+                // We must dispose pair streams here, since we don't have access to them
+                // where we would ideally like to schedule their disposal
+                returnHandles.FinalExecutionHandle = JobHandle.CombineDependencies(
+                    dynamicVsDynamicBroadphasePairsStream.Dispose(returnHandles.FinalExecutionHandle),
+                    staticVsDynamicBroadphasePairStream.Dispose(returnHandles.FinalExecutionHandle));
 
                 return returnHandles;
             }
@@ -358,8 +421,8 @@ namespace Unity.Physics
 
             // Dispose
             var disposePhasedDispatchPairs = sortedPairs.Dispose(dispatchPairHandle);
-            returnHandles.FinalDisposeHandle = JobHandle.CombineDependencies(returnHandles.FinalDisposeHandle, disposePhasedDispatchPairs);
 
+            returnHandles.FinalDisposeHandle = JobHandle.CombineDependencies(returnHandles.FinalDisposeHandle, disposePhasedDispatchPairs);
             returnHandles.FinalExecutionHandle = dispatchPairHandle;
 
             return returnHandles;
@@ -367,7 +430,7 @@ namespace Unity.Physics
 
         #region Helpers
 
-        // A lookup table used by CreateDispatchPairPhasesJob
+        /// <summary>   A lookup table used by CreateDispatchPairPhasesJob. </summary>
         internal struct BitLookupTableDynamicDynamicPairs : IDisposable
         {
             public readonly int NumPhases;
@@ -409,7 +472,7 @@ namespace Unity.Physics
             }
         }
 
-        // A lookup table used by CreateDispatchPairPhasesJob
+        /// <summary>   A lookup table used by CreateDispatchPairPhasesJob. </summary>
         internal struct BitLookupTableDynamicStaticPairs : IDisposable
         {
             public readonly int NumPhases;
@@ -453,10 +516,12 @@ namespace Unity.Physics
             }
         }
 
-        // Helper function to schedule jobs to sort an array of dispatch pairs.
-        // The first single threaded job is a single pass Radix sort on the bits associated
-        // with DispatchPair.BodyIndexA, resulting in sub arrays with the same bodyA index.
-        // The second parallel job dispatches default sorts on each sub array.
+        /// <summary>
+        /// Helper function to schedule jobs to sort an array of dispatch pairs. The first single
+        /// threaded job is a single pass Radix sort on the bits associated with DispatchPair.BodyIndexA,
+        /// resulting in sub arrays with the same bodyA index. The second parallel job dispatches default
+        /// sorts on each sub array.
+        /// </summary>
         private static unsafe JobHandle ScheduleSortJob(
             int numBodies,
             NativeArray<DispatchPair> unsortedPairsIn,
@@ -503,7 +568,7 @@ namespace Unity.Physics
 
         #region Jobs
 
-        // Combines body pairs and joint pairs into an array of dispatch pairs
+        /// <summary>   Combines body pairs and joint pairs into an array of dispatch pairs. </summary>
         [BurstCompile]
         private struct CreateUnsortedDispatchPairsJob : IJob
         {
@@ -587,7 +652,9 @@ namespace Unity.Physics
             }
         }
 
-        // Combines body pairs and joint pairs into an unsorted array of dispatch pairs
+        /// <summary>
+        /// Combines body pairs and joint pairs into an unsorted array of dispatch pairs.
+        /// </summary>
         [BurstCompile]
         private struct CreateDispatchPairsJobST : IJob
         {
@@ -605,7 +672,7 @@ namespace Unity.Physics
             }
         }
 
-        // Sorts an array of dispatch pairs by Body A index
+        /// <summary>   Sorts an array of dispatch pairs by Body A index. </summary>
         [BurstCompile]
         unsafe internal struct RadixSortPerBodyAJob : IJob
         {
@@ -672,7 +739,7 @@ namespace Unity.Physics
             }
         }
 
-        // Sorts slices of an array in parallel
+        /// <summary>   Sorts slices of an array in parallel. </summary>
         [BurstCompile]
         internal struct SortSubArraysJob : IJobParallelFor
         {
@@ -721,7 +788,7 @@ namespace Unity.Physics
             }
         }
 
-        // Creates phases based on sorted list of dispatch pairs
+        /// <summary>   Creates phases based on sorted list of dispatch pairs. </summary>
         [BurstCompile]
         internal struct CreateDispatchPairPhasesJob : IJob
         {

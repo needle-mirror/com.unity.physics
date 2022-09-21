@@ -186,8 +186,8 @@ namespace Unity.Physics.Authoring
         }
 
         struct ConvertToHashMapJob<TKey, TValue> : IJob
-            where TKey : struct, IEquatable<TKey>
-            where TValue : struct
+            where TKey : unmanaged, IEquatable<TKey>
+            where TValue : unmanaged
         {
             [DeallocateOnJobCompletion]
             [ReadOnly] public NativeArray<KeyValuePair<TKey, TValue>> Input;

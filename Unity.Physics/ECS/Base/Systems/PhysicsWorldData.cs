@@ -6,72 +6,159 @@ using Unity.Transforms;
 namespace Unity.Physics.Systems
 {
     /// <summary>
-    /// Structure containing PhysicsWorld and other data and queries that are necessary for simulating a physics world.
+    /// Structure containing PhysicsWorld and other data and queries that are necessary for
+    /// simulating a physics world. Note: it is important to create <see cref="PhysicsWorldData"/>
+    /// and use it (to schedule physics world build) in the same system. Creating it in one system,
+    /// and calling the Schedule() methods in another can cause race conditions.
     /// </summary>
     public struct PhysicsWorldData : IDisposable
     {
+        /// <summary>   The physics world. </summary>
         public PhysicsWorld PhysicsWorld;
 
-        public NativeArray<int> HaveStaticBodiesChanged;
+        /// <summary>   A flag indicating if the static bodies have changed in this frame. </summary>
+        public NativeReference<int> HaveStaticBodiesChanged;
 
-        // Entity group queries
+        /// <summary>   Group in which the dynamic bodies belong to. </summary>
         public EntityQuery DynamicEntityGroup;
+        /// <summary>   Group in which the static bodies belong to </summary>
         public EntityQuery StaticEntityGroup;
+        /// <summary>   Group in which the joints belong to </summary>
         public EntityQuery JointEntityGroup;
 
-        public PhysicsWorldData(EntityManager EntityManager, in PhysicsWorldIndex worldIndex)
+        /// <summary>
+        /// The component handles. Stores the information about ECS component handles needed for
+        /// generating a <see cref="PhysicsWorld"/>
+        /// </summary>
+        public PhysicsWorldComponentHandles ComponentHandles;
+
+        /// <summary>
+        /// The physics world component handles. Stores the information about ECS component handles
+        /// needed for generating a <see cref="PhysicsWorld"/>
+        /// </summary>
+        public struct PhysicsWorldComponentHandles
         {
-            PhysicsWorld = new PhysicsWorld(0, 0, 0);
-            HaveStaticBodiesChanged = new NativeArray<int>(1, Allocator.Persistent);
-
-            DynamicEntityGroup = EntityManager.CreateEntityQuery(new EntityQueryDesc
+            /// <summary>   Constructor. </summary>
+            ///
+            /// <param name="systemState">  [in,out] State of the system. </param>
+            public PhysicsWorldComponentHandles(ref SystemState systemState)
             {
-                All = new ComponentType[]
-                {
-                    typeof(PhysicsVelocity),
-                    typeof(Translation),
-                    typeof(Rotation),
-                    typeof(PhysicsWorldIndex)
-                }
-            });
-            DynamicEntityGroup.SetSharedComponentFilter(worldIndex);
+                EntityType = systemState.GetEntityTypeHandle();
+                LocalToWorldType = systemState.GetComponentTypeHandle<LocalToWorld>(true);
+                ParentType = systemState.GetComponentTypeHandle<Parent>(true);
+                PositionType = systemState.GetComponentTypeHandle<Translation>(true);
+                RotationType = systemState.GetComponentTypeHandle<Rotation>(true);
+                ScaleType = systemState.GetComponentTypeHandle<Scale>(true);
+                PhysicsColliderType = systemState.GetComponentTypeHandle<PhysicsCollider>(true);
+                PhysicsVelocityType = systemState.GetComponentTypeHandle<PhysicsVelocity>(true);
+                PhysicsMassType = systemState.GetComponentTypeHandle<PhysicsMass>(true);
+                PhysicsMassOverrideType = systemState.GetComponentTypeHandle<PhysicsMassOverride>(true);
+                PhysicsDampingType = systemState.GetComponentTypeHandle<PhysicsDamping>(true);
+                PhysicsGravityFactorType = systemState.GetComponentTypeHandle<PhysicsGravityFactor>(true);
+                PhysicsCustomTagsType = systemState.GetComponentTypeHandle<PhysicsCustomTags>(true);
+                PhysicsConstrainedBodyPairType = systemState.GetComponentTypeHandle<PhysicsConstrainedBodyPair>(true);
+                PhysicsJointType = systemState.GetComponentTypeHandle<PhysicsJoint>(true);
+                SimulateType = systemState.GetComponentTypeHandle<Simulate>(true);
+            }
 
-            StaticEntityGroup = EntityManager.CreateEntityQuery(new EntityQueryDesc
+            /// <summary>
+            /// Updates the <see cref="PhysicsWorldComponentHandles"/>. Call this in OnUpdate() methods of
+            /// the systems in which you want to store PhysicsWorldData in.
+            /// </summary>
+            ///
+            /// <param name="systemState">  [in,out] State of the system. </param>
+            public void Update(ref SystemState systemState)
             {
-                All = new ComponentType[]
-                {
-                    typeof(PhysicsCollider),
-                    typeof(PhysicsWorldIndex)
-                },
-                Any = new ComponentType[]
-                {
-                    typeof(LocalToWorld),
-                    typeof(Translation),
-                    typeof(Rotation)
-                },
-                None = new ComponentType[]
-                {
-                    typeof(PhysicsVelocity)
-                }
-            });
-            StaticEntityGroup.SetSharedComponentFilter(worldIndex);
+                EntityType.Update(ref systemState);
+                LocalToWorldType.Update(ref systemState);
+                ParentType.Update(ref systemState);
+                PositionType.Update(ref systemState);
+                RotationType.Update(ref systemState);
+                ScaleType.Update(ref systemState);
+                PhysicsColliderType.Update(ref systemState);
+                PhysicsVelocityType.Update(ref systemState);
+                PhysicsMassType.Update(ref systemState);
+                PhysicsMassOverrideType.Update(ref systemState);
+                PhysicsDampingType.Update(ref systemState);
+                PhysicsGravityFactorType.Update(ref systemState);
+                PhysicsCustomTagsType.Update(ref systemState);
+                PhysicsConstrainedBodyPairType.Update(ref systemState);
+                PhysicsJointType.Update(ref systemState);
+                SimulateType.Update(ref systemState);
+            }
 
-            JointEntityGroup = EntityManager.CreateEntityQuery(new EntityQueryDesc
-            {
-                All = new ComponentType[]
-                {
-                    typeof(PhysicsConstrainedBodyPair),
-                    typeof(PhysicsJoint),
-                    typeof(PhysicsWorldIndex)
-                }
-            });
-            JointEntityGroup.SetSharedComponentFilter(worldIndex);
+            internal EntityTypeHandle EntityType;
+            internal ComponentTypeHandle<LocalToWorld> LocalToWorldType;
+            internal ComponentTypeHandle<Parent> ParentType;
+            internal ComponentTypeHandle<Translation> PositionType;
+            internal ComponentTypeHandle<Rotation> RotationType;
+            internal ComponentTypeHandle<Scale> ScaleType;
+            internal ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
+            internal ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
+            internal ComponentTypeHandle<PhysicsMass> PhysicsMassType;
+            internal ComponentTypeHandle<PhysicsMassOverride> PhysicsMassOverrideType;
+            internal ComponentTypeHandle<PhysicsDamping> PhysicsDampingType;
+            internal ComponentTypeHandle<PhysicsGravityFactor> PhysicsGravityFactorType;
+            internal ComponentTypeHandle<PhysicsCustomTags> PhysicsCustomTagsType;
+            internal ComponentTypeHandle<PhysicsConstrainedBodyPair> PhysicsConstrainedBodyPairType;
+            internal ComponentTypeHandle<PhysicsJoint> PhysicsJointType;
+            internal ComponentTypeHandle<Simulate> SimulateType;
         }
 
+        /// <summary>   Constructor. </summary>
+        ///
+        /// <param name="state">      [in,out] The <see cref="SystemState"/> of the system in which you
+        /// want to use <see cref="PhysicsWorldData"/>. </param>
+        /// <param name="worldIndex">   Zero-based index of the world. </param>
+        public PhysicsWorldData(ref SystemState state, in PhysicsWorldIndex worldIndex)
+        {
+            PhysicsWorld = new PhysicsWorld(0, 0, 0);
+            HaveStaticBodiesChanged = new NativeReference<int>(Allocator.Persistent);
+
+            EntityQueryBuilder queryBuilder = new EntityQueryBuilder(Allocator.Temp)
+                .WithAll<PhysicsVelocity, Translation, Rotation, PhysicsWorldIndex>();
+            DynamicEntityGroup = state.GetEntityQuery(queryBuilder);
+            DynamicEntityGroup.SetSharedComponentFilter(worldIndex);
+            queryBuilder.Dispose();
+
+            queryBuilder = new EntityQueryBuilder(Allocator.Temp)
+                .WithAll<PhysicsCollider, PhysicsWorldIndex>()
+                .WithAny<LocalToWorld, Translation, Rotation>()
+                .WithNone<PhysicsVelocity>();
+            StaticEntityGroup = state.GetEntityQuery(queryBuilder);
+            StaticEntityGroup.SetSharedComponentFilter(worldIndex);
+            queryBuilder.Dispose();
+
+            queryBuilder = new EntityQueryBuilder(Allocator.Temp)
+                .WithAll<PhysicsConstrainedBodyPair, PhysicsJoint, PhysicsWorldIndex>();
+            JointEntityGroup = state.GetEntityQuery(queryBuilder);
+            JointEntityGroup.SetSharedComponentFilter(worldIndex);
+            queryBuilder.Dispose();
+
+            ComponentHandles = new PhysicsWorldComponentHandles(ref state);
+        }
+
+        /// <summary>
+        /// Calls the <see cref="PhysicsWorldComponentHandles.Update(ref SystemState)"></see> of the
+        /// handles stored in this object. /&gt;
+        /// </summary>
+        ///
+        /// <param name="state">    [in,out] The state. </param>
+        public void Update(ref SystemState state)
+        {
+            ComponentHandles.Update(ref state);
+        }
+
+        /// <summary>
+        /// Free stored memory.
+        /// </summary>
         public void Dispose()
         {
             PhysicsWorld.Dispose();
-            HaveStaticBodiesChanged.Dispose();
+            if (HaveStaticBodiesChanged.IsCreated)
+            {
+                HaveStaticBodiesChanged.Dispose();
+            }
         }
     }
 }

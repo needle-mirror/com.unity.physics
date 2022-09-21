@@ -109,7 +109,7 @@ namespace Unity.Physics.Authoring
 
                                 res.ConvexHullProperties.PointCount = pointCloud.Length;
                                 res.ConvexHullProperties.PointsStart = allConvexHullPoints.Length;
-                                allConvexHullPoints.AddRange(pointCloud);
+                                allConvexHullPoints.AddRange(pointCloud.AsArray());
                             }
                         }
                     }
@@ -152,8 +152,8 @@ namespace Unity.Physics.Authoring
                                 res.MeshProperties.VertexCount = vertices.Length;
                                 res.MeshProperties.TrianglesStart = allMeshTriangles.Length;
                                 res.MeshProperties.TriangleCount = triangles.Length;
-                                allMeshVertices.AddRange(vertices);
-                                allMeshTriangles.AddRange(triangles);
+                                allMeshVertices.AddRange(vertices.AsArray());
+                                allMeshTriangles.AddRange(triangles.AsArray());
                             }
                         }
                     }

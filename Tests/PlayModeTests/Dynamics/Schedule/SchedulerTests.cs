@@ -16,7 +16,7 @@ namespace Unity.Physics.Tests.Dynamics.Schedule
         [Test]
         public void TestSchedulerWithFullBatches()
         {
-            DispatchPairSequencer sequencer = new DispatchPairSequencer();
+            DispatchPairSequencer sequencer = DispatchPairSequencer.Create();
 
             int numDynamicBodies = 15;
             var solverSchedulerInfo = new SolverSchedulerInfo(sequencer.m_PhaseLookupTableDynamicDynamicPairs.NumPhases);

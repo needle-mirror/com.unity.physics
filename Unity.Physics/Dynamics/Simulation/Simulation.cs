@@ -2,13 +2,14 @@ using System;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
-using Unity.Jobs.LowLevel.Unsafe;
 using Unity.Mathematics;
 
 namespace Unity.Physics
 {
-    // Holds temporary data in a storage that lives as long as simulation lives
-    // and is only re-allocated if necessary.
+    /// <summary>
+    /// Holds temporary data in a storage that lives as long as simulation lives and is only re-
+    /// allocated if necessary.
+    /// </summary>
     public struct SimulationContext : IDisposable
     {
         private int m_NumDynamicBodies;
@@ -25,17 +26,36 @@ namespace Unity.Physics
 
         internal NativeStream CollisionEventDataStream;
         internal NativeStream TriggerEventDataStream;
+        internal NativeStream ImpulseEventDataStream;
 
+        /// <summary>   Gets the collision events. </summary>
+        ///
+        /// <value> The collision events. </value>
         public CollisionEvents CollisionEvents => new CollisionEvents(CollisionEventDataStream, InputVelocities, TimeStep);
+
+        /// <summary>   Gets the trigger events. </summary>
+        ///
+        /// <value> The trigger events. </value>
         public TriggerEvents TriggerEvents => new TriggerEvents(TriggerEventDataStream);
+
+        /// <summary>   Gets the impulse events. </summary>
+        ///
+        /// <value> The impulse events. </value>
+        public ImpulseEvents ImpulseEvents => new ImpulseEvents(ImpulseEventDataStream);
 
         private NativeArray<int> WorkItemCount;
 
-        // Resets the simulation storage
-        // - Reallocates input velocities storage if necessary
-        // - Disposes event streams and allocates new ones with a single work item
-        // NOTE: Reset or ScheduleReset needs to be called before passing the SimulationContext
-        // to a simulation step job. If you don't then you may get initialization errors.
+        internal bool ReadyForEventScheduling => m_InputVelocities.IsCreated && CollisionEventDataStream.IsCreated && TriggerEventDataStream.IsCreated && ImpulseEventDataStream.IsCreated;
+
+        /// <summary>
+        /// Resets the simulation storage
+        /// - Reallocates input velocities storage if necessary
+        /// - Disposes event streams and allocates new ones with a single work item
+        /// NOTE: Reset or ScheduleReset needs to be called before passing the SimulationContext to a
+        /// simulation step job. If you don't then you may get initialization errors.
+        /// </summary>
+        ///
+        /// <param name="stepInput">    The step input. </param>
         public void Reset(SimulationStepInput stepInput)
         {
             m_NumDynamicBodies = stepInput.World.NumDynamicBodies;
@@ -76,14 +96,20 @@ namespace Unity.Physics
             {
                 TriggerEventDataStream.Dispose();
             }
+            if (ImpulseEventDataStream.IsCreated)
+            {
+                ImpulseEventDataStream.Dispose();
+            }
 
             {
                 if (!WorkItemCount.IsCreated)
                 {
-                    WorkItemCount = new NativeArray<int>(new int[] { 1 }, Allocator.Persistent);
+                    WorkItemCount = new NativeArray<int>(1, Allocator.Persistent);
+                    WorkItemCount[0] = 1;
                 }
                 CollisionEventDataStream = new NativeStream(WorkItemCount[0], Allocator.Persistent);
                 TriggerEventDataStream = new NativeStream(WorkItemCount[0], Allocator.Persistent);
+                ImpulseEventDataStream = new NativeStream(WorkItemCount[0], Allocator.Persistent);
             }
         }
 
@@ -141,18 +167,27 @@ namespace Unity.Physics
             {
                 handle = TriggerEventDataStream.Dispose(handle);
             }
+            if (ImpulseEventDataStream.IsCreated)
+            {
+                handle = ImpulseEventDataStream.Dispose(handle);
+            }
             if (allocateEventDataStreams)
             {
                 if (!WorkItemCount.IsCreated)
                 {
-                    WorkItemCount = new NativeArray<int>(new int[] { 1 }, Allocator.Persistent);
+                    WorkItemCount = new NativeArray<int>(1, Allocator.Persistent);
+                    WorkItemCount[0] = 1;
                 }
                 handle = NativeStream.ScheduleConstruct(out CollisionEventDataStream, WorkItemCount, handle, Allocator.Persistent);
                 handle = NativeStream.ScheduleConstruct(out TriggerEventDataStream, WorkItemCount, handle, Allocator.Persistent);
+                handle = NativeStream.ScheduleConstruct(out ImpulseEventDataStream, WorkItemCount, handle, Allocator.Persistent);
             }
             return handle;
         }
 
+        /// <summary>
+        /// Disposes the simulation context.
+        /// </summary>
         public void Dispose()
         {
             if (m_InputVelocities.IsCreated)
@@ -173,6 +208,11 @@ namespace Unity.Physics
             if (TriggerEventDataStream.IsCreated)
             {
                 TriggerEventDataStream.Dispose();
+            }
+
+            if (ImpulseEventDataStream.IsCreated)
+            {
+                ImpulseEventDataStream.Dispose();
             }
 
             if (WorkItemCount.IsCreated)
@@ -199,31 +239,84 @@ namespace Unity.Physics
         public NativeStream Jacobians;
     }
 
-    // Default simulation implementation
-    public class Simulation : ISimulation
+    /// <summary>   Steps a physics world. </summary>
+    public struct Simulation : ISimulation
     {
+        /// <summary>   Gets the simulation type. </summary>
+        ///
+        /// <value> <see cref="SimulationType.UnityPhysics"/>. </value>
         public SimulationType Type => SimulationType.UnityPhysics;
+
+        /// <summary>   Gets the handle of the final simulation job (not including dispose jobs). </summary>
+        ///
+        /// <value> The final simulation job handle. </value>
         public JobHandle FinalSimulationJobHandle => m_StepHandles.FinalExecutionHandle;
+
+        /// <summary>   Gets the handle of the final job. </summary>
+        ///
+        /// <value> The final job handle. </value>
         public JobHandle FinalJobHandle => JobHandle.CombineDependencies(FinalSimulationJobHandle, m_StepHandles.FinalDisposeHandle);
 
-        internal StepContext StepContext = new StepContext();
+        internal SimulationScheduleStage m_SimulationScheduleStage;
 
+        internal StepContext StepContext;
+
+        /// <summary>   Gets the collision events. </summary>
+        ///
+        /// <value> The collision events. </value>
         public CollisionEvents CollisionEvents => SimulationContext.CollisionEvents;
 
+        /// <summary>   Gets the trigger events. </summary>
+        ///
+        /// <value> The trigger events. </value>
         public TriggerEvents TriggerEvents => SimulationContext.TriggerEvents;
 
-        internal SimulationContext SimulationContext = new SimulationContext();
+        /// <summary>   Gets the impulse events. </summary>
+        ///
+        /// <value> The impulse events. </value>
+        public ImpulseEvents ImpulseEvents => SimulationContext.ImpulseEvents;
 
-        private readonly DispatchPairSequencer m_Scheduler = new DispatchPairSequencer();
-        private SimulationJobHandles m_StepHandles = new SimulationJobHandles(new JobHandle());
+        internal SimulationContext SimulationContext;
 
+        private DispatchPairSequencer m_Scheduler;
+        internal SimulationJobHandles m_StepHandles;
+
+        internal bool ReadyForEventScheduling => SimulationContext.ReadyForEventScheduling;
+
+        /// <summary>   Creates a new Simulation. </summary>
+        ///
+        /// <returns>   A Simulation. </returns>
+        public static Simulation Create()
+        {
+            Simulation sim = new Simulation();
+            sim.Init();
+            return sim;
+        }
+
+        /// <summary>
+        /// Disposes the simulation.
+        /// </summary>
         public void Dispose()
         {
             m_Scheduler.Dispose();
             SimulationContext.Dispose();
         }
 
-        // Steps the simulation immediately on a single thread without spawning any jobs.
+        private void Init()
+        {
+            StepContext = new StepContext();
+            SimulationContext = new SimulationContext();
+            m_Scheduler = DispatchPairSequencer.Create();
+            m_StepHandles = new SimulationJobHandles(new JobHandle());
+            m_SimulationScheduleStage = SimulationScheduleStage.Idle;
+        }
+
+        /// <summary>
+        /// Steps the simulation immediately on a single thread without spawning any jobs.
+        /// </summary>
+        ///
+        /// <param name="input">                The input. </param>
+        /// <param name="simulationContext">    [in,out] Context for the simulation. </param>
         public static void StepImmediate(SimulationStepInput input, ref SimulationContext simulationContext)
         {
             SafetyChecks.CheckFiniteAndPositiveAndThrow(input.TimeStep, nameof(input.TimeStep));
@@ -277,9 +370,10 @@ namespace Unity.Physics
                 var jacobiansReader = jacobians.AsReader();
                 var collisionEventsWriter = simulationContext.CollisionEventDataStream.AsWriter();
                 var triggerEventsWriter = simulationContext.TriggerEventDataStream.AsWriter();
+                var impulseEventsWriter = simulationContext.ImpulseEventDataStream.AsWriter();
                 Solver.StabilizationData solverStabilizationData = new Solver.StabilizationData(input, simulationContext);
                 Solver.SolveJacobians(ref jacobiansReader, input.World.DynamicsWorld.MotionVelocities,
-                    input.TimeStep, input.NumSolverIterations, ref collisionEventsWriter, ref triggerEventsWriter, solverStabilizationData);
+                    input.TimeStep, input.NumSolverIterations, ref collisionEventsWriter, ref triggerEventsWriter, ref impulseEventsWriter, solverStabilizationData);
             }
 
             // Integrate motions
@@ -292,24 +386,22 @@ namespace Unity.Physics
             }
         }
 
-        public void Step(SimulationStepInput input)
-        {
-            StepImmediate(input, ref SimulationContext);
-        }
-
-        // Schedule all the jobs for the simulation step.
-        // Enqueued callbacks can choose to inject additional jobs at defined sync points.
-        // multiThreaded defines which simulation type will be called:
-        //     - true will result in default multithreaded simulation
-        //     - false will result in a very small number of jobs (1 per physics step phase) that are scheduled sequentially
-        // Behavior doesn't change regardless of the multiThreaded argument provided.
-        public unsafe SimulationJobHandles ScheduleStepJobs(SimulationStepInput input, SimulationCallbacks callbacksIn, JobHandle inputDeps, bool multiThreaded = true)
+        /// <summary>   Schedule broadphase jobs. </summary>
+        ///
+        /// <param name="input">            The input. </param>
+        /// <param name="inputDeps">        The input deps. </param>
+        /// <param name="multiThreaded">    (Optional) True if multi threaded. </param>
+        ///
+        /// <returns>   The SimulationJobHandles. </returns>
+        public SimulationJobHandles ScheduleBroadphaseJobs(SimulationStepInput input, JobHandle inputDeps, bool multiThreaded = true)
         {
             SafetyChecks.CheckFiniteAndPositiveAndThrow(input.TimeStep, nameof(input.TimeStep));
             SafetyChecks.CheckInRangeAndThrow(input.NumSolverIterations, new int2(1, int.MaxValue), nameof(input.NumSolverIterations));
+            SafetyChecks.CheckSimulationStageAndThrow(m_SimulationScheduleStage, SimulationScheduleStage.Idle);
+            m_SimulationScheduleStage = SimulationScheduleStage.PostCreateBodyPairs;
 
             // Dispose and reallocate input velocity buffer, if dynamic body count has increased.
-            // Dispose previous collision and trigger event data streams.
+            // Dispose previous collision, trigger and impulse event data streams.
             // New event streams are reallocated later when the work item count is known.
             JobHandle handle = SimulationContext.ScheduleReset(input, inputDeps, false);
             SimulationContext.TimeStep = input.TimeStep;
@@ -323,13 +415,11 @@ namespace Unity.Physics
                 return m_StepHandles;
             }
 
-            SimulationCallbacks callbacks = callbacksIn ?? new SimulationCallbacks();
-
             // Find all body pairs that overlap in the broadphase
             var handles = input.World.CollisionWorld.ScheduleFindOverlapsJobs(
                 out NativeStream dynamicVsDynamicBodyPairs, out NativeStream dynamicVsStaticBodyPairs, handle, multiThreaded);
             handle = handles.FinalExecutionHandle;
-            var disposeHandle1 = handles.FinalDisposeHandle;
+            var disposeHandle = handles.FinalDisposeHandle;
             var postOverlapsHandle = handle;
 
             // Sort all overlapping and jointed body pairs into phases
@@ -337,77 +427,154 @@ namespace Unity.Physics
                 ref input.World, ref dynamicVsDynamicBodyPairs, ref dynamicVsStaticBodyPairs, handle,
                 ref StepContext.PhasedDispatchPairs, out StepContext.SolverSchedulerInfo, multiThreaded);
             handle = handles.FinalExecutionHandle;
-            var disposeHandle2 = handles.FinalDisposeHandle;
+            disposeHandle = JobHandle.CombineDependencies(handles.FinalDisposeHandle, disposeHandle);
 
             // Apply gravity and copy input velocities at this point (in parallel with the scheduler, but before the callbacks)
             var applyGravityAndCopyInputVelocitiesHandle = Solver.ScheduleApplyGravityAndCopyInputVelocitiesJob(
                 input.World.DynamicsWorld.MotionVelocities, SimulationContext.InputVelocities,
                 input.TimeStep * input.Gravity, multiThreaded ? postOverlapsHandle : handle, multiThreaded);
 
-            handle = JobHandle.CombineDependencies(handle, applyGravityAndCopyInputVelocitiesHandle);
-            handle = callbacks.Execute(SimulationCallbacks.Phase.PostCreateDispatchPairs, this, ref input.World, handle);
+            m_StepHandles.FinalExecutionHandle = JobHandle.CombineDependencies(applyGravityAndCopyInputVelocitiesHandle, handle);
+            m_StepHandles.FinalDisposeHandle = disposeHandle;
 
-            // Create contact points & joint Jacobians
-            handles = NarrowPhase.ScheduleCreateContactsJobs(ref input.World, input.TimeStep,
-                ref StepContext.Contacts, ref StepContext.Jacobians, ref StepContext.PhasedDispatchPairs, handle,
+            return m_StepHandles;
+        }
+
+        /// <summary>   Schedule narrowphase jobs. </summary>
+        ///
+        /// <param name="input">            The input. </param>
+        /// <param name="inputDeps">        The input deps. </param>
+        /// <param name="multiThreaded">    (Optional) True if multi threaded. </param>
+        ///
+        /// <returns>   The SimulationJobHandles. </returns>
+        public SimulationJobHandles ScheduleNarrowphaseJobs(SimulationStepInput input, JobHandle inputDeps, bool multiThreaded = true)
+        {
+            SafetyChecks.CheckSimulationStageAndThrow(m_SimulationScheduleStage, SimulationScheduleStage.PostCreateBodyPairs);
+            m_SimulationScheduleStage = SimulationScheduleStage.PostCreateContacts;
+
+            if (input.World.NumDynamicBodies == 0)
+            {
+                // No need to do anything, since nothing can move
+                m_StepHandles = new SimulationJobHandles(inputDeps);
+                return m_StepHandles;
+            }
+
+            var disposeHandle = m_StepHandles.FinalDisposeHandle;
+            m_StepHandles = NarrowPhase.ScheduleCreateContactsJobs(ref input.World, input.TimeStep,
+                ref StepContext.Contacts, ref StepContext.Jacobians, ref StepContext.PhasedDispatchPairs, inputDeps,
                 ref StepContext.SolverSchedulerInfo, multiThreaded);
-            handle = handles.FinalExecutionHandle;
-            var disposeHandle3 = handles.FinalDisposeHandle;
-            handle = callbacks.Execute(SimulationCallbacks.Phase.PostCreateContacts, this, ref input.World, handle);
+            m_StepHandles.FinalDisposeHandle = JobHandle.CombineDependencies(disposeHandle, m_StepHandles.FinalDisposeHandle);
+
+            return m_StepHandles;
+        }
+
+        /// <summary>   Schedule create jacobians jobs. </summary>
+        ///
+        /// <param name="input">            The input. </param>
+        /// <param name="inputDeps">        The input deps. </param>
+        /// <param name="multiThreaded">    (Optional) True if multi threaded. </param>
+        ///
+        /// <returns>   The SimulationJobHandles. </returns>
+        public SimulationJobHandles ScheduleCreateJacobiansJobs(SimulationStepInput input, JobHandle inputDeps, bool multiThreaded = true)
+        {
+            SafetyChecks.CheckSimulationStageAndThrow(m_SimulationScheduleStage, SimulationScheduleStage.PostCreateContacts);
+            m_SimulationScheduleStage = SimulationScheduleStage.PostCreateJacobians;
+
+            if (input.World.NumDynamicBodies == 0)
+            {
+                // No need to do anything, since nothing can move
+                m_StepHandles = new SimulationJobHandles(inputDeps);
+                return m_StepHandles;
+            }
+
 
             // Create contact Jacobians
-            handles = Solver.ScheduleBuildJacobiansJobs(ref input.World, input.TimeStep, input.Gravity, input.NumSolverIterations,
-                handle, ref StepContext.PhasedDispatchPairs, ref StepContext.SolverSchedulerInfo,
+            var disposeHandle = m_StepHandles.FinalDisposeHandle;
+            m_StepHandles = Solver.ScheduleBuildJacobiansJobs(ref input.World, input.TimeStep, input.Gravity, input.NumSolverIterations,
+                inputDeps, ref StepContext.PhasedDispatchPairs, ref StepContext.SolverSchedulerInfo,
                 ref StepContext.Contacts, ref StepContext.Jacobians, multiThreaded);
-            handle = handles.FinalExecutionHandle;
-            var disposeHandle4 = handles.FinalDisposeHandle;
-            handle = callbacks.Execute(SimulationCallbacks.Phase.PostCreateContactJacobians, this, ref input.World, handle);
+            m_StepHandles.FinalDisposeHandle = JobHandle.CombineDependencies(disposeHandle, m_StepHandles.FinalDisposeHandle);
+
+            return m_StepHandles;
+        }
+
+        /// <summary>   Schedule solve and integrate jobs. </summary>
+        ///
+        /// <param name="input">            The input. </param>
+        /// <param name="inputDeps">        The input deps. </param>
+        /// <param name="multiThreaded">    (Optional) True if multi threaded. </param>
+        ///
+        /// <returns>   The SimulationJobHandles. </returns>
+        public SimulationJobHandles ScheduleSolveAndIntegrateJobs(SimulationStepInput input, JobHandle inputDeps, bool multiThreaded = true)
+        {
+            SafetyChecks.CheckSimulationStageAndThrow(m_SimulationScheduleStage, SimulationScheduleStage.PostCreateJacobians);
+            m_SimulationScheduleStage = SimulationScheduleStage.Idle;
+
+            if (input.World.NumDynamicBodies == 0)
+            {
+                // No need to do anything, since nothing can move
+                m_StepHandles = new SimulationJobHandles(inputDeps);
+                return m_StepHandles;
+            }
 
             // Solve all Jacobians
+            var disposeHandle = m_StepHandles.FinalDisposeHandle;
             Solver.StabilizationData solverStabilizationData = new Solver.StabilizationData(input, SimulationContext);
-            handles = Solver.ScheduleSolveJacobiansJobs(ref input.World.DynamicsWorld, input.TimeStep, input.NumSolverIterations,
+            m_StepHandles = Solver.ScheduleSolveJacobiansJobs(ref input.World.DynamicsWorld, input.TimeStep, input.NumSolverIterations,
                 ref StepContext.Jacobians, ref SimulationContext.CollisionEventDataStream, ref SimulationContext.TriggerEventDataStream,
-                ref StepContext.SolverSchedulerInfo, solverStabilizationData, handle, multiThreaded);
-            handle = handles.FinalExecutionHandle;
-            var disposeHandle5 = handles.FinalDisposeHandle;
+                ref SimulationContext.ImpulseEventDataStream, ref StepContext.SolverSchedulerInfo, solverStabilizationData, inputDeps, multiThreaded);
 
             // Integrate motions
-            handle = Integrator.ScheduleIntegrateJobs(ref input.World.DynamicsWorld, input.TimeStep, handle, multiThreaded);
+            m_StepHandles.FinalExecutionHandle = Integrator.ScheduleIntegrateJobs(ref input.World.DynamicsWorld, input.TimeStep, m_StepHandles.FinalExecutionHandle, multiThreaded);
+            m_StepHandles.FinalDisposeHandle = JobHandle.CombineDependencies(disposeHandle, m_StepHandles.FinalDisposeHandle);
 
             // Synchronize the collision world
             if (input.SynchronizeCollisionWorld)
             {
-                handle = input.World.CollisionWorld.ScheduleUpdateDynamicTree(ref input.World, input.TimeStep, input.Gravity, handle, multiThreaded);  // TODO: timeStep = 0?
+                m_StepHandles.FinalExecutionHandle = input.World.CollisionWorld.ScheduleUpdateDynamicTree(ref input.World, input.TimeStep, input.Gravity, m_StepHandles.FinalExecutionHandle, multiThreaded);  // TODO: timeStep = 0?
             }
-
-            // Return the final simulation handle
-            m_StepHandles.FinalExecutionHandle = handle;
 
             // Different dispose logic for single threaded simulation compared to "standard" threading (multi threaded)
             if (!multiThreaded)
             {
-                handle = dynamicVsDynamicBodyPairs.Dispose(handle);
-                handle = dynamicVsStaticBodyPairs.Dispose(handle);
-                handle = StepContext.PhasedDispatchPairs.Dispose(handle);
-                handle = StepContext.Contacts.Dispose(handle);
-                handle = StepContext.Jacobians.Dispose(handle);
-                handle = StepContext.SolverSchedulerInfo.ScheduleDisposeJob(handle);
+                m_StepHandles.FinalDisposeHandle = StepContext.PhasedDispatchPairs.Dispose(m_StepHandles.FinalExecutionHandle);
+                m_StepHandles.FinalDisposeHandle = StepContext.Contacts.Dispose(m_StepHandles.FinalDisposeHandle);
+                m_StepHandles.FinalDisposeHandle = StepContext.Jacobians.Dispose(m_StepHandles.FinalDisposeHandle);
+                m_StepHandles.FinalDisposeHandle = StepContext.SolverSchedulerInfo.ScheduleDisposeJob(m_StepHandles.FinalDisposeHandle);
+            }
 
-                m_StepHandles.FinalDisposeHandle = handle;
-            }
-            else
-            {
-                // Return the final handle, which includes disposing temporary arrays
-                JobHandle* deps = stackalloc JobHandle[5]
-                {
-                    disposeHandle1,
-                    disposeHandle2,
-                    disposeHandle3,
-                    disposeHandle4,
-                    disposeHandle5
-                };
-                m_StepHandles.FinalDisposeHandle = JobHandleUnsafeUtility.CombineDependencies(deps, 5);
-            }
+            return m_StepHandles;
+        }
+
+        /// <summary>   Steps the world immediately. </summary>
+        ///
+        /// <param name="input">    The input. </param>
+        public void Step(SimulationStepInput input)
+        {
+            StepImmediate(input, ref SimulationContext);
+        }
+
+        /// <summary>
+        /// Schedule all the jobs for the simulation step. Enqueued callbacks can choose to inject
+        /// additional jobs at defined sync points. multiThreaded defines which simulation type will be
+        /// called:
+        ///     - true will result in default multithreaded simulation
+        ///     - false will result in a very small number of jobs (1 per physics step phase) that are
+        ///     scheduled sequentially
+        /// Behavior doesn't change regardless of the multiThreaded argument provided.
+        /// </summary>
+        ///
+        /// <param name="input">            The input. </param>
+        /// <param name="inputDeps">        The input deps. </param>
+        /// <param name="multiThreaded">    (Optional) True if multi threaded. </param>
+        ///
+        /// <returns>   The SimulationJobHandles. </returns>
+        public unsafe SimulationJobHandles ScheduleStepJobs(SimulationStepInput input, JobHandle inputDeps, bool multiThreaded = true)
+        {
+            ScheduleBroadphaseJobs(input, inputDeps, multiThreaded);
+            ScheduleNarrowphaseJobs(input, m_StepHandles.FinalExecutionHandle, multiThreaded);
+            ScheduleCreateJacobiansJobs(input, m_StepHandles.FinalExecutionHandle, multiThreaded);
+            ScheduleSolveAndIntegrateJobs(input, m_StepHandles.FinalExecutionHandle, multiThreaded);
 
             return m_StepHandles;
         }

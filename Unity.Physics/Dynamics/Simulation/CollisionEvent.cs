@@ -5,7 +5,7 @@ using Unity.Mathematics;
 
 namespace Unity.Physics
 {
-    // An event raised when a pair of bodies have collided during solving.
+    /// <summary>   An event raised when a pair of bodies have collided during solving. </summary>
     public struct CollisionEvent : ISimulationEvent<CollisionEvent>
     {
         internal CollisionEventDataRef EventData;
@@ -13,19 +13,61 @@ namespace Unity.Physics
         internal Velocity InputVelocityA;
         internal Velocity InputVelocityB;
 
+        /// <summary>   Gets the entity b. </summary>
+        ///
+        /// <value> The entity b. </value>
         public Entity EntityB => EventData.Value.Entities.EntityB;
+
+        /// <summary>   Gets the entity a. </summary>
+        ///
+        /// <value> The entity a. </value>
         public Entity EntityA => EventData.Value.Entities.EntityA;
+
+        /// <summary>   Gets the body index b. </summary>
+        ///
+        /// <value> The body index b. </value>
         public int BodyIndexB => EventData.Value.BodyIndices.BodyIndexB;
+
+        /// <summary>   Gets the body index a. </summary>
+        ///
+        /// <value> The body index a. </value>
         public int BodyIndexA => EventData.Value.BodyIndices.BodyIndexA;
+
+        /// <summary>   Gets the collider key b. </summary>
+        ///
+        /// <value> The collider key b. </value>
         public ColliderKey ColliderKeyB => EventData.Value.ColliderKeys.ColliderKeyB;
+
+        /// <summary>   Gets the collider key a. </summary>
+        ///
+        /// <value> The collider key a. </value>
         public ColliderKey ColliderKeyA => EventData.Value.ColliderKeys.ColliderKeyA;
 
+        /// <summary>   Gets the normal. The normal is pointing from the body B to the body A. </summary>
+        ///
+        /// <value> The normal. </value>
         public float3 Normal => EventData.Value.Normal;
 
+        /// <summary>
+        /// Compares this CollisionEvent object to another to determine their relative ordering.
+        /// </summary>
+        ///
+        /// <param name="other">    Another instance to compare. </param>
+        ///
+        /// <returns>
+        /// Negative if this object is less than the other, 0 if they are equal, or positive if this is
+        /// greater.
+        /// </returns>
         public int CompareTo(CollisionEvent other) => ISimulationEventUtilities.CompareEvents(this, other);
 
-        // Calculate extra details about the collision.
-        // Note: Since the solver does not naturally produce this data, it requires some computation.
+        /// <summary>
+        /// Calculate extra details about the collision. Note: Since the solver does not naturally
+        /// produce this data, it requires some computation.
+        /// </summary>
+        ///
+        /// <param name="physicsWorld"> [in,out] The physics world. </param>
+        ///
+        /// <returns>   The calculated details. </returns>
         public Details CalculateDetails(ref PhysicsWorld physicsWorld)
         {
             int numContactPoints = EventData.Value.NumNarrowPhaseContactPoints;
@@ -38,20 +80,23 @@ namespace Unity.Physics
             return EventData.Value.CalculateDetails(ref physicsWorld, TimeStep, InputVelocityA, InputVelocityB, contactPoints);
         }
 
-        // Extra details about a collision
+        /// <summary>   Extra details about a collision. </summary>
         public struct Details
         {
-            // Estimated contact point positions (in world space).
-            // Use this information about individual contact point positions
-            // to apply custom logic, for example looking at the Length
-            // to differentiate between vertex (1 point), edge (2 point)
-            // or face (3 or more points) collision.
+            /// <summary>
+            /// Estimated contact point positions (in world space). Use this information about individual
+            /// contact point positions to apply custom logic, for example looking at the Length to
+            /// differentiate between vertex (1 point), edge (2 point)
+            /// or face (3 or more points) collision.
+            /// </summary>
             public NativeArray<float3> EstimatedContactPointPositions;
 
-            // Estimated total impulse applied
+            /// <summary>   Estimated total impulse applied. </summary>
             public float EstimatedImpulse;
 
-            // Calculate the average contact point position
+            /// <summary>   Calculate the average contact point position. </summary>
+            ///
+            /// <value> The average contact point position. </value>
             public float3 AverageContactPointPosition
             {
                 get
@@ -67,8 +112,10 @@ namespace Unity.Physics
         }
     }
 
-    // A stream of collision events.
-    // This is a value type, which means it can be used in Burst jobs (unlike IEnumerable<CollisionEvent>).
+    /// <summary>
+    /// A stream of collision events. This is a value type, which means it can be used in Burst jobs
+    /// (unlike IEnumerable&lt;CollisionEvent&gt;).
+    /// </summary>
     public struct CollisionEvents /* : IEnumerable<CollisionEvent> */
     {
         //@TODO: Unity should have a Allow null safety restriction
@@ -85,11 +132,15 @@ namespace Unity.Physics
             m_TimeStep = timeStep;
         }
 
+        /// <summary>   Gets the enumerator. </summary>
+        ///
+        /// <returns>   The enumerator. </returns>
         public Enumerator GetEnumerator()
         {
             return new Enumerator(m_EventDataStream, m_InputVelocities, m_TimeStep);
         }
 
+        /// <summary>   An enumerator. </summary>
         public struct Enumerator /* : IEnumerator<CollisionEvent> */
         {
             private NativeStream.Reader m_Reader;
@@ -100,6 +151,9 @@ namespace Unity.Physics
             private readonly NativeArray<Velocity> m_InputVelocities;
             private readonly float m_TimeStep;
 
+            /// <summary>   Gets the current. </summary>
+            ///
+            /// <value> The current. </value>
             public CollisionEvent Current
             {
                 get => m_Current.Value.CreateCollisionEvent(m_TimeStep, m_InputVelocities);
@@ -122,6 +176,9 @@ namespace Unity.Physics
                 AdvanceReader();
             }
 
+            /// <summary>   Determines if we can move next. </summary>
+            ///
+            /// <returns>   True if it succeeds, false if it fails. </returns>
             public bool MoveNext()
             {
                 if (m_Reader.RemainingItemCount > 0)

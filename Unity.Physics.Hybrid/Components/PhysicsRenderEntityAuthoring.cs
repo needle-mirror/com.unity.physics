@@ -18,4 +18,13 @@ namespace Unity.Physics.Authoring
             dstManager.AddComponentData(entity, renderEntity);
         }
     }
+
+    internal class PhysicsRenderEntityBaker : Baker<PhysicsRenderEntityAuthoring>
+    {
+        public override void Bake(PhysicsRenderEntityAuthoring authoring)
+        {
+            var renderEntity = new PhysicsRenderEntity { Entity = GetEntity(authoring.RenderEntity) };
+            AddComponent(renderEntity);
+        }
+    }
 }
