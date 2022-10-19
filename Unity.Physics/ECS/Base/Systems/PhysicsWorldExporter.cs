@@ -22,6 +22,7 @@ namespace Unity.Physics.Systems
                 PositionType = systemState.GetComponentTypeHandle<Translation>(false);
                 RotationType = systemState.GetComponentTypeHandle<Rotation>(false);
                 PhysicsVelocityType = systemState.GetComponentTypeHandle<PhysicsVelocity>(false);
+                SimulateType = systemState.GetComponentTypeHandle<Simulate>(true);
             }
 
             /// <summary>   Updates the component handles. Call this in OnUpdate() methods of the system you want to export physics world. </summary>
@@ -32,11 +33,13 @@ namespace Unity.Physics.Systems
                 PositionType.Update(ref systemState);
                 RotationType.Update(ref systemState);
                 PhysicsVelocityType.Update(ref systemState);
+                SimulateType.Update(ref systemState);
             }
 
             internal ComponentTypeHandle<Translation> PositionType;
             internal ComponentTypeHandle<Rotation> RotationType;
             internal ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
+            internal ComponentTypeHandle<Simulate> SimulateType;
         }
 
         /// <summary>
@@ -72,6 +75,7 @@ namespace Unity.Physics.Systems
                     PositionType = componentTypeHandles.PositionType,
                     RotationType = componentTypeHandles.RotationType,
                     VelocityType = componentTypeHandles.PhysicsVelocityType,
+                    SimulateType = componentTypeHandles.SimulateType,
                     ChunkBaseEntityIndices = chunkBaseEntityIndices,
                 }.ScheduleParallel(dynamicEntities, baseIndexJob);
             }
@@ -106,6 +110,7 @@ namespace Unity.Physics.Systems
                     PositionType = exportPhysicsWorldHandles.PositionType,
                     RotationType = exportPhysicsWorldHandles.RotationType,
                     VelocityType = exportPhysicsWorldHandles.PhysicsVelocityType,
+                    SimulateType = exportPhysicsWorldHandles.SimulateType,
                     ChunkBaseEntityIndices = chunkBaseEntityIndices,
                 }.Run(dynamicEntities);
             }
@@ -123,6 +128,7 @@ namespace Unity.Physics.Systems
             public ComponentTypeHandle<Translation> PositionType;
             public ComponentTypeHandle<Rotation> RotationType;
             public ComponentTypeHandle<PhysicsVelocity> VelocityType;
+            [ReadOnly]public ComponentTypeHandle<Simulate> SimulateType;
 
             public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
@@ -131,10 +137,16 @@ namespace Unity.Physics.Systems
                 var chunkRotations = chunk.GetNativeArray(RotationType);
                 var chunkVelocities = chunk.GetNativeArray(VelocityType);
 
-                var entityEnumerator =
-                    new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.ChunkEntityCount);
+                var entityEnumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.ChunkEntityCount);
+                var isEntitySimulated = chunk.GetEnabledMask(ref SimulateType);
                 while (entityEnumerator.NextEntityIndex(out var i))
                 {
+                    //If an entity is not simulated (so it is marked as kinematic and has also zero velocity)
+                    //we should not export the velocity, position and orientation.
+                    //Technically would be better to add the Simulate component to the query. But this will break other jobs
+                    //that can't handle the enable mask. So we are doing a check here on an entity by entity basis.
+                    if(!isEntitySimulated[i])
+                        continue;
                     int motionIndex = entityStartIndex + i;
                     MotionData md = MotionDatas[motionIndex];
                     RigidTransform worldFromBody = math.mul(md.WorldFromMotion, math.inverse(md.BodyFromMotion));

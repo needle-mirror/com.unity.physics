@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using Unity.Entities;
+using Unity.Transforms;
 
 namespace Unity.Physics.Authoring
 {
@@ -43,10 +44,12 @@ namespace Unity.Physics.Authoring
                     continue;
                 var proxyEnt = CreateAdditionalEntity(TransformUsageFlags.WriteGlobalTransform | TransformUsageFlags.ReadLocalToWorld);
                 AddComponent(proxyEnt, new CustomPhysicsProxyDriver {rootEntity = GetEntity(), FirstOrderGain = authoring.FirstOrderGain});
-                AddSharedComponent(proxyEnt, new PhysicsWorldIndex((uint)i));
+                AddComponent(proxyEnt, default(Translation));
+                AddComponent(proxyEnt, default(Rotation));
                 AddComponent(proxyEnt, default(PhysicsMass));
                 AddComponent(proxyEnt, default(PhysicsVelocity));
                 AddComponent(proxyEnt, default(PhysicsCollider));
+                AddSharedComponent(proxyEnt, new PhysicsWorldIndex((uint)i));
             }
         }
     }

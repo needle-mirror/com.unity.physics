@@ -5,7 +5,7 @@
   "dependencies": {
     "com.unity.burst": "1.7.3",
     "com.unity.collections": "2.1.0-exp.4",
-    "com.unity.entities": "1.0.0-exp.8",
+    "com.unity.entities": "1.0.0-exp.12",
     "com.unity.jobs": "0.70.0-preview.7",
     "com.unity.mathematics": "1.2.6",
     "com.unity.test-framework": "1.1.33",
@@ -20,13 +20,13 @@
   "name": "com.unity.physics",
   "unity": "2022.2",
   "unityRelease": "0b5",
-  "version": "1.0.0-exp.8",
+  "version": "1.0.0-exp.12",
   "upmCi": {
-    "footprint": "8a250b431c186752ddac1adf8cab37eb8a23f550"
+    "footprint": "93ada97f758b8b9476acf054513aba31c5d4fc1b"
   },
   "repository": {
     "url": "https://github.cds.internal.unity3d.com/unity/dots.git",
     "type": "git",
-    "revision": "7f4180a58b7e1c75f6375bd73fb80bd99d195d4e"
+    "revision": "3f0a7e39227bd97f1239a6505a9449425fecfe1e"
   }
 }

@@ -10,24 +10,31 @@ using Unity.Physics.Aspects;
 namespace Unity.Physics
 {
     /// <summary>   An instance of a collider in a physics world. </summary>
+    /// Using StructLayout to handle for an issue where there can be a mismatch between struct sizes for RigidBody in separate jobs
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Explicit, Pack = 1, Size = 56)]
     public struct RigidBody : ICollidable, IAspectQueryable
     {
         /// <summary>   The rigid body's collider (allowed to be null) </summary>
+        [System.Runtime.InteropServices.FieldOffset(0)]
         public BlobAssetReference<Collider> Collider;
 
         /// <summary>   The rigid body's transform in world space. </summary>
+        [System.Runtime.InteropServices.FieldOffset(8)]
         public RigidTransform WorldFromBody;
 
         /// <summary>   The entity that rigid body represents. </summary>
+        [System.Runtime.InteropServices.FieldOffset(36)]
         public Entity Entity;
 
         /// <summary>
         /// Arbitrary custom tags. These get copied into contact manifolds and can be used to inform
         /// contact modifiers.
         /// </summary>
+        [System.Runtime.InteropServices.FieldOffset(44)]
         public byte CustomTags;
 
         /// <summary>   The rigid body's scale in world space. </summary>
+        [System.Runtime.InteropServices.FieldOffset(48)]
         public float Scale;
 
         /// <summary>   Rigid body that thas identity transform, null entity, and a null collider. </summary>

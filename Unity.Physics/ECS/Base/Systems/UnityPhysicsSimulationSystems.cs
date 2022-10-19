@@ -13,6 +13,7 @@ namespace Unity.Physics.Systems
     [CreateBefore(typeof(PhysicsCreateContactsGroup))]
     [CreateBefore(typeof(PhysicsCreateJacobiansGroup))]
     [CreateBefore(typeof(PhysicsSolveAndIntegrateGroup))]
+    [CreateBefore(typeof(BroadphaseSystem))]
     internal unsafe partial struct PhysicsSimulationPickerSystem : ISystem
     {
         public SimulationType m_SimulationType;

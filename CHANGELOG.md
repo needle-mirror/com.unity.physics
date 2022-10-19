@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.0-exp.12] - 2022-10-19
+
+### Added
+
+* `[CreateBefore(typeof(BroadphaseSystem))]`  for `PhysicsSimulationPickerSystem ` within `UnityPhysicsSimulationSystems.cs` script file.
+
+
+
+
+
 ## [1.0.0-exp.8] - 2022-09-21
 
 ### Upgrade guide
@@ -9,10 +19,10 @@
 * Retrieval of `Simulation` is achieved differently. Previously, it was neccessary to get it directly from `StepPhysicsWorld` system. Now, `Simulation` is retrieved by calling (`SystemAPI|SystemBase|EntityQuery`).GetSingleton<SimulationSingleton>().AsSimulation() in case read-only access is required, and by calling (`SystemAPI|SystemBase|EntityQuery`).GetSingletonRW<SimulationSingleton>().AsSimulation() in case of read-write access. Check out [documentation](xref:interacting-with-physics) for more information.
 * The dependencies between physics systems now get sorted automatically as long as `GetSingleton<>()` approach is used for retrieving `PhysicsWorld` and `Simulation`. There is no need to call `RegisterPhysicsSystems(ReadOnly|ReadWrite)`, `AddInputDependency()` or `AddInputDependencyToComplete()` and these functions were removed.
 * `ITriggerEventsJob`, `ICollisionEventsJob`, `IBodyPairsJob`, `IContactsJob` and `IJacobiansJob` no longer take `ISimulation` as an argument for `Schedule()` method, but instead take `SimulationSingleton`. Use `GetSingleton<SimulationSingleton>()` for `ITriggerEventsJob` and `ICollisionEventsJob`, `GetSingletonRW<SimulationSingleton>()` for `IBodyPairsJob`, `IContactsJob` and `IJacobiansJob`. All of these jobs can be now scheduled in Burst friendly way.
-* Callbacks between simulation stages have been removed. To get the same functionality, you now need to:     
-    - Create a system     
-    - Make it `[UpdateInGroup(typeof(PhysicsSimulationGroup))]` and make it `[UpdateBefore]` and `[UpdateAfter]` one of 4 `PhysicsSimulationGroup` subgroups.     
-    - In `OnUpdate()` of the system, recreate the functionality of a callback by scheduling one of the specialised jobs: `IBodyPairsJob`, `IContactsJob`, `IJacobiansJob`.     
+* Callbacks between simulation stages have been removed. To get the same functionality, you now need to:
+    - Create a system
+    - Make it `[UpdateInGroup(typeof(PhysicsSimulationGroup))]` and make it `[UpdateBefore]` and `[UpdateAfter]` one of 4 `PhysicsSimulationGroup` subgroups.
+    - In `OnUpdate()` of the system, recreate the functionality of a callback by scheduling one of the specialised jobs: `IBodyPairsJob`, `IContactsJob`, `IJacobiansJob`.
     - See [documentation](xref:simulation-modification) for details and examples.
 * Uniform scale is now supported.     - `Scale` component is now taken into account when creating physics bodies. The component doesn't get created by `Baking` (previously known as `Conversion`) in the Editor. Scale set in Editor gets baked into the collider geometry. If you want to dynamically scale bodies, add this component to physics body entities.     - You might get problems if you were creating `RigidBody` struct instances directly, since the scale will be initialized to zero. Set it to `1.0f` to return to previous behaviour.     - `ColliderCast` and `ColliderDistance` queries now support uniform scale for colliders that you are querying with. `ColliderDistanceInput` and `ColliderCastInput` therefore have a new field that enables you to set it. Same as `RigidBody`, you might get problems since the scale will be initialized to zero. Set it to `1.0f` to return to previous behaviour.     - Positive and negative values of scale are supported.
 * Multiple worlds support has been reworked. To support this use case previously, it was necessary to create a physics pipeline on your own, by using helpers such as `PhysicsWorldData`, `PhysicsWorldStepper` and `PhysicsWorldExporter`. Now it is possible to instantiate a `CustomPhysicsSystemGroup` with a proper world index, which will run the physics simulation on non-default world index bodies. Check out the [documentation](xref:interacting-with-bodies) for more information.
