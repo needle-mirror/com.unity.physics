@@ -19,8 +19,12 @@ namespace Unity.Physics.Systems
             /// <param name="systemState">  [in,out] State of the system. </param>
             public ExportPhysicsWorldTypeHandles(ref SystemState systemState)
             {
+#if !ENABLE_TRANSFORM_V1
+                LocalTransformType = systemState.GetComponentTypeHandle<LocalTransform>(false);
+#else
                 PositionType = systemState.GetComponentTypeHandle<Translation>(false);
                 RotationType = systemState.GetComponentTypeHandle<Rotation>(false);
+#endif
                 PhysicsVelocityType = systemState.GetComponentTypeHandle<PhysicsVelocity>(false);
                 SimulateType = systemState.GetComponentTypeHandle<Simulate>(true);
             }
@@ -30,14 +34,22 @@ namespace Unity.Physics.Systems
             /// <param name="systemState">  [in,out] State of the system. </param>
             public void Update(ref SystemState systemState)
             {
+#if !ENABLE_TRANSFORM_V1
+                LocalTransformType.Update(ref systemState);
+#else
                 PositionType.Update(ref systemState);
                 RotationType.Update(ref systemState);
+#endif
                 PhysicsVelocityType.Update(ref systemState);
                 SimulateType.Update(ref systemState);
             }
 
+#if !ENABLE_TRANSFORM_V1
+            internal ComponentTypeHandle<LocalTransform> LocalTransformType;
+#else
             internal ComponentTypeHandle<Translation> PositionType;
             internal ComponentTypeHandle<Rotation> RotationType;
+#endif
             internal ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
             internal ComponentTypeHandle<Simulate> SimulateType;
         }
@@ -72,8 +84,12 @@ namespace Unity.Physics.Systems
                 {
                     MotionVelocities = world.MotionVelocities,
                     MotionDatas = world.MotionDatas,
+#if !ENABLE_TRANSFORM_V1
+                    LocalTransformType = componentTypeHandles.LocalTransformType,
+#else
                     PositionType = componentTypeHandles.PositionType,
                     RotationType = componentTypeHandles.RotationType,
+#endif
                     VelocityType = componentTypeHandles.PhysicsVelocityType,
                     SimulateType = componentTypeHandles.SimulateType,
                     ChunkBaseEntityIndices = chunkBaseEntityIndices,
@@ -107,10 +123,14 @@ namespace Unity.Physics.Systems
                 {
                     MotionVelocities = world.MotionVelocities,
                     MotionDatas = world.MotionDatas,
+#if !ENABLE_TRANSFORM_V1
+                    LocalTransformType = exportPhysicsWorldHandles.LocalTransformType,
+#else
                     PositionType = exportPhysicsWorldHandles.PositionType,
                     RotationType = exportPhysicsWorldHandles.RotationType,
-                    VelocityType = exportPhysicsWorldHandles.PhysicsVelocityType,
+#endif
                     SimulateType = exportPhysicsWorldHandles.SimulateType,
+                    VelocityType = exportPhysicsWorldHandles.PhysicsVelocityType,
                     ChunkBaseEntityIndices = chunkBaseEntityIndices,
                 }.Run(dynamicEntities);
             }
@@ -125,19 +145,27 @@ namespace Unity.Physics.Systems
             [ReadOnly] public NativeArray<MotionData> MotionDatas;
             [ReadOnly] public NativeArray<int> ChunkBaseEntityIndices;
 
+#if !ENABLE_TRANSFORM_V1
+            public ComponentTypeHandle<LocalTransform> LocalTransformType;
+#else
             public ComponentTypeHandle<Translation> PositionType;
             public ComponentTypeHandle<Rotation> RotationType;
+#endif
             public ComponentTypeHandle<PhysicsVelocity> VelocityType;
-            [ReadOnly]public ComponentTypeHandle<Simulate> SimulateType;
+            [ReadOnly] public ComponentTypeHandle<Simulate> SimulateType;
 
             public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
                 int entityStartIndex = ChunkBaseEntityIndices[unfilteredChunkIndex];
-                var chunkPositions = chunk.GetNativeArray(PositionType);
-                var chunkRotations = chunk.GetNativeArray(RotationType);
-                var chunkVelocities = chunk.GetNativeArray(VelocityType);
+#if !ENABLE_TRANSFORM_V1
+                var chunkLocalTransforms = chunk.GetNativeArray(ref LocalTransformType);
+#else
+                var chunkPositions = chunk.GetNativeArray(ref PositionType);
+                var chunkRotations = chunk.GetNativeArray(ref RotationType);
+#endif
+                var chunkVelocities = chunk.GetNativeArray(ref VelocityType);
 
-                var entityEnumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.ChunkEntityCount);
+                var entityEnumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
                 var isEntitySimulated = chunk.GetEnabledMask(ref SimulateType);
                 while (entityEnumerator.NextEntityIndex(out var i))
                 {
@@ -145,13 +173,20 @@ namespace Unity.Physics.Systems
                     //we should not export the velocity, position and orientation.
                     //Technically would be better to add the Simulate component to the query. But this will break other jobs
                     //that can't handle the enable mask. So we are doing a check here on an entity by entity basis.
-                    if(!isEntitySimulated[i])
+                    if (!isEntitySimulated[i])
                         continue;
                     int motionIndex = entityStartIndex + i;
                     MotionData md = MotionDatas[motionIndex];
                     RigidTransform worldFromBody = math.mul(md.WorldFromMotion, math.inverse(md.BodyFromMotion));
+#if !ENABLE_TRANSFORM_V1
+                    var localToWorldTransform = chunkLocalTransforms[i];
+                    localToWorldTransform.Position = worldFromBody.pos;
+                    localToWorldTransform.Rotation = worldFromBody.rot;
+                    chunkLocalTransforms[i] = localToWorldTransform;
+#else
                     chunkPositions[i] = new Translation { Value = worldFromBody.pos };
                     chunkRotations[i] = new Rotation { Value = worldFromBody.rot };
+#endif
                     chunkVelocities[i] = new PhysicsVelocity
                     {
                         Linear = MotionVelocities[motionIndex].LinearVelocity,

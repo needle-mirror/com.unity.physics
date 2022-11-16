@@ -1,5 +1,4 @@
 using System;
-using System.Runtime.CompilerServices;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
@@ -19,7 +18,6 @@ namespace Unity.Physics.Authoring
             m_BeginColliderBakingSystem.BlobComputationContext;
 
         EntityQuery m_RebakedRootQuery;
-        EntityQuery m_RebakedCollidersQuery;
         EntityQuery m_RootQuery;
         EntityQuery m_ColliderSourceQuery;
         ComponentTypeSet m_StaticCleanUpTypes;
@@ -31,28 +29,17 @@ namespace Unity.Physics.Authoring
             m_RebakedRootQuery = GetEntityQuery(new EntityQueryDesc
             {
                 All = new[] { ComponentType.ReadOnly<PhysicsRootBaked>() },
-                Options = EntityQueryOptions.IncludePrefab
-            });
-            m_RebakedCollidersQuery = GetEntityQuery(new EntityQueryDesc
-            {
-                All = new[] { ComponentType.ReadOnly<PhysicsColliderAuthoringData>(), ComponentType.ReadOnly<PhysicsColliderBakedData>() },
-                Options = EntityQueryOptions.IncludePrefab
+                Options = EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities
             });
             m_RootQuery = GetEntityQuery(new EntityQueryDesc
             {
                 All = new[] { ComponentType.ReadOnly<PhysicsCompoundData>() },
-                Options = EntityQueryOptions.IncludePrefab
+                Options = EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities
             });
             m_ColliderSourceQuery = GetEntityQuery(new EntityQueryDesc
             {
                 All = new[] { ComponentType.ReadOnly<PhysicsColliderBakedData>() },
-                Options = EntityQueryOptions.IncludePrefab
-            });
-
-            GetEntityQuery(new EntityQueryDesc
-            {
-                All = new[] { ComponentType.ReadOnly<PhysicsCompoundData>() },
-                Options = EntityQueryOptions.IncludePrefab
+                Options = EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities
             });
 
             m_StaticCleanUpTypes = new ComponentTypeSet(
@@ -95,9 +82,9 @@ namespace Unity.Physics.Authoring
             }
 
             // Collect all the root entities that didn't rebake but any of their colliders did
-            if (m_RebakedCollidersQuery.CalculateChunkCount() > 0)
+            if (m_ColliderSourceQuery.CalculateChunkCount() > 0)
             {
-                using var rebakedColliders = m_RebakedCollidersQuery.ToComponentDataArray<PhysicsColliderBakedData>(Allocator.TempJob);
+                using var rebakedColliders = m_ColliderSourceQuery.ToComponentDataArray<PhysicsColliderBakedData>(Allocator.TempJob);
                 foreach (var collider in rebakedColliders)
                 {
                     if (!rootEntitiesLookUp.ContainsKey(collider.BodyEntity) && m_RootQuery.Matches(collider.BodyEntity))
@@ -138,7 +125,7 @@ namespace Unity.Physics.Authoring
                             }
                         });
                     }
-                }).WithEntityQueryOptions(EntityQueryOptions.IncludePrefab)
+                }).WithEntityQueryOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)
                     .WithReadOnly(blobComputationContext)
                     .WithReadOnly(rootEntitiesLookUp)
                     .ScheduleParallel(default);
@@ -239,7 +226,7 @@ namespace Unity.Physics.Authoring
                     .WithReadOnly(blobComputationContext)
                     .WithReadOnly(rootEntitiesLookUp)
                     .WithReadOnly(childrenPerRoot)
-                    .WithEntityQueryOptions(EntityQueryOptions.IncludePrefab)
+                    .WithEntityQueryOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)
                     .ScheduleParallel(childrenGatheringJobHandle);
 
             Profiler.EndSample();
@@ -279,7 +266,7 @@ namespace Unity.Physics.Authoring
                     }
                 }).WithReadOnly(deduplicationHashMap)
                     .WithReadOnly(deferredCompoundResults)
-                    .WithEntityQueryOptions(EntityQueryOptions.IncludePrefab)
+                    .WithEntityQueryOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)
                     .ScheduleParallel(blobCalculationJobHandle);
 
             // Update the blob assets relation to the authoring component
@@ -301,7 +288,7 @@ namespace Unity.Physics.Authoring
                     }
                 }).WithReadOnly(deduplicationHashMap)
                     .WithReadOnly(deferredCompoundResults)
-                    .WithEntityQueryOptions(EntityQueryOptions.IncludePrefab)
+                    .WithEntityQueryOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)
                     .Schedule(blobCalculationJobHandle);
 
             var combinedJobHandle = JobHandle.CombineDependencies(blobContextUpdateJobHandle, deferredResolutionJobHandle);
@@ -319,7 +306,11 @@ namespace Unity.Physics.Authoring
                         // There was a StaticOptimizeEntity root that was not used, so we need to clean up the added components
                         manager.RemoveComponent(entity, m_StaticCleanUpTypes);
                     }
-                }).WithStructuralChanges().WithReadOnly(childrenPerRoot).Run();
+                })
+                .WithEntityQueryOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)
+                .WithStructuralChanges()
+                .WithReadOnly(childrenPerRoot)
+                .Run();
 
             deferredCompoundResults.Dispose(combinedJobHandle);
             deduplicationHashMap.Dispose(combinedJobHandle);

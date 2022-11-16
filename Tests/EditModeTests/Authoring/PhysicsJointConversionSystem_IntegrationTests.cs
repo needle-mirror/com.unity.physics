@@ -62,7 +62,7 @@ namespace Unity.Physics.Tests.Authoring
                         if (constraints[j].Type == ConstraintType.Linear)
                         {
                             Assume.That(constraints[j].MaxImpulse, Is.EqualTo(new float3(legacyJoint.breakForce * Time.fixedDeltaTime)));
-                            Assume.That(constraints[j].EnableImpulseEvents, Is.EqualTo(true));
+                            Assume.That(constraints[j].ShouldRaiseImpulseEvents, Is.EqualTo(true));
                         }
                     }
                 }
@@ -86,7 +86,7 @@ namespace Unity.Physics.Tests.Authoring
                         if (constraints[j].Type == ConstraintType.Angular)
                         {
                             Assume.That(constraints[j].MaxImpulse, Is.EqualTo(new float3(legacyJoint.breakTorque * Time.fixedDeltaTime)));
-                            Assume.That(constraints[j].EnableImpulseEvents, Is.EqualTo(true));
+                            Assume.That(constraints[j].ShouldRaiseImpulseEvents, Is.EqualTo(true));
                         }
                     }
                 }
@@ -103,7 +103,7 @@ namespace Unity.Physics.Tests.Authoring
                 {
                     var constraints = joints[i].GetConstraints();
                     for (int j = 0; j < constraints.Length; ++j)
-                        Assume.That(constraints[j].EnableImpulseEvents, Is.EqualTo(false));
+                        Assume.That(constraints[j].ShouldRaiseImpulseEvents, Is.EqualTo(false));
                 }
             }, count);
         }

@@ -63,8 +63,8 @@ namespace Unity.Physics.GraphicsIntegration
             public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
                 Assert.IsFalse(useEnabledMask);
-                NativeArray<PhysicsVelocity> physicsVelocities = chunk.GetNativeArray(PhysicsVelocityType);
-                NativeArray<PhysicsGraphicalSmoothing> physicsGraphicalSmoothings = chunk.GetNativeArray(PhysicsGraphicalSmoothingType);
+                NativeArray<PhysicsVelocity> physicsVelocities = chunk.GetNativeArray(ref PhysicsVelocityType);
+                NativeArray<PhysicsGraphicalSmoothing> physicsGraphicalSmoothings = chunk.GetNativeArray(ref PhysicsGraphicalSmoothingType);
                 unsafe
                 {
                     UnsafeUtility.MemCpyStride(

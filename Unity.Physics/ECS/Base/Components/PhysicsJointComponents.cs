@@ -143,9 +143,58 @@ namespace Unity.Physics
         internal Constraint A;
         internal Constraint B;
         internal Constraint C;
+
         /// <summary>   The number of constraints currently stored. </summary>
         public byte Length;
         internal const byte Capacity = 3;
+
+
+        /// <summary>
+        /// Set the sequence of <see cref="Constraint"/>s to this constraint block.
+        /// </summary>
+        ///
+        /// <param name="constraints"> A sequence of <see cref="Constraint"/>s to apply in order. </param>
+        internal void SetConstraints(FixedList512Bytes<Constraint> constraints)
+        {
+            SafetyChecks.CheckLengthSmallerThanCapacityAndThrow(constraints.Length, ConstraintBlock3.Capacity);
+            if (constraints.Length > 0)
+            {
+                for (var i = 0; i < constraints.Length; ++i)
+                {
+                    var limits = new FloatRange(constraints[i].Min, constraints[i].Max).Sorted();
+                    constraints.ElementAt(i).Min = limits.Min;
+                    constraints.ElementAt(i).Max = limits.Max;
+                }
+                unsafe
+                {
+                    ref var constraintsRef = ref this;
+                    ref var listRef = ref constraints.ElementAt(0);
+                    fixed(void* constraintPtr = &constraintsRef, constraintListPtr = &listRef)
+                    {
+                        UnsafeUtility.MemCpy(constraintPtr, constraintListPtr, constraints.Length * sizeof(Constraint));
+                    }
+                    Length = (byte)constraints.Length;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Returns a list representation of constraints in this block.
+        /// </summary>
+        /// <returns> The constraints. </returns>
+        internal  FixedList512Bytes<Constraint> GetConstraints()
+        {
+            unsafe
+            {
+                FixedList512Bytes<Constraint> temp = default;
+                ref var self = ref this;
+                fixed(void* ptr = &self)
+                {
+                    temp.AddRange(ptr, Length);
+                }
+                return temp;
+            }
+        }
     }
 
     /// <summary>
@@ -237,15 +286,34 @@ namespace Unity.Physics
         [Obsolete("This property is only included to display data in the Entity Inspector. It should not be used.", true)]
         IEnumerable<Constraint> Constraints => GetConstraints().ToArray();
 
-        internal unsafe Constraint this[int constraintIndex]
+        /// <summary> Get number of <see cref="Constraint"/> atoms in this joint.</summary>
+        /// <returns> Number of constraint atoms in this joint.</returns>
+        public int GetConstraintCount() => m_Constraints.Length;
+
+        /// <summary>
+        /// Access to <see cref="Constraint"/> atom with provided index.
+        /// </summary>
+        ///
+        /// <param name="constraintIndex"> Index of the constraint atom.</param>
+        public unsafe Constraint this[int constraintIndex]
         {
             get
+            {
+                SafetyChecks.CheckIndexAndThrow(constraintIndex, GetConstraintCount());
+                ref var self = ref m_Constraints;
+                fixed(void* ptr = &self)
+                {
+                    return ((Constraint*)ptr)[constraintIndex];
+                }
+            }
+            set
             {
                 SafetyChecks.CheckIndexAndThrow(constraintIndex, m_Constraints.Length);
                 ref var self = ref m_Constraints;
                 fixed(void* ptr = &self)
                 {
-                    return ((Constraint*)ptr)[constraintIndex];
+                    Constraint* constraintPtr = &(((Constraint*)ptr)[constraintIndex]);
+                    *constraintPtr = value;
                 }
             }
         }
@@ -256,48 +324,75 @@ namespace Unity.Physics
         ///
         /// <returns>   The constraints. </returns>
         public FixedList512Bytes<Constraint> GetConstraints()
+            => m_Constraints.GetConstraints();
+
+        /// <summary>
+        /// Set the sequence of <see cref="Constraint"/>s to apply between the two bodies.
+        /// </summary>
+        ///
+        /// <param name="constraints"> A sequence of <see cref="Constraint"/>s to apply in order. </param>
+        public void SetConstraints(FixedList512Bytes<Constraint> constraints)
         {
-            unsafe
+            m_Constraints = default;
+            m_Constraints.SetConstraints(constraints);
+            ++m_Version;
+        }
+
+        /// <summary>
+        /// Set the impulse event threshold of a constraint specified by constraint index.
+        /// If a selected constraint is a motor, this function will have no effect.
+        /// </summary>
+        /// <param name="constraintIndex"> Constraint index (a value between 0 and 2). </param>
+        /// <param name="impulseEventThreshold"> Impulse event threshold. </param>
+        public void SetImpulseEventThresholdSingleConstraint(int constraintIndex, float3 impulseEventThreshold)
+        {
+            SafetyChecks.CheckIndexAndThrow(constraintIndex, m_Constraints.Length, 0);
+            Constraint constraint = this[constraintIndex];
+            if (constraint.IsNonMotorizedConstraint)
             {
-                FixedList512Bytes<Constraint> temp = default;
-                ref var self = ref m_Constraints;
-                fixed(void* ptr = &self)
-                {
-                    temp.AddRange(ptr, m_Constraints.Length);
-                }
-                return temp;
+                constraint.MaxImpulse = impulseEventThreshold;
+                this[constraintIndex] = constraint;
             }
         }
 
         /// <summary>
-        /// Set the sequence of <see cref="Constraint"/> atoms to apply between the two bodies.
+        /// Set the impulse event threshold for all eligible constraints (non-motorized ones) in this joint.
         /// </summary>
-        ///
-        /// <param name="constraints"> A sequence of <see cref="Constraint"/> atoms to apply in order. </param>
-        public void SetConstraints(FixedList512Bytes<Constraint> constraints)
+        /// <param name="impulseEventThreshold"> Impulse event threshold. </param>
+        public void SetImpulseEventThresholdAllConstraints(float3 impulseEventThreshold)
         {
-            SafetyChecks.CheckLengthSmallerThanCapacityAndThrow(constraints.Length, ConstraintBlock3.Capacity);
-            m_Constraints = default;
-            if (constraints.Length > 0)
+            for (int i = 0; i < m_Constraints.Length; i++)
             {
-                for (var i = 0; i < constraints.Length; ++i)
+                Constraint constraint = this[i];
+                if (constraint.IsNonMotorizedConstraint)
                 {
-                    var limits = new FloatRange(constraints[i].Min, constraints[i].Max).Sorted();
-                    constraints.ElementAt(i).Min = limits.Min;
-                    constraints.ElementAt(i).Max = limits.Max;
-                }
-                unsafe
-                {
-                    ref var constraintsRef = ref m_Constraints;
-                    ref var listRef = ref constraints.ElementAt(0);
-                    fixed(void* constraintPtr = &constraintsRef, constraintListPtr = &listRef)
-                    {
-                        UnsafeUtility.MemCpy(constraintPtr, constraintListPtr, constraints.Length * sizeof(Constraint));
-                    }
-                    m_Constraints.Length = (byte)constraints.Length;
+                    constraint.MaxImpulse = impulseEventThreshold;
+                    this[i] = constraint;
                 }
             }
-            ++m_Version;
+        }
+
+        /// <summary>
+        /// Set the impulse event threshold for all eligible constraints (non-motorized ones) in this joint.
+        /// </summary>
+        /// <param name="impulseEventLinearThreshold"> Impulse event threshold for all linear constraints. </param>
+        /// <param name="impulseEventAngularThreshold"> Impulse event threshold for all angular constraints. </param>
+        public void SetImpulseEventThresholdAllConstraints(float3 impulseEventLinearThreshold, float3 impulseEventAngularThreshold)
+        {
+            for (int i = 0; i < m_Constraints.Length; i++)
+            {
+                Constraint constraint = this[i];
+                if (constraint.Type == ConstraintType.Linear)
+                {
+                    constraint.MaxImpulse = impulseEventLinearThreshold;
+                }
+                else if (constraint.Type == ConstraintType.Angular)
+                {
+                    constraint.MaxImpulse = impulseEventAngularThreshold;
+                }
+
+                this[i] = constraint;
+            }
         }
 
         #region Constructors
@@ -431,17 +526,32 @@ namespace Unity.Physics
         internal const int k_PrismaticDistanceOnAxisIndex = 1;
 
         /// <summary>
-        /// Create a <see cref="JointType.RotationalMotor"/> joint. This is an angular motor that will drive towards a
-        /// target angle, about a specified axis.
+        /// Create a <see cref="JointType.RotationalMotor"/> joint. This is an angular motor that will drive towards
+        /// the specified target angle, about an axis.
         /// </summary>
-        /// <param name="bodyAFromJoint">Specifies the anchor point, axis of rotation, and rest orientation in the space of body A.</param>
-        /// <param name="bodyBFromJoint">Specifies the target point, axis of alignment, and reference orientation in the space of body B.</param>
-        /// <param name="target">The target rotation along the normalized axis of rotation, in radians. It can be
-        /// calculated as target = targetInRadians * math.normalize(AxisOfRotation), where the targetInRadians is a
-        /// magnitude.</param>
+        /// <param name="bodyAFromJoint">Specifies the pivot point and axis of rotation in the space of body A.
+        ///  This is the body that has the motor. The BodyFrame parameters should be set as follows:
+        ///  The Position should be set to the pivot position. The Pivot Position is an offset from the center of the
+        ///   body with the motor (bodyA).
+        ///  The Axis is the axis that bodyA will pivot about. Value must be normalized.
+        ///  The Perpendicular Axis must be perpendicular to Axis. Value must be normalized. </param>
+        /// <param name="bodyBFromJoint">Specifies the pivot point and axis of alignment in the space of bodyB.
+        ///  This is the Connected Body. If no body is connected, then bodyB is the World and data should be in world-space. It is
+        ///  recommended to 'Auto Set Connected' this body to bodyA such that they share a pivot point (code is not
+        ///  supported for this not to be enabled) and should be calculated using the following transformation:
+        ///  RigidTransform bFromA = math.mul(math.inverse(worldFromB), worldFromA). The BodyFrame parameters should be
+        ///  set as follows:
+        ///  The Position should be calculated as math.transform(bFromA, PivotPosition); where PivotPosition is the
+        ///   translation in bodyAFromJoint. This is the position of the Pivot relative to the Connected Body.
+        ///  The Axis should be calculated as math.mul(bFromA.rot, axis), where axis is the Axis of bodyAFromJoint. This
+        ///   is the translation of the Axis relative to the Connected Body. Value must be normalized.
+        ///  The Perpendicular Axis should be calculated as perpendicular to Axis (for bodyB). Value must be normalized. </param>
+        /// <param name="target">The target rotation around Joint's Axis, in radians.</param>
+        /// <param name="maxImpulseOfMotor">The magnitude of the max impulse that a motor constraint can exert in a single
+        /// step. This is a motor specific usage that does not represent the impulse threshold to break the motor.</param>
         /// <returns>   A Constraint. </returns>
         public static PhysicsJoint CreateRotationalMotor(
-            BodyFrame bodyAFromJoint, BodyFrame bodyBFromJoint, float3 target
+            BodyFrame bodyAFromJoint, BodyFrame bodyBFromJoint, float target, float maxImpulseOfMotor = Constraint.DefaultMaxImpulse
         ) =>
             new PhysicsJoint
         {
@@ -451,7 +561,7 @@ namespace Unity.Physics
             m_Constraints = new ConstraintBlock3
             {
                 Length = 3,
-                A = Constraint.MotorTwist(target),
+                A = Constraint.MotorTwist(target, math.abs(maxImpulseOfMotor)),
                 B = Constraint.Hinge(0),
                 C = Constraint.BallAndSocket()
             }
@@ -459,17 +569,31 @@ namespace Unity.Physics
 
         /// <summary>
         /// Create a <see cref="JointType.AngularVelocityMotor"/> joint. This is an angular motor that will spin around
-        /// a specified axis at a constant target velocity
+        /// an axis at the specified constant target velocity.
         /// </summary>
-        /// <param name="bodyAFromJoint">Specifies the anchor point, axis of rotation, and rest orientation in the space of body A.</param>
-        /// <param name="bodyBFromJoint">Specifies the target point, axis of alignment, and reference orientation in the space of body B.</param>
-        /// <param name="targetVelocity">The target angular velocity, in radians/s. This vector is oriented along the
-        /// normalized hinge axis and can be calculated as
-        /// math.radians(TargetSpeed) * math.normalize(AxisOfRotation), where TargetSpeed is the magnitude of the speed
-        /// in degrees/s and AxisOfRotation is a normalized float3 representing the hinge axis</param>
+        /// <param name="bodyAFromJoint">Specifies the pivot point and axis of rotation in the space of body A.
+        ///  This is the body that has the motor. The BodyFrame parameters should be set as follows:
+        ///  The Position should be set to the pivot position. The Pivot Position is an offset from the center of the
+        ///   body with the motor (bodyA).
+        ///  The Axis is the axis that bodyA will pivot about. Value must be normalized.
+        ///  The Perpendicular Axis must be perpendicular to Axis. Value must be normalized. </param>
+        /// <param name="bodyBFromJoint">Specifies the pivot point and axis of rotation in the space of bodyB.
+        ///  This is the Connected Body. If no body is connected, then bodyB is the World and data should be in world-space. It is
+        ///  recommended to 'Auto Set Connected' this body to bodyA such that they share a pivot point (code is not
+        ///  supported for this not to be enabled) and should be calculated using the following transformation:
+        ///  RigidTransform bFromA = math.mul(math.inverse(worldFromB), worldFromA). The BodyFrame parameters should be
+        ///  set as follows:
+        /// The Position should be calculated as math.transform(bFromA, PivotPosition); where PivotPosition is the
+        ///   translation in bodyAFromJoint. This is the position of the Pivot relative to the Connected Body.
+        ///  The Axis should be calculated as math.mul(bFromA.rot, axis), where axis is the Axis of bodyAFromJoint. This
+        ///   is the translation of the Axis relative to the Connected Body. Value must be normalized.
+        ///  The Perpendicular Axis should be calculated as perpendicular to Axis (for bodyB). Value must be normalized. </param>
+        /// <param name="targetVelocity">The target angular velocity around Joint's Axis, in radians/s.</param>
+        /// <param name="maxImpulseOfMotor">The magnitude of the max impulse that a motor constraint can exert in a single
+        /// step. This is a motor specific usage that does not represent the impulse threshold to break the motor.</param>
         /// <returns>   A Constraint. </returns>
         public static PhysicsJoint CreateAngularVelocityMotor(
-            BodyFrame bodyAFromJoint, BodyFrame bodyBFromJoint, float3 targetVelocity
+            BodyFrame bodyAFromJoint, BodyFrame bodyBFromJoint, float targetVelocity, float maxImpulseOfMotor = Constraint.DefaultMaxImpulse
         ) =>
             new PhysicsJoint
         {
@@ -479,7 +603,7 @@ namespace Unity.Physics
             m_Constraints = new ConstraintBlock3
             {
                 Length = 3,
-                A = Constraint.AngularVelocityMotor(targetVelocity),
+                A = Constraint.AngularVelocityMotor(targetVelocity, math.abs(maxImpulseOfMotor)),
                 B = Constraint.Hinge(0),
                 C = Constraint.BallAndSocket()
             }
@@ -510,17 +634,33 @@ namespace Unity.Physics
         };
 
         /// <summary>
-        /// Create a PositionMotor joint. This is a linear motor that drives towards a
-        /// target position.
+        /// Create a PositionMotor joint. This is a motorized prismatic joint that drives bodies toward the specified
+        /// relative target position, along one axis.
         /// </summary>
-        /// <param name="bodyAFromJoint">Specifies the anchor point and axis of rotation in the space of body A.</param>
-        /// <param name="bodyBFromJoint">Specifies the target point and axis of alignment in the space of body B.</param>
-        /// <param name="target">The target position. This is the position the motor will be driving towards. It should
-        /// be calculated as TargetDistance * math.normalize(DirectionOfMovement), where DirectionOfMovement is a float3
-        /// representing the vector direction of the motor.</param>
+        /// <param name="bodyAFromJoint">Specifies the anchor point and axis of translation of bodyA. This is the body
+        ///  that has the motor. The BodyFrame parameters should be set as follows:
+        ///  The Position should be set to the anchor position. The Anchor Position is an offset from the center of the
+        ///   body with the motor (bodyA), and represents the anchor point of translation.
+        ///  The Axis is the normalized direction of the motor rotated relative to the orientation of bodyA. Value must
+        ///   be normalized.
+        ///  The Perpendicular Axis must be perpendicular to Axis. Value must be normalized. </param>
+        /// <param name="bodyBFromJoint">Specifies the pivot point and axis of alignment in the space of bodyB.
+        ///  This is the Connected Body. If no body is connected, then bodyB is the World and data should be in world-space. It is
+        ///  recommended to 'Auto Set Connected' this body to bodyA such that they share a pivot point (code is not
+        ///  supported for this not to be enabled) and should be calculated using the following transformation:
+        ///  RigidTransform bFromA = math.mul(math.inverse(worldFromB), worldFromA). The BodyFrame parameters should be
+        ///  set as follows:
+        ///  The Position should be calculated as math.transform(bFromA, AnchorPosition); where AnchorPosition is the
+        ///   translation in bodyAFromJoint. This is the position of the Anchor relative to the Connected Body.
+        ///  The Axis should be calculated as math.mul(bFromA.rot, axis), where axis is the Axis of bodyAFromJoint. This
+        ///   is the translation of the Axis relative to the Connected Body. Value must be normalized.
+        ///  The Perpendicular Axis should be calculated as perpendicular to Axis (for bodyB). Value must be normalized. </param>
+        /// <param name="target">The target distance between the bodies' anchor points, along the Joint's Axis. This is the position the motor will be driving towards.</param>
+        /// <param name="maxImpulseOfMotor">The magnitude of the max impulse that a motor constraint can exert in a single
+        /// step. This is a motor specific usage that does not represent the impulse threshold to break the motor.</param>
         /// <returns>   A Constraint. </returns>
         public static PhysicsJoint CreatePositionMotor(
-            BodyFrame bodyAFromJoint, BodyFrame bodyBFromJoint, float3 target
+            BodyFrame bodyAFromJoint, BodyFrame bodyBFromJoint, float target, float maxImpulseOfMotor = Constraint.DefaultMaxImpulse
         ) =>
             new PhysicsJoint
         {
@@ -530,24 +670,41 @@ namespace Unity.Physics
             m_Constraints = new ConstraintBlock3
             {
                 Length = 3,
-                A = Constraint.MotorPlanar(target),
+                A = Constraint.MotorPlanar(target, math.abs(maxImpulseOfMotor)),
                 B = Constraint.FixedAngle(),
                 C = Constraint.Cylindrical(0, float2.zero)
             }
         };
 
         /// <summary>
-        /// Create a <see cref="JointType.LinearVelocityMotor"/> joint. This is a linear motor that will drive at a
-        /// constant target velocity, in a specified direction.
+        /// Create a <see cref="JointType.LinearVelocityMotor"/> joint. This is a motorized prismatic joint type that
+        /// will drive to a constant target relative velocity, in a specified direction.
         /// </summary>
-        /// <param name="bodyAFromJoint">Specifies the anchor point and axis of rotation in the space of body A.</param>
-        /// <param name="bodyBFromJoint">Specifies the target point and axis of alignment in the space of body B.</param>
-        /// <param name="target">The target velocity. This is the velocity vector the motor will be driving towards.
-        /// It should be calculated as TargetSpeed * math.normalize(DirectionOfMovement), where: TargetSpeed is the
-        /// magnitude of the motor's speed, DirectionOfMovement is a float3 representing the vector direction of the motor. </param>
+        /// <param name="bodyAFromJoint">Specifies the anchor point and axis of rotation in the space of bodyA. This is
+        ///  the body that has the motor. The BodyFrame parameters should be set as follows:
+        ///  The Position should be set to the anchor position. The Anchor Position is an offset from the center of the
+        ///   body with the motor (bodyA), representing the anchor point of translation.
+        ///  The Axis is the normalized direction of the motor rotated relative to the orientation of bodyA. Value must
+        ///   be normalized.
+        ///  The Perpendicular Axis should be calculated as perpendicular to Axis. Value must be normalized. </param>
+        /// <param name="bodyBFromJoint">Specifies the pivot point and axis of alignment in the space of bodyB.
+        ///  This is the Connected Body. If no body is connected, then bodyB is the World and data should be in world-space. It is
+        ///  recommended to 'Auto Set Connected' this body to bodyA such that they share a pivot point (code is not
+        ///  supported for this not to be enabled) and should be calculated using the following transformation:
+        ///  RigidTransform bFromA = math.mul(math.inverse(worldFromB), worldFromA). The BodyFrame parameters should be
+        ///  set as follows:
+        ///  The Position should be calculated as math.transform(bFromA, AnchorPosition); where AnchorPosition is the
+        ///   translation in bodyAFromJoint. This is the position of the Anchor relative to the Connected Body.
+        ///  The Axis should be calculated as math.mul(bFromA.rot, axis), where axis is the Axis of bodyAFromJoint. This
+        ///   is the translation of the Axis relative to the Connected Body. Value must be normalized.
+        ///  The Perpendicular Axis should be calculated as perpendicular to Axis (for bodyB). Value must be normalized. </param>
+        /// <param name="target">The target velocity, in m/s. The motor will drive the bodies to this relative speed,
+        /// along the Joint's Axis.</param>
+        /// <param name="maxImpulseOfMotor">The magnitude of the max impulse that a motor constraint can exert in a single
+        /// step. This is a motor specific usage that does not represent the impulse threshold to break the motor.</param>
         /// <returns>   A Constraint. </returns>
         public static PhysicsJoint CreateLinearVelocityMotor(
-            BodyFrame bodyAFromJoint, BodyFrame bodyBFromJoint, float3 target
+            BodyFrame bodyAFromJoint, BodyFrame bodyBFromJoint, float target, float maxImpulseOfMotor = Constraint.DefaultMaxImpulse
         ) =>
             new PhysicsJoint
         {
@@ -557,7 +714,7 @@ namespace Unity.Physics
             m_Constraints = new ConstraintBlock3()
             {
                 Length = 2,
-                A = Constraint.LinearVelocityMotor(target),
+                A = Constraint.LinearVelocityMotor(target, math.abs(maxImpulseOfMotor)),
                 B = Constraint.FixedAngle()
             }
         };
@@ -655,8 +812,9 @@ namespace Unity.Physics
                         Type = ConstraintType.Linear,
                         Min = 0,
                         Max = 0,
+                        MaxImpulse = Constraint.DefaultMaxImpulse,
                         SpringFrequency = Constraint.DefaultSpringFrequency,
-                        SpringDamping = Constraint.DefaultSpringDamping
+                        SpringDamping = Constraint.DefaultSpringDamping,
                     },
                     B = new Constraint
                     {
@@ -664,6 +822,7 @@ namespace Unity.Physics
                         Type = ConstraintType.Angular,
                         Min = 0,
                         Max = 0,
+                        MaxImpulse = Constraint.DefaultMaxImpulse,
                         SpringFrequency = Constraint.DefaultSpringFrequency,
                         SpringDamping = Constraint.DefaultSpringDamping
                     }

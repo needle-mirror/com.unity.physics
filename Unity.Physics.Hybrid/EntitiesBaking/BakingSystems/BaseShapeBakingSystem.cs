@@ -51,7 +51,7 @@ namespace Unity.Physics.Authoring
             m_ShapeQuery = GetEntityQuery(new EntityQueryDesc
             {
                 All = new[] { ComponentType.ReadOnly<PhysicsColliderAuthoringData>() },
-                Options = EntityQueryOptions.IncludePrefab
+                Options = EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities
             });
             m_BeginColliderBakingSystem = World.GetOrCreateSystemManaged<BeginColliderBakingSystem>();
             meshArray = new List<UnityMesh>();
@@ -59,7 +59,7 @@ namespace Unity.Physics.Authoring
             m_MeshBlobQuery = GetEntityQuery(new EntityQueryDesc
             {
                 All = new[] { ComponentType.ReadOnly<PhysicsColliderAuthoringData>(), ComponentType.ReadOnly<PhysicsMeshAuthoringData>() },
-                Options = EntityQueryOptions.IncludePrefab
+                Options = EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities
             });
         }
 
@@ -76,12 +76,12 @@ namespace Unity.Physics.Authoring
             // It would be better to use a native container, but AcquireReadOnlyMeshData doesn't accept it
             meshArray.Clear();
             int meshCount = 0;
-            Entities.ForEach((ref PhysicsMeshAuthoringData meshBakingData) =>
+            foreach (var meshBakingData in SystemAPI.Query<RefRW<PhysicsMeshAuthoringData>>().WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities))
             {
-                meshArray.Add(meshBakingData.Mesh.Value);
-                meshBakingData.MeshArrayIndex = meshCount;
+                meshArray.Add(meshBakingData.ValueRW.Mesh.Value);
+                meshBakingData.ValueRW.MeshArrayIndex = meshCount;
                 ++meshCount;
-            }).WithEntityQueryOptions(EntityQueryOptions.IncludePrefab).WithName("ExtractMeshes").WithoutBurst().Run();
+            }
             var meshDataArray = UnityEditor.MeshUtility.AcquireReadOnlyMeshData(meshArray);
             Profiler.EndSample();
 
@@ -105,7 +105,7 @@ namespace Unity.Physics.Authoring
                 instance.Hash = hash;
                 shapeData.Instance = instance;
                 colliderData.ShapeComputationalData = shapeData;
-            }).WithEntityQueryOptions(EntityQueryOptions.IncludePrefab)
+            }).WithEntityQueryOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)
                     .WithName("HashMeshes")
                     .WithReadOnly(meshDataArray)
                     .ScheduleParallel(default);
@@ -129,7 +129,7 @@ namespace Unity.Physics.Authoring
                         instance.Hash = hash;
                         shapeData.Instance = instance;
                         colliderData.ShapeComputationalData = shapeData;
-                    }).WithEntityQueryOptions(EntityQueryOptions.IncludePrefab)
+                    }).WithEntityQueryOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)
                     .WithName("HashBasics")
                     .ScheduleParallel(meshHashesJobHandle);
             Profiler.EndSample();
@@ -163,7 +163,7 @@ namespace Unity.Physics.Authoring
                 {
                     colliderData.RecalculateBlob = false;
                 }
-            }).WithEntityQueryOptions(EntityQueryOptions.IncludePrefab).WithName("Deduplicate").Schedule(hashesJobHandle);
+            }).WithEntityQueryOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities).WithName("Deduplicate").Schedule(hashesJobHandle);
             Profiler.EndSample();
 
             // 4) Calculate blobs
@@ -206,7 +206,7 @@ namespace Unity.Physics.Authoring
                                 ColliderBlobAsset = CalculateBasicBlobAsset(ref shapeData)
                             };
                         }
-                    }).WithEntityQueryOptions(EntityQueryOptions.IncludePrefab)
+                    }).WithEntityQueryOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)
                     .WithName("BasicBlobs")
                     .WithNativeDisableParallelForRestriction(generatedDataArray)
                     .ScheduleParallel(meshBlobsJobHandle);

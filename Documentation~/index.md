@@ -1,23 +1,40 @@
-About Unity Physics
-======
+# Unity Physics overview
 
-Use the Unity Physics package to benefit from a deterministic rigid body dynamics system and spatial query system that uses the Unity data oriented tech stack (DOTS).
+The Unity Physics package, part of Unity's Data-Oriented Technology Stack (DOTS), provides a deterministic rigid body dynamics system and spatial query system.
 
-## Preview package
+See the [Unity Physics Samples](https://github.com/Unity-Technologies/EntityComponentSystemSamples/tree/master/PhysicsSamples) for introductory material, including tutorials, samples, and videos.
 
-This package is available as a preview, so it is not ready for production use. The features and documentation in this package might change before it is verified for release.
+![](images/entities-splash-image.png)
 
-## Installation
+## Package installation
 
-To install this package, follow the instructions in the [Package Manager documentation](https://docs.unity3d.com/Manual/upm-ui-install.html).
+To use the Unity Physics package, you must have Unity version 2022.2.0b8 and later installed.
 
-## Requirements
+To install the package, open the Package Manager window (**Window &gt; Package Manager**) and perform one of the following options:
 
-This version of Unity Physics is compatible with the following versions of the Unity Editor:
-* 2019.3 and later (recommended)
+* [Add the package by its name](xref:upm-ui-quick)
+* [Add the package from its Git URL](xref:upm-ui-giturl)
 
-## Overview
+## Known issues
 
-To get an overview of the Unity Physics system at a high level:
-* Read through the [Design Philosophy](design.md) and [Getting Started](getting_started.md) sections – and then further explore the concepts currently documented in the other sections.
-* Get and use the [Unity Physics Samples](https://github.com/Unity-Technologies/EntityComponentSystemSamples/blob/master/UnityPhysicsSamples/Documentation/samples.md) project, which includes use cases such as character controllers, ray cast driven cars, and examples of all the joints.
+* Handles Gizmos in the scene window do not follow physics bodies when sub scene is open during play mode time, this results with an incorrect respawning position after simulation. Either converting game objects to prefabs or close the sub scene before running the scene.
+* Physics colliders gizmos are not being displayed within a sub scene during the edit mode. Physics colliders are displayed outside sub scenes.
+* Compound collider gets created even if children are disabled in Editor's game object hierarchy.
+* Mesh collider types contacting results in a wrong behaviour by getting glued to each other as if they were joints.
+* Enabling the `Draw Collider` toggle button within the `Physics Debug Display` results in errors being displayed in the console window and breaking the scene.
+* Mesh collider simplification: if primitive scale is smaller than 0.018f, selecting entities in the scene view throws error.
+* Selecting entities in the scene view throws error “GetAllOverlapping failed”.
+* The rotational motor does not behave as expected in some cases (spins unexpectedly or does not move at all).
+* Adding a rigidbody to a game object in a sub scene, causes it to disappear from game and scene view.
+* Moving the child of a game object in a sub scene results in exceptions, when both parent and child have traditional colliders (e.g. box collider component) but no rigidbodies.
+* A GameObject with both non-uniform scale in its `Transform` and its `Physics Body`'s `Smoothing` value of anything other than `None` will throw the following error:
+  > InvalidOperationException: Baking error: Attempt to add duplicate component Unity.Transforms.PropagateLocalToWorld for Baker PhysicsBodyAuthoringBaker with authoring component PhysicsBodyAuthoring.  Previous component added by Baker PhysicsBodyAuthoringBaker
+  
+  This will be fixed before the final 1.0 release. In the meantime, the suggested workaround is to temporarily set `Smoothing` to `None`. This may result in visual choppiness when rendering entities, but they will still be simulated correctly.
+  
+## Additional resources
+
+* [Getting started](getting-started.md)
+* [Upgrade guide](upgrade-guide.md)
+* [What's new](whats-new.md)
+* [ECS packages](ecs-packages.md)

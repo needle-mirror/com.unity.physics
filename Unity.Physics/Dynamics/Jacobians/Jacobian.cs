@@ -34,7 +34,7 @@ namespace Unity.Physics
         /// <summary>   An enum constant representing the position motor jacobian. </summary>
         PositionMotor,
         /// <summary>   An enum constant representing the linear velocity motor jacobian. </summary>
-        LinearVelocityMotor
+        LinearVelocityMotor,
     }
 
     /// <summary>   Flags which enable optional Jacobian behaviors. </summary>
@@ -59,7 +59,11 @@ namespace Unity.Physics
         /// <summary>   A binary constant representing the enable collision events flag. Apples only to contact jacobian. </summary>
         EnableCollisionEvents = 1 << 6,
         /// <summary>   A binary constant representing the enable surface velocity flag. Apples only to contact jacobian. </summary>
-        EnableSurfaceVelocity = 1 << 7
+        EnableSurfaceVelocity = 1 << 7,
+
+        // Applies only to joint Jacobians
+        /// <summary>   A binary constant representing the enable impulse events options. Apples only to joint jacobian. </summary>
+        EnableImpulseEvents = 1 << 5
     }
 
     // Jacobian header, first part of each Jacobian in the stream
@@ -170,6 +174,11 @@ namespace Unity.Physics
 
         #region Helpers
 
+        public static bool IsNonMotorizedConstraint(JacobianType type)
+        {
+            return (type & (JacobianType.LinearLimit | JacobianType.AngularLimit1D | JacobianType.AngularLimit2D | JacobianType.AngularLimit3D)) != 0;
+        }
+
         public static int CalculateSize(JacobianType type, JacobianFlags flags, int numContactPoints = 0)
         {
             return UnsafeUtility.SizeOf<JacobianHeader>() +
@@ -205,7 +214,14 @@ namespace Unity.Physics
         private static int SizeOfModifierData(JacobianType type, JacobianFlags flags)
         {
             return SizeOfColliderKeys(type, flags) + SizeOfEntityPair(type, flags) + SizeOfSurfaceVelocity(type, flags) +
-                SizeOfMassFactors(type, flags);
+                SizeOfMassFactors(type, flags) + SizeOfImpulseEventSolverData(type, flags);
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        private static int SizeOfImpulseEventSolverData(JacobianType type, JacobianFlags flags)
+        {
+            return (IsNonMotorizedConstraint(type) && (flags & JacobianFlags.EnableImpulseEvents) != 0) ?
+                UnsafeUtility.SizeOf<ImpulseEventSolverData>() : 0;
         }
 
         private static int SizeOfContactPointData(JacobianType type, JacobianFlags flags, int numContactPoints = 0)
@@ -307,6 +323,15 @@ namespace Unity.Physics
             return ref UnsafeUtility.AsRef<ContactPoint>(ptr);
         }
 
+        public unsafe ref ImpulseEventSolverData AccessImpulseEventSolverData()
+        {
+            Assert.IsTrue(IsNonMotorizedConstraint(Type) && ((Flags & JacobianFlags.EnableImpulseEvents) != 0));
+
+            byte* ptr = (byte*)UnsafeUtility.AddressOf(ref this);
+            ptr += UnsafeUtility.SizeOf<JacobianHeader>() + SizeOfBaseJacobian(Type);
+            return ref UnsafeUtility.AsRef<ImpulseEventSolverData>(ptr);
+        }
+
         #endregion
     }
 
@@ -316,7 +341,8 @@ namespace Unity.Physics
         // This is the inverse function to CalculateConstraintTauAndDamping
         // Given a final Tau and Damping you can get the original Spring Frequency and Damping for a given solver step
         // See Unity.Physics.Constraint struct for discussion about default Spring Frequency and Damping values.
-        public static void CalculateSpringFrequencyAndDamping(float constraintTau, float constraintDamping, float timestep, int iterations, out float springFrequency, out float springDamping)
+        public static void CalculateSpringFrequencyAndDamping(float constraintTau, float constraintDamping,
+            float timestep, int iterations, out float springFrequency, out float springDamping)
         {
             int n = iterations;
             float h = timestep;
@@ -335,7 +361,8 @@ namespace Unity.Physics
         }
 
         // This is the inverse function to CalculateSpringFrequencyAndDamping
-        public static void CalculateConstraintTauAndDamping(float springFrequency, float springDamping, float timestep, int iterations, out float constraintTau, out float constraintDamping)
+        public static void CalculateConstraintTauAndDamping(float springFrequency, float springDamping, float timestep,
+            int iterations, out float constraintTau, out float constraintDamping)
         {
             // TODO
             // - it's a significant amount of work to calculate tau and damping.  They depend on step length, so they have to be calculated each step.
@@ -421,11 +448,13 @@ namespace Unity.Physics
         // If (predicted < initial) HAVE NOT met target = predicted * tau (ie: damping not used if target not met)
         public static float CalculateCorrection(float predictedError, float initialError, float tau, float damping)
         {
-            return math.max(predictedError - initialError, 0.0f) * damping + math.min(predictedError, initialError) * tau;
+            return math.max(predictedError - initialError, 0.0f) * damping +
+                math.min(predictedError, initialError) * tau;
         }
 
         // Integrate the relative orientation of a pair of bodies, faster and less memory than storing both bodies' orientations and integrating them separately
-        public static quaternion IntegrateOrientationBFromA(quaternion bFromA, float3 angularVelocityA, float3 angularVelocityB, float timestep)
+        public static quaternion IntegrateOrientationBFromA(quaternion bFromA, float3 angularVelocityA,
+            float3 angularVelocityB, float timestep)
         {
             quaternion dqA = Integrator.IntegrateAngularVelocity(angularVelocityA, timestep);
             quaternion dqB = Integrator.IntegrateAngularVelocity(angularVelocityB, timestep);
@@ -470,6 +499,86 @@ namespace Unity.Physics
                 new float3(offDiag.x, diag.y, offDiag.z),
                 new float3(offDiag.y, offDiag.z, diag.z)
             );
+        }
+
+        /// <summary>
+        /// Compute how much of an impulse can be applied, based on the impulses accumulated over several iterations, to
+        /// a motor based on some threshold. This method can be used for positive or negative checks. For 1D corrections.
+        /// </summary>
+        /// <param name="impulse"> The current calculated impulse that can be applied </param>
+        /// <param name="accumulatedImpulse"> The impulse that has been accumulated so far. This is passed by reference
+        /// and as an input argument does not include the current impulse. On completion, this will be the accumulated
+        /// impulse. This impulse will not exceed the define maximum impulse threshold. </param>
+        /// <param name="maxImpulseOfMotor"> A magnitude representing the maximum accumulated impulse that can be
+        /// applied. Value should not be negative </param>
+        /// <returns>  The impulse to be applied by a motor. </returns>
+        internal static float CapImpulse(float impulse, ref float accumulatedImpulse, float maxImpulseOfMotor)
+        {
+            SafetyChecks.CheckWithinThresholdAndThrow(accumulatedImpulse, maxImpulseOfMotor, "Accumulated Impulse");
+
+            float newAccImpulse = accumulatedImpulse + impulse;
+            if (newAccImpulse < -maxImpulseOfMotor)
+            {
+                // we want an impulse with which we have -maxImpulse = accumulatedImpulse + impulse
+                impulse = -maxImpulseOfMotor - accumulatedImpulse;
+                accumulatedImpulse = -maxImpulseOfMotor;
+            }
+            else if (newAccImpulse > maxImpulseOfMotor)
+            {
+                // we want an impulse with which we have maxImpulse = accumulatedImpulse + impulse
+                impulse = maxImpulseOfMotor - accumulatedImpulse;
+                accumulatedImpulse = maxImpulseOfMotor;
+            }
+            else
+            {
+                // impulse is within range
+                accumulatedImpulse += impulse;
+            }
+
+            return impulse;
+        }
+
+        /// <summary>
+        /// Compute how much of an impulse can be applied, based on the impulses accumulated over several iterations, to
+        /// a motor based on some threshold. This method can be used for positive or negative checks. For 3D corrections.
+        /// </summary>
+        /// <param name="impulse"> The current calculated impulse that can be applied </param>
+        /// <param name="accumulatedImpulse"> A parameter passed by reference. On input it is the impulse that has been
+        /// accumulated so far. This value does not include the current impulse. On completion, it is the accumulated
+        /// impulse. This impulse will not exceed the define maximum impulse threshold. </param>
+        /// <param name="maxImpulseOfMotor"> A magnitude representing the maximum accumulated impulse that can be
+        /// applied. Value should not be negative </param>
+        /// <returns>  The impulse to be applied by a motor. </returns>
+        internal static float3 CapImpulse(float3 impulse, ref float3 accumulatedImpulse, float maxImpulseOfMotor)
+        {
+            // Test Case A: Adding impulse to accumulation does not exceed threshold
+            if (math.length(accumulatedImpulse + impulse) < maxImpulseOfMotor)
+            {
+                accumulatedImpulse += impulse;
+                return impulse;
+            }
+
+            // Test Case D: Accumulation has reached threshold already
+            if (maxImpulseOfMotor - math.length(accumulatedImpulse) <= math.EPSILON)
+            {
+                accumulatedImpulse = maxImpulseOfMotor * math.normalizesafe(accumulatedImpulse); //set to max instead of input > corrective in case given wrong accumulation
+                return 0.0f;
+            }
+
+            // Cases when threshold is exceeded:
+            // Test Case C: No impulses accumulated and the impulse is larger than threshold:
+            if ((math.length(accumulatedImpulse) < math.EPSILON) && (math.length(impulse) - maxImpulseOfMotor > math.EPSILON))
+            {
+                impulse = maxImpulseOfMotor * math.normalizesafe(impulse); //cap impulse at threshold
+            }
+            else // Test Case B: accumulation + impulse will push over threshold, so apply the remaining impulse balance
+            {
+                impulse = (maxImpulseOfMotor * math.normalizesafe(accumulatedImpulse)) - accumulatedImpulse;
+            }
+
+            accumulatedImpulse += impulse;
+            
+            return impulse;
         }
     }
 

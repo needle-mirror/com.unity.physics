@@ -36,7 +36,7 @@ namespace Unity.Physics.Authoring
             : base($"Unknown shape type {shapeType} requires explicit implementation") {}
     }
 
-    [AddComponentMenu("DOTS/Physics/Physics Shape")]
+    [AddComponentMenu("Entities/Physics/Physics Shape")]
     [HelpURL(HelpURLs.PhysicsShapeAuthoring)]
     public sealed class PhysicsShapeAuthoring : MonoBehaviour, IInheritPhysicsMaterialProperties, ISerializationCallbackReceiver
     {

@@ -9,17 +9,26 @@ namespace Unity.Physics.Authoring
     {
         protected override void OnUpdate()
         {
+#if !ENABLE_TRANSFORM_V1
+            var transformFromEntity = GetComponentLookup<LocalTransform>();
+#else
             var translationFromEntity = GetComponentLookup<Translation>();
             var rotationFromEntity = GetComponentLookup<Rotation>();
+#endif
             var physicsMassFromEntity = GetComponentLookup<PhysicsMass>();
             var physicsColliderFromEntity = GetComponentLookup<PhysicsCollider>();
-            Entities.ForEach((Entity ent, in CustomPhysicsProxyDriver driver) => {
-                translationFromEntity[ent] = translationFromEntity[driver.rootEntity];
-                rotationFromEntity[ent] = rotationFromEntity[driver.rootEntity];
-
-                physicsMassFromEntity[ent] = PhysicsMass.CreateKinematic(physicsColliderFromEntity[driver.rootEntity].MassProperties);
-                physicsColliderFromEntity[ent] = physicsColliderFromEntity[driver.rootEntity];
-            }).WithEntityQueryOptions(EntityQueryOptions.IncludePrefab).Run();
+            foreach (var (driver, entity) in SystemAPI.Query<RefRW<CustomPhysicsProxyDriver>>().WithEntityAccess()
+                         .WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities))
+            {
+#if !ENABLE_TRANSFORM_V1
+                transformFromEntity[entity] = transformFromEntity[driver.ValueRW.rootEntity];
+#else
+                translationFromEntity[entity] = translationFromEntity[driver.ValueRW.rootEntity];
+                rotationFromEntity[entity] = rotationFromEntity[driver.ValueRW.rootEntity];
+#endif
+                physicsMassFromEntity[entity] = PhysicsMass.CreateKinematic(physicsColliderFromEntity[driver.ValueRW.rootEntity].MassProperties);
+                physicsColliderFromEntity[entity] = physicsColliderFromEntity[driver.ValueRW.rootEntity];
+            }
         }
     }
 }

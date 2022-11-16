@@ -22,6 +22,12 @@ namespace Unity.Physics
         public quaternion MotionAFromJoint;
         public quaternion MotionBFromJoint;
 
+        // Maximum impulse that can be applied to the motor before it caps out (not a breaking impulse)
+        public float MaxImpulseOfMotor;
+
+        // Accumulated impulse applied over the number of solver iterations
+        public float AccumulatedImpulse;
+
         // Error before solving
         public float InitialError;
 
@@ -39,9 +45,13 @@ namespace Unity.Physics
         {
             AxisIndex = constraint.ConstrainedAxis1D;
             AxisInMotionA = aFromConstraint.Rotation[AxisIndex];
-            Target = constraint.Target; //angular velocity as float3 in rad/s
+            Target = AxisInMotionA * constraint.Target[AxisIndex]; //angular velocity as float3 in rad/s
             Tau = tau;
             Damping = damping;
+
+            MaxImpulseOfMotor = math.abs(constraint.MaxImpulse.x); //using as magnitude, y&z components are unused
+            AccumulatedImpulse = 0.0f;
+
             MotionBFromA = math.mul(math.inverse(motionB.WorldFromMotion.rot), motionA.WorldFromMotion.rot);
             MotionAFromJoint = new quaternion(aFromConstraint.Rotation);
             MotionBFromJoint = new quaternion(bFromConstraint.Rotation);
@@ -71,6 +81,7 @@ namespace Unity.Physics
             float rhs = -(math.dot(Target, axisInMotionB) - relativeVelocity) * Damping;
 
             float impulse = math.mul(effectiveMass, rhs);
+            impulse = JacobianUtilities.CapImpulse(impulse, ref AccumulatedImpulse, MaxImpulseOfMotor);
 
             velocityA.ApplyAngularImpulse(impulse * AxisInMotionA);
             velocityB.ApplyAngularImpulse(impulse * axisInMotionB);

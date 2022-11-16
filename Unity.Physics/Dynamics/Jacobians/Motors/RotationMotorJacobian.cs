@@ -1,5 +1,6 @@
 using Unity.Burst;
 using Unity.Mathematics;
+using UnityEngine;
 using static Unity.Physics.Math;
 
 namespace Unity.Physics
@@ -9,16 +10,11 @@ namespace Unity.Physics
     struct RotationMotorJacobian
     {
         // Limited axis in motion A space
-        // TODO could calculate this from AxisIndex and MotionAFromJoint
         public float3 AxisInMotionA;
-        public float3 Target;
+        public float Target;
 
         // Index of the limited axis
         public int AxisIndex;
-
-        // Relative angle limits
-        public float MinAngle;
-        public float MaxAngle;
 
         // Relative orientation of the motions before solving
         public quaternion MotionBFromA;
@@ -26,6 +22,12 @@ namespace Unity.Physics
         // Rotation to joint space from motion space
         public quaternion MotionAFromJoint;
         public quaternion MotionBFromJoint;
+
+        // Maximum impulse that can be applied to the motor before it caps out (not a breaking impulse)
+        public float MaxImpulseOfMotor;
+
+        // Accumulated impulse applied over the number of solver iterations
+        public float AccumulatedImpulse;
 
         // Error before solving
         public float InitialError;
@@ -44,11 +46,11 @@ namespace Unity.Physics
         {
             AxisIndex = constraint.ConstrainedAxis1D;
             AxisInMotionA = math.normalize(aFromConstraint.Rotation[AxisIndex]);
-            Target = constraint.Target; //is a float3 set of Euler angles in radians
-            MinAngle = constraint.Min;
-            MaxAngle = constraint.Max;
+            Target = constraint.Target[AxisIndex];
             Tau = tau;
             Damping = damping;
+            MaxImpulseOfMotor = math.abs(constraint.MaxImpulse.x); //using as magnitude, y&z components are unused
+            AccumulatedImpulse = 0.0f;
             MotionBFromA = math.mul(math.inverse(motionB.WorldFromMotion.rot), motionA.WorldFromMotion.rot);
             MotionAFromJoint = new quaternion(aFromConstraint.Rotation);
             MotionBFromJoint = new quaternion(bFromConstraint.Rotation);
@@ -78,6 +80,7 @@ namespace Unity.Physics
             float solveError = JacobianUtilities.CalculateCorrection(futureError, InitialError, Tau, Damping);
 
             float impulse = math.mul(effectiveMass, -solveError) * stepInput.InvTimestep;
+            impulse = JacobianUtilities.CapImpulse(impulse, ref AccumulatedImpulse, MaxImpulseOfMotor);
 
             velocityA.ApplyAngularImpulse(impulse * AxisInMotionA);
             velocityB.ApplyAngularImpulse(impulse * axisInMotionB);
@@ -86,10 +89,16 @@ namespace Unity.Physics
         // Helper function
         private float CalculateError(quaternion motionBFromA)
         {
-            float angle = 2.0f * math.acos(motionBFromA.value.w);
-            quaternion targetAsQuaternion = quaternion.Euler(Target);
-            float targetAngle = 2.0f * math.acos(targetAsQuaternion.value.w);
-            return angle - targetAngle;
+            // Calculate the relative joint frame rotation
+            quaternion jointBFromA = math.mul(math.mul(math.inverse(MotionBFromJoint), motionBFromA), MotionAFromJoint);
+
+            // extract current axis and angle between the two joint frames
+            ((Quaternion)jointBFromA).ToAngleAxis(out var angle, out var axis);
+            // filter out any "out of rotation axis" components between the joint frames and make sure we are accounting
+            // for a potential axis flip in the to-angle-axis calculation.
+            angle *= axis[AxisIndex];
+
+            return math.radians(angle) - Target;
         }
     }
 }

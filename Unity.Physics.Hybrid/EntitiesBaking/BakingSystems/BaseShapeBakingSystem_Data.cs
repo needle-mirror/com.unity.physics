@@ -6,6 +6,30 @@ using Hash128 = Unity.Entities.Hash128;
 
 namespace Unity.Physics.Authoring
 {
+    struct ColliderInstanceId : IEquatable<ColliderInstanceId>
+    {
+        public ColliderInstanceId(Hash128 blobDataHash, int authoringComponentId)
+        {
+            BlobDataHash = blobDataHash;
+            AuthoringComponentId = authoringComponentId;
+        }
+
+        readonly Hash128 BlobDataHash;
+        readonly int AuthoringComponentId;
+
+        public bool Equals(ColliderInstanceId other) =>
+            BlobDataHash.Equals(other.BlobDataHash) && AuthoringComponentId == other.AuthoringComponentId;
+
+        public override bool Equals(object obj) => obj is ColliderInstanceId other && Equals(other);
+
+        public override int GetHashCode() =>
+            (int)math.hash(new uint2((uint)BlobDataHash.GetHashCode(), (uint)AuthoringComponentId));
+
+        public static bool operator==(ColliderInstanceId left, ColliderInstanceId right) => left.Equals(right);
+
+        public static bool operator!=(ColliderInstanceId left, ColliderInstanceId right) => !left.Equals(right);
+    }
+
     // structure with minimal data needed to incrementally convert a shape that is possibly part of a compound collider
     struct ColliderInstanceBaking : IEquatable<ColliderInstanceBaking>
     {
@@ -17,7 +41,6 @@ namespace Unity.Physics.Authoring
         public Entity ChildEntity;
         public RigidTransform BodyFromShape;
         public Hash128 Hash;
-        public bool BodyInHierarchy;
 
         public static RigidTransform GetCompoundFromChild(Transform shape, Transform body)
         {
@@ -30,6 +53,7 @@ namespace Unity.Physics.Authoring
         {
             return AuthoringComponentId == other.AuthoringComponentId
                 && ConvertedAuthoringInstanceID == other.ConvertedAuthoringInstanceID
+                && ConvertedBodyInstanceID == other.ConvertedBodyInstanceID
                 && BodyEntity.Equals(other.BodyEntity)
                 && ShapeEntity.Equals(other.ShapeEntity)
                 && BodyFromShape.Equals(other.BodyFromShape)
@@ -44,6 +68,7 @@ namespace Unity.Physics.Authoring
             {
                 var hashCode = AuthoringComponentId;
                 hashCode = (hashCode * 397) ^ ConvertedAuthoringInstanceID;
+                hashCode = (hashCode * 397) ^ ConvertedBodyInstanceID;
                 hashCode = (hashCode * 397) ^ BodyEntity.GetHashCode();
                 hashCode = (hashCode * 397) ^ ShapeEntity.GetHashCode();
                 hashCode = (hashCode * 397) ^ BodyFromShape.GetHashCode();

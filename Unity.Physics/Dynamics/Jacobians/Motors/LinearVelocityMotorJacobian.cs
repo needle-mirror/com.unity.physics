@@ -39,6 +39,12 @@ namespace Unity.Physics
         // Fraction of the velocity error to correct per step
         public float Damping;
 
+        // Maximum impulse that can be applied to the motor before it caps out (not a breaking impulse)
+        public float MaxImpulseOfMotor;
+
+        // Accumulated impulse applied over the number of solver iterations
+        public float3 AccumulatedImpulsePerAxis;
+
         // Build the Jacobian
         public void Build(
             MTransform aFromConstraint, MTransform bFromConstraint,
@@ -48,16 +54,21 @@ namespace Unity.Physics
             WorldFromA = motionA.WorldFromMotion;
             WorldFromB = motionB.WorldFromMotion;
 
+            // Motor drive is independent of bodyA rotation, which drives relative to orientation of bodyB
             PivotAinA = aFromConstraint.Translation;
             PivotBinB = bFromConstraint.Translation;
-            Target = constraint.Target;  // constraint is velocity vector in m/s
 
             AxisInB = bFromConstraint.Rotation[constraint.ConstrainedAxis1D];
+            Target = AxisInB * constraint.Target[constraint.ConstrainedAxis1D];  // is velocity vector relative to bodyB, in m/s
+
             Is1D = true;
             MinDistance = constraint.Min;
             MaxDistance = constraint.Max;
             Tau = tau;
             Damping = damping;
+
+            MaxImpulseOfMotor = math.abs(constraint.MaxImpulse.x); //using as magnitude, y&z components are unused
+            AccumulatedImpulsePerAxis = float3.zero;
         }
 
         private static void ApplyImpulse(float3 impulse, float3 ang0, float3 ang1, float3 ang2, ref MotionVelocity velocity)
@@ -81,9 +92,6 @@ namespace Unity.Physics
                 futureWorldFromA = new MTransform(futureOrientationA, WorldFromA.pos + velocityA.LinearVelocity * stepInput.Timestep);
                 futureWorldFromB = new MTransform(futureOrientationB, WorldFromB.pos + velocityB.LinearVelocity * stepInput.Timestep);
             }
-
-            var TargetInA = math.mul(WorldFromA.rot, Target);
-            float3 solveError = TargetInA - velocityA.LinearVelocity;
 
             // Calculate the angulars
             CalculateAngulars(PivotAinA, futureWorldFromA.Rotation, out float3 angA0, out float3 angA1, out float3 angA2);
@@ -110,9 +118,13 @@ namespace Unity.Physics
                 JacobianUtilities.InvertSymmetricMatrix(invEffectiveMassDiag, invEffectiveMassOffDiag, out EffectiveMassDiag, out EffectiveMassOffDiag);
             }
 
-            // Calculate the impulse to correct the error
             float3x3 effectiveMass = JacobianUtilities.BuildSymmetricMatrix(EffectiveMassDiag, EffectiveMassOffDiag);
-            float3 impulse = math.mul(effectiveMass, solveError) * stepInput.Timestep; //TODO: fix *timestep requirement
+
+            var targetFromOrientationB = math.mul(WorldFromB.rot, Target); // Target vector is shifted based on the orientation of body B
+            float3 solveError = targetFromOrientationB - velocityA.LinearVelocity; //in world space, units: m/s
+
+            float3 impulse = math.mul(effectiveMass, solveError);
+            impulse = JacobianUtilities.CapImpulse(impulse, ref AccumulatedImpulsePerAxis, MaxImpulseOfMotor);
 
             // Apply the impulse
             ApplyImpulse(impulse, angA0, angA1, angA2, ref velocityA);

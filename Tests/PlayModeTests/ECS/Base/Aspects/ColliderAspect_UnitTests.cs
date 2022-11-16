@@ -28,18 +28,29 @@ namespace Unity.Physics.Tests.Aspects
             PhysicsWorldIndex worldIndex = new PhysicsWorldIndex { Value = 0 };
 
             PhysicsCollider pc = new PhysicsCollider();
+#if !ENABLE_TRANSFORM_V1
+            LocalTransform tl = LocalTransform.FromPositionRotationScale(AspectTestUtils.DefaultPos, AspectTestUtils.DefaultRot, 1.0f);
+            WorldTransform tw = (WorldTransform)tl;
+            LocalToWorld ltw = new LocalToWorld { Value = tw.ToMatrix() };
+#else
             Translation t = new Translation { Value = AspectTestUtils.DefaultPos };
             Rotation r = new Rotation { Value = AspectTestUtils.DefaultRot };
             Scale s = new Scale { Value = 1.0f };
             LocalToWorld ltw = new LocalToWorld { Value = new float4x4(r.Value, t.Value) };
+#endif
 
             Entity body = manager.CreateEntity();
 
             // Add index, transform, scale, localToWorld, collider
             manager.AddSharedComponent<PhysicsWorldIndex>(body, worldIndex);
+#if !ENABLE_TRANSFORM_V1
+            manager.AddComponentData<LocalTransform>(body, tl);
+            manager.AddComponentData<WorldTransform>(body, tw);
+#else
             manager.AddComponentData<Translation>(body, t);
             manager.AddComponentData<Rotation>(body, r);
             manager.AddComponentData<Scale>(body, s);
+#endif
             manager.AddComponentData<LocalToWorld>(body, ltw);
 
             Random rnd = new Random(12345);
@@ -234,7 +245,7 @@ namespace Unity.Physics.Tests.Aspects
 
             protected override void OnUpdate()
             {
-                Entity aspectEntity = GetSingletonEntity<PhysicsCollider>();
+                Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
                 ColliderAspect aspect = GetAspectRW<ColliderAspect>(aspectEntity);
 
                 Assert.IsTrue(aspect.CollisionType == CollisionType.Convex);
@@ -247,7 +258,7 @@ namespace Unity.Physics.Tests.Aspects
         {
             protected override void OnUpdate()
             {
-                Entity aspectEntity = GetSingletonEntity<PhysicsCollider>();
+                Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
                 ColliderAspect aspect = GetAspectRW<ColliderAspect>(aspectEntity);
 
                 Assert.IsTrue(aspect.CollisionType == CollisionType.Composite);
@@ -261,7 +272,7 @@ namespace Unity.Physics.Tests.Aspects
         {
             protected override void OnUpdate()
             {
-                Entity aspectEntity = GetSingletonEntity<PhysicsCollider>();
+                Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
                 ColliderAspect aspect = GetAspectRW<ColliderAspect>(aspectEntity);
 
                 Assert.IsTrue(aspect.CollisionType == CollisionType.Composite);
@@ -452,8 +463,8 @@ namespace Unity.Physics.Tests.Aspects
         {
             protected override void OnUpdate()
             {
-                Entity aspectEntity = GetSingletonEntity<PhysicsCollider>();
-                ColliderAspect aspect = GetAspectRW<ColliderAspect>(aspectEntity);
+                Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
+                ColliderAspect aspect = SystemAPI.GetAspectRW<ColliderAspect>(aspectEntity);
 
                 Assert.IsTrue(aspect.CollisionType == CollisionType.Composite);
                 Assert.IsTrue(aspect.Type == ColliderType.Compound);
@@ -538,7 +549,7 @@ namespace Unity.Physics.Tests.Aspects
         {
             protected unsafe override void OnUpdate()
             {
-                Entity aspectEntity = GetSingletonEntity<PhysicsCollider>();
+                Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
                 ColliderAspect aspect = GetAspectRW<ColliderAspect>(aspectEntity);
 
                 // Check that self-filtering works

@@ -41,10 +41,7 @@ namespace Unity.Physics.Tests.Authoring
             DefaultWorldInitialization.DefaultLazyEditModeInitialize();
 
             // create folder for temporary assets
-            string folderName;
-            do { folderName = Path.GetRandomFileName(); }
-            while (AssetDatabase.IsValidFolder(Path.Combine("Assets", folderName)));
-            TemporaryAssetsPath = AssetDatabase.GUIDToAssetPath(AssetDatabase.CreateFolder("Assets", folderName));
+            TemporaryAssetsPath = AssetDatabase.GUIDToAssetPath(AssetDatabase.CreateFolder("Assets", "SubScene_IntegrationTests"));
 
             // create non-readable mesh asset
             NonReadableMesh = UnityMesh.Instantiate(Resources.GetBuiltinResource<UnityMesh>("New-Cylinder.fbx"));

@@ -48,6 +48,8 @@ namespace Unity.Physics.Authoring
             public void OnDrawGizmos()
             {
 #if UNITY_EDITOR
+                if (World.DefaultGameObjectInjectionWorld == null)
+                    return;
                 World.DefaultGameObjectInjectionWorld.GetExistingSystemManaged<PhysicsDebugDisplaySystem>().CompleteDependency();
                 Unity.DebugDisplay.DebugDisplay.Render();
 #endif
@@ -191,7 +193,7 @@ namespace Unity.Physics.Authoring
 
         protected override void OnUpdate()
         {
-            GetSingletonRW<PhysicsDebugDisplayData>();
+            SystemAPI.GetSingletonRW<PhysicsDebugDisplayData>();
 #if UNITY_EDITOR
             CompleteDependency();
 

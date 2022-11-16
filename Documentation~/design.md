@@ -1,9 +1,8 @@
-Design philosophy
-=========
+# Design philosophy
 
-Unity Physics is a complete deterministic rigid body dynamics and spatial query system written entirely in high performance C# using DOTS best practices. The design of Unity Physics follows from the overall DOTS philosophy of minimal dependencies and complete control.
+Unity Physics is a complete deterministic rigid body dynamics and spatial query system, written entirely in high performance C# using ECS best practices. The design of Unity Physics follows from the overall DOTS philosophy of minimal dependencies and complete control.
 
-Many experiences today do not necessarily need a full monolithic physics package like PhysX or Havok. Instead you often want a simpler subset of features that can be freely controlled and customized to achieve your desired vision. Unity Physics is designed to balance this control without sacrificing on performance in areas where it appears to be critical. Here are described the design decisions that have been taken in order to achieve this goal.
+Unity Physics is designed to support users who do not necessarily need a full-featured physics package like PhysX or Havok, but instead want a simpler subset of features that they can freely control and customize. The goal of Unity Physics is to provide this in a stable way, without sacrificing on performance in areas where it is critical. This page describes the design decisions that have been taken in order to achieve this goal.
 
 ## Stateless
 
@@ -25,10 +24,11 @@ Unity Physics keeps data compatibility with the Havok Physics Integration (HPI) 
 
 # Code base structure
 
-|Collider|Description|
-|---|---|
-| Base        | Containers and Math used throughout Unity.Physics.                        |
-| Collision   | Contains all code for collision detection and spatial queries.            |
-| Dynamics    | Contains all code for integration, constraint solving and world stepping. |
-| Extensions  | Optional components for characters, vehicles, debugging helpers etc.      |
-| ECS         | Contains the components and systems for exposing Unity Physics to ECS.    |
+| Collider   | Description                                                                                        |
+|------------|----------------------------------------------------------------------------------------------------|
+| Base       | Containers and Math used throughout Unity.Physics.                                                 |
+| Collision  | Contains all code for collision detection and spatial queries.                                     |
+| DFG        | Contains all code for DataFlowGraph that performs Collider and Ray Cast query on a CollisionWorld. |
+| Dynamics   | Contains all code for integration, constraint solving and world stepping.                          |
+| ECS        | Contains the components and systems for exposing Unity Physics to ECS.                             |
+| Extensions | Optional components for characters, vehicles, debugging helpers etc.                               |

@@ -55,7 +55,7 @@ namespace Unity.Physics.Authoring
 
         Vector2 m_ScrollPosition;
 
-        [MenuItem("Window/DOTS/Physics/Upgrade Data")]
+        [MenuItem("Window/Entities/Physics/Upgrade Data")]
         static void Create() => GetWindow<DataUpgradeWindow>();
 
         [Serializable]

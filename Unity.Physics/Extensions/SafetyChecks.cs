@@ -160,6 +160,20 @@ namespace Unity.Physics
         }
 
         [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        public static void CheckInRangeAndThrow(float value, float2 range, in FixedString32Bytes paramName)
+        {
+            if (value < range.x || value > range.y)
+                throw new ArgumentOutOfRangeException($"{paramName}", $"{value} is out of range [{range.x}, {range.y}].");
+        }
+
+        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        public static void CheckWithinThresholdAndThrow(float value, float threshold, in FixedString32Bytes paramName)
+        {
+            if (value < -threshold || value > threshold)
+                throw new ArgumentOutOfRangeException($"{paramName}", $"{value} cannot exceed threshold of {threshold}");
+        }
+
+        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
         public static void CheckNotEmptyAndThrow<T>(NativeArray<T> array, in FixedString32Bytes paramName) where T : struct
         {
             if (!array.IsCreated || array.Length == 0)

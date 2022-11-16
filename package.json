@@ -1,15 +1,13 @@
 {
   "displayName": "Unity Physics",
   "category": "Unity",
-  "description": "Unity's C# stateless physics library.\n\nBuilt on top of the Unity C# DOTS framework, Unity Physics is network-ready, completely customizable, and built for performance out of the box. Whether you're building the next mobile hit or a new networked multiplayer console experience, Unity Physics leverages the Burst compiler and Job system to scale across a range of hardware.\n\nUnity Physics is currently in preview, and is compatible with Unity 2019.3 and newer.",
+  "description": "Unity's C# stateless physics library.\n\nBuilt on top of the Unity C# DOTS framework, Unity Physics is network-ready, completely customizable, and built for performance out of the box. Whether you're building the next mobile hit or a new networked multiplayer console experience, Unity Physics leverages the Burst compiler and Job system to scale across a range of hardware.",
   "dependencies": {
-    "com.unity.burst": "1.7.3",
-    "com.unity.collections": "2.1.0-exp.4",
-    "com.unity.entities": "1.0.0-exp.12",
-    "com.unity.jobs": "0.70.0-preview.7",
+    "com.unity.burst": "1.7.4",
+    "com.unity.collections": "2.1.0-pre.2",
+    "com.unity.entities": "1.0.0-pre.15",
     "com.unity.mathematics": "1.2.6",
     "com.unity.test-framework": "1.1.33",
-    "com.unity.test-framework.performance": "2.3.1-preview",
     "com.unity.modules.imgui": "1.0.0",
     "com.unity.modules.jsonserialize": "1.0.0"
   },
@@ -19,14 +17,14 @@
   ],
   "name": "com.unity.physics",
   "unity": "2022.2",
-  "unityRelease": "0b5",
-  "version": "1.0.0-exp.12",
+  "unityRelease": "0f1",
+  "version": "1.0.0-pre.15",
   "upmCi": {
-    "footprint": "93ada97f758b8b9476acf054513aba31c5d4fc1b"
+    "footprint": "b32c4357d902bf1d1d3c7ae4c1dc3fcdab9708b4"
   },
   "repository": {
     "url": "https://github.cds.internal.unity3d.com/unity/dots.git",
     "type": "git",
-    "revision": "3f0a7e39227bd97f1239a6505a9449425fecfe1e"
+    "revision": "82387d7cb4bc4aee07e94656ef8103860ef6ec55"
   }
 }

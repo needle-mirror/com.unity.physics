@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Physics.GraphicsIntegration;
+using Unity.Transforms;
 using UnityEngine;
 
 namespace Unity.Physics.Authoring
@@ -101,6 +102,9 @@ namespace Unity.Physics.Authoring
             if (authoring.Smoothing != BodySmoothing.None)
             {
                 AddComponent(new PhysicsGraphicalSmoothing());
+#if !ENABLE_TRANSFORM_V1
+                AddComponent(new PropagateLocalToWorld());
+#endif
                 if (authoring.Smoothing == BodySmoothing.Interpolation)
                 {
                     AddComponent(new PhysicsGraphicalInterpolationBuffer
@@ -121,23 +125,22 @@ namespace Unity.Physics.Authoring
         protected override void OnUpdate()
         {
             // Fill in the MassProperties based on the potential calculated value by BuildCompoundColliderBakingSystem
-            Entities
-                .ForEach(
-                (ref PhysicsMass physicsMass, in PhysicsBodyAuthoringData bodyData, in PhysicsCollider collider) =>
+            foreach (var (physicsMass, bodyData, collider) in
+                     SystemAPI.Query<RefRW<PhysicsMass>, RefRO<PhysicsBodyAuthoringData>, RefRO<PhysicsCollider>>().WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities))
+            {
+                // Build mass component
+                var massProperties = collider.ValueRO.MassProperties;
+                if (bodyData.ValueRO.OverrideDefaultMassDistribution)
                 {
-                    // Build mass component
-                    var massProperties = collider.MassProperties;
-                    if (bodyData.OverrideDefaultMassDistribution)
-                    {
-                        massProperties.MassDistribution = bodyData.CustomMassDistribution;
-                        // Increase the angular expansion factor to account for the shift in center of mass
-                        massProperties.AngularExpansionFactor += math.length(massProperties.MassDistribution.Transform.pos - bodyData.CustomMassDistribution.Transform.pos);
-                    }
+                    massProperties.MassDistribution = bodyData.ValueRO.CustomMassDistribution;
+                    // Increase the angular expansion factor to account for the shift in center of mass
+                    massProperties.AngularExpansionFactor += math.length(massProperties.MassDistribution.Transform.pos - bodyData.ValueRO.CustomMassDistribution.Transform.pos);
+                }
 
-                    physicsMass = bodyData.IsDynamic ?
-                        PhysicsMass.CreateDynamic(massProperties, bodyData.Mass) :
-                        PhysicsMass.CreateKinematic(massProperties);
-                }).WithEntityQueryOptions(EntityQueryOptions.IncludePrefab).Run();
+                physicsMass.ValueRW = bodyData.ValueRO.IsDynamic ?
+                    PhysicsMass.CreateDynamic(massProperties, bodyData.ValueRO.Mass) :
+                    PhysicsMass.CreateKinematic(massProperties);
+            }
         }
     }
 }

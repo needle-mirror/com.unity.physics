@@ -18,18 +18,6 @@ namespace Unity.Physics
         public float MinDistance;
         public float MaxDistance;
 
-        // The max impulse that can be applied on this joint
-        float3 MaxImpulse;
-
-        // Accumulated impulse applied over all steps
-        public float3 AccumulatedImpulse;
-
-        // The joint entity between the body pair
-        Entity JointEntity;
-
-        // When true, will send impulse events when max impulse is exceeded
-        public bool EnableImpulseEvents;
-
         // Motion transforms before solving
         public RigidTransform WorldFromA;
         public RigidTransform WorldFromB;
@@ -53,7 +41,7 @@ namespace Unity.Physics
 
         // Build the Jacobian
         public void Build(
-            Entity jointEntity, MTransform aFromConstraint, MTransform bFromConstraint,
+            MTransform aFromConstraint, MTransform bFromConstraint,
             MotionVelocity velocityA, MotionVelocity velocityB,
             MotionData motionA, MotionData motionB,
             Constraint constraint, float tau, float damping)
@@ -69,11 +57,6 @@ namespace Unity.Physics
 
             MinDistance = constraint.Min;
             MaxDistance = constraint.Max;
-
-            MaxImpulse = constraint.MaxImpulse;
-            EnableImpulseEvents = constraint.EnableImpulseEvents;
-            JointEntity = jointEntity;
-            AccumulatedImpulse = float3.zero;
 
             Tau = tau;
             Damping = damping;
@@ -183,29 +166,9 @@ namespace Unity.Physics
             ApplyImpulse(impulse, angA0, angA1, angA2, ref velocityA);
             ApplyImpulse(-impulse, angB0, angB1, angB2, ref velocityB);
 
-            AccumulatedImpulse += impulse;
-
-            // if impulse exceeds max impulse, write back data
-            if (EnableImpulseEvents && stepInput.IsLastIteration && math.any(math.abs(AccumulatedImpulse) > MaxImpulse))
+            if ((jacHeader.Flags & JacobianFlags.EnableImpulseEvents) != 0)
             {
-                // We have to convert our impulse into constraint space to match what havok is returning from their impulses
-                // currently the linear motions are calculated in world space, therefore we need to convert it into constraint space
-                RigidTransform bFromA = math.mul(math.inverse(WorldFromB), WorldFromA);
-                // Project pivot A on the same plane as pivot B (same world space as body B) and calculate the diff between the two
-                float3 pivotAinB = BodyFromConstraintB.Translation - math.transform(bFromA, BodyFromConstraintA.Translation);
-                //Inverse the rotation of world space B on the pivot diff
-                pivotAinB = math.mul(BodyFromConstraintB.InverseRotation, pivotAinB);
-                float3 normal = math.normalize(pivotAinB);
-                // Move accumulated impulse into constraint space by multiplying with the direction vector
-                float3 constraintSpaceImpulse = normal * math.length(AccumulatedImpulse);
-
-                impulseEventsWriter.Write(new ImpulseEventData
-                {
-                    Type = ConstraintType.Linear,
-                    Impulse = constraintSpaceImpulse,
-                    JointEntity = JointEntity,
-                    BodyIndices = jacHeader.BodyPair
-                });
+                HandleImpulseEvent(ref jacHeader, impulse, stepInput.IsLastIteration, ref impulseEventsWriter);
             }
         }
 
@@ -250,6 +213,34 @@ namespace Unity.Physics
 
             // Find the difference between the future distance and the limit range
             return JacobianUtilities.CalculateError(distance, MinDistance, MaxDistance);
+        }
+
+        private void HandleImpulseEvent(ref JacobianHeader jacHeader, float3 appliedImpulse, bool isLastIteration, ref NativeStream.Writer impulseEventsWriter)
+        {
+            ref ImpulseEventSolverData impulseEventData = ref jacHeader.AccessImpulseEventSolverData();
+            impulseEventData.AccumulatedImpulse += appliedImpulse;
+
+            if (isLastIteration && math.any(math.abs(impulseEventData.AccumulatedImpulse) > impulseEventData.MaxImpulse))
+            {
+                // We have to convert our impulse into constraint space to match what havok is returning from their impulses
+                // currently the linear motions are calculated in world space, therefore we need to convert it into constraint space
+                RigidTransform bFromA = math.mul(math.inverse(WorldFromB), WorldFromA);
+                // Project pivot A on the same plane as pivot B (same world space as body B) and calculate the diff between the two
+                float3 pivotAinB = BodyFromConstraintB.Translation - math.transform(bFromA, BodyFromConstraintA.Translation);
+                //Inverse the rotation of world space B on the pivot diff
+                pivotAinB = math.mul(BodyFromConstraintB.InverseRotation, pivotAinB);
+                float3 normal = math.normalize(pivotAinB);
+                // Move accumulated impulse into constraint space by multiplying with the direction vector
+                float3 constraintSpaceImpulse = normal * math.length(impulseEventData.AccumulatedImpulse);
+
+                impulseEventsWriter.Write(new ImpulseEventData
+                {
+                    Type = ConstraintType.Linear,
+                    Impulse = constraintSpaceImpulse,
+                    JointEntity = impulseEventData.JointEntity,
+                    BodyIndices = jacHeader.BodyPair
+                });
+            }
         }
 
         #endregion

@@ -41,6 +41,8 @@ namespace Unity.Physics.Authoring
 
     public abstract class BaseColliderBaker<T> : BasePhysicsBaker<T> where T : Component
     {
+        static List<GameObject> s_Parents = new List<GameObject>();
+
         protected GameObject FindFirstEnabledAncestor<TU>(GameObject shape, List<TU> buffer) where TU : Component
         {
             // include inactive in case the supplied shape GameObject is a prefab that has not been instantiated
@@ -84,7 +86,7 @@ namespace Unity.Physics.Authoring
             return result;
         }
 
-        protected GameObject GetPrimaryBody(GameObject shape, out bool hasBodyComponent)
+        protected GameObject GetPrimaryBody(GameObject shape, out bool hasBodyComponent, out bool isStaticBody)
         {
             var pb = FindFirstEnabledAncestor(shape, PhysicsShapeExtensions_NonBursted.s_PhysicsBodiesBuffer);
 #if LEGACY_PHYSICS
@@ -93,6 +95,7 @@ namespace Unity.Physics.Authoring
             GameObject rb = null;
 #endif
             hasBodyComponent = (pb != null || rb != null);
+            isStaticBody = false;
 
             if (pb != null)
             {
@@ -104,7 +107,7 @@ namespace Unity.Physics.Authoring
                 return rb.gameObject;
 
             // for implicit static shape, first see if it is part of static optimized hierarchy
-            var topStatic = FindTopmostEnabledAncestor(shape, PhysicsShapeExtensions_NonBursted.s_StaticOptimizeEntitiesBuffer);
+            isStaticBody = FindTopmostStaticEnabledAncestor(shape, out var topStatic);
             if (topStatic != null)
                 return topStatic;
 
@@ -123,6 +126,32 @@ namespace Unity.Physics.Authoring
                 : topShape.transform.IsChildOf(topCollider.transform)
                 ? topCollider
                 : topShape;
+        }
+
+        private bool FindTopmostStaticEnabledAncestor(GameObject gameObject, out GameObject topStatic)
+        {
+            topStatic = null;
+            if (gameObject == null)
+                return false;
+
+            if (IsStatic(gameObject))
+            {
+                // get the list of ancestors and set a dependency on the entire ancestor hierarchy
+                var parents = s_Parents;
+                GetParents(parents);
+
+                for (int i = parents.Count - 1; i >= 0; --i)
+                {
+                    // find the top most static parent and take a dependency on it and all its non-static ancestors
+                    if (IsStatic(parents[i]))
+                    {
+                        topStatic = parents[i];
+                        break;
+                    }
+                }
+            }
+
+            return topStatic != null;
         }
     }
 }

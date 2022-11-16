@@ -19,7 +19,7 @@ public readonly partial struct ColliderAspect : IAspect, IAspectQueryable, IColl
     /// <summary>   Gets or sets the world transform of a collider aspect. </summary>
     ///
     /// <value> The world space transform. </value>
-    public UniformScaleTransform WorldFromCollider
+    public WorldTransform WorldFromCollider
     {
         get => m_TransformAspect.WorldFromBody;
         set => m_TransformAspect.WorldFromBody = value;
@@ -72,7 +72,7 @@ public readonly partial struct ColliderAspect : IAspect, IAspectQueryable, IColl
     }
 
     /// <summary>
-    /// Gets the friction. In case of a <see cref="CompoundCollider"/>, this behaves 
+    /// Gets the friction. In case of a <see cref="CompoundCollider"/>, this behaves
     /// as <see cref="GetFriction(ColliderKey)"/> with ColliderKey.Zero passed in.
     /// </summary>
     ///
@@ -91,7 +91,7 @@ public readonly partial struct ColliderAspect : IAspect, IAspectQueryable, IColl
     public float GetFriction(ColliderKey colliderKey) => m_Collider.ValueRO.Value.As<Collider>().GetFriction(colliderKey);
 
     /// <summary>
-    /// Sets the friction. In case of a <see cref="CompoundCollider"/>, this behaves 
+    /// Sets the friction. In case of a <see cref="CompoundCollider"/>, this behaves
     /// as <see cref="SetFriction(System.Single,Unity.Physics.ColliderKey)"/> with ColliderKey.Zero passed in.
     /// </summary>
     ///
@@ -109,7 +109,7 @@ public readonly partial struct ColliderAspect : IAspect, IAspectQueryable, IColl
     /// <param name="colliderKey">  The collider key. </param>
     public void SetFriction(float friction, ColliderKey colliderKey) => m_Collider.ValueRW.Value.As<Collider>().SetFriction(friction, colliderKey);
 
-    /// <summary> Gets the collision response. In case of a <see cref="CompoundCollider"/>, 
+    /// <summary> Gets the collision response. In case of a <see cref="CompoundCollider"/>,
     /// this behaves as <see cref="GetCollisionResponse(ColliderKey)"/> with ColliderKey.Zero passed in.</summary>
     ///
     /// <returns>   The collision response. </returns>
@@ -127,8 +127,8 @@ public readonly partial struct ColliderAspect : IAspect, IAspectQueryable, IColl
     /// <returns>   The collision response. </returns>
     public CollisionResponsePolicy GetCollisionResponse(ColliderKey colliderKey) => m_Collider.ValueRO.Value.As<Collider>().GetCollisionResponse(colliderKey);
 
-    /// <summary>Sets collision response. In case of a <see cref="CompoundCollider"/>, 
-    /// this behaves as <see cref="SetCollisionResponse(CollisionResponsePolicy, ColliderKey)"/> 
+    /// <summary>Sets collision response. In case of a <see cref="CompoundCollider"/>,
+    /// this behaves as <see cref="SetCollisionResponse(CollisionResponsePolicy, ColliderKey)"/>
     /// with ColliderKey.Zero passed in.</summary>
     ///
     /// <param name="collisionResponse">    The collision response. </param>
@@ -143,7 +143,7 @@ public readonly partial struct ColliderAspect : IAspect, IAspectQueryable, IColl
     /// <param name="colliderKey">          The collider key. </param>
     public void SetCollisionResponse(CollisionResponsePolicy collisionResponse, ColliderKey colliderKey) => m_Collider.ValueRW.Value.As<Collider>().SetCollisionResponse(collisionResponse, colliderKey);
 
-    /// <summary>Gets the restitution. In case of a <see cref="CompoundCollider"/>, 
+    /// <summary>Gets the restitution. In case of a <see cref="CompoundCollider"/>,
     /// this behaves as <see cref="GetRestitution(ColliderKey)"/> with ColliderKey.Zero passed in.</summary>
     ///
     /// <returns>   The restitution. </returns>
@@ -162,7 +162,7 @@ public readonly partial struct ColliderAspect : IAspect, IAspectQueryable, IColl
     public float GetRestitution(ColliderKey colliderKey) => m_Collider.ValueRO.Value.As<Collider>().GetRestitution(colliderKey);
 
     /// <summary>
-    /// Sets the restitution. In case of a <see cref="CompoundCollider"/>, this 
+    /// Sets the restitution. In case of a <see cref="CompoundCollider"/>, this
     /// behaves as <see cref="SetRestitution(System.Single,Unity.Physics.ColliderKey)"/> with ColliderKey.Zero passed in.
     /// </summary>
     ///
@@ -253,7 +253,7 @@ public readonly partial struct ColliderAspect : IAspect, IAspectQueryable, IColl
     /// <returns>   The calculated aabb in world space. </returns>
     public Aabb CalculateAabb()
     {
-        UniformScaleTransform worldFromCollider = WorldFromCollider;
+        WorldTransform worldFromCollider = WorldFromCollider;
         return RigidBody.RigidBodyUtil.CalculateAabb(m_Collider.ValueRO.Value, new RigidTransform(worldFromCollider.Rotation, worldFromCollider.Position), worldFromCollider.Scale);
     }
 
@@ -295,7 +295,7 @@ public readonly partial struct ColliderAspect : IAspect, IAspectQueryable, IColl
     public bool CastRay<T>(RaycastInput input, ref T collector)
         where T : struct, ICollector<RaycastHit>
     {
-        UniformScaleTransform worldFromCollider = m_TransformAspect.WorldFromBody;
+        WorldTransform worldFromCollider = m_TransformAspect.WorldFromBody;
         return RigidBody.RigidBodyUtil.CastRay(m_Collider.ValueRO.Value, Entity, input, ref collector, new RigidTransform(worldFromCollider.Rotation, worldFromCollider.Position), worldFromCollider.Scale);
     }
 
@@ -335,7 +335,7 @@ public readonly partial struct ColliderAspect : IAspect, IAspectQueryable, IColl
     public bool CastCollider<T>(ColliderCastInput input, ref T collector)
         where T : struct, ICollector<ColliderCastHit>
     {
-        UniformScaleTransform worldFromCollider = m_TransformAspect.WorldFromBody;
+        WorldTransform worldFromCollider = m_TransformAspect.WorldFromBody;
         return RigidBody.RigidBodyUtil.CastCollider(m_Collider.ValueRO.Value, Entity, input, ref collector, new RigidTransform(worldFromCollider.Rotation, worldFromCollider.Position), worldFromCollider.Scale);
     }
 
@@ -375,7 +375,7 @@ public readonly partial struct ColliderAspect : IAspect, IAspectQueryable, IColl
     public bool CalculateDistance<T>(PointDistanceInput input, ref T collector)
         where T : struct, ICollector<DistanceHit>
     {
-        UniformScaleTransform worldFromCollider = m_TransformAspect.WorldFromBody;
+        WorldTransform worldFromCollider = m_TransformAspect.WorldFromBody;
         return RigidBody.RigidBodyUtil.CalculateDistance(m_Collider.ValueRO.Value, Entity, input, ref collector, new RigidTransform(worldFromCollider.Rotation, worldFromCollider.Position), worldFromCollider.Scale);
     }
 
@@ -415,7 +415,7 @@ public readonly partial struct ColliderAspect : IAspect, IAspectQueryable, IColl
     public bool CalculateDistance<T>(ColliderDistanceInput input, ref T collector)
         where T : struct, ICollector<DistanceHit>
     {
-        UniformScaleTransform worldFromCollider = m_TransformAspect.WorldFromBody;
+        WorldTransform worldFromCollider = m_TransformAspect.WorldFromBody;
         return RigidBody.RigidBodyUtil.CalculateDistance(m_Collider.ValueRO.Value, Entity, input, ref collector, new RigidTransform(worldFromCollider.Rotation, worldFromCollider.Position), worldFromCollider.Scale);
     }
 

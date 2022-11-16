@@ -50,14 +50,14 @@ namespace Unity.Physics.GraphicsIntegration
 
         protected override void OnUpdate()
         {
-            var worldIndex = GetSingleton<PhysicsWorldSingleton>().PhysicsWorldIndex;
+            var worldIndex = SystemAPI.GetSingleton<PhysicsWorldSingleton>().PhysicsWorldIndex;
             if (!m_initializedWorlds.Contains(worldIndex))
             {
                 //Let the graphics system smooth the rigid body motion for the physics world using recent smooth time.
                 m_smoothGraphicalMotionSystem.RegisterPhysicsWorldForSmoothRigidBodyMotion(worldIndex);
                 m_initializedWorlds.Add(worldIndex);
             }
-            var mostRecentTimeBuffer = GetBuffer<MostRecentFixedTime>(GetSingletonEntity<MostRecentFixedTime>());
+            var mostRecentTimeBuffer = SystemAPI.GetBuffer<MostRecentFixedTime>(SystemAPI.GetSingletonEntity<MostRecentFixedTime>());
             mostRecentTimeBuffer[(int)worldIndex.Value] = new MostRecentFixedTime
             {
                 ElapsedTime = SystemAPI.Time.ElapsedTime,

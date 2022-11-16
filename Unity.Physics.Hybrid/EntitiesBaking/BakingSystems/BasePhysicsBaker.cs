@@ -39,10 +39,11 @@ namespace Unity.Physics.Authoring
     {
         protected bool NeedsPostProcessTransform(Transform worldTransform, bool gameObjectStatic, BodyMotionType motionType, out PhysicsPostProcessData data)
         {
-            var transformParent         = worldTransform.parent;
-            var haveParentEntity    = transformParent != null;
-            var haveBakedTransform  = gameObjectStatic;
-            var unparent            = motionType != BodyMotionType.Static || !haveParentEntity || haveBakedTransform;
+            Transform transformParent = worldTransform.parent;
+            bool haveParentEntity    = transformParent != null;
+            bool haveBakedTransform  = gameObjectStatic;
+            bool hasNonIdentityScale = HasNonIdentityScale(worldTransform);
+            bool unparent            = motionType != BodyMotionType.Static || hasNonIdentityScale || !haveParentEntity || haveBakedTransform;
 
             data = default;
             if (unparent)
@@ -56,6 +57,11 @@ namespace Unity.Physics.Authoring
             return unparent;
         }
 
+        bool HasNonIdentityScale(Transform bodyTransform)
+        {
+            return math.lengthsq((float3)bodyTransform.lossyScale - new float3(1f)) > 0f;
+        }
+
         protected void PostProcessTransform(Transform bodyTransform, BodyMotionType motionType)
         {
             if (NeedsPostProcessTransform(bodyTransform, IsStatic(), motionType, out PhysicsPostProcessData data))
@@ -66,14 +72,32 @@ namespace Unity.Physics.Authoring
                 // Need to add all the necessary transform elements
                 AddComponent(new LocalToWorld { Value = bodyTransform.localToWorldMatrix });
 
+#if !ENABLE_TRANSFORM_V1
+                if (HasNonIdentityScale(bodyTransform))
+                {
+                    // Any non-identity scale at authoring time is baked into the physics collision shape/mass data.
+                    // In this case, the LocalTransform scale field should be set to 1.0 to avoid double-scaling
+                    // within the physics simulation. We bake the scale into the PostTransformScale to make sure the object
+                    // is rendered correctly.
+                    // TODO(DOTS-7098): should potentially add a tag component here to indicate that scale is baked in?
+                    var compositeScale = float3x3.Scale(bodyTransform.localScale);
+                    AddComponent(new PostTransformScale { Value = compositeScale });
+                    AddComponent<PropagateLocalToWorld>();
+                }
+                var uniformScale = 1.0f;
+                LocalTransform transform = LocalTransform.FromPositionRotationScale(bodyTransform.localPosition,
+                    bodyTransform.localRotation, uniformScale);
+                AddComponent(transform);
+                AddComponent((WorldTransform)transform);
+#else
                 AddComponent(new Translation { Value = bodyTransform.localPosition });
                 AddComponent(new Rotation { Value = bodyTransform.localRotation });
 
-                if (math.lengthsq((float3)bodyTransform.lossyScale - new float3(1f)) > 0f)
+                if (HasNonIdentityScale(bodyTransform))
                 {
                     AddComponent(new CompositeScale() { Value = float4x4.Scale(bodyTransform.localScale) });
                 }
-
+#endif
                 AddComponent(data);
             }
         }

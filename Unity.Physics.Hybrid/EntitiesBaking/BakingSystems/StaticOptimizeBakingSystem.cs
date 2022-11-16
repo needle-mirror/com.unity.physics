@@ -1,0 +1,156 @@
+using System;
+using Unity.Burst;
+using Unity.Collections;
+using Unity.Entities;
+using Unity.Mathematics;
+using UnityEngine;
+using LegacyPhysics = UnityEngine.Physics;
+using LegacyCollider = UnityEngine.Collider;
+using LegacyBox = UnityEngine.BoxCollider;
+using LegacyCapsule = UnityEngine.CapsuleCollider;
+using LegacyMesh = UnityEngine.MeshCollider;
+using LegacySphere = UnityEngine.SphereCollider;
+using UnityMesh = UnityEngine.Mesh;
+
+namespace Unity.Physics.Authoring
+{
+    /// <summary>
+    /// Marks a primary entity as a static root when building the compound colliders.
+    /// </summary>
+    [TemporaryBakingType]
+    struct StaticOptimizePhysicsBaking : IComponentData { }
+
+    /// <summary>
+    /// Component added on additional entities in bakers to mark the static root found during the baking of a collider.
+    /// </summary>
+    /// <remarks>
+    /// Multiple bakers may find the same static root body. The system <see cref="StaticOptimizeBakingSystem"/>
+    /// adds the component <see cref="StaticOptimizePhysicsBaking"/> to the static root primary entity.
+    /// </remarks>
+    [BakingType]
+    struct BakeStaticRoot : IComponentData
+    {
+        public Entity Body;
+        public int ConvertedBodyInstanceID;
+    }
+
+    [BurstCompile]
+    [UpdateBefore(typeof(BuildCompoundCollidersBakingSystem))]
+    [WorldSystemFilter(WorldSystemFilterFlags.BakingSystem)]
+    partial struct StaticOptimizeBakingSystem : ISystem
+    {
+        EntityQuery _ChangedBakeStaticRootQuery;
+        EntityQuery _PreviousBakeStaticRootQuery;
+        EntityQuery _StateQuery;
+        ComponentTypeSet _RootComponents;
+
+        /// <summary>
+        /// Holds the set of static roots baked in a previous iteration.
+        /// </summary>
+        struct StaticRootState : ICleanupComponentData
+        {
+            public NativeHashSet<Entity> State;
+        }
+
+        [BurstCompile]
+        public void OnCreate(ref SystemState systemState)
+        {
+            _StateQuery = new EntityQueryBuilder(Allocator.Temp).WithAllRW<StaticRootState>().Build(ref systemState);
+
+            _PreviousBakeStaticRootQuery = new EntityQueryBuilder(Allocator.Temp)
+                .WithAll<BakeStaticRoot>()
+                .WithNone<BakedEntity>()
+                .Build(ref systemState);
+
+            _ChangedBakeStaticRootQuery = new EntityQueryBuilder(Allocator.Temp)
+                .WithAll<BakeStaticRoot, BakedEntity>()
+                .Build(ref systemState);
+
+            _RootComponents = new ComponentTypeSet(
+                ComponentType.ReadWrite<StaticOptimizePhysicsBaking>(),
+                ComponentType.ReadWrite<PhysicsWorldIndex>(),
+                ComponentType.ReadWrite<PhysicsCompoundData>(),
+                ComponentType.ReadWrite<PhysicsCollider>(),
+                ComponentType.ReadWrite<PhysicsColliderKeyEntityPair>());
+        }
+
+        [BurstCompile]
+        public void OnDestroy(ref SystemState systemState)
+        {
+            if (!_StateQuery.IsEmpty)
+            {
+                var state = _StateQuery.GetSingleton<StaticRootState>();
+                state.State.Dispose();
+
+                systemState.EntityManager.RemoveComponent<StaticRootState>(_StateQuery);
+            }
+        }
+
+        [BurstCompile]
+        public void OnUpdate(ref SystemState systemState)
+        {
+            if (_StateQuery.IsEmpty)
+            {
+                var singleton = systemState.EntityManager.CreateSingleton<StaticRootState>("StaticOptimizeBakingSystemState");
+                systemState.EntityManager.SetComponentData(singleton, new StaticRootState()
+                {
+                    State = new NativeHashSet<Entity>(10, Allocator.Persistent)
+                });
+            }
+
+            var state = _StateQuery.GetSingletonRW<StaticRootState>().ValueRW;
+
+            var previousStaticRoots = _PreviousBakeStaticRootQuery.ToComponentDataArray<BakeStaticRoot>(Allocator.Temp);
+            var changedStaticRoots = _ChangedBakeStaticRootQuery.ToComponentDataArray<BakeStaticRoot>(Allocator.Temp);
+
+            var capacity = math.max(previousStaticRoots.Length, changedStaticRoots.Length);
+            var uniqueRoots = new NativeHashMap<Entity, BakeStaticRoot>(capacity, Allocator.Temp);
+
+            // clear the root components from roots that are no longer needed
+            GetUniqueRoots(previousStaticRoots, ref uniqueRoots);
+            var oldState = state.State.ToNativeArray(Allocator.Temp);
+            for (int i = 0, count = oldState.Length; i < count; ++i)
+            {
+                var r = oldState[i];
+                if (!uniqueRoots.ContainsKey(r))
+                {
+                    systemState.EntityManager.RemoveComponent(r, _RootComponents);
+                    state.State.Remove(r);
+                }
+            }
+
+            // add the root components on the new static roots
+            uniqueRoots.Clear();
+            GetUniqueRoots(changedStaticRoots, ref uniqueRoots);
+            foreach (var kv in uniqueRoots)
+            {
+                var rootEntity = kv.Value.Body;
+                state.State.Add(rootEntity);
+                systemState.EntityManager.AddComponent(rootEntity, _RootComponents);
+
+                systemState.EntityManager.SetSharedComponent(rootEntity, new PhysicsWorldIndex());
+
+                systemState.EntityManager.SetComponentData(rootEntity, new PhysicsCompoundData()
+                {
+                    AssociateBlobToBody = false,
+                    ConvertedBodyInstanceID = kv.Value.ConvertedBodyInstanceID,
+                    Hash = default,
+                });
+            }
+        }
+
+        [BurstCompile]
+        static void GetUniqueRoots(in NativeArray<BakeStaticRoot> rootMarkers, ref NativeHashMap<Entity, BakeStaticRoot> bodyRoots)
+        {
+            for (int i = 0, count = rootMarkers.Length; i < count; ++i)
+            {
+                var bakedStaticRoot = rootMarkers[i];
+                var rootEntity = bakedStaticRoot.Body;
+                if (bodyRoots.ContainsKey(rootEntity))
+                    continue;
+
+                bodyRoots.Add(rootEntity, bakedStaticRoot);
+            }
+        }
+    }
+}

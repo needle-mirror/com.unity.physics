@@ -50,7 +50,7 @@ namespace Unity.Physics.Authoring
     }
 
     /// <summary>   The physics body authoring. This class cannot be inherited. </summary>
-    [AddComponentMenu("DOTS/Physics/Physics Body")]
+    [AddComponentMenu("Entities/Physics/Physics Body")]
     [DisallowMultipleComponent]
     [HelpURL(HelpURLs.PhysicsBodyAuthoring)]
     public sealed class PhysicsBodyAuthoring : MonoBehaviour

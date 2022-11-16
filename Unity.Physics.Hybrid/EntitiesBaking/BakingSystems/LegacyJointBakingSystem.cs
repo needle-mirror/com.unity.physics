@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using UnityEngine.Assertions;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -55,6 +56,35 @@ namespace Unity.Physics.Authoring
             public PhysicsJoint AngularJoint;
         }
 
+        public void SetupBodyFrames(quaternion jointFrameOrientation, LegacyJoint joint, ref BodyFrame bodyAFromJoint, ref BodyFrame bodyBFromJoint)
+        {
+            RigidTransform worldFromBodyA = Math.DecomposeRigidBodyTransform(joint.transform.localToWorldMatrix);
+            RigidTransform worldFromBodyB = joint.connectedBody == null
+                ? RigidTransform.identity
+                : Math.DecomposeRigidBodyTransform(joint.connectedBody.transform.localToWorldMatrix);
+
+            var legacyWorldFromJointA = math.mul(
+                new RigidTransform(joint.transform.rotation, joint.transform.position),
+                new RigidTransform(jointFrameOrientation, joint.anchor)
+            );
+            bodyAFromJoint = new BodyFrame(math.mul(math.inverse(worldFromBodyA), legacyWorldFromJointA));
+
+            var connectedEntity = GetEntity(joint.connectedBody);
+            var isConnectedBodyConverted =
+                joint.connectedBody == null || connectedEntity != Entity.Null;
+
+            RigidTransform bFromA = isConnectedBodyConverted ? math.mul(math.inverse(worldFromBodyB), worldFromBodyA) : worldFromBodyA;
+            RigidTransform bFromBSource =
+                isConnectedBodyConverted ? RigidTransform.identity : worldFromBodyB;
+
+            bodyBFromJoint = new BodyFrame
+            {
+                Axis = math.mul(bFromA.rot, bodyAFromJoint.Axis),
+                PerpendicularAxis = math.mul(bFromA.rot, bodyAFromJoint.PerpendicularAxis),
+                Position = math.mul(bFromBSource, new float4(joint.connectedAnchor, 1f)).xyz
+            };
+        }
+
         public CombinedJoint CreateConfigurableJoint(
             quaternion jointFrameOrientation,
             LegacyJoint joint, bool3 linearLocks, bool3 linearLimited, SoftJointLimit linearLimit, SoftJointLimitSpring linearSpring, bool3 angularFree, bool3 angularLocks,
@@ -64,9 +94,6 @@ namespace Unity.Physics.Authoring
             var angularConstraints = new FixedList512Bytes<Constraint>();
             var linearConstraints = new FixedList512Bytes<Constraint>();
 
-            bool angularBreakable = joint.breakTorque == float.PositiveInfinity ? false : true;
-            bool LinearBreakable = joint.breakForce == float.PositiveInfinity ? false : true;
-
             if (angularLimited[0])
             {
                 Constraint constraint = Constraint.Twist(
@@ -75,7 +102,6 @@ namespace Unity.Physics.Authoring
                     joint.breakTorque * Time.fixedDeltaTime,
                     CalculateSpringFrequencyFromSpringConstant(angularXLimitSpring.spring),
                     angularXLimitSpring.damper);
-                constraint.EnableImpulseEvents = angularBreakable;
                 angularConstraints.Add(constraint);
             }
 
@@ -88,7 +114,6 @@ namespace Unity.Physics.Authoring
                     CalculateSpringFrequencyFromSpringConstant(angularYZLimitSpring.spring),
                     angularYZLimitSpring.damper);
 
-                constraint.EnableImpulseEvents = angularBreakable;
                 angularConstraints.Add(constraint);
             }
 
@@ -101,12 +126,12 @@ namespace Unity.Physics.Authoring
                     CalculateSpringFrequencyFromSpringConstant(angularYZLimitSpring.spring),
                     angularYZLimitSpring.damper);
 
-                constraint.EnableImpulseEvents = angularBreakable;
                 angularConstraints.Add(constraint);
             }
 
             if (math.any(linearLimited))
             {
+                // 'Linear Limit Spring' & 'Linear Limit' section:
                 //If spring=0, then need to treat it and damper as locked. Okay for damper=0 if spring>0
                 var spring = Constraint.DefaultSpringFrequency; //stiff spring
                 var damping = 1.0f; //critically damped
@@ -125,7 +150,6 @@ namespace Unity.Physics.Authoring
                     SpringFrequency = CalculateSpringFrequencyFromSpringConstant(spring),
                     SpringDamping = damping,
                     MaxImpulse = joint.breakForce * Time.fixedDeltaTime,
-                    EnableImpulseEvents = LinearBreakable
                 });
             }
 
@@ -140,7 +164,6 @@ namespace Unity.Physics.Authoring
                     SpringFrequency =  Constraint.DefaultSpringFrequency, //stiff spring
                     SpringDamping = 1.0f, //critically damped
                     MaxImpulse = joint.breakForce * Time.fixedDeltaTime,
-                    EnableImpulseEvents = LinearBreakable
                 });
             }
 
@@ -155,35 +178,11 @@ namespace Unity.Physics.Authoring
                     SpringFrequency = Constraint.DefaultSpringFrequency, //stiff spring
                     SpringDamping = 1.0f, //critically damped
                     MaxImpulse = joint.breakTorque * Time.fixedDeltaTime,
-                    EnableImpulseEvents = angularBreakable
                 });
             }
-
-            RigidTransform worldFromBodyA = Math.DecomposeRigidBodyTransform(joint.transform.localToWorldMatrix);
-            RigidTransform worldFromBodyB = joint.connectedBody == null
-                ? RigidTransform.identity
-                : Math.DecomposeRigidBodyTransform(joint.connectedBody.transform.localToWorldMatrix);
-
-            var legacyWorldFromJointA = math.mul(
-                new RigidTransform(joint.transform.rotation, joint.transform.position),
-                new RigidTransform(jointFrameOrientation, joint.anchor)
-            );
-            var bodyAFromJoint = new BodyFrame(math.mul(math.inverse(worldFromBodyA), legacyWorldFromJointA));
-
-            var connectedEntity = GetEntity(joint.connectedBody);
-            var isConnectedBodyConverted =
-                joint.connectedBody == null || connectedEntity != Entity.Null;
-
-            RigidTransform bFromA = isConnectedBodyConverted ? math.mul(math.inverse(worldFromBodyB), worldFromBodyA) : worldFromBodyA;
-            RigidTransform bFromBSource =
-                isConnectedBodyConverted ? RigidTransform.identity : worldFromBodyB;
-
-            var bodyBFromJoint = new BodyFrame
-            {
-                Axis = math.mul(bFromA.rot, bodyAFromJoint.Axis),
-                PerpendicularAxis = math.mul(bFromA.rot, bodyAFromJoint.PerpendicularAxis),
-                Position = math.mul(bFromBSource, new float4(joint.connectedAnchor, 1f)).xyz
-            };
+            var bodyAFromJoint = new BodyFrame {};
+            var bodyBFromJoint = new BodyFrame {};
+            SetupBodyFrames(jointFrameOrientation, joint, ref bodyAFromJoint, ref bodyBFromJoint);
 
             var combinedJoint = new CombinedJoint();
             combinedJoint.LinearJoint.SetConstraints(linearConstraints);
@@ -194,6 +193,43 @@ namespace Unity.Physics.Authoring
             combinedJoint.AngularJoint.BodyBFromJoint = bodyBFromJoint;
 
             return combinedJoint;
+        }
+
+        public PhysicsJoint ConvertMotor(quaternion jointFrameOrientation, LegacyJoint joint, JacobianType motorType, float target, float maxImpulseForMotor)
+        {
+            var bodyAFromJoint = new BodyFrame {};
+            var bodyBFromJoint = new BodyFrame {};
+            SetupBodyFrames(jointFrameOrientation, joint, ref bodyAFromJoint, ref bodyBFromJoint);
+
+            // In PhysX Configurable Joint:
+            // X Motion and Angular X Motion: applied to Axis (not necessarily the x-axis)
+            // Y Motion and Angular Y Motion: applied to Secondary Axis (not necessarily the y-axis)
+            // Z Motion and Angular Z Motion: applied to axis perpendicular to Axis & Secondary Axis
+            // Therefore when setting Target fields in PhysX, the Target.x is aligned to whatever the Axis field is set
+            // and Target.y is aligned to the Secondary Axis > need to convert the target to be aligns to Axis
+            // Targets are set local to bodyA as the offset of the final target relative to  the starting bodyA position
+            var jointData = new PhysicsJoint();
+
+            switch (motorType)
+            {
+                case JacobianType.PositionMotor:
+                    jointData = PhysicsJoint.CreatePositionMotor(bodyAFromJoint, bodyBFromJoint, target, maxImpulseForMotor);
+                    break;
+                case JacobianType.LinearVelocityMotor:
+                    jointData = PhysicsJoint.CreateLinearVelocityMotor(bodyAFromJoint, bodyBFromJoint, target, maxImpulseForMotor);
+                    break;
+                case JacobianType.RotationMotor:
+                    jointData = PhysicsJoint.CreateRotationalMotor(bodyAFromJoint, bodyBFromJoint, target, maxImpulseForMotor);
+                    break;
+                case JacobianType.AngularVelocityMotor:
+                    jointData = PhysicsJoint.CreateAngularVelocityMotor(bodyAFromJoint, bodyBFromJoint, target, maxImpulseForMotor);
+                    break;
+                default:
+                    SafetyChecks.ThrowNotImplementedException();
+                    break;
+            }
+
+            return jointData;
         }
 
         public uint GetWorldIndex(UnityEngine.Component c)
@@ -324,16 +360,146 @@ namespace Unity.Physics.Authoring
                 GetAxesWithMotionType(ConfigurableJointMotion.Limited, joint.angularXMotion, joint.angularYMotion, joint.angularZMotion);
 
             var jointFrameOrientation = GetJointFrameOrientation(joint.axis, joint.secondaryAxis);
-            var jointData = CreateConfigurableJoint(jointFrameOrientation, joint, linearLocks, linearLimited,
-                joint.linearLimit, joint.linearLimitSpring, angularFree, angularLocks, angularLimited,
-                joint.lowAngularXLimit, joint.highAngularXLimit, joint.angularXLimitSpring, joint.angularYLimit,
-                joint.angularZLimit, joint.angularYZLimitSpring);
 
-            var worldIndex = GetWorldIndex(joint);
-            using (var joints = new NativeArray<PhysicsJoint>(2, Allocator.Temp) { [0] = jointData.LinearJoint, [1] = jointData.AngularJoint })
-            using (var jointEntities = new NativeList<Entity>(2, Allocator.Temp))
+            bool requiredDoF_forLinearMotors = math.any(linearLocks) && math.all(angularLocks) && math.all(!linearLimited);
+            bool requiredDoF_forAngularMotors = math.all(linearLocks) && math.any(angularLocks) && math.all(!linearLimited);
+
+            // Enforcing motor authoring on X Drive (primary Axis aligned) only. If either of these values are zero, then it will not be flagged be a position motor.
+            bool3 isPositionMotor;
+            isPositionMotor.x = joint.xDrive.positionSpring * joint.xDrive.maximumForce > 0;
+            isPositionMotor.y = false;
+            isPositionMotor.z = false;
+
+            // Enforcing motor authoring on X Drive (primary Axis aligned) only. If either of these values are zero, then it will not be flagged be a velocity motor
+            bool3 isLinearVelocityMotor;
+            isLinearVelocityMotor.x = joint.xDrive.positionDamper * joint.xDrive.maximumForce > 0;
+            isLinearVelocityMotor.y = false;
+            isLinearVelocityMotor.z = false;
+
+            var maxForceForLinearMotor = new float3(joint.xDrive.maximumForce, joint.yDrive.maximumForce, joint.zDrive.maximumForce);
+
+            // Enforcing motor authoring on Angular X Drive (primary Axis aligned) only. If either of these values are zero, then it will not be flagged be a rotation motor
+            bool3 isRotationMotor;
+            isRotationMotor.x = joint.angularXDrive.positionSpring * joint.angularXDrive.maximumForce > 0;
+            isRotationMotor.y = false;
+            isRotationMotor.z = false;
+
+            // Enforcing motor authoring on Angular X Drive (primary Axis aligned) only. If either of these values are zero, then it will not be flagged be an angular velocity motor
+            bool3 isAngularVelocityMotor;
+            isAngularVelocityMotor.x = joint.angularXDrive.positionDamper * joint.angularXDrive.maximumForce > 0;
+            isAngularVelocityMotor.y = false;
+            isAngularVelocityMotor.z = false;
+
+            var maxForceForAngularMotor = new float3(joint.angularXDrive.maximumForce, joint.angularYZDrive.maximumForce, joint.angularYZDrive.maximumForce);
+
+            PhysicsJoint motorJointData;
+            uint worldIndex;
+            bool isMotor = false;
+            if (math.any(isPositionMotor))
             {
-                CreateJointEntities(worldIndex, GetConstrainedBodyPair(joint), joints, jointEntities);
+                isMotor = true;
+                // To simplify conversion require: X Motion = Free. Y&Z Motion = Locked. Angular X/Y/Z = Locked. Axis field determines rotation
+                if (requiredDoF_forLinearMotors)
+                {
+                    Assert.IsTrue(linearLocks.y && linearLocks.z,
+                        $"Configurable Joint Baking Failed for {joint.name}: Baking Motor as Position Motor requires that both Y Drive = Locked, Z Drive = Locked");
+                    var maxImpulseForLinearMotor = math.length((int3)isPositionMotor * maxForceForLinearMotor) * Time.fixedDeltaTime;
+                    float3 targetVector = (int3)isPositionMotor * (float3)joint.targetPosition;
+                    var target = targetVector.x * -1; //need -1: PhysX sets target as offset from the target, whereas ECS Physics targets target as where to go
+
+                    motorJointData = ConvertMotor(jointFrameOrientation, joint, JacobianType.PositionMotor, target, maxImpulseForLinearMotor);
+                    motorJointData.SetImpulseEventThresholdAllConstraints(
+                        joint.breakForce * Time.fixedDeltaTime,
+                        joint.breakTorque * Time.fixedDeltaTime);
+
+                    worldIndex = GetWorldIndex(joint);
+                    CreateJointEntity(worldIndex, GetConstrainedBodyPair(joint), motorJointData);
+                }
+            }
+
+            if (math.any(isLinearVelocityMotor))
+            {
+                isMotor = true;
+                // To simplify conversion require: X Motion = Free. Y&Z Motion = Locked. Angular X/Y/Z = Locked. Axis field determines rotation
+                if (requiredDoF_forLinearMotors)
+                {
+                    Assert.IsTrue(linearLocks.y && linearLocks.z,
+                        $"Configurable Joint Baking Failed for {joint.name}: Baking Motor as Linear Velocity Motor requires that both Y Drive = Locked, Z Drive = Locked");
+
+                    var maxImpulseForLinearMotor = math.length((int3)isLinearVelocityMotor * maxForceForLinearMotor) * Time.fixedDeltaTime;
+                    float3 targetVector = (int3)isLinearVelocityMotor * (float3)joint.targetVelocity;
+                    var target = targetVector.x * -1; //need -1: PhysX sets target as offset from the target, whereas ECS Physics targets target as where to go
+
+                    motorJointData = ConvertMotor(jointFrameOrientation, joint, JacobianType.LinearVelocityMotor, target, maxImpulseForLinearMotor);
+                    motorJointData.SetImpulseEventThresholdAllConstraints(
+                        joint.breakForce * Time.fixedDeltaTime,
+                        joint.breakTorque * Time.fixedDeltaTime);
+
+                    worldIndex = GetWorldIndex(joint);
+                    CreateJointEntity(worldIndex, GetConstrainedBodyPair(joint), motorJointData);
+                }
+            }
+
+            if (math.any(isRotationMotor))
+            {
+                isMotor = true;
+                // To simplify conversion require: Angular X Motion = Free. Angular Y&Z = Locked. X/Y/Z Motion = Locked.  Axis field determines rotation
+                if (requiredDoF_forAngularMotors)
+                {
+                    Assert.IsTrue(angularLocks.y && angularLocks.z,
+                        $"Configurable Joint Baking Failed for {joint.name}: Baking Motor as Rotation Motor requires that both Angular Y Drive = Locked, Angular Z Drive = Locked");
+
+                    var maxImpulseForAngularMotor = math.length((int3)isRotationMotor * maxForceForAngularMotor) * Time.fixedDeltaTime;
+                    float3 targetVector = (int3)isRotationMotor * (float3)joint.targetRotation.eulerAngles; //in degrees, targetRotation a Quaternion
+                    var target = math.radians(targetVector.x) * -1; //need -1: PhysX sets target as offset from the target, whereas ECS Physics targets target as where to go
+
+                    motorJointData = ConvertMotor(jointFrameOrientation, joint, JacobianType.RotationMotor, target, maxImpulseForAngularMotor);
+                    motorJointData.SetImpulseEventThresholdAllConstraints(
+                        joint.breakForce * Time.fixedDeltaTime,
+                        joint.breakTorque * Time.fixedDeltaTime);
+
+                    worldIndex = GetWorldIndex(joint);
+                    CreateJointEntity(worldIndex, GetConstrainedBodyPair(joint), motorJointData);
+                }
+            }
+
+            if (math.any(isAngularVelocityMotor))
+            {
+                isMotor = true;
+                // To simplify conversion require: Angular X Motion = Free. Angular Y&Z = Locked. X/Y/Z Motion = Locked.  Axis field determines rotation
+                if (requiredDoF_forAngularMotors)
+                {
+                    Assert.IsTrue(angularLocks.y && angularLocks.z,
+                        $"Configurable Joint Baking Failed for {joint.name}: Baking Motor as Angular Velocity Motor requires that both Angular Y Drive = Locked, Angular Z Drive = Locked");
+
+                    var maxImpulseForAngularMotor = math.length((int3)isAngularVelocityMotor * maxForceForAngularMotor) * Time.fixedDeltaTime;
+                    float3 targetVector = (int3)isAngularVelocityMotor * (float3)joint.targetAngularVelocity; //target in radian/s
+                    var target = targetVector.x;
+
+                    motorJointData = ConvertMotor(jointFrameOrientation, joint, JacobianType.AngularVelocityMotor, target, maxImpulseForAngularMotor);
+                    motorJointData.SetImpulseEventThresholdAllConstraints(
+                        joint.breakForce * Time.fixedDeltaTime,
+                        joint.breakTorque * Time.fixedDeltaTime);
+
+                    worldIndex = GetWorldIndex(joint);
+                    CreateJointEntity(worldIndex, GetConstrainedBodyPair(joint), motorJointData);
+                }
+            }
+
+            if (!isMotor)
+            {
+                var jointData = CreateConfigurableJoint(jointFrameOrientation, joint, linearLocks, linearLimited,
+                    joint.linearLimit, joint.linearLimitSpring, angularFree, angularLocks, angularLimited,
+                    joint.lowAngularXLimit, joint.highAngularXLimit, joint.angularXLimitSpring, joint.angularYLimit,
+                    joint.angularZLimit, joint.angularYZLimitSpring);
+
+                worldIndex = GetWorldIndex(joint);
+                using (var joints = new NativeArray<PhysicsJoint>(2, Allocator.Temp)
+                       { [0] = jointData.LinearJoint, [1] = jointData.AngularJoint })
+                using (var jointEntities = new NativeList<Entity>(2, Allocator.Temp))
+                {
+                    CreateJointEntities(worldIndex, GetConstrainedBodyPair(joint), joints, jointEntities);
+                }
             }
         }
 
@@ -362,26 +528,7 @@ namespace Unity.Physics.Authoring
             var bodyBFromJoint = new BodyFrame(math.mul(math.inverse(worldFromBodyB), legacyWorldFromJointA));
 
             var jointData = PhysicsJoint.CreateFixed(bodyAFromJoint, bodyBFromJoint);
-
-            bool LinearBreakable = joint.breakForce == float.PositiveInfinity ? false : true;
-            bool angularBreakable = joint.breakTorque == float.PositiveInfinity ? false : true;
-            var constraints = jointData.GetConstraints();
-            for (int i = 0; i < constraints.Length; ++i)
-            {
-                ref Constraint constraint = ref constraints.ElementAt(i);
-                switch (constraint.Type)
-                {
-                    case ConstraintType.Linear:
-                        constraint.MaxImpulse = joint.breakForce * Time.fixedDeltaTime;
-                        constraint.EnableImpulseEvents = LinearBreakable;
-                        break;
-                    case ConstraintType.Angular:
-                        constraint.MaxImpulse = joint.breakTorque * Time.fixedDeltaTime;
-                        constraint.EnableImpulseEvents = angularBreakable;
-                        break;
-                }
-            }
-            jointData.SetConstraints(constraints);
+            jointData.SetImpulseEventThresholdAllConstraints(joint.breakForce * Time.fixedDeltaTime, joint.breakTorque * Time.fixedDeltaTime);
 
             var worldIndex = GetWorldIndex(joint);
             Entity entity = CreateJointEntity(worldIndex, GetConstrainedBodyPair(joint), jointData);
@@ -426,29 +573,29 @@ namespace Unity.Physics.Authoring
             };
 
             var limits = math.radians(new FloatRange(joint.limits.min, joint.limits.max).Sorted());
-            var jointData = joint.useLimits
-                ? PhysicsJoint.CreateLimitedHinge(bodyAFromJoint, bodyBFromJoint, limits)
-                : PhysicsJoint.CreateHinge(bodyAFromJoint, bodyBFromJoint);
 
-            bool LinearBreakable = joint.breakForce == float.PositiveInfinity ? false : true;
-            bool angularBreakable = joint.breakTorque == float.PositiveInfinity ? false : true;
-            var constraints = jointData.GetConstraints();
-            for (int i = 0; i < constraints.Length; ++i)
+            // Create different types of joints based on: are there limits, is there a motor?
+            var jointData = new PhysicsJoint();
+            if (joint.useSpring && !joint.useMotor) //a rotational motor if Use Spring = T, Spring: Spring, Damper, Target Position are set
             {
-                ref Constraint constraint = ref constraints.ElementAt(i);
-                switch (constraint.Type)
-                {
-                    case ConstraintType.Linear:
-                        constraint.MaxImpulse = joint.breakForce * Time.fixedDeltaTime;
-                        constraint.EnableImpulseEvents = LinearBreakable;
-                        break;
-                    case ConstraintType.Angular:
-                        constraint.MaxImpulse = joint.breakTorque * Time.fixedDeltaTime;
-                        constraint.EnableImpulseEvents = angularBreakable;
-                        break;
-                }
+                var maxImpulseOfMotor = joint.breakTorque * Time.fixedDeltaTime;
+                var target = math.radians(joint.spring.targetPosition);
+                jointData = PhysicsJoint.CreateRotationalMotor(bodyAFromJoint, bodyBFromJoint, target, maxImpulseOfMotor);
             }
-            jointData.SetConstraints(constraints);
+            else if (joint.useMotor) //an angular velocity motor if use Motor = T, Motor: Target Velocity, Force are set
+            {
+                var targetSpeedInRadians = math.radians(joint.motor.targetVelocity);
+                var maxImpulseOfMotor = joint.motor.force * Time.fixedDeltaTime;
+                jointData = PhysicsJoint.CreateAngularVelocityMotor(bodyAFromJoint, bodyBFromJoint, targetSpeedInRadians, maxImpulseOfMotor);
+            }
+            else //non-motorized
+            {
+                jointData = joint.useLimits
+                    ? PhysicsJoint.CreateLimitedHinge(bodyAFromJoint, bodyBFromJoint, limits)
+                    : PhysicsJoint.CreateHinge(bodyAFromJoint, bodyBFromJoint);
+            }
+
+            jointData.SetImpulseEventThresholdAllConstraints(joint.breakForce * Time.fixedDeltaTime, joint.breakTorque * Time.fixedDeltaTime);
 
             var worldIndex = GetWorldIndex(joint);
             Entity entity = CreateJointEntity(worldIndex, GetConstrainedBodyPair(joint), jointData);
@@ -474,7 +621,6 @@ namespace Unity.Physics.Authoring
                 SpringFrequency = CalculateSpringFrequencyFromSpringConstant(joint.spring),
                 SpringDamping = joint.damper,
                 MaxImpulse = joint.breakForce * Time.fixedDeltaTime,
-                EnableImpulseEvents =  Single.IsPositiveInfinity(joint.breakForce) ? false : true
             };
 
             var jointFrameA = BodyFrame.Identity;

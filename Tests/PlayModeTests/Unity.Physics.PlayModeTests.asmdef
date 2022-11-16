@@ -1,5 +1,6 @@
 {
     "name": "Unity.Physics.PlayModeTests",
+    "rootNamespace": "",
     "references": [
         "Unity.Burst",
         "Unity.Collections",
@@ -12,7 +13,6 @@
         "Unity.Physics.Hybrid",
         "Unity.Physics.Editor",
         "Unity.Transforms",
-        "Unity.Jobs",
         "Unity.DataFlowGraph",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"

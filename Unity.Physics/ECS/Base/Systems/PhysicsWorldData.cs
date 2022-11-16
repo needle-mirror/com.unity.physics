@@ -46,9 +46,14 @@ namespace Unity.Physics.Systems
                 EntityType = systemState.GetEntityTypeHandle();
                 LocalToWorldType = systemState.GetComponentTypeHandle<LocalToWorld>(true);
                 ParentType = systemState.GetComponentTypeHandle<Parent>(true);
+#if !ENABLE_TRANSFORM_V1
+                LocalTransformType = systemState.GetComponentTypeHandle<LocalTransform>(true);
+                PostTransformScaleType = systemState.GetComponentTypeHandle<PostTransformScale>(true);
+#else
                 PositionType = systemState.GetComponentTypeHandle<Translation>(true);
                 RotationType = systemState.GetComponentTypeHandle<Rotation>(true);
                 ScaleType = systemState.GetComponentTypeHandle<Scale>(true);
+#endif
                 PhysicsColliderType = systemState.GetComponentTypeHandle<PhysicsCollider>(true);
                 PhysicsVelocityType = systemState.GetComponentTypeHandle<PhysicsVelocity>(true);
                 PhysicsMassType = systemState.GetComponentTypeHandle<PhysicsMass>(true);
@@ -72,9 +77,14 @@ namespace Unity.Physics.Systems
                 EntityType.Update(ref systemState);
                 LocalToWorldType.Update(ref systemState);
                 ParentType.Update(ref systemState);
+#if !ENABLE_TRANSFORM_V1
+                LocalTransformType.Update(ref systemState);
+                PostTransformScaleType.Update(ref systemState);
+#else
                 PositionType.Update(ref systemState);
                 RotationType.Update(ref systemState);
                 ScaleType.Update(ref systemState);
+#endif
                 PhysicsColliderType.Update(ref systemState);
                 PhysicsVelocityType.Update(ref systemState);
                 PhysicsMassType.Update(ref systemState);
@@ -90,9 +100,14 @@ namespace Unity.Physics.Systems
             internal EntityTypeHandle EntityType;
             internal ComponentTypeHandle<LocalToWorld> LocalToWorldType;
             internal ComponentTypeHandle<Parent> ParentType;
+#if !ENABLE_TRANSFORM_V1
+            internal ComponentTypeHandle<LocalTransform> LocalTransformType;
+            internal ComponentTypeHandle<PostTransformScale> PostTransformScaleType;
+#else
             internal ComponentTypeHandle<Translation> PositionType;
             internal ComponentTypeHandle<Rotation> RotationType;
             internal ComponentTypeHandle<Scale> ScaleType;
+#endif
             internal ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
             internal ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
             internal ComponentTypeHandle<PhysicsMass> PhysicsMassType;
@@ -116,14 +131,22 @@ namespace Unity.Physics.Systems
             HaveStaticBodiesChanged = new NativeReference<int>(Allocator.Persistent);
 
             EntityQueryBuilder queryBuilder = new EntityQueryBuilder(Allocator.Temp)
-                .WithAll<PhysicsVelocity, Translation, Rotation, PhysicsWorldIndex>();
+#if !ENABLE_TRANSFORM_V1
+                .WithAll<PhysicsVelocity, LocalTransform, PhysicsWorldIndex>();
+#else
+                    .WithAll<PhysicsVelocity, Translation, Rotation, PhysicsWorldIndex>();
+#endif
             DynamicEntityGroup = state.GetEntityQuery(queryBuilder);
             DynamicEntityGroup.SetSharedComponentFilter(worldIndex);
             queryBuilder.Dispose();
 
             queryBuilder = new EntityQueryBuilder(Allocator.Temp)
                 .WithAll<PhysicsCollider, PhysicsWorldIndex>()
+#if !ENABLE_TRANSFORM_V1
+                .WithAny<LocalToWorld, LocalTransform>()
+#else
                 .WithAny<LocalToWorld, Translation, Rotation>()
+#endif
                 .WithNone<PhysicsVelocity>();
             StaticEntityGroup = state.GetEntityQuery(queryBuilder);
             StaticEntityGroup.SetSharedComponentFilter(worldIndex);

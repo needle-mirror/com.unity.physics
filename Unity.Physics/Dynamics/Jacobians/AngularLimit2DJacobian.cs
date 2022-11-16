@@ -18,21 +18,9 @@ namespace Unity.Physics
         public float MinAngle;
         public float MaxAngle;
 
-        // The max impulse that can be applied on this constraint
-        public float3 MaxImpulse;
-
-        // Accumulated impulse applied over all steps
-        public float3 AccumulatedImpulse;
-
-        // The joint entity between the body pair
-        Entity JointEntity;
-
         // Current constraint axis indices
         public int ConstraintIndexX;
         public int ConstraintIndexY;
-
-        // When true, will send impulse events when max impulse is exceeded
-        public bool EnableImpulseEvents;
 
         // Relative orientation before solving
         public quaternion BFromA;
@@ -48,7 +36,7 @@ namespace Unity.Physics
 
         // Build the Jacobian
         public void Build(
-            Entity jointEntity, MTransform aFromConstraint, MTransform bFromConstraint,
+            MTransform aFromConstraint, MTransform bFromConstraint,
             MotionVelocity velocityA, MotionVelocity velocityB,
             MotionData motionA, MotionData motionB,
             Constraint constraint, float tau, float damping)
@@ -61,10 +49,6 @@ namespace Unity.Physics
             ConstraintIndexY = (freeIndex + 2) % 3;
             MinAngle = constraint.Min;
             MaxAngle = constraint.Max;
-            MaxImpulse = constraint.MaxImpulse;
-            JointEntity = jointEntity;
-            AccumulatedImpulse = float3.zero;
-            EnableImpulseEvents = constraint.EnableImpulseEvents;
             Tau = tau;
             Damping = damping;
             BFromA = math.mul(math.inverse(motionB.WorldFromMotion.rot), motionA.WorldFromMotion.rot);
@@ -128,17 +112,25 @@ namespace Unity.Physics
             velocityA.ApplyAngularImpulse(impulse.x * jacA0 + impulse.y * jacA1);
             velocityB.ApplyAngularImpulse(impulse.x * jacB0 + impulse.y * jacB1);
 
-            AccumulatedImpulse[ConstraintIndexX] += impulse.x;
-            AccumulatedImpulse[ConstraintIndexY] += impulse.y;
+            if ((jacHeader.Flags & JacobianFlags.EnableImpulseEvents) != 0)
+            {
+                HandleImpulseEvent(ref jacHeader, impulse, stepInput.IsLastIteration, ref impulseEventsWriter);
+            }
+        }
 
-            // if impulse exceeds max impulse, write back data
-            if (EnableImpulseEvents && stepInput.IsLastIteration && math.any(math.abs(AccumulatedImpulse) > MaxImpulse))
+        private void HandleImpulseEvent(ref JacobianHeader jacHeader, float2 impulse, bool isLastIteration, ref NativeStream.Writer impulseEventsWriter)
+        {
+            ref ImpulseEventSolverData impulseEventData = ref jacHeader.AccessImpulseEventSolverData();
+            impulseEventData.AccumulatedImpulse[ConstraintIndexX] += impulse.x;
+            impulseEventData.AccumulatedImpulse[ConstraintIndexY] += impulse.y;
+
+            if (isLastIteration && math.any(math.abs(impulseEventData.AccumulatedImpulse) > impulseEventData.MaxImpulse))
             {
                 impulseEventsWriter.Write(new ImpulseEventData
                 {
                     Type = ConstraintType.Angular,
-                    Impulse = AccumulatedImpulse,
-                    JointEntity = JointEntity,
+                    Impulse = impulseEventData.AccumulatedImpulse,
+                    JointEntity = impulseEventData.JointEntity,
                     BodyIndices = jacHeader.BodyPair
                 });
             }

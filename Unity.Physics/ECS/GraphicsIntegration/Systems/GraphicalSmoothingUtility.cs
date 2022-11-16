@@ -26,7 +26,7 @@ namespace Unity.Physics.GraphicsIntegration
         ///                                        o
         /// </code>
         /// </summary>
-        /// <param name="currentTransform">The transform of the rigid body after physics has stepped (i.e., the value of its <c>Translation</c> and <c>Rotation</c> components).</param>
+        /// <param name="currentTransform">The transform of the rigid body after physics has stepped (i.e., the value of its <see cref="Unity.Transforms.LocalTransform"/> components).</param>
         /// <param name="currentVelocity">The velocity of the rigid body after physics has stepped (i.e., the value of its <see cref="PhysicsVelocity"/> component).</param>
         /// <param name="mass">The body's <see cref="PhysicsMass"/> component.</param>
         /// <param name="timeAhead">A value indicating how many seconds the current elapsed time for graphics is ahead of the elapsed time when physics last stepped.</param>
@@ -61,7 +61,7 @@ namespace Unity.Physics.GraphicsIntegration
         /// See <see cref="InterpolateUsingVelocity"/> for an alternative approach.
         /// </summary>
         /// <param name="previousTransform">The transform of the rigid body before physics stepped.</param>
-        /// <param name="currentTransform">The transform of the rigid body after physics has stepped (i.e., the value of its <c>Translation</c> and <c>Rotation</c> components).</param>
+        /// <param name="currentTransform">The transform of the rigid body after physics has stepped (i.e., the value of its <see cref="Unity.Transforms.LocalTransform"/> components).</param>
         /// <param name="normalizedTimeAhead">A value in the range [0, 1] indicating how many seconds the current elapsed time for graphics is ahead of the elapsed time when physics last stepped, as a proportion of the fixed timestep used by physics.</param>
         /// <returns>
         /// An interpolated transform for a rigid body's graphical representation, suitable for constructing its <c>LocalToWorld</c> matrix before rendering.
@@ -133,6 +133,28 @@ namespace Unity.Physics.GraphicsIntegration
         /// <param name="compositeScales">The CompositeScale values in the chunk, if any.</param>
         /// <returns>A LocalToWorld matrix to use in place of those produced by default.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+#if !ENABLE_TRANSFORM_V1
+        public static LocalToWorld BuildLocalToWorld(
+            int i, RigidTransform transform,
+            float uniformScale,
+            bool hasPostTransformScale,
+            NativeArray<PostTransformScale> postTransformScales
+        )
+        {
+            var tr = new float4x4(transform);
+            // TODO(DOTS-7098): More robust check here?
+            if (hasPostTransformScale)
+            {
+                var m = new float4x4(postTransformScales[i].Value, float3.zero);
+                return new LocalToWorld { Value = math.mul(new float4x4(transform), m) };
+            }
+            else if (uniformScale != 0)
+                return new LocalToWorld { Value = float4x4.TRS(transform.pos, transform.rot, new float3(uniformScale)) };
+            else
+                return new LocalToWorld { Value = new float4x4(transform) };
+        }
+
+#else
         public static LocalToWorld BuildLocalToWorld(
             int i, RigidTransform transform,
             bool hasAnyScale,
@@ -154,5 +176,7 @@ namespace Unity.Physics.GraphicsIntegration
 
             return new LocalToWorld { Value = math.mul(tr, scale) };
         }
+
+#endif
     }
 }

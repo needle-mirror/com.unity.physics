@@ -5,10 +5,10 @@ using static Unity.Physics.PhysicsStep;
 
 namespace Unity.Physics.Authoring
 {
-    [AddComponentMenu("DOTS/Physics/Physics Step")]
+    [AddComponentMenu("Entities/Physics/Physics Step")]
     [DisallowMultipleComponent]
     [HelpURL(HelpURLs.PhysicsStepAuthoring)]
-    public sealed class PhysicsStepAuthoring : MonoBehaviour, IConvertGameObjectToEntity
+    public sealed class PhysicsStepAuthoring : MonoBehaviour
     {
         PhysicsStepAuthoring() {}
 
@@ -83,30 +83,9 @@ namespace Unity.Physics.Authoring
             SynchronizeCollisionWorld = (byte)(SynchronizeCollisionWorld ? 1 : 0)
         };
 
-        Entity m_ConvertedEntity = Entity.Null;
-        EntityManager m_ConvertedEntityManager;
-
-        void IConvertGameObjectToEntity.Convert(Entity entity, EntityManager dstManager, GameObjectConversionSystem conversionSystem)
-        {
-            dstManager.AddComponentData(entity, AsComponent);
-
-            m_ConvertedEntity = entity;
-            m_ConvertedEntityManager = dstManager;
-        }
-
         void OnValidate()
         {
             SolverIterationCount = math.max(1, SolverIterationCount);
-
-            if (!enabled) return;
-            if (gameObject.scene.isSubScene) return;
-            if (m_ConvertedEntity == Entity.Null) return;
-
-            // This requires Entity Conversion mode to be 'Convert And Inject Game Object'
-            if (m_ConvertedEntityManager.HasComponent<Physics.PhysicsStep>(m_ConvertedEntity))
-            {
-                m_ConvertedEntityManager.SetComponentData(m_ConvertedEntity, AsComponent);
-            }
         }
     }
 

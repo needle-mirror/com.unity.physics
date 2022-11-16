@@ -1,0 +1,13 @@
+# Physics data types
+
+Unity Physics references 2 _types_ of data at runtime: ECS components and physics simulation data.
+
+ECS components are structures that implement the `IComponentData` interface and their data is permanently stored in chunks. The key ECS components for physics are listed in [Physics Body Data](getting-started.md#physics-body-data) section (e.g. `PhysicsVelocity`).
+
+Physics simulation data is the runtime-only data stored in `PhysicsWorld`, formed from ECS components and restructured in a way that is more convenient for real-time physics simulation (this is done by `PhysicsInitializeGroup`). All collision queries are performed on physics simulation data.
+
+For reading physics data (for queries or some other case) you need to make sure to set up proper update order attributes on your system. `[UpdateBefore|After|InGroup(typeof(PhysicsSystemGroup))]` are fine for reading purposes. If `[UpdateBefore|After(typeof(PhysicsSystemGroup))]` is selected, it is also needed to add a `[UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]`. If `[UpdateInGroup(typeof(PhysicsSystemGroup))]` is selected, then it is possible provide more granularity by selecting update order between the two subgroups and a physics system in that group (`PhysicsInitializeGroup`, `PhysicsSimulationGroup` and `ExportPhysicsWorld`). It is also possible to select `[UpdateIn(typeof(PhysicsSimulationGroup))]`, and if done so, even more granularity can be provided by selecting update order between four subgroups (`PhysicsCreateBodyPairsGroup`, `PhysicsCreateContactsGroup`, `PhysicsCreateJacobiansGroup`, `PhysicsSolveAndIntegrateGroup`). Usage of these subgroups, as well as modifying physics data is covered in [Simulation modification](simulation-modification.md#overriding-intermediate-simulation-results)).
+
+All jobs from `PhysicsSystemGroup` work only on physics simulation data, so physics ECS data should not be changed while they are running. In order to write the simulation results to ECS components, `PhysicsInitializeGroup` and `ExportPhysicsWorld` systems expect the chunk layouts for rigid bodies to be the same at both ends of the physics pipeline. Therefore, it is not safe to make structural changes between these two systems (for example, do not add/remove entities with physics components, or add/remove components from physics entities). Modifying physics ECS data while in physics pipeline will have no effect, as the modifications will be overwritten by `ExportPhysicsWorld`. An integrity error will be thrown if modifying or adding/removing ECS data on physics entities during physics pipeline is tried.
+
+In short, ECS components of physics entities should only be changed before or after `PhysicsSystemGroup`.

@@ -1,11 +1,7 @@
-using System.Collections;
-using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Mathematics;
-using Unity.Physics;
-using UnityEngine;
 
 namespace Unity.Physics
 {
@@ -126,5 +122,12 @@ namespace Unity.Physics
                 EventData = this
             };
         }
+    }
+
+    struct ImpulseEventSolverData
+    {
+        public float3 AccumulatedImpulse;
+        public float3 MaxImpulse;
+        public Entity JointEntity;
     }
 }

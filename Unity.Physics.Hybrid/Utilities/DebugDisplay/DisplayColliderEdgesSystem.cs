@@ -331,7 +331,7 @@ namespace Unity.Physics.Authoring
             if (!SystemAPI.TryGetSingleton(out PhysicsDebugDisplayData debugDisplay) || debugDisplay.DrawColliderEdges == 0)
                 return;
 
-            var world = GetSingleton<PhysicsWorldSingleton>().PhysicsWorld;
+            var world = SystemAPI.GetSingleton<PhysicsWorldSingleton>().PhysicsWorld;
 
             if (world.NumBodies == 0)
             {

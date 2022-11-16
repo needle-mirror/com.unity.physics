@@ -87,7 +87,7 @@ namespace Unity.Physics.Systems
         protected override void OnUpdate()
         {
             // Can't switch if the sim singleton is null
-            if (GetSingleton<SimulationSingleton>().Type == SimulationType.NoPhysics)
+            if (SystemAPI.GetSingleton<SimulationSingleton>().Type == SimulationType.NoPhysics)
                 return;
 
             // copy systems from PhysicsSystemGroup if first time
@@ -125,7 +125,7 @@ namespace Unity.Physics.Systems
             // change active physics world
             var prevWorld = bpwData.PhysicsData;
             var prevFilter = bpwData.WorldFilter;
-            var prevSingleton = GetSingleton<PhysicsWorldSingleton>();
+            var prevSingleton = SystemAPI.GetSingleton<PhysicsWorldSingleton>();
             bpwData.PhysicsData = m_WorldData;
             bpwData.WorldFilter = m_WorldFilter;
 

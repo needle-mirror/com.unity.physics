@@ -9,13 +9,6 @@ using Unity.Physics.Aspects;
 namespace Unity.Physics
 {
     /// <summary>
-    /// Add this tag to a body or joint to exclude it from the physics world.
-    /// This allows you to retain all of its other data, but temporarily ignore it for purposes of physics
-    /// </summary>
-    [Obsolete("PhysicsExclude will be deprecated soon. Instead of adding PhysicsExclude, please remove PhysicsWorldIndex from entities you want to exclude from all physics worlds. (RemovedAfter 2021-10-01)", false)]
-    public struct PhysicsExclude : IComponentData {}
-
-    /// <summary>
     /// Shared component for entities that belong to a physics world. Default physics world is built
     /// in <see cref="Systems.BuildPhysicsWorld"/>, from entities that have Value of 0.
     /// </summary>
@@ -192,29 +185,36 @@ namespace Unity.Physics
         /// </summary>
         public float3 Angular;
 
+        /// <summary>   Zero Physics Velocity. All fields are initialized to zero. </summary>
+        public static readonly PhysicsVelocity Zero = new PhysicsVelocity
+        {
+            Linear = new float3(0),
+            Angular = new float3(0)
+        };
+
         /// <summary>
         /// Create a <see cref="PhysicsVelocity"/> required to move a body to a target position and
         /// orientation. Use this method to control kinematic bodies directly if they need to generate
         /// contact events when moving to their new positions. If you need to teleport kinematic bodies
-        /// you can simply set their Translation and Rotation values directly.
+        /// you can simply set their <see cref="Unity.Transforms.LocalTransform"/> component values directly.
         /// </summary>
         ///
         /// <param name="bodyMass">         The body's <see cref="PhysicsMass"/> component. </param>
-        /// <param name="bodyPosition">     The body's Translation component. </param>
-        /// <param name="bodyOrientation">  The body's Rotation component. </param>
-        /// <param name="targetTransform"> The desired Translation and Rotation values the body should
+        /// <param name="bodyPosition">     The body's world-space position. </param>
+        /// <param name="bodyOrientation">  The body's world-space rotation. </param>
+        /// <param name="targetTransform">  The desired translation and rotation values the body should
         /// move to in world space. </param>
         /// <param name="stepFrequency">   The step frequency in the simulation where the body's motion
         /// is solved (i.e., 1 / FixedDeltaTime). </param>
         ///
         /// <returns>   The calculated velocity to target. </returns>
         public static PhysicsVelocity CalculateVelocityToTarget(
-            in PhysicsMass bodyMass, in Translation bodyPosition, in Rotation bodyOrientation,
+            in PhysicsMass bodyMass, in float3 bodyPosition, in quaternion bodyOrientation,
             in RigidTransform targetTransform, in float stepFrequency
         )
         {
             var velocity = new PhysicsVelocity();
-            var worldFromBody = new RigidTransform(bodyOrientation.Value, bodyPosition.Value);
+            var worldFromBody = new RigidTransform(bodyOrientation, bodyPosition);
             var worldFromMotion = math.mul(worldFromBody, bodyMass.Transform);
             PhysicsWorldExtensions.CalculateVelocityToTargetImpl(
                 worldFromBody, math.inverse(worldFromMotion.rot), bodyMass.Transform.pos, targetTransform, stepFrequency,
@@ -222,6 +222,31 @@ namespace Unity.Physics
             );
             return velocity;
         }
+
+#if ENABLE_TRANSFORM_V1
+        /// <summary>
+        /// Obsolete. Use <see cref="CalculateVelocityToTarget(Unity.Physics.PhysicsMass,Unity.Mathematics.float3,Unity.Mathematics.quaternion,Unity.Mathematics.RigidTransform,float)"/> instead.
+        /// </summary>
+        ///
+        /// <param name="bodyMass">         The body's <see cref="PhysicsMass"/> component. </param>
+        /// <param name="bodyPosition">     The body's world-space position. </param>
+        /// <param name="bodyOrientation">  The body's world-space rotation. </param>
+        /// <param name="targetTransform">  The desired translation and rotation values the body should
+        /// move to in world space. </param>
+        /// <param name="stepFrequency">   The step frequency in the simulation where the body's motion
+        /// is solved (i.e., 1 / FixedDeltaTime). </param>
+        ///
+        /// <returns>   The calculated velocity to target. </returns>
+        [Obsolete("This variant will be removed with Transform V1; use the V2-compatible version instead.", true)]
+        public static PhysicsVelocity CalculateVelocityToTarget(
+            in PhysicsMass bodyMass, in Translation bodyPosition, in Rotation bodyOrientation,
+            in RigidTransform targetTransform, in float stepFrequency
+        )
+        {
+            return CalculateVelocityToTarget(bodyMass, bodyPosition.Value, bodyOrientation.Value, targetTransform, stepFrequency);
+        }
+
+#endif
     }
 
     /// <summary>

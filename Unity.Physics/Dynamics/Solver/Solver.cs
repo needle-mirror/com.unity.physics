@@ -1131,7 +1131,7 @@ namespace Unity.Physics
                     }
 
                     // Write size before every jacobian
-                    JacobianFlags jacFlags = 0;
+                    JacobianFlags jacFlags = constraint.ShouldRaiseImpulseEvents ? JacobianFlags.EnableImpulseEvents : 0;
                     int jacobianSize = JacobianHeader.CalculateSize(jacType, jacFlags);
                     jacobianWriter.Write(jacobianSize);
 
@@ -1151,7 +1151,7 @@ namespace Unity.Physics
                     switch (constraint.Type)
                     {
                         case ConstraintType.Linear:
-                            header.AccessBaseJacobian<LinearLimitJacobian>().Build(joint.Entity,
+                            header.AccessBaseJacobian<LinearLimitJacobian>().Build(
                                 motionAFromJoint, motionBFromJoint,
                                 velocityA, velocityB, motionA, motionB, constraint, tau, damping);
                             break;
@@ -1159,17 +1159,17 @@ namespace Unity.Physics
                             switch (constraintDimension)
                             {
                                 case 1:
-                                    header.AccessBaseJacobian<AngularLimit1DJacobian>().Build(joint.Entity,
+                                    header.AccessBaseJacobian<AngularLimit1DJacobian>().Build(
                                         motionAFromJoint, motionBFromJoint,
                                         velocityA, velocityB, motionA, motionB, constraint, tau, damping);
                                     break;
                                 case 2:
-                                    header.AccessBaseJacobian<AngularLimit2DJacobian>().Build(joint.Entity,
+                                    header.AccessBaseJacobian<AngularLimit2DJacobian>().Build(
                                         motionAFromJoint, motionBFromJoint,
                                         velocityA, velocityB, motionA, motionB, constraint, tau, damping);
                                     break;
                                 case 3:
-                                    header.AccessBaseJacobian<AngularLimit3DJacobian>().Build(joint.Entity,
+                                    header.AccessBaseJacobian<AngularLimit3DJacobian>().Build(
                                         motionAFromJoint, motionBFromJoint,
                                         velocityA, velocityB, motionA, motionB, constraint, tau, damping);
                                     break;
@@ -1202,6 +1202,14 @@ namespace Unity.Physics
                         default:
                             SafetyChecks.ThrowNotImplementedException();
                             return;
+                    }
+
+                    if ((jacFlags & JacobianFlags.EnableImpulseEvents) != 0)
+                    {
+                        ref ImpulseEventSolverData impulseEventData = ref header.AccessImpulseEventSolverData();
+                        impulseEventData.AccumulatedImpulse = float3.zero;
+                        impulseEventData.JointEntity = joint.Entity;
+                        impulseEventData.MaxImpulse = math.abs(constraint.MaxImpulse);
                     }
                 }
             }

@@ -19,7 +19,7 @@ namespace Unity.Physics.Tests.Aspects
         internal static PhysicsDamping DefaultDamping => new PhysicsDamping { Angular = 0.75f, Linear = 0.75f };
         internal static PhysicsMass DefaultMass => PhysicsMass.CreateDynamic(MassProperties.UnitSphere, 3.0f);
         internal static PhysicsGravityFactor DefaultGravityFactor => new PhysicsGravityFactor { Value = 0.50f };
-        internal static Scale NonIdentityScale => new Scale { Value = 2.0f };
+        internal static float NonIdentityScale => 2.0f;
         internal static Material Material1 => new Material { CollisionResponse = CollisionResponsePolicy.Collide, CustomTags = 2, Friction = 0.197f, Restitution = 0.732f, FrictionCombinePolicy = Material.CombinePolicy.Minimum, RestitutionCombinePolicy = Material.CombinePolicy.ArithmeticMean };
         internal static Material Material2 => new Material { CollisionResponse = CollisionResponsePolicy.CollideRaiseCollisionEvents, CustomTags = 4, Friction = 0.127f, Restitution = 0.332f, FrictionCombinePolicy = Material.CombinePolicy.Maximum, RestitutionCombinePolicy = Material.CombinePolicy.GeometricMean};
         internal static CollisionFilter NonDefaultFilter => new CollisionFilter { BelongsTo = 123, CollidesWith = 567, GroupIndex = 442 };
@@ -59,10 +59,16 @@ namespace Unity.Physics.Tests.Aspects
                 pc.Value = BoxCollider.Create(geometry);
             }
 
+#if !ENABLE_TRANSFORM_V1
+            LocalTransform tl = LocalTransform.FromPositionRotationScale(AspectTestUtils.DefaultPos, AspectTestUtils.DefaultRot, 1.0f);
+            WorldTransform tw = (WorldTransform)tl;
+            LocalToWorld ltw = new LocalToWorld { Value = tw.ToMatrix() };
+#else
             Translation t = new Translation { Value = AspectTestUtils.DefaultPos };
             Rotation r = new Rotation { Value = AspectTestUtils.DefaultRot };
             Scale s = new Scale { Value = 1.0f };
             LocalToWorld ltw = new LocalToWorld { Value = new float4x4(r.Value, t.Value) };
+#endif
 
             PhysicsVelocity pv = AspectTestUtils.DefaultVelocity;
             PhysicsMass pm = AspectTestUtils.DefaultMass;
@@ -74,9 +80,14 @@ namespace Unity.Physics.Tests.Aspects
 
             // Add index, transform, scale, localToWorld, collider
             manager.AddSharedComponent<PhysicsWorldIndex>(body, worldIndex);
+#if !ENABLE_TRANSFORM_V1
+            manager.AddComponentData<LocalTransform>(body, tl);
+            manager.AddComponentData<WorldTransform>(body, tw);
+#else
             manager.AddComponentData<Translation>(body, t);
             manager.AddComponentData<Rotation>(body, r);
             manager.AddComponentData<Scale>(body, s);
+#endif
             manager.AddComponentData<LocalToWorld>(body, ltw);
             manager.AddComponentData<PhysicsCollider>(body, pc);
             manager.AddComponentData<PhysicsDamping>(body, pd);
@@ -102,8 +113,17 @@ namespace Unity.Physics.Tests.Aspects
                     goto case BodyType.KINEMATIC_MASS_OVERRIDE;
 
                 case BodyType.SCALED_DYNAMIC:
-                    s = AspectTestUtils.NonIdentityScale;
+#if !ENABLE_TRANSFORM_V1
+                    var localTransform = manager.GetComponentData<LocalTransform>(body);
+                    localTransform.Scale = AspectTestUtils.NonIdentityScale;
+                    manager.SetComponentData<LocalTransform>(body, localTransform);
+                    var worldTransform = manager.GetComponentData<WorldTransform>(body);
+                    worldTransform.Scale = AspectTestUtils.NonIdentityScale;
+                    manager.SetComponentData<WorldTransform>(body, worldTransform);
+#else
+                    s = new Scale {Value = AspectTestUtils.NonIdentityScale };
                     manager.SetComponentData<Scale>(body, s);
+#endif
                     goto case BodyType.DYNAMIC;
 
                 case BodyType.KINEMATIC_MASS_OVERRIDE:
@@ -238,12 +258,10 @@ namespace Unity.Physics.Tests.Aspects
             protected override void OnUpdate()
             {
                 int count = 0;
-                Entities
-                    .ForEach((in RigidBodyAspect aspect) =>
+                foreach (var aspect in SystemAPI.Query<RigidBodyAspect>())
                 {
                     count++;
-                })
-                    .Run();
+                }
                 Assert.AreEqual(0, count);
             }
         }
@@ -254,12 +272,10 @@ namespace Unity.Physics.Tests.Aspects
             protected override void OnUpdate()
             {
                 int count = 0;
-                Entities
-                    .ForEach((in RigidBodyAspect aspect) =>
+                foreach (var aspect in SystemAPI.Query<RigidBodyAspect>())
                 {
                     count++;
-                })
-                    .Run();
+                }
                 Assert.AreEqual(1, count);
             }
         }
@@ -269,7 +285,7 @@ namespace Unity.Physics.Tests.Aspects
         {
             protected override void OnUpdate()
             {
-                Entity aspectEntity = GetSingletonEntity<PhysicsCollider>();
+                Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
                 RigidBodyAspect aspect = GetAspectRW<RigidBodyAspect>(aspectEntity);
 
                 // Transforms
@@ -308,7 +324,7 @@ namespace Unity.Physics.Tests.Aspects
         {
             protected override void OnUpdate()
             {
-                Entity aspectEntity = GetSingletonEntity<PhysicsCollider>();
+                Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
                 RigidBodyAspect aspect = GetAspectRW<RigidBodyAspect>(aspectEntity);
 
                 Assert.AreEqual(aspect.HasInfiniteInertia, true);
@@ -323,7 +339,7 @@ namespace Unity.Physics.Tests.Aspects
         {
             protected override void OnUpdate()
             {
-                Entity aspectEntity = GetSingletonEntity<PhysicsCollider>();
+                Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
                 RigidBodyAspect aspect = GetAspectRW<RigidBodyAspect>(aspectEntity);
 
                 Assert.AreEqual(aspect.HasInfiniteInertia, false);
@@ -338,7 +354,7 @@ namespace Unity.Physics.Tests.Aspects
         {
             protected override void OnUpdate()
             {
-                Entity aspectEntity = GetSingletonEntity<PhysicsCollider>();
+                Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
                 RigidBodyAspect aspect = GetAspectRW<RigidBodyAspect>(aspectEntity);
 
                 Assert.AreEqual(aspect.HasInfiniteInertia, true);
@@ -354,7 +370,7 @@ namespace Unity.Physics.Tests.Aspects
         {
             protected override void OnUpdate()
             {
-                Entity aspectEntity = GetSingletonEntity<PhysicsCollider>();
+                Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
                 RigidBodyAspect aspect = GetAspectRW<RigidBodyAspect>(aspectEntity);
 
                 Assert.AreEqual(aspect.HasInfiniteInertia, true);
@@ -389,7 +405,7 @@ namespace Unity.Physics.Tests.Aspects
         {
             protected override void OnUpdate()
             {
-                Entity aspectEntity = GetSingletonEntity<PhysicsCollider>();
+                Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
                 RigidBodyAspect aspect = GetAspectRW<RigidBodyAspect>(aspectEntity);
 
                 Assert.AreEqual(aspect.HasInfiniteInertia, true);
@@ -407,7 +423,7 @@ namespace Unity.Physics.Tests.Aspects
         {
             protected override void OnUpdate()
             {
-                Entity aspectEntity = GetSingletonEntity<PhysicsCollider>();
+                Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
                 RigidBodyAspect aspect = GetAspectRW<RigidBodyAspect>(aspectEntity);
 
                 // pos, rot
@@ -539,7 +555,7 @@ namespace Unity.Physics.Tests.Aspects
         {
             protected override void OnUpdate()
             {
-                Entity aspectEntity = GetSingletonEntity<PhysicsCollider>();
+                Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
                 RigidBodyAspect aspect = GetAspectRW<RigidBodyAspect>(aspectEntity);
 
                 // scale modification
@@ -549,7 +565,7 @@ namespace Unity.Physics.Tests.Aspects
                     Assert.AreEqual(newScale, aspect.Scale);
 
                     // revert
-                    aspect.Scale = AspectTestUtils.NonIdentityScale.Value;
+                    aspect.Scale = AspectTestUtils.NonIdentityScale;
                 }
 
                 // mass implications
@@ -563,7 +579,7 @@ namespace Unity.Physics.Tests.Aspects
                     Assert.AreEqual(math.all(oldCOMLocal == aspect.CenterOfMassLocalSpace), true);
 
                     // revert
-                    aspect.Scale = AspectTestUtils.NonIdentityScale.Value;
+                    aspect.Scale = AspectTestUtils.NonIdentityScale;
                 }
             }
         }
@@ -573,14 +589,14 @@ namespace Unity.Physics.Tests.Aspects
         {
             protected override void OnUpdate()
             {
-                Entity aspectEntity = GetSingletonEntity<PhysicsCollider>();
+                Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
                 RigidBodyAspect aspect = GetAspectRW<RigidBodyAspect>(aspectEntity);
 
                 // GetVelocityAtPoint
                 {
                     float3 point = new float3(1.0f, 2.0f, 3.0f);
                     PhysicsVelocity pv = AspectTestUtils.DefaultVelocity;
-                    float3 linVel1 = pv.GetLinearVelocity(aspect.m_Mass.ValueRO, new Translation { Value = aspect.Position }, new Rotation { Value = aspect.Rotation }, point);
+                    float3 linVel1 = pv.GetLinearVelocity(aspect.m_Mass.ValueRO, aspect.Position, aspect.Rotation, point);
                     float3 linVel2 = aspect.GetLinearVelocityAtPointWorldSpace(point);
 
                     Assert.AreEqual(math.all(linVel1 == linVel2), true);
@@ -591,7 +607,11 @@ namespace Unity.Physics.Tests.Aspects
                     float3 impulse = new float3(1.0f, 2.0f, 3.0f);
                     PhysicsVelocity pv = AspectTestUtils.DefaultVelocity;
 
-                    pv.ApplyLinearImpulse(aspect.m_Mass.ValueRO, aspect.m_TransformAspect.m_Scale.ValueRO, impulse);
+#if !ENABLE_TRANSFORM_V1
+                    pv.ApplyLinearImpulse(aspect.m_Mass.ValueRO, aspect.m_TransformAspect.Scale, impulse);
+#else
+                    pv.ApplyLinearImpulse(aspect.m_Mass.ValueRO, aspect.m_TransformAspect.m_Scale.ValueRO.Value, impulse);
+#endif
                     aspect.ApplyLinearImpulseWorldSpace(impulse);
 
                     Assert.AreEqual(math.all(pv.Linear == aspect.LinearVelocity), true);
@@ -609,7 +629,11 @@ namespace Unity.Physics.Tests.Aspects
 
                     float3 impulseBodySpace = math.rotate(math.inverse(aspect.m_TransformAspect.Rotation), impulse);
                     float3 impulseMotionSpace = math.rotate(math.inverse(aspect.BodyFromMotion_Rot), impulseBodySpace);
-                    pv.ApplyAngularImpulse(aspect.m_Mass.ValueRO, aspect.m_TransformAspect.m_Scale.ValueRO, impulseMotionSpace);
+#if !ENABLE_TRANSFORM_V1
+                    pv.ApplyAngularImpulse(aspect.m_Mass.ValueRO, aspect.m_TransformAspect.Scale, impulseMotionSpace);
+#else
+                    pv.ApplyAngularImpulse(aspect.m_Mass.ValueRO, aspect.m_TransformAspect.m_Scale.ValueRO.Value, impulseMotionSpace);
+#endif
                     aspect.ApplyAngularImpulseWorldSpace(impulse);
 
                     Assert.AreEqual(math.all(pv.Linear == aspect.LinearVelocity), true);
@@ -625,12 +649,18 @@ namespace Unity.Physics.Tests.Aspects
                     float3 impulse = new float3(1.0f, 2.0f, 3.0f);
                     PhysicsVelocity pv = AspectTestUtils.DefaultVelocity;
 
-                    pv.ApplyLinearImpulse(aspect.m_Mass.ValueRO, aspect.m_TransformAspect.m_Scale.ValueRO, impulse);
-
+#if !ENABLE_TRANSFORM_V1
+                    pv.ApplyLinearImpulse(aspect.m_Mass.ValueRO, aspect.m_TransformAspect.Scale, impulse);
+#else
+                    pv.ApplyLinearImpulse(aspect.m_Mass.ValueRO, aspect.m_TransformAspect.m_Scale.ValueRO.Value, impulse);
+#endif
                     float3 impulseBodySpace = math.rotate(math.inverse(aspect.m_TransformAspect.Rotation), impulse);
                     float3 impulseMotionSpace = math.rotate(math.inverse(aspect.BodyFromMotion_Rot), impulseBodySpace);
-                    pv.ApplyAngularImpulse(aspect.m_Mass.ValueRO, aspect.m_TransformAspect.m_Scale.ValueRO, impulseMotionSpace);
-
+#if !ENABLE_TRANSFORM_V1
+                    pv.ApplyAngularImpulse(aspect.m_Mass.ValueRO, aspect.m_TransformAspect.Scale, impulseMotionSpace);
+#else
+                    pv.ApplyAngularImpulse(aspect.m_Mass.ValueRO, aspect.m_TransformAspect.m_Scale.ValueRO.Value, impulseMotionSpace);
+#endif
                     aspect.ApplyLinearImpulseWorldSpace(impulse);
                     aspect.ApplyAngularImpulseWorldSpace(impulse);
 
@@ -648,8 +678,11 @@ namespace Unity.Physics.Tests.Aspects
                     float3 point = new float3(1.0f, 2.0f, 3.0f);
                     PhysicsVelocity pv = AspectTestUtils.DefaultVelocity;
 
-                    pv.ApplyImpulse(aspect.m_Mass.ValueRO, new Translation { Value = aspect.Position }, new Rotation { Value = aspect.Rotation }, aspect.m_TransformAspect.m_Scale.ValueRO, impulse, point);
-
+#if !ENABLE_TRANSFORM_V1
+                    pv.ApplyImpulse(aspect.m_Mass.ValueRO, aspect.Position, aspect.Rotation, aspect.m_TransformAspect.Scale, impulse, point);
+#else
+                    pv.ApplyImpulse(aspect.m_Mass.ValueRO, aspect.Position, aspect.Rotation, aspect.m_TransformAspect.m_Scale.ValueRO.Value, impulse, point);
+#endif
                     aspect.ApplyImpulseAtPointWorldSpace(impulse, point);
 
                     Assert.AreEqual(math.all(pv.Linear == aspect.LinearVelocity), true);
@@ -668,16 +701,19 @@ namespace Unity.Physics.Tests.Aspects
 
                     PhysicsVelocity pv = AspectTestUtils.DefaultVelocity;
 
-                    pv.ApplyExplosionForce(AspectTestUtils.DefaultMass, aspect.m_Collider.ValueRO, new Translation { Value = AspectTestUtils.DefaultPos }, new Rotation { Value = AspectTestUtils.DefaultRot }, AspectTestUtils.NonIdentityScale, impulse, explosionPosition, explosionRadius, 1.0f, math.up(), CollisionFilter.Default, 0.0f, ForceMode.Impulse);
+                    pv.ApplyExplosionForce(AspectTestUtils.DefaultMass, aspect.m_Collider.ValueRO,
+                        AspectTestUtils.DefaultPos, AspectTestUtils.DefaultRot, AspectTestUtils.NonIdentityScale,
+                        impulse, explosionPosition, explosionRadius, 1.0f, math.up(), CollisionFilter.Default,
+                        0.0f, ForceMode.Impulse);
                     aspect.ApplyExplosiveImpulse(impulse, explosionPosition, explosionRadius, math.up(), CollisionFilter.Default, 0.0f);
 
                     // First, check that the impulse got applied
-                    Assert.IsTrue(math.any(pv.Linear != AspectTestUtils.DefaultVelocity.Linear));
-                    Assert.IsTrue(math.any(pv.Angular != AspectTestUtils.DefaultVelocity.Angular));
+                    Assert.AreNotEqual(AspectTestUtils.DefaultVelocity.Linear, pv.Linear, "linear impulse was not applied");
+                    Assert.AreNotEqual(AspectTestUtils.DefaultVelocity.Angular, pv.Angular, "angular impulse was not applied");
 
                     // Now, check the outputs of 2 ways of applying explosion force
-                    Assert.IsTrue(math.all(pv.Linear == aspect.LinearVelocity));
-                    Assert.IsTrue(math.all(pv.Angular == aspect.m_Velocity.ValueRO.Angular));
+                    Assert.AreEqual(aspect.LinearVelocity, pv.Linear, "linear impulse does not match linear velocity");
+                    Assert.AreEqual(aspect.m_Velocity.ValueRO.Angular, pv.Angular, "angular impulse does not match angular velocity");
 
                     // Revert
                     aspect.LinearVelocity = AspectTestUtils.DefaultVelocity.Linear;
@@ -687,8 +723,7 @@ namespace Unity.Physics.Tests.Aspects
                 // Center of mass consistency
                 {
                     PhysicsMass pm = aspect.m_Mass.ValueRO;
-                    var cOmWS = pm.GetCenterOfMassWorldSpace(new Scale { Value = aspect.Scale }, new Translation { Value = aspect.Position }, new Rotation { Value = aspect.Rotation });
-
+                    var cOmWS = pm.GetCenterOfMassWorldSpace(aspect.Scale, aspect.Position, aspect.Rotation);
                     Assert.AreEqual(math.all(cOmWS == aspect.CenterOfMassWorldSpace), true);
                 }
             }

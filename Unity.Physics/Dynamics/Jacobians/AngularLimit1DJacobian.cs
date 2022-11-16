@@ -21,18 +21,6 @@ namespace Unity.Physics
         public float MinAngle;
         public float MaxAngle;
 
-        // The max impulse that can be applied on this joint
-        public float3 MaxImpulse;
-
-        // Accumulated impulse applied over all steps
-        public float3 AccumulatedImpulse;
-
-        // The joint entity between the body pair
-        Entity JointEntity;
-
-        // When true, will send impulse events when max impulse is exceeded
-        public bool EnableImpulseEvents;
-
         // Relative orientation of the motions before solving
         public quaternion MotionBFromA;
 
@@ -51,7 +39,7 @@ namespace Unity.Physics
 
         // Build the Jacobian
         public void Build(
-            Entity jointEntity, MTransform aFromConstraint, MTransform bFromConstraint,
+            MTransform aFromConstraint, MTransform bFromConstraint,
             MotionVelocity velocityA, MotionVelocity velocityB,
             MotionData motionA, MotionData motionB,
             Constraint constraint, float tau, float damping)
@@ -61,10 +49,6 @@ namespace Unity.Physics
             AxisInMotionA = aFromConstraint.Rotation[AxisIndex];
             MinAngle = constraint.Min;
             MaxAngle = constraint.Max;
-            MaxImpulse = constraint.MaxImpulse;
-            EnableImpulseEvents = constraint.EnableImpulseEvents;
-            JointEntity = jointEntity;
-            AccumulatedImpulse = float3.zero;
             Tau = tau;
             Damping = damping;
             MotionBFromA = math.mul(math.inverse(motionB.WorldFromMotion.rot), motionA.WorldFromMotion.rot);
@@ -97,25 +81,16 @@ namespace Unity.Physics
             velocityA.ApplyAngularImpulse(impulse * AxisInMotionA);
             velocityB.ApplyAngularImpulse(impulse * axisInMotionB);
 
-            AccumulatedImpulse[AxisIndex] += impulse;
-
-            // if impulse exceeds max impulse, write back data
-            if (EnableImpulseEvents && stepInput.IsLastIteration && math.any(math.abs(AccumulatedImpulse) > MaxImpulse))
+            if ((jacHeader.Flags & JacobianFlags.EnableImpulseEvents) != 0)
             {
-                impulseEventsWriter.Write(new ImpulseEventData
-                {
-                    Type = ConstraintType.Angular,
-                    Impulse = AccumulatedImpulse,
-                    JointEntity = JointEntity,
-                    BodyIndices = jacHeader.BodyPair
-                });
+                HandleImpulseEvent(ref jacHeader, impulse, stepInput.IsLastIteration, ref impulseEventsWriter);
             }
         }
 
         // Helper function
         private float CalculateError(quaternion motionBFromA)
         {
-            // Calculate the relative body rotation
+            // Calculate the relative joint frame rotation
             quaternion jointBFromA = math.mul(math.mul(math.inverse(MotionBFromJoint), motionBFromA), MotionAFromJoint);
 
             // Find the twist angle of the rotation.
@@ -142,6 +117,23 @@ namespace Unity.Physics
 
             // Calculate the relative angle about the twist axis
             return JacobianUtilities.CalculateError(angle, MinAngle, MaxAngle);
+        }
+
+        private void HandleImpulseEvent(ref JacobianHeader jacHeader, float impulse, bool isLastIteration, ref NativeStream.Writer impulseEventsWriter)
+        {
+            ref ImpulseEventSolverData impulseEventData = ref jacHeader.AccessImpulseEventSolverData();
+            impulseEventData.AccumulatedImpulse[AxisIndex] += impulse;
+
+            if (isLastIteration && math.any(math.abs(impulseEventData.AccumulatedImpulse) > impulseEventData.MaxImpulse))
+            {
+                impulseEventsWriter.Write(new ImpulseEventData
+                {
+                    Type = ConstraintType.Angular,
+                    Impulse = impulseEventData.AccumulatedImpulse,
+                    JointEntity = impulseEventData.JointEntity,
+                    BodyIndices = jacHeader.BodyPair
+                });
+            }
         }
     }
 }

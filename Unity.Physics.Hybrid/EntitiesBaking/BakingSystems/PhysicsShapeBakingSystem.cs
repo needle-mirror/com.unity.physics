@@ -21,9 +21,18 @@ namespace Unity.Physics.Authoring
         ShapeComputationDataBaking GetInputDataFromAuthoringComponent(PhysicsShapeAuthoring shape, Entity colliderEntity)
         {
             GameObject shapeGameObject = shape.gameObject;
-            var body = GetPrimaryBody(shapeGameObject, out bool hasBodyComponent);
+            var body = GetPrimaryBody(shapeGameObject, out bool hasBodyComponent, out bool isStaticBody);
             var child = shapeGameObject;
             var shapeInstanceID = shape.GetInstanceID();
+
+            var bodyEntity = GetEntity(body);
+
+            // prepare the static root
+            if (isStaticBody)
+            {
+                var staticRootMarker = CreateAdditionalEntity(TransformUsageFlags.Default, true, "StaticRootBakeMarker");
+                AddComponent(staticRootMarker, new BakeStaticRoot() { Body = bodyEntity, ConvertedBodyInstanceID = body.transform.GetInstanceID() });
+            }
 
             // Track dependencies to the transforms
             Transform shapeTransform = GetComponent<Transform>(shape);
@@ -31,11 +40,10 @@ namespace Unity.Physics.Authoring
             var instance = new ColliderInstanceBaking
             {
                 AuthoringComponentId = shapeInstanceID,
-                BodyEntity = GetEntity(body),
+                BodyEntity = bodyEntity,
                 ShapeEntity = GetEntity(shapeGameObject),
                 ChildEntity = GetEntity(child),
                 BodyFromShape = ColliderInstanceBaking.GetCompoundFromChild(shapeTransform, bodyTransform),
-                BodyInHierarchy = hasBodyComponent
             };
 
             var data = GenerateComputationData(shape, instance, colliderEntity);

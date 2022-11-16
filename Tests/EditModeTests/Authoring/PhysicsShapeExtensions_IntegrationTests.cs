@@ -91,6 +91,31 @@ namespace Unity.Physics.Tests.Authoring
         }
 
         [Test]
+        public void GetPrimaryBody_WhenHierarchyContainsBody_AndIsStatic_ReturnsBody(
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyRigidBody),
+#endif
+                typeof(PhysicsBodyAuthoring)
+            )]
+            Type parentBodyType,
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyBox),
+#endif
+                typeof(PhysicsShapeAuthoring)
+            )]
+            Type childShapeType
+        )
+        {
+            CreateHierarchy(true, Array.Empty<Type>(), new[] { parentBodyType }, new[] { childShapeType });
+
+            var primaryBody = PhysicsShapeExtensions.GetPrimaryBody(Child);
+
+            Assert.That(primaryBody, Is.EqualTo(Parent));
+        }
+
+        [Test]
         public void GetPrimaryBody_WhenHierarchyContainsNoBodies_ReturnsTopMostShape(
             [Values(
 #if LEGACY_PHYSICS
@@ -134,6 +159,24 @@ namespace Unity.Physics.Tests.Authoring
         )
         {
             CreateHierarchy(new[] { typeof(StaticOptimizeEntity) }, Array.Empty<Type>(), new[] { childShapeType });
+
+            var primaryBody = PhysicsShapeExtensions.GetPrimaryBody(Child);
+
+            Assert.That(primaryBody, Is.EqualTo(Root));
+        }
+
+        [Test]
+        public void GetPrimaryBody_WhenHierarchyContainsNoBodies_IsStatic_ReturnsStaticOptimizeEntity(
+            [Values(
+#if LEGACY_PHYSICS
+                typeof(LegacyBox),
+#endif
+                typeof(PhysicsShapeAuthoring)
+            )]
+            Type childShapeType
+        )
+        {
+            CreateHierarchy(true, Array.Empty<Type>(), Array.Empty<Type>(), new[] { childShapeType });
 
             var primaryBody = PhysicsShapeExtensions.GetPrimaryBody(Child);
 

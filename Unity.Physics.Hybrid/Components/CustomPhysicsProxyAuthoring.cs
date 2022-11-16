@@ -8,7 +8,7 @@ namespace Unity.Physics.Authoring
     /// <summary>
     /// This authoring component will create multiple proxy entities in different physics worlds.
     /// </summary>
-    [AddComponentMenu("DOTS/Physics/Custom Physics Proxy")]
+    [AddComponentMenu("Entities/Physics/Custom Physics Proxy")]
     [HelpURL(HelpURLs.CustomPhysicsProxyAuthoring)]
     public sealed class CustomPhysicsProxyAuthoring : MonoBehaviour
     {
@@ -44,8 +44,13 @@ namespace Unity.Physics.Authoring
                     continue;
                 var proxyEnt = CreateAdditionalEntity(TransformUsageFlags.WriteGlobalTransform | TransformUsageFlags.ReadLocalToWorld);
                 AddComponent(proxyEnt, new CustomPhysicsProxyDriver {rootEntity = GetEntity(), FirstOrderGain = authoring.FirstOrderGain});
+#if !ENABLE_TRANSFORM_V1
+                AddComponent(proxyEnt, default(LocalTransform));
+                AddComponent(proxyEnt, default(WorldTransform));
+#else
                 AddComponent(proxyEnt, default(Translation));
                 AddComponent(proxyEnt, default(Rotation));
+#endif
                 AddComponent(proxyEnt, default(PhysicsMass));
                 AddComponent(proxyEnt, default(PhysicsVelocity));
                 AddComponent(proxyEnt, default(PhysicsCollider));

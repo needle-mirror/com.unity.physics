@@ -69,6 +69,9 @@ namespace Unity.Physics.Authoring
             if (authoring.interpolation != RigidbodyInterpolation.None)
             {
                 AddComponent(new PhysicsGraphicalSmoothing());
+#if !ENABLE_TRANSFORM_V1
+                AddComponent(new PropagateLocalToWorld());
+#endif
                 if (authoring.interpolation == RigidbodyInterpolation.Interpolate)
                 {
                     AddComponent(new PhysicsGraphicalInterpolationBuffer
@@ -110,18 +113,17 @@ namespace Unity.Physics.Authoring
         protected override void OnUpdate()
         {
             // Fill in the MassProperties based on the potential calculated value by BuildCompoundColliderBakingSystem
-            Entities
-                .ForEach(
-                (ref PhysicsMass physicsMass, in LegacyRigidBodyBakingData bodyData, in PhysicsCollider collider) =>
-                {
-                    // Build mass component
-                    var massProperties = collider.MassProperties;
+            foreach (var (physicsMass, bodyData, collider) in
+                     SystemAPI.Query<RefRW<PhysicsMass>, RefRO<LegacyRigidBodyBakingData>, RefRO<PhysicsCollider>>().WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities))
+            {
+                // Build mass component
+                var massProperties = collider.ValueRO.MassProperties;
 
-                    // n.b. no way to know if CoM was manually adjusted, so all legacy Rigidbody objects use auto CoM
-                    physicsMass = !bodyData.isKinematic ?
-                        PhysicsMass.CreateDynamic(massProperties, bodyData.mass) :
-                        PhysicsMass.CreateKinematic(massProperties);
-                }).WithEntityQueryOptions(EntityQueryOptions.IncludePrefab).Run();
+                // n.b. no way to know if CoM was manually adjusted, so all legacy Rigidbody objects use auto CoM
+                physicsMass.ValueRW = !bodyData.ValueRO.isKinematic ?
+                    PhysicsMass.CreateDynamic(massProperties, bodyData.ValueRO.mass) :
+                    PhysicsMass.CreateKinematic(massProperties);
+            }
         }
     }
 }

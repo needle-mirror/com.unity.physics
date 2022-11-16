@@ -323,10 +323,10 @@ namespace Unity.Physics.Authoring
         protected override void OnUpdate()
         {
 #if UNITY_EDITOR
-            if (!TryGetSingleton<PhysicsDebugDisplayData>(out PhysicsDebugDisplayData debugDisplay) || debugDisplay.DrawColliders == 0)
+            if (!SystemAPI.TryGetSingleton<PhysicsDebugDisplayData>(out PhysicsDebugDisplayData debugDisplay) || debugDisplay.DrawColliders == 0)
                 return;
 
-            var world = GetSingleton<PhysicsWorldSingleton>().PhysicsWorld;
+            var world = SystemAPI.GetSingleton<PhysicsWorldSingleton>().PhysicsWorld;
             if (world.NumBodies == 0)
                 return;
 

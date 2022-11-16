@@ -159,7 +159,7 @@ namespace Unity.Physics.Authoring
                 return rb.gameObject;
 
             // for implicit static shape, first see if it is part of static optimized hierarchy
-            var topStatic = FindTopmostEnabledAncestor(shape, PhysicsShapeExtensions_NonBursted.s_StaticOptimizeEntitiesBuffer);
+            FindTopmostStaticEnabledAncestor(shape, out GameObject topStatic);
             if (topStatic != null)
                 return topStatic;
 
@@ -178,6 +178,45 @@ namespace Unity.Physics.Authoring
                 : topShape.transform.IsChildOf(topCollider.transform)
                 ? topCollider
                 : topShape;
+        }
+
+        static bool IsStatic(GameObject go)
+        {
+            return go != null && (go.isStatic || go.TryGetComponent(out StaticOptimizeEntity _));
+        }
+
+        static void GetParents(GameObject go, List<GameObject> parents)
+        {
+            parents.Clear();
+            Transform parentTransform = go.transform.parent;
+            while (parentTransform != null)
+            {
+                parents.Add(parentTransform.gameObject);
+                parentTransform = parentTransform.parent;
+            }
+        }
+
+        static bool FindTopmostStaticEnabledAncestor(GameObject gameObject, out GameObject topStatic)
+        {
+            topStatic = null;
+            if (gameObject == null)
+                return false;
+
+            // get the list of ancestors and set a dependency on the entire ancestor hierarchy
+            var parents = new List<GameObject>();
+            GetParents(gameObject, parents);
+
+            for (int i = parents.Count - 1; i >= 0; --i)
+            {
+                // find the top most static parent and take a dependency on it and all its non-static ancestors
+                if (IsStatic(parents[i]))
+                {
+                    topStatic = parents[i];
+                    break;
+                }
+            }
+
+            return topStatic != null;
         }
 
         static GameObject FindFirstEnabledAncestor<T>(GameObject shape, List<T> buffer) where T : Component

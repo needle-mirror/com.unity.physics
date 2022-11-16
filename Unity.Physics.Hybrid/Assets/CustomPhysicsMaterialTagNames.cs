@@ -11,7 +11,7 @@ namespace Unity.Physics.Authoring
         IReadOnlyList<string> TagNames { get; }
     }
 
-    [CreateAssetMenu(menuName = "DOTS/Physics/Custom Physics Material Tag Names", fileName = "Custom Material Tag Names")]
+    [CreateAssetMenu(menuName = "Entities/Physics/Custom Physics Material Tag Names", fileName = "Custom Material Tag Names")]
     [HelpURL(HelpURLs.CustomPhysicsMaterialTagNames)]
     public sealed partial class CustomPhysicsMaterialTagNames : ScriptableObject, ITagNames
     {

@@ -16,10 +16,10 @@ namespace Unity.Physics.Authoring
         public int DrawJoints;
     }
 
-    [AddComponentMenu("DOTS/Physics/Physics Debug Display")]
+    [AddComponentMenu("Entities/Physics/Physics Debug Display")]
     [DisallowMultipleComponent]
     [HelpURL(HelpURLs.PhysicsDebugDisplayAuthoring)]
-    public sealed class PhysicsDebugDisplayAuthoring : MonoBehaviour, IConvertGameObjectToEntity
+    public sealed class PhysicsDebugDisplayAuthoring : MonoBehaviour
     {
         PhysicsDebugDisplayAuthoring() {}
 
@@ -45,30 +45,6 @@ namespace Unity.Physics.Authoring
             DrawTriggerEvents = DrawTriggerEvents ? 1 : 0,
             DrawJoints = DrawJoints ? 1 : 0
         };
-
-        Entity m_ConvertedEntity = Entity.Null;
-        EntityManager m_ConvertedEntityManager;
-
-        void IConvertGameObjectToEntity.Convert(Entity entity, EntityManager dstManager, GameObjectConversionSystem conversionSystem)
-        {
-            dstManager.AddComponentData(entity, AsComponent);
-
-            m_ConvertedEntity = entity;
-            m_ConvertedEntityManager = dstManager;
-        }
-
-        void OnValidate()
-        {
-            if (!enabled) return;
-            if (gameObject.scene.isSubScene) return;
-            if (m_ConvertedEntity == Entity.Null) return;
-
-            // This requires Entity Conversion mode to be 'Convert And Inject Game Object'
-            if (m_ConvertedEntityManager.HasComponent<PhysicsStep>(m_ConvertedEntity))
-            {
-                m_ConvertedEntityManager.SetComponentData(m_ConvertedEntity, AsComponent);
-            }
-        }
     }
 
     public class PhysicsDebugDisplayDataBaker : Baker<PhysicsDebugDisplayAuthoring>
