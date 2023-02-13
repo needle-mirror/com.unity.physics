@@ -14,12 +14,6 @@ namespace Unity.Physics.Authoring
     internal partial struct DisplayMassPropertiesSystem : ISystem
     {
         [BurstCompile]
-        public void OnCreate(ref SystemState state) {}
-
-        [BurstCompile]
-        public void OnDestroy(ref SystemState state) {}
-
-        [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
 #if UNITY_EDITOR

@@ -23,15 +23,10 @@ To install the package, open the Package Manager window (**Window &gt; Package M
 * Mesh collider types contacting results in a wrong behaviour by getting glued to each other as if they were joints.
 * Enabling the `Draw Collider` toggle button within the `Physics Debug Display` results in errors being displayed in the console window and breaking the scene.
 * Mesh collider simplification: if primitive scale is smaller than 0.018f, selecting entities in the scene view throws error.
-* Selecting entities in the scene view throws error “GetAllOverlapping failed”.
 * The rotational motor does not behave as expected in some cases (spins unexpectedly or does not move at all).
 * Adding a rigidbody to a game object in a sub scene, causes it to disappear from game and scene view.
 * Moving the child of a game object in a sub scene results in exceptions, when both parent and child have traditional colliders (e.g. box collider component) but no rigidbodies.
-* A GameObject with both non-uniform scale in its `Transform` and its `Physics Body`'s `Smoothing` value of anything other than `None` will throw the following error:
-  > InvalidOperationException: Baking error: Attempt to add duplicate component Unity.Transforms.PropagateLocalToWorld for Baker PhysicsBodyAuthoringBaker with authoring component PhysicsBodyAuthoring.  Previous component added by Baker PhysicsBodyAuthoringBaker
-  
-  This will be fixed before the final 1.0 release. In the meantime, the suggested workaround is to temporarily set `Smoothing` to `None`. This may result in visual choppiness when rendering entities, but they will still be simulated correctly.
-  
+
 ## Additional resources
 
 * [Getting started](getting-started.md)

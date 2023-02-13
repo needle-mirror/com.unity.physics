@@ -1,13 +1,48 @@
 # Changelog
 
+## [1.0.0-pre.44] - 2023-02-13
+
+### Added
+
+* legacy icons to the physics authoring components `PhysicsShape` and `PhysicsBody`.
+* Help icon now always points to latest version of documentation for physics authoring components
+* Unit tests for Motors
+* Unit tests for some Jacobian methods
+* Internal API to help with connecting bodyB to bodyA for joints/motor configuration
+
+### Changed
+
+* Added functions that allow you to set impulse event threshold on all constraint joints, or only one of them.
+* Replaced PhysicsTransformAspect with TransformAspect
+* Increased testing of position motor in Position Motor demo scene, and re-enabled Position Motor package test.
+* Cleanup and simplification of position motor joint code
+* Use of `TransformAspect.WorldPosition`, `TransformAspect.WorldRotation`, `TransformAspect.WorldScale` when using Transform_V2 instead of `TransformAspect.Position`, `TransformAspect.Rotation`, `TransformAspect.Scale`.
+* `BaseShapeBakingSystem` and `BuildCompoundCollidersBakingSystem` have been modified to use `IJobEntity` instead of `Entities.ForEach()`.
+
+### Removed
+
+* `Attributes.cs` script has been removed since the `com.unity.properties` package is part of the editor as a module.
+* the gap left due to the old references being removed on the .asmdef files.
+
+### Fixed
+
+* Fixed bug when an extra ConfigurableJoint constraint was created when baking a motored Configurable Joint
+* Fixed bug where target wasn't calculated correctly when baking a motored Configurable Joint
+* Duplicate component error when switching Smoothing type to anything but None in Physics Body
+* Immediately reset component in PhysicsShapeAuthoring's Reset() function to avoid sequential coupling issues
+* During conversion from Game Object physics joints to Unity Physics joints the joint's spring coefficient is correctly considered.
+
+
 ## [1.0.0-pre.15] - 2022-11-16
 
 ### Added
 
 * For all 4 motor types, added a new field for the maximum impulse that can be exerted by the motor constraint
 * GameObjects that use axis-aligned motors are now converted during baking
-* `[CreateBefore(typeof(BroadphaseSystem))]`  for `PhysicsSimulationPickerSystem ` within `UnityPhysicsSimulationSystems.cs` script file.
-* Functions that allow you to set impulse event threshold on all constraint joints, or only one of them.
+* Support for validation of position motors in Simulation Validation System
+* `UnityPhysicsStep` component does not show Havok physics engine in the dropdown field when `com.havok.physics` package is not installed.
+* Functions that allow you to set an impulse event threshold on all constraint joints, or only one of them.
+
 
 ### Changed
 
@@ -16,12 +51,12 @@
 * The physics baking systems obey the GameObject static flag, in addition to the StaticOptimizeEntity component.
 * Adding '.AsArray()' method to do explicit cast for the test scenes.
 * API for motor creation have an additional argument for the max impulse of a motor. If this argument is not specified, a default value of infinity will be used.
-* naming path for Unity Physics Authoring components and material components.
+* Naming path for Unity Physics Authoring components and material components.
 
 ### Removed
 
-* Removing dependencies `com.unity.jobs` package.
-* dependency on `com.unity.test-framework.performance` package.
+* Dependancy on `com.unity.jobs` package.
+* Dependency on `com.unity.test-framework.performance` package.
 
 ### Fixed
 
@@ -30,12 +65,11 @@
 * Fixed bug in Position Motor target error calculation for when bodyA is rotated
 * Fixed bug in Linear Velocity Motor regarding the timestep
 * Fixed bug in Position Motor regarding the timestep
-* motion should be not exported for physics entities that have the Simulate component disabled.
+* Motion should be not exported for physics entities that have the Simulate component disabled.
 * Fixed a bug in which scale value was read from LocalTransform array even if the array had zero size.
-* Fixed bug when an extra ConfigurableJoint constraint was created when baking a motored Configurable Joint
-* Fixed bug where target wasn't calculated correctly when baking a motored Configurable Joint
 * It is now possible to enable impulse events feature using Constraint creation methods.
 * When baking a configurable joint into a motor, the Break Force and Break Torque now update the Max Impulse for breakable events
+
 
 ## [1.0.0-exp.12] - 2022-10-19
 
@@ -144,49 +178,26 @@
 * Simplified math to improve performance in `CalculateTwistAngle()`
 * Fixed a bug in `ConvexHullBuilder.Compact()` where triangle indices in links were not properly updated after remapping.
 
-## [0.51.1] - 2022-06-27
+### Security
 
-### Changed
 
-* Package Dependencies
-    * `com.unity.entities` to version `0.51.1`
-    * `com.unity.collections` to version `1.4.0`
 
-## [0.51.0] - 2022-05-04
 
-### Changed
-
-* Package Dependencies
-    * `com.unity.entities` to version `0.51.0`
-    * `com.unity.jobs` to version `0.51.0`
-    * `com.unity.mathematics` to version `1.2.6`
-    * `com.unity.collections` to version `1.3.0`
-
-### Fixed
-
-* `PhysicsShapeAuthoring.SetCylinder()` now takes into account provided geometry's side count.
-
-## [0.50.0] - 2021-09-17
+## [0.10.0] - 2021-09-17
 
 ### Changed
 
 * Upgraded com.unity.burst to 1.5.5
 * Adjusted code to remove obsolete APIs across all jobs inheriting IJobEntityBatch
-* Resources/ (used by Debug Draw) has been renamed DebugDisplayResources/ and now loads assets differently
 
 ### Removed
 
 * All usages of PhysicsExclude from Demo and Runtime code.
 
-### Fixed
 
-* An issue with the rendering pipeline used for the package samples, which caused none of the samples to render post conversion
-* An issue with the materials present in the samples as their colors were no longer correct
 
 ## [0.10.0-preview.1] - 2021-06-25
-
 ### Upgrade guide
-
 * Added `PhysicsWorldIndex` shared component, which is required on every Entity that should be involved in physics simulation (body or joint). Its `Value` denotes the index of physics world that the Entity belongs to (0 for default `PhysicsWorld` processed by `BuildPhysicsWorld`, `StepPhysicsWorld` and `ExportPhysicsWorld` systems). Note that Entities for different physics worlds will be stored in separate chunks, due to different values of shared component.
 * `PhysicsExclude` component is obsolete, but will still work at least until 2021-10-01. Instead of adding `PhysicsExclude` when you want to exclude an Entity from physics simulation, you can achieve the same thing by removing the required `PhysicsWorldIndex` shared component.
 * `HaveStaticBodiesChanged` was added to `SimulationStepInput`. It's a NativeArray of size 1, used for optimization of static body synchronization.
@@ -212,26 +223,21 @@
     * Added support for multiple `PhysicsWorlds`, where each body in each world is represented by a separate Entity. Each entity must have all components that are needed for physics simulation in its world.
     * Non-default physics worlds require custom systems that will processs (build, simulate and export) them, from Entities that are marked with appropriate `PhysicsWorldIndex` shared component. Storage of `PhysicsWorld` is also controlled by the user. A number of utilities was added to make this easier.
 * Authoring/Conversion Behavior
-
 ### Fixes
-
 * Fixed a bug in Graphical Interpolation where `LocalToWorld` was not updated if rendering and physics were exactly in sync.
 * Fixed the spring constant calculation during joint conversion
 * Fixed the configurable joint linear limit during joint conversion
 * Physics Debug Display: Draw Collider Edges performance improved
 * Physics Debug Display: Draw Collider Edges for sphere colliders improved
+### Known Issues
 
 
 ## [0.9.0-preview.4] - 2021-05-19
-
 ### Upgrade guide
-
 * An extra check was added to verify that the data provided to the 'Start/End' properties of 'RayCastInput/ColliderCastInput' does not generate a cast length that is not too long. The maximum length allowed is half of 'float.MaxValue'
 * Integrity checks can be now be enabled and disabled by toggling the new "DOTS/Physics/Enable Integrity Checks" menu item. Integrity checks should be enabled when checking simulation quality and behaviour. Integrity checks should be disabled when measuring performance. When enabled, Integrity checks will be included in a in Development build of a standalone executable, but are always excluded in release builds.
 * An extra check was added to verify that the data provided to the `Start` & `End` properties of `RayCastInput` & `ColliderCastInput` does not generate a cast length that is too long. The maximum length allowed is half of `float.MaxValue`
-
 ### Changes
-
 * Dependencies
     * Updated Burst to `1.5.3`
     * Updated Collections to `0.17.0-preview.18`
@@ -246,10 +252,10 @@
 * Integrity checks can now be toggled via an Editor menu item, and can be run in Development builds.
 * Fixed a bug where PhysicsDebugDisplay lines would disappear if editor was paused in PlayMode
 
+### Known Issues
 ## [0.8.0-preview.1] - 2021-03-26
-
+### Upgrade guide
 ### Changes
-
 * Dependencies
     * Updated Collections from `0.16.0-preview.22` to `0.17.0-preview.10`
     * Updated Entities from `0.18.0-preview.42` to `0.19.0-preview.17`
@@ -269,6 +275,7 @@
 
 * Fixed a bug in `ExportPhysicsWorld.CheckColliderFilterIntegrity()` method that was giving false integrity errors due to the fact that it had incorrectly handled compound colliders, if they (or their children) had a `GroupIndex` on the `Filter` that is not 0.
 * Added an extra change check on the `Parent` component type to `CheckStaticBodyChangesJob` in the `BuildPhysicsWorld` system.
+### Known Issues
 
 
 ## [0.7.0-preview.3] - 2021-02-24
@@ -314,6 +321,8 @@
 
 * Fixed a bug in `ExportPhysicsWorld.OnCreate()` method that relied on the fact that `BuildPhysicsWorld.OnCreate()` was executed before it.
 * Fixed `CompoundCollider.RefreshCollisionFilter()` when compound contains compound children.
+
+### Known Issues
 
 ## [0.6.0-preview.3] - 2021-01-18
 
@@ -381,14 +390,17 @@
 * Authoring/Conversion Behavior
 
 ### Fixes
-
 * Fixed the issue of `BuildPhysicsWorld` system not being run when there are not entities in the scene, leading to `StepPhysicsWorld` system operating on stale data.
 * Fixed write-back in `ContactJacobian.SolveContact()` to only affect linear and angular velocity. This prevents `JacobianHeader`'s mass factors from affecting `MotionVelocity`'s mass factors, which used to have multiplicative effect on those mass factors over time.
 * Fixed the issue where `ExportPhysicsWorld` system would not get run if there wasn't at least one entity that has `PhysicsCollider` component.
 * Fixed a crash on Android 32 with Bursted calls to create a `Hash128`.
 * Fixed a bug that was causing AABB of the compound collider to be incorrectly calculated if one of the child colliders were a TerrainCollider.
 
+### Known Issues
+
 ## [0.5.1-preview.2] - 2020-10-14
+
+### Upgrade guide
 
 ### Changes
 
@@ -513,7 +525,6 @@
     * Inspector help button for built-in authoring components and assets now opens the corresponding page in the API reference.
 
 ### Fixes
-
 * Fixed issue where orientation in Physics Shape component would get dirtied when nothing changed
 * Fixed issue with `PhysicsJoint.CreateHinge()` only working on a single axes.
 * Fixed `Constraint.Dimension` not returning 0 when it should.
@@ -522,7 +533,6 @@
 * Fixed regression that caused additional sub-meshes to be ignored when converting mesh colliders.
 
 ### Known Issues
-
 * Physics debug display may not work properly while stepping frame by frame in Editor.
 
 ## [0.4.1-preview] - 2020-07-28
@@ -720,6 +730,7 @@
 * Volume of dynamic meshes is now being approximated with the volume of the mesh AABB, as opposed to previously being set to 0.
 * Fixed regression causing newly added `PhysicsShapeAuthoring` components to initialize with a bevel radius of 0.
 
+### Known Issues
 
 ## [0.3.1-preview] - 2020-03-19
 
@@ -1129,6 +1140,10 @@
     * `SphereGeometry`
 * Improved performance of `MeshConnectivityBuilder.WeldVertices()`.
 * Fixed a potential assert when joints are created with a static and dynamic body (in that order).
+
+### Known Issues
+
+
 
 ## [0.2.2-preview] - 2019-09-06
 

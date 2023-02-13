@@ -21,7 +21,7 @@ namespace Unity.Physics.Authoring
     public abstract class BaseLegacyJointBaker<T> : Baker<T> where T : UnityEngine.Component
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static quaternion GetJointFrameOrientation(float3 axis, float3 secondaryAxis)
+        protected static quaternion GetJointFrameOrientation(float3 axis, float3 secondaryAxis)
         {
             // classic Unity uses a different approach than BodyFrame.ValidateAxes() for ortho-normalizing degenerate inputs
             // ortho-normalizing here ensures behavior is consistent with classic Unity
@@ -31,32 +31,51 @@ namespace Unity.Physics.Authoring
             return new BodyFrame { Axis = a, PerpendicularAxis = p }.AsRigidTransform().rot;
         }
 
-        public bool3 GetAxesWithMotionType(
+        protected bool3 GetAxesWithMotionType(
             ConfigurableJointMotion motionType,
             ConfigurableJointMotion x, ConfigurableJointMotion y, ConfigurableJointMotion z
         ) => new bool3(x == motionType, y == motionType, z == motionType);
 
-        public float CalculateSpringFrequencyFromSpringConstant(float springConstant)
+        protected float CalculateSpringFrequencyFromSpringConstant(float springConstant, float mass = 1.0f)
         {
             if (springConstant < Math.Constants.Eps) return 0.0f;
 
-            return math.sqrt(springConstant) * Math.Constants.OneOverTau;
+            return math.sqrt(springConstant / mass) * Math.Constants.OneOverTau;
         }
 
-        public PhysicsConstrainedBodyPair GetConstrainedBodyPair(LegacyJoint joint) =>
+        protected PhysicsConstrainedBodyPair GetConstrainedBodyPair(in LegacyJoint joint) =>
             new PhysicsConstrainedBodyPair(
                 GetEntity(joint.gameObject),
                 joint.connectedBody == null ? Entity.Null : GetEntity(joint.connectedBody),
                 joint.enableCollision
             );
 
-        public struct CombinedJoint
+        protected float GetConstrainedBodyMass(in LegacyJoint joint)
+        {
+            var rigidBody = GetComponent<Rigidbody>(joint.gameObject);
+            var connectedBody = joint.connectedBody;
+            float mass = 0;
+
+            if (rigidBody != null && !rigidBody.isKinematic)
+            {
+                mass += rigidBody.mass;
+            }
+
+            if (connectedBody != null && !connectedBody.isKinematic)
+            {
+                mass += connectedBody.mass;
+            }
+
+            return mass > 0 ? mass : 1.0f;
+        }
+
+        protected struct CombinedJoint
         {
             public PhysicsJoint LinearJoint;
             public PhysicsJoint AngularJoint;
         }
 
-        public void SetupBodyFrames(quaternion jointFrameOrientation, LegacyJoint joint, ref BodyFrame bodyAFromJoint, ref BodyFrame bodyBFromJoint)
+        private void SetupBodyFrames(quaternion jointFrameOrientation, LegacyJoint joint, ref BodyFrame bodyAFromJoint, ref BodyFrame bodyBFromJoint)
         {
             RigidTransform worldFromBodyA = Math.DecomposeRigidBodyTransform(joint.transform.localToWorldMatrix);
             RigidTransform worldFromBodyB = joint.connectedBody == null
@@ -85,7 +104,7 @@ namespace Unity.Physics.Authoring
             };
         }
 
-        public CombinedJoint CreateConfigurableJoint(
+        protected CombinedJoint CreateConfigurableJoint(
             quaternion jointFrameOrientation,
             LegacyJoint joint, bool3 linearLocks, bool3 linearLimited, SoftJointLimit linearLimit, SoftJointLimitSpring linearSpring, bool3 angularFree, bool3 angularLocks,
             bool3 angularLimited, SoftJointLimit lowAngularXLimit, SoftJointLimit highAngularXLimit, SoftJointLimitSpring angularXLimitSpring, SoftJointLimit angularYLimit,
@@ -94,13 +113,15 @@ namespace Unity.Physics.Authoring
             var angularConstraints = new FixedList512Bytes<Constraint>();
             var linearConstraints = new FixedList512Bytes<Constraint>();
 
+            var constrainedMass = GetConstrainedBodyMass(joint);
+
             if (angularLimited[0])
             {
                 Constraint constraint = Constraint.Twist(
                     0,
                     math.radians(new FloatRange(-highAngularXLimit.limit, -lowAngularXLimit.limit).Sorted()),
                     joint.breakTorque * Time.fixedDeltaTime,
-                    CalculateSpringFrequencyFromSpringConstant(angularXLimitSpring.spring),
+                    CalculateSpringFrequencyFromSpringConstant(angularXLimitSpring.spring, constrainedMass),
                     angularXLimitSpring.damper);
                 angularConstraints.Add(constraint);
             }
@@ -111,7 +132,7 @@ namespace Unity.Physics.Authoring
                     1,
                     math.radians(new FloatRange(-angularYLimit.limit, angularYLimit.limit).Sorted()),
                     joint.breakTorque * Time.fixedDeltaTime,
-                    CalculateSpringFrequencyFromSpringConstant(angularYZLimitSpring.spring),
+                    CalculateSpringFrequencyFromSpringConstant(angularYZLimitSpring.spring, constrainedMass),
                     angularYZLimitSpring.damper);
 
                 angularConstraints.Add(constraint);
@@ -123,7 +144,7 @@ namespace Unity.Physics.Authoring
                     2,
                     math.radians(new FloatRange(-angularZLimit.limit, angularZLimit.limit).Sorted()),
                     joint.breakTorque * Time.fixedDeltaTime,
-                    CalculateSpringFrequencyFromSpringConstant(angularYZLimitSpring.spring),
+                    CalculateSpringFrequencyFromSpringConstant(angularYZLimitSpring.spring, constrainedMass),
                     angularYZLimitSpring.damper);
 
                 angularConstraints.Add(constraint);
@@ -147,7 +168,7 @@ namespace Unity.Physics.Authoring
                     Type = ConstraintType.Linear,
                     Min = 0f,
                     Max = linearLimit.limit,  //allow movement up to limit from anchor
-                    SpringFrequency = CalculateSpringFrequencyFromSpringConstant(spring),
+                    SpringFrequency = CalculateSpringFrequencyFromSpringConstant(spring, constrainedMass),
                     SpringDamping = damping,
                     MaxImpulse = joint.breakForce * Time.fixedDeltaTime,
                 });
@@ -195,7 +216,7 @@ namespace Unity.Physics.Authoring
             return combinedJoint;
         }
 
-        public PhysicsJoint ConvertMotor(quaternion jointFrameOrientation, LegacyJoint joint, JacobianType motorType, float target, float maxImpulseForMotor)
+        protected PhysicsJoint ConvertMotor(quaternion jointFrameOrientation, LegacyJoint joint, JacobianType motorType, float target, float maxImpulseForMotor)
         {
             var bodyAFromJoint = new BodyFrame {};
             var bodyBFromJoint = new BodyFrame {};
@@ -232,7 +253,7 @@ namespace Unity.Physics.Authoring
             return jointData;
         }
 
-        public uint GetWorldIndex(UnityEngine.Component c)
+        protected uint GetWorldIndex(UnityEngine.Component c)
         {
             uint worldIndex = 0;
             var physicsBody = GetComponent<PhysicsBodyAuthoring>(c);
@@ -243,7 +264,7 @@ namespace Unity.Physics.Authoring
             return worldIndex;
         }
 
-        public Entity CreateJointEntity(uint worldIndex, PhysicsConstrainedBodyPair constrainedBodyPair, PhysicsJoint joint)
+        protected Entity CreateJointEntity(uint worldIndex, PhysicsConstrainedBodyPair constrainedBodyPair, PhysicsJoint joint)
         {
             using (var joints = new NativeArray<PhysicsJoint>(1, Allocator.Temp) { [0] = joint })
             using (var jointEntities = new NativeList<Entity>(1, Allocator.Temp))
@@ -253,7 +274,7 @@ namespace Unity.Physics.Authoring
             }
         }
 
-        public void CreateJointEntities(uint worldIndex, PhysicsConstrainedBodyPair constrainedBodyPair, NativeArray<PhysicsJoint> joints, NativeList<Entity> newJointEntities = default)
+        protected void CreateJointEntities(uint worldIndex, PhysicsConstrainedBodyPair constrainedBodyPair, NativeArray<PhysicsJoint> joints, NativeList<Entity> newJointEntities = default)
         {
             if (!joints.IsCreated || joints.Length == 0)
                 return;
@@ -266,30 +287,13 @@ namespace Unity.Physics.Authoring
             // create all new joints
             var multipleJoints = joints.Length > 1;
 
-            // TODO: BAKING - WE CAN'T GET THE NAME AT THE MOMENT IN BAKING, SHOULD WE ALLOW IT?
-/*
-#if UNITY_EDITOR
-            var nameEntityA = DstEntityManager.GetName(constrainedBodyPair.EntityA);
-            var nameEntityB = constrainedBodyPair.EntityB == Entity.Null
-                ? "PhysicsWorld"
-                : DstEntityManager.GetName(constrainedBodyPair.EntityB);
-            var baseName = $"Joining {nameEntityA} + {nameEntityB}";
-#endif*/
-
-            var entity = GetEntity();
-            for (var i = 0; i < joints.Length; ++i)
+            foreach (var joint in joints)
             {
                 var jointEntity = CreateAdditionalEntity();
                 AddSharedComponent(jointEntity, new PhysicsWorldIndex(worldIndex));
 
-                // TODO: BAKING - This is not supported in baking yet
-/*
-#if UNITY_EDITOR
-                DstEntityManager.SetName(jointEntity, $"{baseName} ({joints[i].JointType})");
-#endif*/
-
                 AddComponent(jointEntity, constrainedBodyPair);
-                AddComponent(jointEntity, joints[i]);
+                AddComponent(jointEntity, joint);
 
                 newJointEntities.Add(jointEntity);
             }
@@ -494,8 +498,7 @@ namespace Unity.Physics.Authoring
                     joint.angularZLimit, joint.angularYZLimitSpring);
 
                 worldIndex = GetWorldIndex(joint);
-                using (var joints = new NativeArray<PhysicsJoint>(2, Allocator.Temp)
-                       { [0] = jointData.LinearJoint, [1] = jointData.AngularJoint })
+                using (var joints = new NativeArray<PhysicsJoint>(2, Allocator.Temp) { [0] = jointData.LinearJoint, [1] = jointData.AngularJoint })
                 using (var jointEntities = new NativeList<Entity>(2, Allocator.Temp))
                 {
                     CreateJointEntities(worldIndex, GetConstrainedBodyPair(joint), joints, jointEntities);
@@ -618,7 +621,7 @@ namespace Unity.Physics.Authoring
                 Type = ConstraintType.Linear,
                 Min = distanceRange.Min,
                 Max = distanceRange.Max,
-                SpringFrequency = CalculateSpringFrequencyFromSpringConstant(joint.spring),
+                SpringFrequency = CalculateSpringFrequencyFromSpringConstant(joint.spring, GetConstrainedBodyMass(joint)),
                 SpringDamping = joint.damper,
                 MaxImpulse = joint.breakForce * Time.fixedDeltaTime,
             };

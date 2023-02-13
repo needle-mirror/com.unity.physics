@@ -308,7 +308,7 @@ namespace Unity.Physics
             }
             set
             {
-                SafetyChecks.CheckIndexAndThrow(constraintIndex, m_Constraints.Length);
+                SafetyChecks.CheckIndexAndThrow(constraintIndex, GetConstraintCount());
                 ref var self = ref m_Constraints;
                 fixed(void* ptr = &self)
                 {

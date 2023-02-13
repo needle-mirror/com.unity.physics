@@ -29,12 +29,6 @@ In the code below, we will apply an impulse to the RigidBody with index 3
 public partial struct ApplyImpulseSystem : ISystem
 {
     [BurstCompile]
-    public void OnCreate(ref SystemState state){}
-    
-    [BurstCompile]
-    public void OnDestroy(ref SystemState state){}
-
-    [BurstCompile]
     public partial struct ApplyImpulseJob : IJob
     {
         PhysicsWorld World;
@@ -91,12 +85,6 @@ Specialised jobs require [SimulationSingleton](physics-singletons.md) and `Physi
 public partial struct DisableDynamicDynamicPairsSystem : ISystem
 {
     [BurstCompile]
-    public void OnCreate(ref SystemState state){}
-    
-    [BurstCompile]
-    public void OnDestroy(ref SystemState state){}
-
-    [BurstCompile]
     struct DisableDynamicDynamicPairsJob : IBodyPairsJob
     {
         public int NumDynamicBodies;
@@ -141,12 +129,6 @@ public partial struct DisableDynamicDynamicPairsSystem : ISystem
 [BurstCompile]
 public partial struct EnableSurfaceVelocitySystem : ISystem
 {
-    [BurstCompile]
-    public void OnCreate(ref SystemState state){}
-    
-    [BurstCompile]
-    public void OnDestroy(ref SystemState state){}
-
     // This sets some data on the contact, to get propagated to the jacobian
     // for processing in our jacobian modifier job. This is necessary because some flags require extra data to
     // be allocated along with the jacobian (e.g., SurfaceVelocity data typically does not exist).
@@ -183,13 +165,7 @@ public partial struct EnableSurfaceVelocitySystem : ISystem
 [UpdateAfter(typeof(PhysicsCreateJacobiansGroup))]
 [UpdateBefore(typeof(PhysicsSolveAndIntegrateGroup))]
 public partial struct SetFrictionToZeroSystem : ISystem
-{
-    [BurstCompile]
-    public void OnCreate(ref SystemState state){}
-    
-    [BurstCompile]
-    public void OnDestroy(ref SystemState state){}
-    
+{   
     [BurstCompile]
     public partial struct SetFrictionToZeroJob : IJacobiansJob 
     // Note: there are much more performant ways of setting friction to zero, this is just for demonstration purposes

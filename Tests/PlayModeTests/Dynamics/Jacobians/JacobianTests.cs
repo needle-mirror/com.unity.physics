@@ -37,14 +37,17 @@ namespace Unity.Physics.Tests.Dynamics.Jacobians
             Assert.AreApproximatelyEqual(0.6294564f, damping);
         }
 
-        [Test]
-        public void JacobianUtilitiesCalculateErrorTest()
+        private static readonly TestCaseData[] k_JacobianCalculateErrorCases =
         {
-            float x = 5.0f;
-            float min = 0.0f;
-            float max = 10.0f;
+            new TestCaseData(5.0f, 0.0f, 10.0f, 0.0f).SetName("Case 1: Within threshold"),
+            new TestCaseData(-5.0f, 0.0f, 10.0f, -5.0f).SetName("Case 2: Below threshold"),
+            new TestCaseData(15.0f, 0.0f, 10.0f, 5.0f).SetName("Case 3: Above threshold"),
+        };
 
-            Assert.AreApproximatelyEqual(0.0f, JacobianUtilities.CalculateError(x, min, max));
+        [TestCaseSource(nameof(k_JacobianCalculateErrorCases))]
+        public void JacobianUtilitiesCalculateErrorTest(float x, float min, float max, float expected)
+        {
+            Assert.AreApproximatelyEqual(expected, JacobianUtilities.CalculateError(x, min, max));
         }
 
         [Test]

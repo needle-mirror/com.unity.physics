@@ -33,11 +33,6 @@ namespace Unity.Physics.Systems
         }
 
         [BurstCompile]
-        public void OnDestroy(ref SystemState state)
-        {
-        }
-
-        [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
             if (!SystemAPI.TryGetSingleton<PhysicsStep>(out PhysicsStep stepComponent))
@@ -227,11 +222,6 @@ namespace Unity.Physics.Systems
         }
 
         [BurstCompile]
-        public void OnDestroy(ref SystemState state)
-        {
-        }
-
-        [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
             var simSingleton = SystemAPI.GetSingletonRW<SimulationSingleton>().ValueRW;
@@ -261,11 +251,6 @@ namespace Unity.Physics.Systems
         }
 
         [BurstCompile]
-        public void OnDestroy(ref SystemState state)
-        {
-        }
-
-        [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
             var simSingleton = SystemAPI.GetSingletonRW<SimulationSingleton>().ValueRW;
@@ -292,11 +277,6 @@ namespace Unity.Physics.Systems
 
             m_PhysicsColliderQuery = state.GetEntityQuery(ComponentType.ReadWrite<PhysicsCollider>());
             SystemAPI.GetSingletonRW<PhysicsWorldSingleton>();
-        }
-
-        [BurstCompile]
-        public void OnDestroy(ref SystemState state)
-        {
         }
 
         [BurstCompile]

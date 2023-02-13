@@ -50,11 +50,16 @@ namespace Unity.Physics.Authoring
     }
 
     /// <summary>   The physics body authoring. This class cannot be inherited. </summary>
+#if UNITY_2021_2_OR_NEWER
+    [Icon(k_IconPath)]
+#endif
     [AddComponentMenu("Entities/Physics/Physics Body")]
     [DisallowMultipleComponent]
     [HelpURL(HelpURLs.PhysicsBodyAuthoring)]
     public sealed class PhysicsBodyAuthoring : MonoBehaviour
     {
+        const string k_IconPath = "Packages/com.unity.physics/Unity.Physics.Editor/Editor Default Resources/Icons/d_Rigidbody@64.png";
+
         PhysicsBodyAuthoring() {}
 
         public BodyMotionType MotionType { get => m_MotionType; set => m_MotionType = value; }

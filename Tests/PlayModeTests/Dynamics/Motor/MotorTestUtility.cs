@@ -11,6 +11,10 @@ namespace Unity.Physics.Tests.Motors
     // Test runner tools and utilities
     public class MotorTestUtility
     {
+        internal const float TestFrequency = 60.0f;
+        internal const float TestTimestep = 1.0f / TestFrequency;
+        internal const int numTestIterations = 4;
+
         internal static void ApplyGravity(ref MotionVelocity velocity, float3 gravity, float timestep)
         {
             if (velocity.InverseMass > 0.0f)
@@ -133,6 +137,37 @@ namespace Unity.Physics.Tests.Motors
                 InverseMass = nextMass
             };
         }
+
+        internal static void SetupMotionVelocity(out MotionVelocity velocityA, out MotionVelocity velocityB)
+        {
+            velocityA = new MotionVelocity
+            {
+                LinearVelocity = float3.zero,
+                AngularVelocity = float3.zero,
+                InverseInertia = new float3(6f, 6f, 6f),
+                InverseMass = 1.0f,
+                AngularExpansionFactor = 0.692820311f
+            };
+
+            velocityB = new MotionVelocity();
+        }
+
+        internal static void SetupMotionData(RigidTransform worldFromA, RigidTransform worldFromB,
+            out MotionData motionA, out MotionData motionB)
+        {
+            motionA = new MotionData
+            {
+                WorldFromMotion = worldFromA,
+                BodyFromMotion = RigidTransform.identity,
+                LinearDamping = 0.0099f,
+                AngularDamping = 0.05f
+            };
+
+            motionB = new MotionData //use default other than this position
+            {
+                WorldFromMotion = worldFromB
+            };
+        }
     }
 
     //
@@ -140,6 +175,9 @@ namespace Unity.Physics.Tests.Motors
     //
     public class MotorTestRunner
     {
+        internal const float Frequency = 60.0f;
+        internal const float Timestep = 1.0f / Frequency;
+
         internal delegate Joint GenerateMotor(ref Random rnd);
 
         // Solves a joint, using a set number of iterations, and integrates the motions
@@ -178,7 +216,7 @@ namespace Unity.Physics.Tests.Motors
                 {
                     ref JacobianHeader header = ref jacIterator.ReadJacobianHeader();
                     header.Solve(ref velocityA, ref velocityB, stepInput,
-                        ref eventWriter,ref eventWriter,
+                        ref eventWriter, ref eventWriter,
                         ref eventWriter, false,
                         Solver.MotionStabilizationInput.Default,
                         Solver.MotionStabilizationInput.Default);
@@ -198,7 +236,75 @@ namespace Unity.Physics.Tests.Motors
             Constraints = joint.m_Constraints
         };
 
-        internal static unsafe void RunMotorTest(string testName, GenerateMotor generateMotor)
+        // For the given test configuration and motor types, simulate the motor
+        // Returns: accumulated angular velocity, accumulated linear velocity, velocityA, velocityB, motionA, motionB
+        // Verifies 2 values: the impulse applied to the linear velocity, the impulse applied to the angular velocity
+        internal static void TestSimulateMotor(string testName, ref Joint jointData,
+            ref MotionVelocity velocityA, ref MotionVelocity velocityB, ref MotionData motionA, ref MotionData motionB,
+            bool useGravity, float maxImpulse, float3 motorOrientation,
+            in int numIterations, in int numSteps, in int numStabilizingSteps,
+            out float3 accumulateAngularVelocity, out float3 accumulateLinearVelocity)
+        {
+            string failureMessage;
+            var impulseThreshold = math.EPSILON;
+
+            float3 gravity = float3.zero;
+            if (useGravity) gravity = new float3(0.0f, -9.81f, 0.0f);
+
+            accumulateAngularVelocity = float3.zero;
+            accumulateLinearVelocity = float3.zero;
+
+            var rotation0 = motionA.WorldFromMotion.rot;
+
+            // Simulate
+            for (int iStep = 0; iStep < numSteps + numStabilizingSteps; iStep++)
+            {
+                if (iStep == numStabilizingSteps - 1)
+                    rotation0 = motionA.WorldFromMotion.rot; //save rotation once motion stabilizes a bit
+
+                var v0Ang = velocityA.AngularVelocity;
+                var v0Lin = velocityA.LinearVelocity * motorOrientation;
+
+                // Before solving, apply gravity
+                MotorTestUtility.ApplyGravity(ref velocityA, gravity, Timestep);
+                MotorTestUtility.ApplyGravity(ref velocityB, gravity, Timestep);
+
+                //NOTE: Position motor tests for y-aligned motors require v0Lin be measured here to pass if not using motorOrientation
+
+                // Solve and integrate
+                SolveSingleJoint(jointData, numIterations, Timestep,
+                    ref velocityA, ref velocityB, ref motionA, ref motionB, out NativeStream jacobians);
+
+                // Verify that the angular maxImpulse for the motor is never exceeded
+                var v1Ang = velocityA.AngularVelocity;
+                var motorImpulseAng = math.length((v1Ang - v0Ang) / velocityA.InverseInertia);
+                var impulseMarginAng = math.abs(motorImpulseAng) - maxImpulse;
+                failureMessage = $"{testName}: Angular Motor impulse {motorImpulseAng} exceeded maximum ({maxImpulse})";
+                Assert.LessOrEqual(impulseMarginAng, impulseThreshold, failureMessage);
+
+                // Verify that the linear maxImpulse for the motor is never exceeded, but only consider directions that the motor is acting on
+                var v1Lin = velocityA.LinearVelocity * motorOrientation;
+                var motorImpulseLin = math.length((v1Lin - v0Lin) / velocityA.InverseMass);
+                var impulseMarginLin = math.abs(motorImpulseLin) - maxImpulse;
+                failureMessage = $"{testName}: Linear Motor impulse {motorImpulseLin} exceeded maximum ({maxImpulse})";
+                Assert.LessOrEqual(impulseMarginLin, impulseThreshold, failureMessage);
+
+                // Only start to accumulate after a stabilizing velocity has been achieved
+                if (iStep > numStabilizingSteps - 1)
+                {
+                    accumulateAngularVelocity += velocityA.AngularVelocity;
+                    accumulateLinearVelocity += velocityA.LinearVelocity;
+                }
+
+                // Cleanup
+                jacobians.Dispose();
+            }
+        }
+
+        // Runs a random simulation. For an input motor, this test sets both bodies to have random motions,
+        // then runs the simulation for numSteps. On the last step, checks if InitialError for the Jacobian has an
+        // InitialError less than a specified threshold
+        internal static unsafe void RunRandomConfigurationMotorTest(string testName, GenerateMotor generateMotor)
         {
             uint numTests = 1000;
             uint dbgTest = 2472156941;
@@ -214,7 +320,6 @@ namespace Unity.Physics.Tests.Motors
                 {
                     rnd.state = dbgTest;
                 }
-                uint state = rnd.state;
 
                 // Generate a random ball and socket joint
                 Joint jointData = generateMotor(ref rnd);
@@ -238,7 +343,7 @@ namespace Unity.Physics.Tests.Motors
                     for (int iStep = 0; iStep < numSteps; iStep++)
                     {
                         // Before solving, apply gravity
-                        MotorTestUtility.ApplyGravity(ref velocityA, gravity, timestep); //AMS: removed motionA. Not used
+                        MotorTestUtility.ApplyGravity(ref velocityA, gravity, timestep);
                         MotorTestUtility.ApplyGravity(ref velocityB, gravity, timestep);
 
                         // Solve and integrate
@@ -250,10 +355,12 @@ namespace Unity.Physics.Tests.Motors
                         {
                             NativeStream.Reader jacobianReader = jacobians.AsReader();
                             var jacIterator = new JacobianIterator(jacobianReader, 0);
-                            string failureMessage = testName + " failed " + iTest + " (" + state + ")";
+                            string failureMessage = $"{testName} failed {iTest}";
                             while (jacIterator.HasJacobiansLeft())
                             {
                                 ref JacobianHeader header = ref jacIterator.ReadJacobianHeader();
+                                float3 target;
+                                float3 pivotA;
                                 switch (header.Type)
                                 {
                                     case JacobianType.LinearLimit:
@@ -269,18 +376,20 @@ namespace Unity.Physics.Tests.Motors
                                         Assert.Less(header.AccessBaseJacobian<AngularLimit3DJacobian>().InitialError, 1e-2f, failureMessage + ": AngularLimit3DJacobian");
                                         break;
                                     case JacobianType.PositionMotor:
-                                        Assert.Less(header.AccessBaseJacobian<PositionMotorJacobian>().InitialError, 1e-3f, failureMessage + ": PositionMotorJacobian");
-                                        break;
-                                    case JacobianType.LinearVelocityMotor:
-                                        Assert.Less(header.AccessBaseJacobian<LinearVelocityMotorJacobian>().InitialError, 1e-3f, failureMessage + ": LinearVelocityMotorJacobian");
+                                        target = header.AccessBaseJacobian<PositionMotorJacobian>().TargetInB;
+                                        pivotA = header.AccessBaseJacobian<PositionMotorJacobian>().PivotAinA;
+                                        var pivotB = header.AccessBaseJacobian<PositionMotorJacobian>().PivotBinB;
+                                        Assert.Less(header.AccessBaseJacobian<PositionMotorJacobian>().InitialError, 1e-3f,
+                                            $"{failureMessage}: PositionMotorJacobian for target: {target} with pivotA: {pivotA} and pivotB: {pivotB}");
                                         break;
                                     case JacobianType.RotationMotor:
-                                        Assert.Less(header.AccessBaseJacobian<RotationMotorJacobian>().InitialError, 1e-2f, failureMessage + ": RotationMotorJacobian");
+                                        target = header.AccessBaseJacobian<RotationMotorJacobian>().Target;
+                                        pivotA = header.AccessBaseJacobian<RotationMotorJacobian>().AxisInMotionA;
+                                        Assert.Less(header.AccessBaseJacobian<RotationMotorJacobian>().InitialError, 1e-2f,
+                                            $"{failureMessage}: RotationMotorJacobian for target: {target} with axisInMotionA: {pivotA}");
                                         break;
-                                    case JacobianType.AngularVelocityMotor:
-                                        // InitialError is a constant for the angular velocity motor (magnitude of the target velocity)
-                                        Assert.Less(header.AccessBaseJacobian<AngularVelocityMotorJacobian>().InitialError, 2e-1f, failureMessage + ": AngularVelocityMotorJacobian");
-                                        break;
+                                    case JacobianType.LinearVelocityMotor:  // InitialError unused
+                                    case JacobianType.AngularVelocityMotor: // InitialError unused
                                     default:
                                         Assert.Fail(failureMessage + ": unexpected jacobian type");
                                         break;

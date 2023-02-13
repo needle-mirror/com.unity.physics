@@ -335,6 +335,7 @@ namespace Unity.Physics.Tests.Aspects
                         Assert.IsTrue(map.Count == 2);
 
                         var keys = map.GetKeyArray(Allocator.Temp);
+                        keys.Sort();
                         Assert.IsTrue(keys[0] == aspect.ConvertChildIndexToColliderKey(0));
                         Assert.IsTrue(keys[1] == aspect.ConvertChildIndexToColliderKey(1));
 
@@ -355,6 +356,7 @@ namespace Unity.Physics.Tests.Aspects
                         NativeHashMap<ColliderKey, ChildCollider> map = new NativeHashMap<ColliderKey, ChildCollider>(2, Allocator.Temp);
                         aspect.GetColliderKeyToChildrenMapping(ref map);
                         var keys = map.GetKeyArray(Allocator.Temp);
+                        keys.Sort();
 
                         // Collision filter
                         {

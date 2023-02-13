@@ -35,11 +35,6 @@ See example below.
 public partial struct GetNumCollisionEventsSystem : ISystem
 {
     [BurstCompile]
-    public void OnCreate(ref SystemState state){}
-    [BurstCompile]
-    public void OnDestroy(ref SystemState state){}
-
-    [BurstCompile]
     public partial struct CountNumCollisionEvents : ICollisionEventsJob
     {
         public NativeReference<int> NumCollisionEvents;
@@ -50,7 +45,7 @@ public partial struct GetNumCollisionEventsSystem : ISystem
     }
 
     [BurstCompile]
-    public void OnUpdate(ref SystemState state){}
+    public void OnUpdate(ref SystemState state)
     {
         NativeReference<int> numCollisionEvents = new NativeReference<int>(0, Allocator.TempJob);
         
@@ -81,11 +76,6 @@ See example below.
 public partial struct GetNumTriggerEventsSystem : ISystem
 {
     [BurstCompile]
-    public void OnCreate(ref SystemState state){}
-    [BurstCompile]
-    public void OnDestroy(ref SystemState state){}
-
-    [BurstCompile]
     public partial struct CountNumTriggerEvents : ITriggerEventsJob
     {
         public NativeReference<int> NumTriggerEvents;
@@ -96,7 +86,7 @@ public partial struct GetNumTriggerEventsSystem : ISystem
     }
 
     [BurstCompile]
-    public void OnUpdate(ref SystemState state){}
+    public void OnUpdate(ref SystemState state)
     {
         NativeReference<int> numTriggerEvents = new NativeReference<int>(0, Allocator.TempJob);
         

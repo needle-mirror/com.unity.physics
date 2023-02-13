@@ -22,7 +22,6 @@ namespace Unity.Physics.Authoring
     {
         public bool Convex;
         public UnityObjectRef<UnityMesh> Mesh;
-        public int MeshID;
         public Bounds MeshBounds;
         public float4x4 BakeFromShape;
         public float4x4 ChildToShape;

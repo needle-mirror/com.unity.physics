@@ -36,30 +36,10 @@ namespace Unity.Physics.Aspects
     }
 #endif
 
-    // TODO(DOTS-7065): replace all uses of PhysicsTransformAspect with TransformAspect
+#if ENABLE_TRANSFORM_V1
     internal readonly partial struct PhysicsTransformAspect : IAspect
     {
-#if !ENABLE_TRANSFORM_V1
-        public WorldTransform WorldFromBody
-        {
-            get
-            {
-                return new WorldTransform
-                {
-                    Position = Position,
-                    Rotation = Rotation,
-                    Scale = Scale
-                };
-            }
-            set
-            {
-                Position = value.Position;
-                Rotation = value.Rotation;
-                Scale = value.Scale;
-            }
-        }
-#else
-        public WorldTransform WorldFromBody
+        public WorldTransform WorldTransform
         {
             get
             {
@@ -80,7 +60,6 @@ namespace Unity.Physics.Aspects
 
         [Optional]
         public readonly RefRW<Unity.Transforms.Scale> m_Scale;
-#endif
 
         [Optional]
         public readonly TransformAspect m_TransformAspect;
@@ -99,10 +78,6 @@ namespace Unity.Physics.Aspects
 
         public float Scale
         {
-#if !ENABLE_TRANSFORM_V1
-            get => m_TransformAspect.LocalScale;
-            set => m_TransformAspect.LocalScale = value;
-#else
             get => m_Scale.IsValid ? m_Scale.ValueRO.Value : 1.0f;
             set
             {
@@ -119,10 +94,9 @@ namespace Unity.Physics.Aspects
                     }
                 }
             }
-#endif
         }
     }
-
+#endif
     internal static class AspectConstants
     {
         public static readonly float k_MinMass = 0.0001f;
@@ -135,7 +109,11 @@ namespace Unity.Physics.Aspects
 /// </summary>
     public readonly partial struct RigidBodyAspect : IAspect
     {
+#if !ENABLE_TRANSFORM_V1
+        internal readonly TransformAspect m_TransformAspect;
+#else
         internal readonly PhysicsTransformAspect m_TransformAspect;
+#endif
         internal readonly RefRW<PhysicsVelocity> m_Velocity;
 
         [Optional]
@@ -157,8 +135,8 @@ namespace Unity.Physics.Aspects
         /// <value> The world space transform. </value>
         public WorldTransform WorldFromBody
         {
-            get => m_TransformAspect.WorldFromBody;
-            set => m_TransformAspect.WorldFromBody = value;
+            get => m_TransformAspect.WorldTransform;
+            set => m_TransformAspect.WorldTransform = value;
         }
 
         /// <summary>   Gets or sets the world space position. </summary>
@@ -166,8 +144,13 @@ namespace Unity.Physics.Aspects
         /// <value> The world space position. </value>
         public float3 Position
         {
+#if !ENABLE_TRANSFORM_V1
+            get => m_TransformAspect.WorldPosition;
+            set => m_TransformAspect.WorldPosition = value;
+#else
             get => m_TransformAspect.Position;
             set => m_TransformAspect.Position = value;
+#endif
         }
 
         /// <summary>   Gets or sets the world space rotation. </summary>
@@ -175,8 +158,13 @@ namespace Unity.Physics.Aspects
         /// <value> The world space rotation. </value>
         public quaternion Rotation
         {
+#if !ENABLE_TRANSFORM_V1
+            get => m_TransformAspect.WorldRotation;
+            set => m_TransformAspect.WorldRotation = value;
+#else
             get => m_TransformAspect.Rotation;
             set => m_TransformAspect.Rotation = value;
+#endif
         }
 
         /// <summary>   Gets or sets the uniform scale. </summary>
@@ -184,8 +172,13 @@ namespace Unity.Physics.Aspects
         /// <value> The scale. </value>
         public float Scale
         {
+#if !ENABLE_TRANSFORM_V1
+            get => m_TransformAspect.WorldScale;
+            set => m_TransformAspect.WorldScale = value;
+#else
             get => m_TransformAspect.Scale;
             set => m_TransformAspect.Scale = value;
+#endif
         }
 
         // Internal helper methods:

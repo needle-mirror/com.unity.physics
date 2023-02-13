@@ -37,7 +37,10 @@ namespace Unity.Physics.Authoring
             var bodyTransform = GetComponent<Transform>();
 
             var motionType = authoring.MotionType;
-            PostProcessTransform(bodyTransform, motionType);
+            var hasSmoothing = authoring.Smoothing != BodySmoothing.None;
+            var hasPropagateLocalToWorld = hasSmoothing;
+
+            PostProcessTransform(bodyTransform, motionType, hasPropagateLocalToWorld);
 
             var customTags = authoring.CustomTags;
             if (!customTags.Equals(CustomPhysicsBodyTags.Nothing))
@@ -99,7 +102,7 @@ namespace Unity.Physics.Authoring
                 });
             }
 
-            if (authoring.Smoothing != BodySmoothing.None)
+            if (hasSmoothing)
             {
                 AddComponent(new PhysicsGraphicalSmoothing());
 #if !ENABLE_TRANSFORM_V1
@@ -125,7 +128,7 @@ namespace Unity.Physics.Authoring
         protected override void OnUpdate()
         {
             // Fill in the MassProperties based on the potential calculated value by BuildCompoundColliderBakingSystem
-            foreach (var (physicsMass, bodyData, collider) in
+            foreach (var(physicsMass, bodyData, collider) in
                      SystemAPI.Query<RefRW<PhysicsMass>, RefRO<PhysicsBodyAuthoringData>, RefRO<PhysicsCollider>>().WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities))
             {
                 // Build mass component

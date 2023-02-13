@@ -577,8 +577,54 @@ namespace Unity.Physics
             }
 
             accumulatedImpulse += impulse;
-            
+
             return impulse;
+        }
+
+        // isAxisInA should match how axisInA/axisInB is used in the Motor Baking
+        // if the authoring axis is an axis relative to bodyA then set isAxisInA = T
+        // if the authoring axis is an axis relative to bodyB, then set isAxisInA = F
+        internal static BodyFrame CalculateDefaultBodyFramesForConnectedBody(RigidTransform worldFromA, RigidTransform worldFromB,
+            float3 positionBodyA, float3 axis, out BodyFrame jointFrameB, bool isAxisInA)
+        {
+            float3 positionBodyB, perpendicularAxisInA, perpendicularAxisInB;
+            float3 axisInA, axisInB;
+
+            RigidTransform bFromA = math.mul(math.inverse(worldFromB), worldFromA);
+
+            if (isAxisInA) // during authoring, axis of motor is relative to bodyA, used for Angular Motors
+            {
+                axisInA = axis;
+                axisInB = math.mul(bFromA.rot, axisInA); //motor axis in Connected Entity space
+            }
+            else // during authoring, axis of motor is specified relative to bodyB, used for Linear Motors
+            {
+                RigidTransform aFromB = math.mul(math.inverse(worldFromA), worldFromB);
+                axisInA = math.mul(aFromB.rot, axis); //motor axis relative to bodyA
+                axisInB = axis;  //motor axis in Connected Entity space
+            }
+
+            //position of motored body relative to Connected Entity in world space
+            positionBodyB = math.transform(bFromA, positionBodyA);
+
+            // Always calculate the perpendicular axes
+            Math.CalculatePerpendicularNormalized(axisInA, out perpendicularAxisInA, out _);
+            perpendicularAxisInB = math.mul(bFromA.rot, perpendicularAxisInA); //perp motor axis in Connected Entity space
+
+            var jointFrameA = new BodyFrame
+            {
+                Axis = axisInA,
+                PerpendicularAxis = perpendicularAxisInA,
+                Position = positionBodyA
+            };
+            jointFrameB = new BodyFrame
+            {
+                Axis = axisInB,
+                PerpendicularAxis = perpendicularAxisInB,
+                Position = positionBodyB
+            };
+
+            return jointFrameA;
         }
     }
 

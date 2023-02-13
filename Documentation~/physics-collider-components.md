@@ -42,25 +42,46 @@ The default values for collision filter ensure that every object collides with e
 It is possible to modify PhysicsCollider's `BlobAssetReference<Collider>` value. While it is completely safe to do so in jobs that declare write access to `PhysicsCollider` component, you need to be extra careful while modifying it otherwise. For example, you could access the collider using `EntityManager.GetComponentData<PhysicsCollider>(entity)` and change the collision filter of the blob. In order for this change to be picked up by the engine, you also need to write back to original `PhysicsCollider` of that entity. Below is a code snippet demonstrating how to properly change physics collider using both approaches.
 
 ```csharp
-
 // Change the filter to CollisionFilter.Zero using Burst-compiled job
 // This is the recommended way of changing the PhysicsCollider, as it is Burst compatible.
 // As long as components are accessed by reference instead of by value, the change will
 // be picked up by the physics engine, and will work as intended.
-Entities
-    .WithName("ChangeColliderFilterJob")
-    .WithBurst()
-    .ForEach((ref PhysicsCollider collider) =>
+
+using UnityEngine;
+using Unity.Entities;
+using Unity.Burst;
+using Unity.Physics;
+
+[BurstCompile]
+public partial class ChangeColliderSystem : ISystem
+{
+    [BurstCompile]
+    public partial struct ChangeColliderJob : IJobEntity
     {
-        collider.Value.Value.SetCollisionFilter(new CollisionFilter
+        [BurstCompile]
+        [WithAll(typeof(ChangeColliderFilterJob))]
+        public void Execute(ref PhysicsCollider collider)
         {
-            BelongsTo = 0,
-            CollidesWith = 0
-        });
+            collider.Value.Value.SetCollisionFilter(CollisionFilter.Zero);
+        }
+    }
 
-    }).Schedule();
+    [BurstCompile]
+    public void OnCreate(ref SystemState state) { }
 
+    [BurstCompile]
+    public void OnDestroy(ref SystemState state) { }
 
+    [BurstCompile]
+    public void OnUpdate(ref SystemState state)
+    {
+        state.Dependency = new ChangeColliderJob().Schedule(state.Dependency);
+    }
+}
+
+```
+
+```csharp
 // Changing the PhysicsCollider using EntityManager.Get/SetComponentData.
 // This is not the recommended way, since it isn't Burst friendly, but if needed
 // this is how it needs to happen
@@ -69,11 +90,7 @@ for (int i = 0; i < entities.Length; i++)
     var entity = entities[i];
     var collider = EntityManager.GetComponentData<PhysicsCollider>(entity);
 
-    collider.Value.Value.SetCollisionFilter(new CollisionFilter
-    {
-        BelongsTo = 0,
-        CollidesWith = 0
-    });
+    collider.Value.Value.SetCollisionFilter(CollisionFilter.Zero);
 
     // IMPORTANT: collider has been changed, but the PhysicsCollider component data hasn't
     // been written back to, and if left at this state, the change might not get caught by

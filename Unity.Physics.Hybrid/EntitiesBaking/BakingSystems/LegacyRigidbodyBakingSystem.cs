@@ -44,7 +44,9 @@ namespace Unity.Physics.Authoring
             var bodyTransform = GetComponent<Transform>();
 
             var motionType = authoring.isKinematic ? BodyMotionType.Kinematic : BodyMotionType.Dynamic;
-            PostProcessTransform(bodyTransform, motionType);
+            var hasInterpolation = authoring.interpolation != RigidbodyInterpolation.None;
+            var hasPropagateLocalToWorld = hasInterpolation;
+            PostProcessTransform(bodyTransform, motionType, hasPropagateLocalToWorld);
 
             // Check that there is at least one collider in the hierarchy to add these three
             GetComponentsInChildren(colliderComponents);
@@ -66,7 +68,7 @@ namespace Unity.Physics.Authoring
             if (IsStatic())
                 return;
 
-            if (authoring.interpolation != RigidbodyInterpolation.None)
+            if (hasInterpolation)
             {
                 AddComponent(new PhysicsGraphicalSmoothing());
 #if !ENABLE_TRANSFORM_V1
@@ -113,7 +115,7 @@ namespace Unity.Physics.Authoring
         protected override void OnUpdate()
         {
             // Fill in the MassProperties based on the potential calculated value by BuildCompoundColliderBakingSystem
-            foreach (var (physicsMass, bodyData, collider) in
+            foreach (var(physicsMass, bodyData, collider) in
                      SystemAPI.Query<RefRW<PhysicsMass>, RefRO<LegacyRigidBodyBakingData>, RefRO<PhysicsCollider>>().WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities))
             {
                 // Build mass component

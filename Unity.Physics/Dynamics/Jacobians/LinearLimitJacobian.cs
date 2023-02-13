@@ -99,7 +99,7 @@ namespace Unity.Physics
                 out float3 directionUnused);
         }
 
-        private static void ApplyImpulse(float3 impulse, float3 ang0, float3 ang1, float3 ang2, ref MotionVelocity velocity)
+        private static void ApplyImpulse(in float3 impulse, in float3 ang0, in float3 ang1, in float3 ang2, ref MotionVelocity velocity)
         {
             velocity.ApplyLinearImpulse(impulse);
             velocity.ApplyAngularImpulse(impulse.x * ang0 + impulse.y * ang1 + impulse.z * ang2);
@@ -121,15 +121,12 @@ namespace Unity.Physics
                 futureWorldFromB = new MTransform(futureOrientationB, WorldFromB.pos + velocityB.LinearVelocity * stepInput.Timestep);
             }
 
-            // Find the difference between the future distance and the limit range, then apply tau and damping
-            float futureDistanceError = CalculateError(futureWorldFromA, futureWorldFromB, out float3 futureDirection);
-
             // Calculate the angulars
             CalculateAngulars(BodyFromConstraintA.Translation, futureWorldFromA.Rotation, out float3 angA0, out float3 angA1, out float3 angA2);
             CalculateAngulars(BodyFromConstraintB.Translation, futureWorldFromB.Rotation, out float3 angB0, out float3 angB1, out float3 angB2);
 
             // Calculate effective mass
-            float3 EffectiveMassDiag, EffectiveMassOffDiag;
+            float3 effectiveMassDiag, effectiveMassOffDiag;
             {
                 // Calculate the inverse effective mass matrix
                 float3 invEffectiveMassDiag = new float3(
@@ -146,19 +143,19 @@ namespace Unity.Physics
                     JacobianUtilities.CalculateInvEffectiveMassOffDiag(angA1, angA2, velocityA.InverseInertia, angB1, angB2, velocityB.InverseInertia));
 
                 // Invert to get the effective mass matrix
-                JacobianUtilities.InvertSymmetricMatrix(invEffectiveMassDiag, invEffectiveMassOffDiag, out EffectiveMassDiag, out EffectiveMassOffDiag);
+                JacobianUtilities.InvertSymmetricMatrix(invEffectiveMassDiag, invEffectiveMassOffDiag, out effectiveMassDiag, out effectiveMassOffDiag);
             }
 
             // Predict error at the end of the step and calculate the impulse to correct it
             float3 impulse;
             {
                 // Find the difference between the future distance and the limit range, then apply tau and damping
-                //float futureDistanceError = CalculateError(futureWorldFromA, futureWorldFromB, out float3 futureDirection);
+                float futureDistanceError = CalculateError(futureWorldFromA, futureWorldFromB, out float3 futureDirection);
                 float solveDistanceError = JacobianUtilities.CalculateCorrection(futureDistanceError, InitialError, Tau, Damping);
 
                 // Calculate the impulse to correct the error
                 float3 solveError = solveDistanceError * futureDirection;
-                float3x3 effectiveMass = JacobianUtilities.BuildSymmetricMatrix(EffectiveMassDiag, EffectiveMassOffDiag);
+                float3x3 effectiveMass = JacobianUtilities.BuildSymmetricMatrix(effectiveMassDiag, effectiveMassOffDiag);
                 impulse = math.mul(effectiveMass, solveError) * stepInput.InvTimestep;
             }
 
@@ -174,7 +171,7 @@ namespace Unity.Physics
 
         #region Helpers
 
-        private static void CalculateAngulars(float3 pivotInMotion, float3x3 worldFromMotionRotation, out float3 ang0, out float3 ang1, out float3 ang2)
+        private static void CalculateAngulars(in float3 pivotInMotion, in float3x3 worldFromMotionRotation, out float3 ang0, out float3 ang1, out float3 ang2)
         {
             // Jacobian directions are i, j, k
             // Angulars are pivotInMotion x (motionFromWorld * direction)
@@ -184,7 +181,7 @@ namespace Unity.Physics
             ang2 = math.cross(pivotInMotion, motionFromWorldRotation.c2);
         }
 
-        private float CalculateError(MTransform worldFromA, MTransform worldFromB, out float3 direction)
+        private float CalculateError(in MTransform worldFromA, in MTransform worldFromB, out float3 direction)
         {
             // Find the direction from pivot A to B and the distance between them
             float3 pivotA = Mul(worldFromA, BodyFromConstraintA.Translation);
@@ -215,7 +212,7 @@ namespace Unity.Physics
             return JacobianUtilities.CalculateError(distance, MinDistance, MaxDistance);
         }
 
-        private void HandleImpulseEvent(ref JacobianHeader jacHeader, float3 appliedImpulse, bool isLastIteration, ref NativeStream.Writer impulseEventsWriter)
+        private void HandleImpulseEvent(ref JacobianHeader jacHeader, in float3 appliedImpulse, bool isLastIteration, ref NativeStream.Writer impulseEventsWriter)
         {
             ref ImpulseEventSolverData impulseEventData = ref jacHeader.AccessImpulseEventSolverData();
             impulseEventData.AccumulatedImpulse += appliedImpulse;

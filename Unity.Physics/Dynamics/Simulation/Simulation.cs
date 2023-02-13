@@ -261,6 +261,13 @@ namespace Unity.Physics
 
         internal StepContext StepContext;
 
+        /// <summary>   Gets the contacts stream. </summary>
+        ///
+        /// This value is only valid after the CreateContactsJob (Narrowphase System), and before BuildJacobiansJob (CreateJacobiansSystem)
+        ///
+        /// <value> The contacts stream-->. </value>
+        public readonly NativeStream Contacts => StepContext.Contacts;
+
         /// <summary>   Gets the collision events. </summary>
         ///
         /// <value> The collision events. </value>

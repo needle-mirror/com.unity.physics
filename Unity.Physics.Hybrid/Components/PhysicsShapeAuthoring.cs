@@ -36,10 +36,15 @@ namespace Unity.Physics.Authoring
             : base($"Unknown shape type {shapeType} requires explicit implementation") {}
     }
 
+#if UNITY_2021_2_OR_NEWER
+    [Icon(k_IconPath)]
+#endif
     [AddComponentMenu("Entities/Physics/Physics Shape")]
     [HelpURL(HelpURLs.PhysicsShapeAuthoring)]
     public sealed class PhysicsShapeAuthoring : MonoBehaviour, IInheritPhysicsMaterialProperties, ISerializationCallbackReceiver
     {
+        const string k_IconPath = "Packages/com.unity.physics/Unity.Physics.Editor/Editor Default Resources/Icons/d_BoxCollider@64.png";
+
         PhysicsShapeAuthoring() {}
 
         [Serializable]
@@ -925,17 +930,12 @@ namespace Unity.Physics.Authoring
         [Conditional("UNITY_EDITOR")]
         void Reset()
         {
-            #if UNITY_EDITOR
-            UnityEditor.EditorApplication.delayCall += () =>
-            {
-                if (this == null)
-                    return;
-                InitializeConvexHullGenerationParameters();
-                FitToEnabledRenderMeshes(m_MinimumSkinnedVertexWeight);
-                // TODO: also pick best primitive shape
-                UnityEditor.SceneView.RepaintAll();
-            };
-            #endif
+#if UNITY_EDITOR
+            InitializeConvexHullGenerationParameters();
+            FitToEnabledRenderMeshes(m_MinimumSkinnedVertexWeight);
+            // TODO: also pick best primitive shape
+            UnityEditor.SceneView.RepaintAll();
+#endif
         }
 
         internal void InitializeConvexHullGenerationParameters()

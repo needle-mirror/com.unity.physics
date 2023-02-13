@@ -27,9 +27,6 @@ apiRules:
       uidRegex: OnInspectorGUI
       type: Method
   - exclude:
-      uidRegex: .*Authoring.*
-      type: Namespace
-  - exclude:
       uidRegex: Tests$
       type: Namespace
   - exclude:

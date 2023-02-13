@@ -160,7 +160,7 @@ namespace Unity.Physics.Authoring
                     AddComponent<PhysicsCollider>();
                     AddBuffer<PhysicsColliderKeyEntityPair>();
 
-                    PostProcessTransform(bodyTransform, BodyMotionType.Static);
+                    PostProcessTransform(bodyTransform);
                 }
             }
 
@@ -333,7 +333,6 @@ namespace Unity.Physics.Authoring
                 Convex = shape.convex,
                 Mesh = mesh,
                 BakeFromShape = bakeFromShape,
-                MeshID = mesh.GetInstanceID(),
                 MeshBounds = mesh.bounds,
                 ChildToShape = float4x4.identity
             };

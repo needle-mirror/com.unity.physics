@@ -49,8 +49,7 @@ namespace Unity.Physics.Tests.Motors
 
             for (int i = 0; i < numSteps; i++)
             {
-                impulse = JacobianUtilities.CapImpulse(impulse, ref accumulatedImpulse, maxImpulseOfMotor); //,
-                //out accumulatedImpulse);
+                impulse = JacobianUtilities.CapImpulse(impulse, ref accumulatedImpulse, maxImpulseOfMotor);
             }
 
             // Always throw an error if the max impulse is exceeded
@@ -69,11 +68,11 @@ namespace Unity.Physics.Tests.Motors
             // Input: accumulated impulse, new impulse, step count, expected impulse afterwards
             new TestCaseData(new float3(0f, 0f, 0f), new float3(0f, 0f, 2f), 1, new float3(0f, 0f, 2f)).SetName("Case A+1: Within threshold"),
             new TestCaseData(new float3(0f, 0f, 2.5f), new float3(0f, 0f, 2.49999f), 1, new float3(0f, 0f, 2.49999f)).SetName("Case A+2: Within threshold"),
-            new TestCaseData(new float3(1f, 1f, 1f), new float3(0.5f, 0.75f, 0.25f), 1, new float3(0.5f, 0.75f, 0.25f)).SetName("Case A+3: Within threshold"),
+            new TestCaseData(new float3(1f, 1f, 1f), new float3(0.5f, 0.5f, 0.5f), 1, new float3(0.5f, 0.5f, 0.5f)).SetName("Case A+3: Within threshold"),
 
             new TestCaseData(new float3(0f, 0f, 0f), new float3(0f, 0f, -2f), 1, new float3(0f, 0f, -2f)).SetName("Case A-1: Within threshold"),
             new TestCaseData(new float3(0f, 0f, -2.5f), new float3(0f, 0f, -2.49999f), 1, new float3(0f, 0f, -2.49999f)).SetName("Case A-2: Within threshold"),
-            new TestCaseData(new float3(-1f, -1f, 1f), new float3(-0.5f, -0.75f, 0.25f), 1, new float3(-0.5f, -0.75f, 0.25f)).SetName("Case A-3: Within threshold"),
+            new TestCaseData(new float3(-1f, -1f, 1f), new float3(-0.5f, -0.5f, 0.5f), 1, new float3(-0.5f, -0.5f, 0.5f)).SetName("Case A-3: Within threshold"),
 
             new TestCaseData(new float3(0f, 4f, 0f), new float3(0f, 2f, 0f), 1, new float3(0f, 1f, 0f)).SetName("Case B+1: Impulse capped"),
             new TestCaseData(new float3(2f, 3f, 2f), new float3(0.75f, 0.25f, 1f), 1, new float3(0.4253564f, 0.6380343f, 0.4253564f)).SetName("Case B+2: Impulse capped"),
@@ -118,7 +117,7 @@ namespace Unity.Physics.Tests.Motors
             float3 accumulatedImpulse = accumulatedImpulseIn;
 
             string failureMessage;
-            var testThreshold = math.EPSILON * 100.0f;
+            var testThreshold = 1e-5;
 
             for (int i = 0; i < numSteps; i++)
             {

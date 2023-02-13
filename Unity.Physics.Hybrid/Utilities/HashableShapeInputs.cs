@@ -335,7 +335,6 @@ namespace Unity.Physics.Authoring
             CollisionFilter filter,
             float4x4 bakeFromShape,
             float4x4 childToShape,
-            int meshID,
             Bounds meshBounds,
             NativeArray<float3> vertices,
             NativeArray<int3> indices
@@ -350,7 +349,6 @@ namespace Unity.Physics.Authoring
             bytes.Append(ref material);
             bytes.Append(ref filter);
             bytes.Append(ref scaleShear);
-            bytes.Append(ref meshID);
             bytes.Append(vertices);
             bytes.Append(indices);
             return HashUtility.Hash128(bytes.GetUnsafeReadOnlyPtr(), bytes.Length);

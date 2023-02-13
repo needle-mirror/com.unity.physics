@@ -44,6 +44,7 @@ namespace Unity.Physics.Editor
 
                 EditorGUILayout.PropertyField(m_SynchronizeCollisionWorld);
 
+#if HAVOK_PHYSICS_EXISTS
                 bool havokPhysics = m_SimulationType.intValue == (int)SimulationType.HavokPhysics;
                 using (new EditorGUI.DisabledScope(havokPhysics))
                 {
@@ -60,6 +61,9 @@ namespace Unity.Physics.Editor
                     if (havokPhysics)
                         m_EnableSolverStabilizationHeuristic.boolValue = enableStabilization;
                 }
+#else
+                EditorGUILayout.PropertyField(m_EnableSolverStabilizationHeuristic, Content.SolverStabilizationLabelUnityPhysics);
+#endif
             }
 
             if (EditorGUI.EndChangeCheck())

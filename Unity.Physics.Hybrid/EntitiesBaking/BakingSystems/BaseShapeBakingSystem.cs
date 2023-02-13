@@ -63,38 +63,17 @@ namespace Unity.Physics.Authoring
             });
         }
 
-        protected override void OnUpdate()
-        {
-            int shapeCount = m_ShapeQuery.CalculateEntityCount();
-            if (shapeCount == 0)
-                return;
-
-            // 1) Obtain all meshes in colliders
-            Profiler.BeginSample("Get Meshes");
-
-            // Collect meshes doing only one call to the engine
-            // It would be better to use a native container, but AcquireReadOnlyMeshData doesn't accept it
-            meshArray.Clear();
-            int meshCount = 0;
-            foreach (var meshBakingData in SystemAPI.Query<RefRW<PhysicsMeshAuthoringData>>().WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities))
-            {
-                meshArray.Add(meshBakingData.ValueRW.Mesh.Value);
-                meshBakingData.ValueRW.MeshArrayIndex = meshCount;
-                ++meshCount;
-            }
-            var meshDataArray = UnityEditor.MeshUtility.AcquireReadOnlyMeshData(meshArray);
-            Profiler.EndSample();
-
-            // 2) Calculate the hashes for all the colliders
-            // -----------------------------------------
-            Profiler.BeginSample("Generate Hashes for Inputs");
-
-            // Convex Hull and Meshes
-            JobHandle meshHashesJobHandle = Entities
-#if UNITY_ANDROID_ARM7V
-                .WithoutBurst()
+        [WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)]
+#if !UNITY_ANDROID_ARM7V
+        [BurstCompile]
 #endif
-                    .ForEach((ref PhysicsColliderAuthoringData colliderData, ref PhysicsColliderBakedData generatedData, in PhysicsMeshAuthoringData meshData) =>
+        partial struct MeshHashesJobHandleJob : IJobEntity
+        {
+            [ReadOnly] public UnityMesh.MeshDataArray meshDataArray;
+#if !UNITY_ANDROID_ARM7V
+            [BurstCompile]
+#endif
+            private void Execute(ref PhysicsColliderAuthoringData colliderData, ref PhysicsColliderBakedData generatedData, in PhysicsMeshAuthoringData meshData)
             {
                 var hash = CalculateMeshHashes(ref colliderData.ShapeComputationalData, meshData, meshDataArray);
                 generatedData.Hash = hash;
@@ -105,46 +84,40 @@ namespace Unity.Physics.Authoring
                 instance.Hash = hash;
                 shapeData.Instance = instance;
                 colliderData.ShapeComputationalData = shapeData;
-            }).WithEntityQueryOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)
-                    .WithName("HashMeshes")
-                    .WithReadOnly(meshDataArray)
-                    .ScheduleParallel(default);
+            }
+        }
 
-            // Basic Colliders
-            var basicHashesJobHandle =
-                Entities
-                    .WithNone<PhysicsMeshAuthoringData>()
-#if UNITY_ANDROID_ARM7V
-                    .WithoutBurst()
+        [WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)]
+#if !UNITY_ANDROID_ARM7V
+        [BurstCompile]
 #endif
-                    .ForEach((ref PhysicsColliderAuthoringData colliderData, ref PhysicsColliderBakedData generatedData) =>
-                    {
-                        // Calculating the hash
-                        var hash = CalculatePhysicsShapeHash(ref colliderData.ShapeComputationalData);
-                        generatedData.Hash = hash;
+        [WithNone(typeof(PhysicsMeshAuthoringData))]
+        partial struct BasicHashesJobHandleJob : IJobEntity
+        {
+#if !UNITY_ANDROID_ARM7V
+            [BurstCompile]
+#endif
+            private void Execute(ref PhysicsColliderAuthoringData colliderData, ref PhysicsColliderBakedData generatedData)
+            {
+                // Calculating the hash
+                var hash = CalculatePhysicsShapeHash(ref colliderData.ShapeComputationalData);
+                generatedData.Hash = hash;
 
-                        // Setting the hash internally inside the ShapeComputationalData
-                        var shapeData = colliderData.ShapeComputationalData;
-                        var instance = shapeData.Instance;
-                        instance.Hash = hash;
-                        shapeData.Instance = instance;
-                        colliderData.ShapeComputationalData = shapeData;
-                    }).WithEntityQueryOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)
-                    .WithName("HashBasics")
-                    .ScheduleParallel(meshHashesJobHandle);
-            Profiler.EndSample();
+                // Setting the hash internally inside the ShapeComputationalData
+                var shapeData = colliderData.ShapeComputationalData;
+                var instance = shapeData.Instance;
+                instance.Hash = hash;
+                shapeData.Instance = instance;
+                colliderData.ShapeComputationalData = shapeData;
+            }
+        }
 
-            var hashesJobHandle = JobHandle.CombineDependencies(meshHashesJobHandle, basicHashesJobHandle);
-
-            // 3) Deduplicate blobs to calculate, so we do it calculate each only once
-            // -----------------------------------------
-            Profiler.BeginSample("Determine New Colliders to Create");
-
-            var localBlobComputationContext = BlobComputationContext;
-
-            NativeArray<int> count = new NativeArray<int>(1, Allocator.TempJob);
-            NativeArray<ColliderBlobBakingData> generatedDataArray = new NativeArray<ColliderBlobBakingData>(shapeCount, Allocator.TempJob);
-            var deduplicateJobHandle = Entities.ForEach((ref PhysicsColliderAuthoringData colliderData) =>
+        [WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)]
+        partial struct DeduplicateJobHandleJob : IJobEntity
+        {
+            public BlobAssetComputationContext<int, Collider> localBlobComputationContext;
+            public NativeArray<int> count;
+            private void Execute(ref PhysicsColliderAuthoringData colliderData)
             {
                 // Associate the blob hash to the GO Instance ID
                 var hash = colliderData.ShapeComputationalData.Instance.Hash;
@@ -163,7 +136,86 @@ namespace Unity.Physics.Authoring
                 {
                     colliderData.RecalculateBlob = false;
                 }
-            }).WithEntityQueryOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities).WithName("Deduplicate").Schedule(hashesJobHandle);
+            }
+        }
+
+        [WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)]
+        [WithNone(typeof(PhysicsMeshAuthoringData))]
+        partial struct BasicBlobsJobHandleJob : IJobEntity
+        {
+            [NativeDisableParallelForRestriction]
+            public NativeArray<ColliderBlobBakingData> generatedDataArray;
+            private void Execute(ref PhysicsColliderAuthoringData colliderData)
+            {
+                // Calculate the blob assets if needed
+                if (colliderData.RecalculateBlob)
+                {
+                    var shapeData = colliderData.ShapeComputationalData;
+                    generatedDataArray[colliderData.BlobIndex] = new ColliderBlobBakingData()
+                    {
+                        Hash = colliderData.ShapeComputationalData.Instance.Hash,
+                        ColliderBlobAsset = CalculateBasicBlobAsset(ref shapeData)
+                    };
+                }
+            }
+        }
+
+        protected override void OnUpdate()
+        {
+            int shapeCount = m_ShapeQuery.CalculateEntityCount();
+            if (shapeCount == 0)
+                return;
+
+            // 1) Obtain all meshes in colliders
+            Profiler.BeginSample("Get Meshes");
+
+            // Collect meshes doing only one call to the engine
+            // It would be better to use a native container, but AcquireReadOnlyMeshData doesn't accept it
+            meshArray.Clear();
+            int meshCount = 0;
+
+            foreach (var meshBakingData in SystemAPI.Query<RefRW<PhysicsMeshAuthoringData>>().WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities))
+            {
+                meshArray.Add(meshBakingData.ValueRW.Mesh.Value);
+                meshBakingData.ValueRW.MeshArrayIndex = meshCount;
+                ++meshCount;
+            }
+
+            var meshDataArray = UnityEditor.MeshUtility.AcquireReadOnlyMeshData(meshArray);
+            Profiler.EndSample();
+
+            // 2) Calculate the hashes for all the colliders
+            // -----------------------------------------
+            Profiler.BeginSample("Generate Hashes for Inputs");
+
+            // Convex Hull and Meshes
+            JobHandle meshHashesJobHandle = new MeshHashesJobHandleJob
+            {
+                meshDataArray = meshDataArray
+            }.ScheduleParallel(default(JobHandle));
+
+            // Basic Colliders
+            JobHandle basicHashesJobHandle = new BasicHashesJobHandleJob().ScheduleParallel(meshHashesJobHandle);
+
+            Profiler.EndSample();
+
+            var hashesJobHandle = JobHandle.CombineDependencies(meshHashesJobHandle, basicHashesJobHandle);
+
+            // 3) Deduplicate blobs to calculate, so we do it calculate each only once
+            // -----------------------------------------
+            Profiler.BeginSample("Determine New Colliders to Create");
+
+            var localBlobComputationContext = BlobComputationContext;
+
+            NativeArray<int> count = new NativeArray<int>(1, Allocator.TempJob);
+            NativeArray<ColliderBlobBakingData> generatedDataArray = new NativeArray<ColliderBlobBakingData>(shapeCount, Allocator.TempJob);
+
+            JobHandle deduplicateJobHandle = new DeduplicateJobHandleJob
+            {
+                localBlobComputationContext = localBlobComputationContext,
+                count = count
+            }.Schedule(hashesJobHandle);
+
             Profiler.EndSample();
 
             // 4) Calculate blobs
@@ -190,26 +242,12 @@ namespace Unity.Physics.Authoring
             Profiler.EndSample();
 
             Profiler.BeginSample("Basic Colliders");
-            // Basic Colliders
-            var basicBlobsJobHandle =
-                Entities
-                    .WithNone<PhysicsMeshAuthoringData>()
-                    .ForEach((ref PhysicsColliderAuthoringData colliderData) =>
-                    {
-                        // Calculate the blob assets if needed
-                        if (colliderData.RecalculateBlob)
-                        {
-                            var shapeData = colliderData.ShapeComputationalData;
-                            generatedDataArray[colliderData.BlobIndex] = new ColliderBlobBakingData()
-                            {
-                                Hash = colliderData.ShapeComputationalData.Instance.Hash,
-                                ColliderBlobAsset = CalculateBasicBlobAsset(ref shapeData)
-                            };
-                        }
-                    }).WithEntityQueryOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)
-                    .WithName("BasicBlobs")
-                    .WithNativeDisableParallelForRestriction(generatedDataArray)
-                    .ScheduleParallel(meshBlobsJobHandle);
+
+            JobHandle basicBlobsJobHandle = new BasicBlobsJobHandleJob
+            {
+                generatedDataArray = generatedDataArray
+            }.ScheduleParallel(meshBlobsJobHandle);
+
             Profiler.EndSample();
 
             Profiler.EndSample();
@@ -247,7 +285,6 @@ namespace Unity.Physics.Authoring
                 res.CollisionFilter,
                 physicsMeshData.BakeFromShape,
                 physicsMeshData.ChildToShape,
-                physicsMeshData.MeshID,
                 physicsMeshData.MeshBounds,
                 pointCloud,
                 triangles

@@ -12,19 +12,6 @@ namespace Unity.Physics.Tests.Authoring
 {
     class HelpURLs_UnitTests
     {
-        [Test]
-        public void ConstPackageVersion_MatchesActualPackageVersion()
-        {
-            var packageInfo = PackageInfo.FindForAssetPath("Packages/com.unity.physics/package.json");
-            var expectedPackageVersionMajorMinor = new Regex(@"\d+\.\d+(?=\.\d+)").Match(packageInfo.version).Value;
-            Assume.That(expectedPackageVersionMajorMinor, Is.Not.Empty, "Unable to determine current package version.");
-
-            Assert.That(
-                HelpURLs.PackageVersion, Is.EqualTo(expectedPackageVersionMajorMinor),
-                $"Update {nameof(HelpURLs)}.{nameof(HelpURLs.PackageVersion)}"
-            );
-        }
-
         static readonly IEnumerable<Type> AllAuthoringTypes = typeof(PhysicsShapeAuthoring).Assembly.GetTypes().Where(
             t => t.IsPublic
             && !t.IsAbstract

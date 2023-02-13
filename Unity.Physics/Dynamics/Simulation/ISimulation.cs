@@ -12,8 +12,10 @@ namespace Unity.Physics
         NoPhysics,
         /// <summary>   Default C# implementation. </summary>
         UnityPhysics,
+#if HAVOK_PHYSICS_EXISTS
         /// <summary>   Havok implementation (using C++ plugin) </summary>
         HavokPhysics
+#endif
     }
 
     internal enum SimulationScheduleStage

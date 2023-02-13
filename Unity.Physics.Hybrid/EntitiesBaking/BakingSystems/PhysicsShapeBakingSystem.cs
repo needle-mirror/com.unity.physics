@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
@@ -72,7 +73,7 @@ namespace Unity.Physics.Authoring
                     AddComponent<PhysicsCollider>();
                     AddBuffer<PhysicsColliderKeyEntityPair>();
 
-                    PostProcessTransform(bodyTransform, BodyMotionType.Static);
+                    PostProcessTransform(bodyTransform);
                 }
             }
 
@@ -119,8 +120,94 @@ namespace Unity.Physics.Authoring
             return mesh;
         }
 
-        internal ShapeComputationDataBaking GenerateComputationData(PhysicsShapeAuthoring shape, ColliderInstanceBaking colliderInstance, Entity colliderEntity
-        )
+        bool GetMeshes(PhysicsShapeAuthoring shape, out List<UnityEngine.Mesh> meshes, out List<float4x4> childrenToShape)
+        {
+            meshes = new List<UnityMesh>();
+            childrenToShape = new List<float4x4>();
+
+            if (shape.CustomMesh != null)
+            {
+                meshes.Add(shape.CustomMesh);
+                childrenToShape.Add(float4x4.identity);
+            }
+
+            // Try to get all the meshes in the children
+            var meshFilters = GetComponentsInChildren<MeshFilter>();
+
+            foreach (var meshFilter in meshFilters)
+            {
+                if (meshFilter != null && meshFilter.sharedMesh != null)
+                {
+                    var shapeAuthoring = GetComponent<PhysicsShapeAuthoring>(meshFilter);
+                    if (shapeAuthoring != null && shapeAuthoring != shape)
+                    {
+                        // Skip this case, since it will be treated independently
+                        continue;
+                    }
+
+                    meshes.Add(meshFilter.sharedMesh);
+
+                    // Don't calculate the children to shape if not needed, to avoid approximation that could prevent collider to be shared
+                    if (shape.transform.localToWorldMatrix.Equals(meshFilter.transform.localToWorldMatrix))
+                        childrenToShape.Add(float4x4.identity);
+                    else
+                    {
+                        var transform = math.mul(shape.transform.worldToLocalMatrix, meshFilter.transform.localToWorldMatrix);
+                        childrenToShape.Add(transform);
+                    }
+
+                    DependsOn(meshes.Last());
+                }
+            }
+
+            return meshes.Count > 0;
+        }
+
+        UnityEngine.Mesh CombineMeshes(PhysicsShapeAuthoring shape, List<UnityEngine.Mesh> meshes, List<float4x4> childrenToShape)
+        {
+            var instances = new List<CombineInstance>();
+            var numVertices = 0;
+            for (var i = 0; i < meshes.Count; ++i)
+            {
+                var currentMesh = meshes[i];
+                var currentChildToShape = childrenToShape[i];
+                if (!currentMesh.IsValidForConversion(shape.gameObject))
+                {
+                    throw new InvalidOperationException(
+                        $"Mesh '{currentMesh}' assigned on {shape.name} is not readable. Ensure that you have enabled Read/Write on its import settings."
+                    );
+                }
+
+                // Combine submeshes manually
+                numVertices += meshes[i].vertexCount;
+                var combinedSubmeshes = new UnityEngine.Mesh();
+                combinedSubmeshes.vertices = currentMesh.vertices;
+
+                var combinedIndices = new List<int>();
+                for (int indexSubMesh = 0; indexSubMesh < meshes[i].subMeshCount; ++indexSubMesh)
+                {
+                    combinedIndices.AddRange(currentMesh.GetIndices(indexSubMesh));
+                }
+
+                combinedSubmeshes.SetIndices(combinedIndices, MeshTopology.Triangles, 0);
+                combinedSubmeshes.RecalculateNormals();
+                var instance = new CombineInstance
+                {
+                    mesh = combinedSubmeshes,
+                    transform = currentChildToShape,
+                };
+                instances.Add(instance);
+            }
+
+            var mesh = new UnityEngine.Mesh();
+            mesh.indexFormat = numVertices > UInt16.MaxValue ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16;
+            mesh.CombineMeshes(instances.ToArray());
+            mesh.RecalculateBounds();
+
+            return mesh;
+        }
+
+        internal ShapeComputationDataBaking GenerateComputationData(PhysicsShapeAuthoring shape, ColliderInstanceBaking colliderInstance, Entity colliderEntity)
         {
             var res = new ShapeComputationDataBaking
             {
@@ -178,35 +265,7 @@ namespace Unity.Physics.Authoring
                     res.ConvexHullProperties.Material = res.Material;
                     res.ConvexHullProperties.GenerationParameters = shape.ConvexHullGenerationParameters.ToRunTime();
 
-                    // TODO: BAKING - SUPPORT FOR ONLY CUSTOM MESH FOR NOW. Added the following errors to replicate the legacy behaviour. The original call is the line below:
-                    // res.Instance.Hash = shape.GetBakedConvexInputs(meshAssets);
-                    var mesh = GetMesh(shape, out var childToShape);
-                    if (mesh == null)
-                    {
-                        throw new InvalidOperationException(
-                            $"No {nameof(PhysicsShapeAuthoring.CustomMesh)} assigned on {shape.name}."
-                        );
-                    }
-                    if (!mesh.IsValidForConversion(shape.gameObject))
-                    {
-                        throw new InvalidOperationException(
-                            $"Mesh '{mesh}' assigned on {shape.name} is not readable. Ensure that you have enabled Read/Write on its import settings."
-                        );
-                    }
-
-                    var bakeFromShape = shape.GetLocalToShapeMatrix();
-
-                    var meshBakingData = new PhysicsMeshAuthoringData()
-                    {
-                        Convex = true,
-                        Mesh = mesh,
-                        BakeFromShape = bakeFromShape,
-                        MeshID = mesh.GetInstanceID(),
-                        MeshBounds = mesh.bounds,
-                        ChildToShape = childToShape
-                    };
-                    AddComponent(colliderEntity, meshBakingData);
-
+                    CreateMeshAuthoringData(shape, colliderEntity);
                     break;
                 }
                 case ShapeType.Mesh:
@@ -214,40 +273,44 @@ namespace Unity.Physics.Authoring
                     res.MeshProperties.Filter = res.CollisionFilter;
                     res.MeshProperties.Material = res.Material;
 
-                    // TODO: BAKING - SUPPORT FOR ONLY CUSTOM MESH FOR NOW. Added the following errors to replicate the legacy behaviour. The original call is the line below:
-                    //res.Instance.Hash = shape.GetBakedMeshInputs(meshAssets);
-                    var mesh = GetMesh(shape, out var childToShape);
-                    if (mesh == null)
-                    {
-                        throw new InvalidOperationException(
-                            $"No {nameof(PhysicsShapeAuthoring.CustomMesh)} assigned on {shape.name}."
-                        );
-                    }
-                    if (!mesh.IsValidForConversion(shape.gameObject))
-                    {
-                        throw new InvalidOperationException(
-                            $"Mesh '{mesh}' assigned on {shape.name} is not readable. Ensure that you have enabled Read/Write on its import settings."
-                        );
-                    }
-
-                    var bakeFromShape = shape.GetLocalToShapeMatrix();
-
-                    var meshBakingData = new PhysicsMeshAuthoringData()
-                    {
-                        Convex = false,
-                        Mesh = mesh,
-                        BakeFromShape = bakeFromShape,
-                        MeshID = mesh.GetInstanceID(),
-                        MeshBounds = mesh.bounds,
-                        ChildToShape = childToShape
-                    };
-                    AddComponent(colliderEntity, meshBakingData);
-
+                    CreateMeshAuthoringData(shape, colliderEntity);
                     break;
                 }
             }
 
             return res;
+        }
+
+        private void CreateMeshAuthoringData(PhysicsShapeAuthoring shape, Entity colliderEntity)
+        {
+            if (GetMeshes(shape, out var meshes, out var childrenToShape))
+            {
+                // Combine all detected meshes into a single one
+                var mesh = CombineMeshes(shape, meshes, childrenToShape);
+                if (!mesh.IsValidForConversion(shape.gameObject))
+                {
+                    throw new InvalidOperationException(
+                        $"Mesh '{mesh}' assigned on {shape.name} is not readable. Ensure that you have enabled Read/Write on its import settings."
+                    );
+                }
+
+                var bakeFromShape = shape.GetLocalToShapeMatrix();
+                var meshBakingData = new PhysicsMeshAuthoringData()
+                {
+                    Convex = shape.ShapeType == ShapeType.ConvexHull,
+                    Mesh = mesh,
+                    BakeFromShape = bakeFromShape,
+                    MeshBounds = mesh.bounds,
+                    ChildToShape = float4x4.identity
+                };
+                AddComponent(colliderEntity, meshBakingData);
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"No {nameof(PhysicsShapeAuthoring.CustomMesh)} or {nameof(MeshFilter.sharedMesh)} assigned on {shape.name}."
+                );
+            }
         }
 
         public override void Bake(PhysicsShapeAuthoring authoring)

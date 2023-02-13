@@ -15,10 +15,6 @@ namespace Unity.Physics
         // Target is a vector that represents the direction of movement relative to bodyB (axis) with a target magnitude
         public float3 TargetInB;
 
-        // Pivot distance limits
-        public float MinDistance;
-        public float MaxDistance;
-
         // Motion transforms before solving
         public RigidTransform WorldFromA;
         public RigidTransform WorldFromB;
@@ -27,9 +23,6 @@ namespace Unity.Physics
         // If the constraint limits 2 DOF, this is the free axis.
         // If the constraint limits 3 DOF, this is unused and set to float3.zero
         public float3 AxisInB;
-
-        // True if the jacobian limits one degree of freedom
-        public bool Is1D;
 
         // Position error at the beginning of the step
         public float InitialError;
@@ -65,9 +58,6 @@ namespace Unity.Physics
             // (constraint.target[axis of movement] = target) where direction is relative to bodyB. Therefore add this to the pivot of bodyB to anchor the target
             TargetInB = (AxisInB * constraint.Target[constraint.ConstrainedAxis1D]) + PivotBinB;
 
-            Is1D = true;
-            MinDistance = constraint.Min;
-            MaxDistance = constraint.Max;
             Tau = tau;
             Damping = damping;
 
@@ -81,7 +71,7 @@ namespace Unity.Physics
                 out float3 directionUnused);
         }
 
-        private static void ApplyImpulse(float3 impulse, float3 ang0, float3 ang1, float3 ang2, ref MotionVelocity velocity)
+        private static void ApplyImpulse(in float3 impulse, in float3 ang0, in float3 ang1, in float3 ang2, ref MotionVelocity velocity)
         {
             velocity.ApplyLinearImpulse(impulse); // world space
             velocity.ApplyAngularImpulse(impulse.x * ang0 + impulse.y * ang1 + impulse.z * ang2); //motion space
@@ -108,7 +98,7 @@ namespace Unity.Physics
             CalculateAngulars(PivotBinB, futureWorldFromB.Rotation, out float3 angB0, out float3 angB1, out float3 angB2);
 
             // Calculate effective mass
-            float3 EffectiveMassDiag, EffectiveMassOffDiag;
+            float3 effectiveMassDiag, effectiveMassOffDiag;
             {
                 // Calculate the inverse effective mass matrix
                 float3 invEffectiveMassDiag = new float3(
@@ -136,19 +126,19 @@ namespace Unity.Physics
                 // Invert to get the effective mass matrix
                 JacobianUtilities.InvertSymmetricMatrix(
                     invEffectiveMassDiag, invEffectiveMassOffDiag,
-                    out EffectiveMassDiag, out EffectiveMassOffDiag);
+                    out effectiveMassDiag, out effectiveMassOffDiag);
             }
-
-            float3x3 effectiveMass = JacobianUtilities.BuildSymmetricMatrix(EffectiveMassDiag, EffectiveMassOffDiag);
 
             // Find the predicted direction and distance between bodyA and bodyB at the end of the step,
             // determine the difference between this and the initial difference, apply softening to this
             // impulse is what is required to move from the initial to the predicted (all in world space)
             float futureDistanceError = CalculateError(futureWorldFromA, futureWorldFromB, out float3 futureDirection);
-            float3 solveError = JacobianUtilities.CalculateCorrection(futureDistanceError, InitialError, Tau, Damping); //units=m
+            float solveDistanceError = JacobianUtilities.CalculateCorrection(futureDistanceError, InitialError, Tau, Damping); //units=m
 
-            // the solve error needs to be axis-aligned to the effectiveMass matrix
-            float3 impulse = futureDirection * math.mul(effectiveMass, solveError) * stepInput.InvTimestep; // m/s, world-space
+            // Calculate the impulse to correct the error
+            float3 solveError = solveDistanceError * futureDirection;
+            float3x3 effectiveMass = JacobianUtilities.BuildSymmetricMatrix(effectiveMassDiag, effectiveMassOffDiag);
+            float3 impulse = math.mul(effectiveMass, solveError) * stepInput.InvTimestep;
             impulse = JacobianUtilities.CapImpulse(impulse, ref AccumulatedImpulsePerAxis, MaxImpulseOfMotor);
 
             // Apply the impulse
@@ -158,7 +148,7 @@ namespace Unity.Physics
 
         #region Helpers
 
-        private static void CalculateAngulars(float3 pivotInMotion, float3x3 worldFromMotionRotation, out float3 ang0, out float3 ang1, out float3 ang2)
+        private static void CalculateAngulars(in float3 pivotInMotion, in float3x3 worldFromMotionRotation, out float3 ang0, out float3 ang1, out float3 ang2)
         {
             // Jacobian directions are i, j, k
             // Angulars are pivotInMotion x (motionFromWorld * direction)
@@ -170,34 +160,17 @@ namespace Unity.Physics
 
         // Given two bodies (in world space), determine the direction (in world space) that the impulse needs to act on
         // and the distance remaining between the bodyA and the target
-        private float CalculateError(MTransform worldFromA, MTransform worldFromB, out float3 directionInWorld)
+        private float CalculateError(in MTransform worldFromA, in MTransform worldFromB, out float3 directionInWorld)
         {
             float3 anchorAinWorld = Mul(worldFromA, PivotAinA);
             float3 targetInWorld = Mul(worldFromB, TargetInB);
             float3 axisInWorld = math.mul(worldFromB.Rotation, AxisInB);
 
-            directionInWorld = targetInWorld - anchorAinWorld;
-            float dot = math.dot(directionInWorld, axisInWorld);
+            var toTargetOffset = targetInWorld - anchorAinWorld;
+            float distance = -math.dot(toTargetOffset, axisInWorld);
 
-            // Project for lower-dimension joints
-            float distance;
-            if (Is1D)
-            {
-                // In 1D, distance is signed and measured along the axis
-                distance = -dot;
-                directionInWorld = -axisInWorld;
-            }
-            else
-            {
-                // In 2D / 3D, distance is nonnegative.  In 2D it is measured perpendicular to the axis.
-                directionInWorld -= axisInWorld * dot;
-                float futureDistanceSq = math.lengthsq(directionInWorld);
-                float invFutureDistance = math.select(math.rsqrt(futureDistanceSq), 0.0f, futureDistanceSq == 0.0f);
-                distance = futureDistanceSq * invFutureDistance;
-                directionInWorld *= invFutureDistance;
-            }
+            directionInWorld = -axisInWorld;
 
-            // Find the difference between the future distance and the limit range
             return distance;
         }
 

@@ -453,6 +453,35 @@ namespace Unity.Physics.Tests.Authoring
 #endif
 
         [Test]
+        public unsafe void ConversionSystems_WhenMultipleShapesShareMeshes_CollidersShareTheSameData(
+            [Values(ShapeType.ConvexHull, ShapeType.Mesh)] ShapeType shapeType
+        )
+        {
+            CreateHierarchy(
+                new[] { typeof(PhysicsShapeAuthoring), typeof(PhysicsBodyAuthoring) },
+                new[] { typeof(MeshFilter), typeof(MeshRenderer) },
+                new[] { typeof(PhysicsShapeAuthoring), typeof(PhysicsBodyAuthoring), typeof(MeshFilter), typeof(MeshRenderer) }
+            );
+
+            foreach (var meshFilter in Root.GetComponentsInChildren<MeshFilter>())
+                meshFilter.sharedMesh = MeshWithMultipleSubMeshes;
+            foreach (var shape in Root.GetComponentsInChildren<PhysicsShapeAuthoring>())
+            {
+                SetDefaultShape(shape, shapeType);
+                shape.ForceUnique = false;
+            }
+
+            TestConvertedSharedData<PhysicsCollider, PhysicsWorldIndex>(colliders =>
+            {
+                var uniqueColliders = new HashSet<int>();
+                foreach (var c in colliders)
+                    uniqueColliders.Add((int)c.ColliderPtr);
+                var numUnique = uniqueColliders.Count;
+                Assert.That(numUnique, Is.EqualTo(1), $"Expected colliders to reference unique data, but found {numUnique} different colliders.");
+            }, 2, k_DefaultWorldIndex);
+        }
+
+        [Test]
         public unsafe void ConversionSystems_WhenMultipleShapesShareMeshes_WithDifferentOffsets_CollidersDoNotShareTheSameData(
             [Values(ShapeType.ConvexHull, ShapeType.Mesh)] ShapeType shapeType
         )

@@ -12,7 +12,6 @@
         "Unity.Physics.Hybrid",
         "Unity.Physics.PlayModeTests",
         "Unity.Scenes",
-        "Unity.Scenes.Hybrid",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner",
         "Unity.Transforms",

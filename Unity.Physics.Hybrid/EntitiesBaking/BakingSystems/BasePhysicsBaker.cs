@@ -62,7 +62,13 @@ namespace Unity.Physics.Authoring
             return math.lengthsq((float3)bodyTransform.lossyScale - new float3(1f)) > 0f;
         }
 
-        protected void PostProcessTransform(Transform bodyTransform, BodyMotionType motionType)
+        /// <summary>
+        /// Post processing set up of this entity's transformation.
+        /// </summary>
+        /// <param name="bodyTransform">Transformation of this entity.</param>
+        /// <param name="motionType">Motion type of this entity. Default is BodyMotionType.Static.</param>
+        /// <param name="hasPropagateLocalToWorld">Specifies whether this entity already has the PropagateLocalToWorld component. Default is false.</param>
+        protected void PostProcessTransform(Transform bodyTransform, BodyMotionType motionType = BodyMotionType.Static, bool hasPropagateLocalToWorld = false)
         {
             if (NeedsPostProcessTransform(bodyTransform, IsStatic(), motionType, out PhysicsPostProcessData data))
             {
@@ -82,7 +88,11 @@ namespace Unity.Physics.Authoring
                     // TODO(DOTS-7098): should potentially add a tag component here to indicate that scale is baked in?
                     var compositeScale = float3x3.Scale(bodyTransform.localScale);
                     AddComponent(new PostTransformScale { Value = compositeScale });
-                    AddComponent<PropagateLocalToWorld>();
+                    if (!hasPropagateLocalToWorld)
+                    {
+                        // Add PropagateLocalToWorld component if not yet present.
+                        AddComponent<PropagateLocalToWorld>();
+                    }
                 }
                 var uniformScale = 1.0f;
                 LocalTransform transform = LocalTransform.FromPositionRotationScale(bodyTransform.localPosition,

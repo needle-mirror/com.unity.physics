@@ -50,10 +50,6 @@ namespace Unity.Physics.Systems
         }
 
         [BurstCompile]
-        public void OnDestroy(ref SystemState state)
-        {}
-
-        [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
 #if !ENABLE_TRANSFORM_V1

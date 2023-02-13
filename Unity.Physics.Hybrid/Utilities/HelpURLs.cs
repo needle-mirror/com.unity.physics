@@ -4,14 +4,13 @@ namespace Unity.Physics.Authoring
 {
     static class HelpURLs
     {
-        //TODO automate the package version automatically"
-        public const string PackageVersion = "1.0";
+        // always display latest version of documentation
+        public const string PackageVersion = "latest";
 
-        //URL links point to API instead of Documentation (manual) page.
-        const string k_BaseURL = "https://docs.unity3d.com/Packages/com.unity.physics@" + PackageVersion + "/api/";
+        // URL links point to API instead of Documentation (manual) page.
+        const string k_BaseURL = "https://docs.unity3d.com/Packages/com.unity.physics@" + PackageVersion + "/index.html?subfolder=/api/";
         const string k_Html = ".html";
 
-        //TODO API links are broken, regression from 0.51 physics version. Add Unity.Physics.Authoring tab section in "https://docs.unity3d.com/Packages/com.unity.physics@1.0/api/"
         public const string CustomPhysicsBodyTagNames = k_BaseURL + "Unity.Physics.Authoring.CustomPhysicsBodyTagNames" + k_Html;
         public const string CustomPhysicsMaterialTagNames = k_BaseURL + "Unity.Physics.Authoring.CustomPhysicsMaterialTagNames" + k_Html;
         public const string PhysicsBodyAuthoring = k_BaseURL + "Unity.Physics.Authoring.PhysicsBodyAuthoring" + k_Html;

@@ -656,13 +656,13 @@ namespace Unity.Physics.Systems
 #endif
                         }
 
-                            // GameObjects with non-identity scale have their scale baked into their collision shape and mass, so
-                            // the entity's transform scale (if any) should not be applied again here. Entities that did not go
-                            // through baking should apply their uniform scale value to the rigid body.
-                            // Baking also adds a PostTransformMatrix component to apply the GameObject's authored scale in the
-                            // rendering code, so we test for that component to determine whether the entity's current scale
-                            // should be applied or ignored.
-                            // TODO(DOTS-7098): More robust check here?
+                        // GameObjects with non-identity scale have their scale baked into their collision shape and mass, so
+                        // the entity's transform scale (if any) should not be applied again here. Entities that did not go
+                        // through baking should apply their uniform scale value to the rigid body.
+                        // Baking also adds a PostTransformMatrix component to apply the GameObject's authored scale in the
+                        // rendering code, so we test for that component to determine whether the entity's current scale
+                        // should be applied or ignored.
+                        // TODO(DOTS-7098): More robust check here?
                         float scale = 1.0f;
 
 #if !ENABLE_TRANSFORM_V1
@@ -676,6 +676,7 @@ namespace Unity.Physics.Systems
                             scale = chunkScales[i].Value;
                         }
 #endif
+
                         RigidBodies[rbIndex] = new RigidBody
                         {
                             WorldFromBody = new RigidTransform(worldFromBody.rot, worldFromBody.pos),
@@ -736,7 +737,7 @@ namespace Unity.Physics.Systems
                     bool hasChunkPhysicsMassType = chunkMasses.IsCreated;
                     bool hasChunkPhysicsMassOverrideType = chunkMassOverrides.IsCreated;
 #if !ENABLE_TRANSFORM_V1
-                    bool hasPostTransformScaleType = chunk.Has(ref PostTransformScaleType);
+                    bool hasPostTransformScale = chunk.Has(ref PostTransformScaleType);
                     bool hasChunkLocalTransformType = chunkLocalTransforms.IsCreated;
 #else
                     bool hasChunkScaleType = chunkScales.IsCreated;
@@ -784,7 +785,7 @@ namespace Unity.Physics.Systems
                         // rendering code, so we test for that component to determine whether the entity's current scale
                         // should be applied or ignored.
                         // TODO(DOTS-7098): More robust check here?
-                        if (!hasPostTransformScaleType && hasChunkLocalTransformType)
+                        if (!hasPostTransformScale && hasChunkLocalTransformType)
                         {
                             mass = mass.ApplyScale(chunkLocalTransforms[i].Scale);
                         }
@@ -837,18 +838,18 @@ namespace Unity.Physics.Systems
                             bodyRotationInWorld = chunkLocalTransforms[i].Rotation;
                             bodyPosInWorld = chunkLocalTransforms[i].Position;
 
-                        // GameObjects with non-identity scale have their scale baked into their collision shape and mass, so
-                        // the entity's transform scale (if any) should not be applied again here. Entities that did not go
-                        // through baking should apply their uniform scale value to the physics mass here.
-                        // Baking also adds a PostTransformMatrix component to apply the GameObject's authored scale in the
-                        // rendering code, so we test for that component to determine whether the entity's current scale
-                        // should be applied or ignored.
-                        // TODO(DOTS-7098): More robust check here?
+                            // GameObjects with non-identity scale have their scale baked into their collision shape and mass, so
+                            // the entity's transform scale (if any) should not be applied again here. Entities that did not go
+                            // through baking should apply their uniform scale value to the physics mass here.
+                            // Baking also adds a PostTransformMatrix component to apply the GameObject's authored scale in the
+                            // rendering code, so we test for that component to determine whether the entity's current scale
+                            // should be applied or ignored.
+                            // TODO(DOTS-7098): More robust check here?
 
-                        if (!hasPostTransformScaleType)
-                        {
-                            mass = mass.ApplyScale(chunkLocalTransforms[i].Scale);
-                        }
+                            if (!hasPostTransformScale)
+                            {
+                                mass = mass.ApplyScale(chunkLocalTransforms[i].Scale);
+                            }
                         }
 
 #else
