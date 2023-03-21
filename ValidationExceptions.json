@@ -1,9 +1,0 @@
-﻿{
-  "ErrorExceptions": [
-    {
-      "ValidationTest": "API Validation",
-      "PackageVersion": "1.0.0-pre.43"
-    }
-  ],
-  "WarningExceptions": []
-}

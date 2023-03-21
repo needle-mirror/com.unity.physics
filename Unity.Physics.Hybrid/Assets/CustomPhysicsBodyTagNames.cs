@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace Unity.Physics.Authoring
 {
-    [CreateAssetMenu(menuName = "Entities/Physics/Custom Physics Body Tag Names", fileName = "Custom Physics Body Tag Names")]
+    [CreateAssetMenu(menuName = "Unity Physics/Custom Physics Body Tag Names", fileName = "Custom Physics Body Tag Names", order = 505)]
     [HelpURL(HelpURLs.CustomPhysicsBodyTagNames)]
     public sealed class CustomPhysicsBodyTagNames : ScriptableObject, ITagNames
     {

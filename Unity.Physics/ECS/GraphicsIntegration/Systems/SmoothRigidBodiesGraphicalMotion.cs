@@ -17,11 +17,9 @@ namespace Unity.Physics.GraphicsIntegration
     /// <see cref="Unity.Transforms.LocalTransform"/> component is left alone.
     /// </summary>
     [UpdateInGroup(typeof(TransformSystemGroup))]
-#if !ENABLE_TRANSFORM_V1
+
     [UpdateBefore(typeof(LocalToWorldSystem))]
-#else
-    [UpdateBefore(typeof(TRSToLocalToWorldSystem))]
-#endif
+
     public partial class SmoothRigidBodiesGraphicalMotion : SystemBase
     {
         /// <summary>
@@ -100,12 +98,9 @@ namespace Unity.Physics.GraphicsIntegration
             {
                 All = new ComponentType[]
                 {
-#if !ENABLE_TRANSFORM_V1
+
                     typeof(LocalTransform),
-#else
-                    typeof(Translation),
-                    typeof(Rotation),
-#endif
+
                     typeof(PhysicsGraphicalSmoothing),
                     typeof(LocalToWorld),
                     typeof(PhysicsWorldIndex)
@@ -135,16 +130,8 @@ namespace Unity.Physics.GraphicsIntegration
                 SmoothedDynamicBodiesQuery.SetSharedComponentFilter(new PhysicsWorldIndex((uint)worldIndex.Value));
                 Dependency = new SmoothMotionJob
                 {
-#if !ENABLE_TRANSFORM_V1
                     LocalTransformType = GetComponentTypeHandle<LocalTransform>(true),
-                    PostTransformScaleType = GetComponentTypeHandle<PostTransformScale>(true),
-#else
-                    TranslationType = GetComponentTypeHandle<Translation>(true),
-                    RotationType = GetComponentTypeHandle<Rotation>(true),
-                    NonUniformScaleType = GetComponentTypeHandle<NonUniformScale>(true),
-                    ScaleType = GetComponentTypeHandle<Scale>(true),
-                    CompositeScaleType = GetComponentTypeHandle<CompositeScale>(true),
-#endif
+                    PostTransformMatrixType = GetComponentTypeHandle<PostTransformMatrix>(true),
                     PhysicsMassType = GetComponentTypeHandle<PhysicsMass>(true),
                     InterpolationBufferType = GetComponentTypeHandle<PhysicsGraphicalInterpolationBuffer>(true),
                     PhysicsGraphicalSmoothingType = GetComponentTypeHandle<PhysicsGraphicalSmoothing>(),
@@ -158,16 +145,9 @@ namespace Unity.Physics.GraphicsIntegration
         [BurstCompile]
         struct SmoothMotionJob : IJobChunk
         {
-#if !ENABLE_TRANSFORM_V1
+
             [ReadOnly] public ComponentTypeHandle<LocalTransform> LocalTransformType;
-            [ReadOnly] public ComponentTypeHandle<PostTransformScale> PostTransformScaleType;
-#else
-            [ReadOnly] public ComponentTypeHandle<Translation> TranslationType;
-            [ReadOnly] public ComponentTypeHandle<Rotation> RotationType;
-            [ReadOnly] public ComponentTypeHandle<NonUniformScale> NonUniformScaleType;
-            [ReadOnly] public ComponentTypeHandle<Scale> ScaleType;
-            [ReadOnly] public ComponentTypeHandle<CompositeScale> CompositeScaleType;
-#endif
+            [ReadOnly] public ComponentTypeHandle<PostTransformMatrix> PostTransformMatrixType;
             [ReadOnly] public ComponentTypeHandle<PhysicsMass> PhysicsMassType;
             [ReadOnly] public ComponentTypeHandle<PhysicsGraphicalInterpolationBuffer> InterpolationBufferType;
             public ComponentTypeHandle<PhysicsGraphicalSmoothing> PhysicsGraphicalSmoothingType;
@@ -178,36 +158,25 @@ namespace Unity.Physics.GraphicsIntegration
             public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
                 Assert.IsFalse(useEnabledMask);
-#if !ENABLE_TRANSFORM_V1
+
                 NativeArray<LocalTransform> localTransforms = chunk.GetNativeArray(ref LocalTransformType);
-                NativeArray<PostTransformScale> postTransformScales = chunk.GetNativeArray(ref PostTransformScaleType);
-#else
-                NativeArray<Translation> positions = chunk.GetNativeArray(ref TranslationType);
-                NativeArray<Rotation> orientations = chunk.GetNativeArray(ref RotationType);
-                NativeArray<NonUniformScale> nonUniformScales = chunk.GetNativeArray(ref NonUniformScaleType);
-                NativeArray<Scale> scales = chunk.GetNativeArray(ref ScaleType);
-                NativeArray<CompositeScale> compositeScales = chunk.GetNativeArray(ref CompositeScaleType);
-#endif
+                NativeArray<PostTransformMatrix> postTransformMatrices = chunk.GetNativeArray(ref PostTransformMatrixType);
                 NativeArray<PhysicsMass> physicsMasses = chunk.GetNativeArray(ref PhysicsMassType);
                 NativeArray<PhysicsGraphicalSmoothing> physicsGraphicalSmoothings = chunk.GetNativeArray(ref PhysicsGraphicalSmoothingType);
                 NativeArray<PhysicsGraphicalInterpolationBuffer> interpolationBuffers = chunk.GetNativeArray(ref InterpolationBufferType);
                 NativeArray<LocalToWorld> localToWorlds = chunk.GetNativeArray(ref LocalToWorldType);
 
-#if !ENABLE_TRANSFORM_V1
+
                 // GameObjects with non-identity scale have their scale baked into their collision shape and mass, so
                 // the entity's transform scale (if any) should not be applied again here. Entities that did not go
                 // through baking should apply their uniform scale value to the rigid body.
-                // Baking also adds a PostTransformScale component to apply the GameObject's authored scale in the
+                // Baking also adds a PostTransformMatrix component to apply the GameObject's authored scale in the
                 // rendering code, so we test for that component to determine whether the entity's current scale
                 // should be applied or ignored.
                 // TODO(DOTS-7098): More robust check here?
-                var hasPostTransformScale = postTransformScales.IsCreated;
+                var hasPostTransformMatrix = postTransformMatrices.IsCreated;
                 var hasLocalTransform = localTransforms.IsCreated;
-#else
-                var hasNonUniformScale = nonUniformScales.IsCreated;
-                var hasScale = scales.IsCreated;
-                var hasAnyScale = hasNonUniformScale || hasScale || compositeScales.IsCreated;
-#endif
+
                 var hasPhysicsMass = physicsMasses.IsCreated;
                 var hasInterpolationBuffer = interpolationBuffers.IsCreated;
 
@@ -218,11 +187,9 @@ namespace Unity.Physics.GraphicsIntegration
                     var smoothing = physicsGraphicalSmoothings[i];
                     var currentVelocity = smoothing.CurrentVelocity;
 
-#if !ENABLE_TRANSFORM_V1
+
                     var currentTransform = hasLocalTransform ? new RigidTransform(localTransforms[i].Rotation, localTransforms[i].Position) : RigidTransform.identity;
-#else
-                    var currentTransform = new RigidTransform(orientations[i].Value, positions[i].Value);
-#endif
+
                     RigidTransform smoothedTransform;
 
                     // apply no smoothing (i.e., teleported bodies)
@@ -249,17 +216,10 @@ namespace Unity.Physics.GraphicsIntegration
                     }
 
                     localToWorlds[i] = GraphicalSmoothingUtility.BuildLocalToWorld(
-#if !ENABLE_TRANSFORM_V1
+
                         i, smoothedTransform,
                         hasLocalTransform ? localTransforms[i].Scale : 1.0f,
-                        hasPostTransformScale, postTransformScales
-#else
-                        i, smoothedTransform,
-                        hasAnyScale,
-                        hasNonUniformScale, nonUniformScales,
-                        hasScale, scales,
-                        compositeScales
-#endif
+                        hasPostTransformMatrix, postTransformMatrices
                     );
 
                     // reset smoothing to apply again next frame (i.e., finish teleportation)

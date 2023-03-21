@@ -1,51 +1,61 @@
-using System.Collections.Generic;
-using System.Linq;
 using Unity.Burst;
-using Unity.Physics.Systems;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.DebugDisplay;
 using Unity.Jobs;
+using Unity.Physics.Systems;
+using Unity.Transforms;
 using static Unity.Physics.Math;
 using UnityEngine;
 
 namespace Unity.Physics.Authoring
 {
+#if UNITY_EDITOR
     [BurstCompile(FloatPrecision.Low, FloatMode.Fast)]
-    internal struct DisplayColliderEdgesJob : IJobParallelFor
+    public struct DisplayColliderEdgesJob : IJobParallelFor
     {
-        [ReadOnly] internal NativeArray<RigidBody> Bodies;
+        [ReadOnly] private NativeArray<RigidBody> RigidBodies;
+        [ReadOnly] private PrimitiveColliderGeometries Geometries;
+        [ReadOnly] private float CollidersEdgesScale;
+
+        public static JobHandle ScheduleJob(in NativeArray<RigidBody> rigidBodies, float collidersEdgesScales, in PrimitiveColliderGeometries geometries, JobHandle inputDeps)
+        {
+            return new DisplayColliderEdgesJob
+            {
+                RigidBodies = rigidBodies,
+                Geometries = geometries,
+                CollidersEdgesScale = collidersEdgesScales
+            }.Schedule(rigidBodies.Length, 16, inputDeps);
+        }
 
         public void Execute(int i)
         {
-            var body = Bodies[i];
-            var collider = body.Collider;
-
-            if (collider.IsCreated)
+            var rigidBody = RigidBodies[i];
+            if (RigidBodies[i].Collider.IsCreated)
             {
-                DrawColliderEdges(collider, body.WorldFromBody, body.Scale);
+                DrawColliderEdges(rigidBody.Collider, rigidBody.WorldFromBody, rigidBody.Scale * CollidersEdgesScale, ref Geometries);
             }
         }
 
-        internal unsafe static void DrawColliderEdges(BlobAssetReference<Collider> collider, RigidTransform worldFromCollider, float uniformScale,
+        private static unsafe void DrawColliderEdges(BlobAssetReference<Collider> collider, RigidTransform worldFromCollider, float uniformScale, ref PrimitiveColliderGeometries geometries,
             bool drawVertices = false)
         {
-            DrawColliderEdges((Collider*)collider.GetUnsafePtr(), worldFromCollider, uniformScale, drawVertices);
+            DrawColliderEdges((Collider*)collider.GetUnsafePtr(), worldFromCollider, uniformScale, ref geometries, drawVertices);
         }
 
-        static unsafe void DrawColliderEdges(Collider* collider, RigidTransform worldFromCollider, float uniformScale, bool drawVertices = false)
+        static unsafe void DrawColliderEdges(Collider* collider, RigidTransform worldFromCollider, float uniformScale, ref PrimitiveColliderGeometries geometries, bool drawVertices = false)
         {
             switch (collider->CollisionType)
             {
                 case CollisionType.Convex:
-                    DrawConvexColliderEdges((ConvexCollider*)collider, worldFromCollider, uniformScale, drawVertices);
+                    DrawConvexColliderEdges((ConvexCollider*)collider, worldFromCollider, uniformScale, ref geometries, drawVertices);
                     break;
                 case CollisionType.Composite:
                     switch (collider->Type)
                     {
                         case ColliderType.Compound:
-                            DrawCompoundColliderEdges((CompoundCollider*)collider, worldFromCollider, uniformScale, drawVertices);
+                            DrawCompoundColliderEdges((CompoundCollider*)collider, worldFromCollider, uniformScale, ref geometries, drawVertices);
                             break;
                         case ColliderType.Mesh:
                             DrawMeshColliderEdges((MeshCollider*)collider, worldFromCollider, uniformScale);
@@ -71,15 +81,9 @@ namespace Unity.Physics.Authoring
             PhysicsDebugDisplaySystem.Line(a, b, ci);
         }
 
-        static unsafe void DrawConvexColliderEdges(ConvexCollider* collider, RigidTransform worldFromConvex, float uniformScale,
-            bool drawVertices = false)
+        static unsafe void DrawConvexColliderEdges(ConvexCollider* collider, RigidTransform worldFromConvex, float uniformScale, ref PrimitiveColliderGeometries geometries, bool drawVertices = false)
         {
             float4x4 worldMatrix = math.float4x4(worldFromConvex);
-
-            // Apply sale to matrix
-            worldMatrix.c0 *= uniformScale;
-            worldMatrix.c1 *= uniformScale;
-            worldMatrix.c2 *= uniformScale;
 
             ref ConvexHull hull = ref collider->ConvexHull;
             float3 centroid = float3.zero;
@@ -119,71 +123,33 @@ namespace Unity.Physics.Authoring
             {
                 float radius;
                 float3 center;
-                int method;
+                float height;
                 switch (collider->Type)
                 {
                     case ColliderType.Capsule:
-                        radius = uniformScale * ((CapsuleCollider*)collider)->Radius;
-                        var vertex0 = uniformScale * ((CapsuleCollider*)collider)->Vertex0;
-                        var vertex1 = uniformScale * ((CapsuleCollider*)collider)->Vertex1;
-                        method = 2;
-                        switch (method)
-                        {
-                            case 1:  // Original method (recommended for ragdolls)
-                                WorldLine(hull.Vertices[0], hull.Vertices[1], ColorIndex.Green, worldMatrix);
-                                break;
-                            case 2: // Wireframe generated capsule
-                                center = -0.5f * (vertex1 - vertex0) + vertex1;
-                                vertex0 = math.transform(worldFromConvex, vertex0);
-                                vertex1 = math.transform(worldFromConvex, vertex1);
-                                var axis = vertex1 - vertex0; //axis in wfc-space
-                                var colliderOrientation = new RigidTransform(Quaternion.FromToRotation(Vector3.up, -axis), worldFromConvex.pos);
-                                var height = 0.5f * math.length(axis) + radius;
-                                DrawColliderUtility.DrawPrimitiveCapsuleEdges(radius, height, center, colliderOrientation);
-                                break;
-                        }
+                        radius = ((CapsuleCollider*)collider)->Radius;
+                        var vertex0 = ((CapsuleCollider*)collider)->Vertex0;
+                        var vertex1 = ((CapsuleCollider*)collider)->Vertex1;
+                        center = -0.5f * (vertex1 - vertex0) + vertex1;
+                        var axis = vertex1 - vertex0; //axis in wfc-space
+                        var colliderOrientation = Quaternion.FromToRotation(Vector3.up, -axis);
+                        height = 0.5f * math.length(axis) + radius;
+                        DrawColliderUtility.DrawPrimitiveCapsuleEdges(radius, height, center, colliderOrientation, worldFromConvex, ref geometries.CapsuleGeometry, uniformScale);
                         break;
 
                     case ColliderType.Cylinder:
-                        // keep using DebugDraw since the lines are simpler than the primitive cylinder mesh
-                        for (var f = 0; f < hull.Faces.Length; f++)
-                        {
-                            var face = hull.Faces[f];
-                            for (var v = 0; v < face.NumVertices - 1; v++)
-                            {
-                                byte i = hull.FaceVertexIndices[face.FirstIndex + v];
-                                byte j = hull.FaceVertexIndices[face.FirstIndex + v + 1];
-                                WorldLine(hull.Vertices[i], hull.Vertices[j], ColorIndex.Green, worldMatrix);
-                            }
-
-                            // Draw final line between first and last vertices
-                            {
-                                byte i = hull.FaceVertexIndices[face.FirstIndex + face.NumVertices - 1];
-                                byte j = hull.FaceVertexIndices[face.FirstIndex];
-                                WorldLine(hull.Vertices[i], hull.Vertices[j], ColorIndex.Green, worldMatrix);
-                            }
-                        }
+                        radius = ((CylinderCollider*)collider)->Radius;
+                        height = ((CylinderCollider*)collider)->Height;
+                        var colliderPosition = ((CylinderCollider*)collider)->Center;
+                        colliderOrientation = ((CylinderCollider*)collider)->Orientation * Quaternion.FromToRotation(Vector3.up, Vector3.back);
+                        DrawColliderUtility.DrawPrimitiveCylinderEdges(radius, height, colliderPosition, colliderOrientation, worldFromConvex, ref geometries.CylinderGeometry, uniformScale);
                         break;
 
                     case ColliderType.Sphere:
-                        radius = uniformScale * ((SphereCollider*)collider)->Radius;
-                        center = uniformScale * ((SphereCollider*)collider)->Center;
-                        method = 1;
-                        switch (method)
-                        {
-                            case 1: // Use a cached mesh that can be either a complex mesh, or simple a icosahedron
-                                //TODO: go through the render pipe for debug draw and strealine vertex process so we only upload 1 mesh and just schedule batches
-                                DrawColliderUtility.DrawPrimitiveSphereEdges(radius, center, worldFromConvex);
-                                break;
-                            case 2: // Draw a small triple axis at the centre
-                                var offset = new float3(radius * 0.5f);
-                                for (var i = 0; i < 3; i++)
-                                {
-                                    offset[i] = -offset[i];
-                                    WorldLine(hull.Vertices[0] - offset, hull.Vertices[0] + offset, ColorIndex.Green, worldMatrix);
-                                }
-                                break;
-                        }
+                        radius = ((SphereCollider*)collider)->Radius;
+                        center = ((SphereCollider*)collider)->Center;
+                        //TODO: go through the render pipe for debug draw and strealine vertex process so we only upload 1 mesh and just schedule batches
+                        DrawColliderUtility.DrawPrimitiveSphereEdges(radius, center, worldFromConvex, ref geometries.SphereGeometry, uniformScale);
                         break;
                 }
             }
@@ -211,8 +177,7 @@ namespace Unity.Physics.Authoring
             }
         }
 
-        static unsafe void DrawMeshColliderEdges(MeshCollider* meshCollider, RigidTransform worldFromCollider, float uniformScale
-        )
+        static unsafe void DrawMeshColliderEdges(MeshCollider* meshCollider, RigidTransform worldFromCollider, float uniformScale)
         {
             ref Mesh mesh = ref meshCollider->Mesh;
 
@@ -261,7 +226,7 @@ namespace Unity.Physics.Authoring
             }
         }
 
-        static unsafe void DrawCompoundColliderEdges(CompoundCollider* compoundCollider, RigidTransform worldFromCompound, float uniformScale,
+        static unsafe void DrawCompoundColliderEdges(CompoundCollider* compoundCollider, RigidTransform worldFromCompound, float uniformScale, ref PrimitiveColliderGeometries geometries,
             bool drawVertices = false)
         {
             for (int i = 0; i < compoundCollider->NumChildren; i++)
@@ -273,76 +238,94 @@ namespace Unity.Physics.Authoring
                 RigidTransform worldFromChild = new RigidTransform(mWorldFromChild.Rotation, mWorldFromChild.Translation);
 
                 var childCollider = child.Collider;
-                DrawColliderEdges(childCollider, worldFromChild, uniformScale, drawVertices);
+                DrawColliderEdges(childCollider, worldFromChild, uniformScale, ref geometries, drawVertices);
             }
         }
-
-        static unsafe void DrawConnectivity(RigidBody body, bool drawVertices = false)
-        {
-            if (body.Collider.Value.Type == ColliderType.Convex)
-                DrawConvexColliderEdges((ConvexCollider*)body.Collider.GetUnsafePtr(), body.WorldFromBody, body.Scale, drawVertices);
-        }
-
-        static unsafe void DrawMeshEdges(RigidBody body) =>
-            DrawMeshColliderEdges((MeshCollider*)body.Collider.GetUnsafePtr(), body.WorldFromBody, body.Scale);
     }
 
-    /// A system to display debug geometry for all body collider edges
-    [RequireMatchingQueriesForUpdate]
+    [WorldSystemFilter(WorldSystemFilterFlags.Default)]
     [UpdateInGroup(typeof(AfterPhysicsSystemGroup))]
-    [CreateAfter(typeof(PhysicsDebugDisplaySystem))]
-    internal partial class DisplayBodyColliderEdges : SystemBase
+    internal partial struct DisplayBodyColliderEdges_Default : ISystem
     {
-        public static readonly List<int> SphereList = new List<int>();
-        public static readonly List<Vector3> SphereVertexList = new List<Vector3>();
+        private PrimitiveColliderGeometries DefaultGeometries;
 
-        public static readonly List<int> CapsuleList = new List<int>();
-        public static readonly List<Vector3> CapsuleVertexList = new List<Vector3>();
-        public static List<float3> CapsuleEdgeList = new List<float3>();
-
-        protected override void OnCreate()
+        void OnCreate(ref SystemState state)
         {
-            DebugMeshCache.GetMesh(PrimitiveType.Capsule).GetTriangles(CapsuleList, 0);
-            DebugMeshCache.GetMesh(PrimitiveType.Capsule).GetVertices(CapsuleVertexList);
-            CapsuleList.TrimExcess();
-            CapsuleVertexList.TrimExcess();
+            state.RequireForUpdate<PhysicsWorldSingleton>();
+            state.RequireForUpdate<PhysicsCollider>();
+            state.RequireForUpdate<PhysicsDebugDisplayData>();
 
-            DebugMeshCache.GetMesh(MeshType.Icosahedron).GetTriangles(SphereList, 0);
-            DebugMeshCache.GetMesh(MeshType.Icosahedron).GetVertices(SphereVertexList);
-            SphereList.TrimExcess();
-            SphereVertexList.TrimExcess();
-
-            CapsuleEdgeList = DrawColliderUtility.DrawCapsuleWireFrame().ToList();
+            DrawColliderUtility.CreateGeometries(out DefaultGeometries);
         }
 
-        protected override void OnDestroy()
+        void OnUpdate(ref SystemState state)
         {
-            SphereList.Clear();
-            SphereVertexList.Clear();
-
-            CapsuleList.Clear();
-            CapsuleVertexList.Clear();
-            CapsuleEdgeList.Clear();
-        }
-
-        protected override void OnUpdate()
-        {
-#if UNITY_EDITOR
             if (!SystemAPI.TryGetSingleton(out PhysicsDebugDisplayData debugDisplay) || debugDisplay.DrawColliderEdges == 0)
                 return;
 
-            var world = SystemAPI.GetSingleton<PhysicsWorldSingleton>().PhysicsWorld;
-
-            if (world.NumBodies == 0)
+            if (SystemAPI.TryGetSingleton(out PhysicsWorldSingleton physicsWorldSingleton))
             {
+                state.Dependency = DisplayColliderEdgesJob.ScheduleJob(physicsWorldSingleton.PhysicsWorld.Bodies, 1.0f, DefaultGeometries, state.Dependency);
+            }
+        }
+
+        void OnDestroy(ref SystemState state)
+        {
+            DefaultGeometries.Dispose();
+        }
+    }
+
+    [WorldSystemFilter(WorldSystemFilterFlags.Editor)]
+    [UpdateInGroup(typeof(PhysicsDisplayDebugGroup))]
+    [UpdateAfter(typeof(CleanPhysicsDebugDataSystem_Editor))]
+    [UpdateBefore(typeof(PhysicsDebugDisplaySystem_Editor))]
+    internal partial struct DisplayBodyColliderEdges_Editor : ISystem
+    {
+        private PrimitiveColliderGeometries DefaultGeometries;
+
+        void OnCreate(ref SystemState state)
+        {
+            var colliderQuery = state.GetEntityQuery(ComponentType.ReadOnly<PhysicsCollider>(), ComponentType.ReadOnly<LocalToWorld>());
+            state.RequireForUpdate(colliderQuery);
+            state.RequireForUpdate<PhysicsDebugDisplayData>();
+
+            DrawColliderUtility.CreateGeometries(out DefaultGeometries);
+        }
+
+        void OnUpdate(ref SystemState state)
+        {
+            if (!SystemAPI.TryGetSingleton(out PhysicsDebugDisplayData debugDisplay) || debugDisplay.DrawColliderEdges == 0)
+                return;
+
+            var rigidBodiesList = new NativeList<RigidBody>(Allocator.TempJob);
+            foreach (var(collider, localToWorld, localTransform) in
+                     SystemAPI.Query<RefRO<PhysicsCollider>, RefRO<LocalToWorld>, RefRO<LocalTransform>>())
+            {
+                var rigidTransform = DecomposeRigidBodyTransform(localToWorld.ValueRO.Value);
+                rigidBodiesList.Add(new RigidBody()
+                {
+                    Collider = collider.ValueRO.Value,
+                    WorldFromBody = rigidTransform,
+                    Scale = localTransform.ValueRO.Scale
+                });
+            }
+
+            if (rigidBodiesList.IsEmpty)
+            {
+                rigidBodiesList.Dispose();
                 return;
             }
 
-            Dependency = new DisplayColliderEdgesJob()
-            {
-                Bodies = world.Bodies,
-            }.Schedule(world.NumBodies, 16, Dependency);
-#endif
+            var displayHandle = DisplayColliderEdgesJob.ScheduleJob(rigidBodiesList.AsArray(), 1.0f, DefaultGeometries, state.Dependency);
+            var disposeHandle = rigidBodiesList.Dispose(displayHandle);
+
+            state.Dependency = disposeHandle;
+        }
+
+        void OnDestroy(ref SystemState state)
+        {
+            DefaultGeometries.Dispose();
         }
     }
+#endif
 }

@@ -70,10 +70,6 @@ class MovingBodyAuthoringBaker : Baker<MovingBodyAuthoring>
 
 public partial struct MovingBodySystem : ISystem
 {
-    public void OnCreate(ref SystemState state) {}
-
-    public void OnDestroy(ref SystemState state) {}
-
     public void OnUpdate(ref SystemState state)
     {
         foreach (var(target, transform, moving, velocity) in SystemAPI.Query<RefRO<Target>, RefRO<LocalTransform>, RefRW<MovingBody>, RefRW<PhysicsVelocity>>().WithAll<MovingBody>())

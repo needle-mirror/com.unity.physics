@@ -10,11 +10,7 @@ namespace Unity.Physics.Aspects
 /// <summary>   A collider aspect. Contains transform data and a collider. </summary>
     public readonly partial struct ColliderAspect : IAspect, IAspectQueryable, ICollidable
     {
-#if !ENABLE_TRANSFORM_V1
-        internal readonly TransformAspect m_TransformAspect;
-#else
-        internal readonly PhysicsTransformAspect m_TransformAspect;
-#endif
+        internal readonly RefRW<LocalTransform> m_Transform;
         internal readonly RefRW<PhysicsCollider> m_Collider;
 
         /// <summary>   The entity of this aspect. </summary>
@@ -23,10 +19,10 @@ namespace Unity.Physics.Aspects
         /// <summary>   Gets or sets the world transform of a collider aspect. </summary>
         ///
         /// <value> The world space transform. </value>
-        public WorldTransform WorldFromCollider
+        public LocalTransform WorldFromCollider
         {
-            get => m_TransformAspect.WorldTransform;
-            set => m_TransformAspect.WorldTransform = value;
+            get => m_Transform.ValueRO;
+            set => m_Transform.ValueRW = value;
         }
 
         /// <summary>   Gets or sets the world space position. </summary>
@@ -34,13 +30,8 @@ namespace Unity.Physics.Aspects
         /// <value> The world space position. </value>
         public float3 Position
         {
-#if !ENABLE_TRANSFORM_V1
-            get => m_TransformAspect.WorldPosition;
-            set => m_TransformAspect.WorldPosition = value;
-#else
-            get => m_TransformAspect.Position;
-            set => m_TransformAspect.Position = value;
-#endif
+            get => m_Transform.ValueRO.Position;
+            set => m_Transform.ValueRW.Position = value;
         }
 
         /// <summary>   Gets or sets the world space rotation. </summary>
@@ -48,13 +39,8 @@ namespace Unity.Physics.Aspects
         /// <value> The world space rotation. </value>
         public quaternion Rotation
         {
-#if !ENABLE_TRANSFORM_V1
-            get => m_TransformAspect.WorldRotation;
-            set => m_TransformAspect.WorldRotation = value;
-#else
-            get => m_TransformAspect.Rotation;
-            set => m_TransformAspect.Rotation = value;
-#endif
+            get => m_Transform.ValueRO.Rotation;
+            set => m_Transform.ValueRW.Rotation = value;
         }
 
         /// <summary>   Gets or sets the uniform scale. </summary>
@@ -62,13 +48,8 @@ namespace Unity.Physics.Aspects
         /// <value> The scale. </value>
         public float Scale
         {
-#if !ENABLE_TRANSFORM_V1
-            get => m_TransformAspect.WorldScale;
-            set => m_TransformAspect.WorldScale = value;
-#else
-            get => m_TransformAspect.Scale;
-            set => m_TransformAspect.Scale = value;
-#endif
+            get => m_Transform.ValueRO.Scale;
+            set => m_Transform.ValueRW.Scale = value;
         }
 
         /// <summary>   Gets the collider type. </summary>
@@ -272,8 +253,8 @@ namespace Unity.Physics.Aspects
         /// <returns>   The calculated aabb in world space. </returns>
         public Aabb CalculateAabb()
         {
-            WorldTransform worldFromCollider = WorldFromCollider;
-            return RigidBody.RigidBodyUtil.CalculateAabb(m_Collider.ValueRO.Value, new RigidTransform(worldFromCollider.Rotation, worldFromCollider.Position), worldFromCollider.Scale);
+            var transformFromCollider = WorldFromCollider;
+            return RigidBody.RigidBodyUtil.CalculateAabb(m_Collider.ValueRO.Value, new RigidTransform(transformFromCollider.Rotation, transformFromCollider.Position), transformFromCollider.Scale);
         }
 
         #region ICollidable
@@ -314,8 +295,8 @@ namespace Unity.Physics.Aspects
         public bool CastRay<T>(RaycastInput input, ref T collector)
             where T : struct, ICollector<RaycastHit>
         {
-            WorldTransform worldFromCollider = m_TransformAspect.WorldTransform;
-            return RigidBody.RigidBodyUtil.CastRay(m_Collider.ValueRO.Value, Entity, input, ref collector, new RigidTransform(worldFromCollider.Rotation, worldFromCollider.Position), worldFromCollider.Scale);
+            var transformFromCollider = m_Transform.ValueRO;
+            return RigidBody.RigidBodyUtil.CastRay(m_Collider.ValueRO.Value, Entity, input, ref collector, new RigidTransform(transformFromCollider.Rotation, transformFromCollider.Position), transformFromCollider.Scale);
         }
 
         /// <summary>   Cast collider. </summary>
@@ -354,8 +335,8 @@ namespace Unity.Physics.Aspects
         public bool CastCollider<T>(ColliderCastInput input, ref T collector)
             where T : struct, ICollector<ColliderCastHit>
         {
-            WorldTransform worldFromCollider = m_TransformAspect.WorldTransform;
-            return RigidBody.RigidBodyUtil.CastCollider(m_Collider.ValueRO.Value, Entity, input, ref collector, new RigidTransform(worldFromCollider.Rotation, worldFromCollider.Position), worldFromCollider.Scale);
+            var transformFromCollider = m_Transform.ValueRO;
+            return RigidBody.RigidBodyUtil.CastCollider(m_Collider.ValueRO.Value, Entity, input, ref collector, new RigidTransform(transformFromCollider.Rotation, transformFromCollider.Position), transformFromCollider.Scale);
         }
 
         /// <summary>   Calculates the distance. </summary>
@@ -394,8 +375,8 @@ namespace Unity.Physics.Aspects
         public bool CalculateDistance<T>(PointDistanceInput input, ref T collector)
             where T : struct, ICollector<DistanceHit>
         {
-            WorldTransform worldFromCollider = m_TransformAspect.WorldTransform;
-            return RigidBody.RigidBodyUtil.CalculateDistance(m_Collider.ValueRO.Value, Entity, input, ref collector, new RigidTransform(worldFromCollider.Rotation, worldFromCollider.Position), worldFromCollider.Scale);
+            var transformFromCollider = m_Transform.ValueRO;
+            return RigidBody.RigidBodyUtil.CalculateDistance(m_Collider.ValueRO.Value, Entity, input, ref collector, new RigidTransform(transformFromCollider.Rotation, transformFromCollider.Position), transformFromCollider.Scale);
         }
 
         /// <summary>   Calculates the distance. </summary>
@@ -434,8 +415,8 @@ namespace Unity.Physics.Aspects
         public bool CalculateDistance<T>(ColliderDistanceInput input, ref T collector)
             where T : struct, ICollector<DistanceHit>
         {
-            WorldTransform worldFromCollider = m_TransformAspect.WorldTransform;
-            return RigidBody.RigidBodyUtil.CalculateDistance(m_Collider.ValueRO.Value, Entity, input, ref collector, new RigidTransform(worldFromCollider.Rotation, worldFromCollider.Position), worldFromCollider.Scale);
+            var transformFromCollider = m_Transform.ValueRO;
+            return RigidBody.RigidBodyUtil.CalculateDistance(m_Collider.ValueRO.Value, Entity, input, ref collector, new RigidTransform(transformFromCollider.Rotation, transformFromCollider.Position), transformFromCollider.Scale);
         }
 
         #region GO API Queries

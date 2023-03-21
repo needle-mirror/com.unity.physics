@@ -52,25 +52,17 @@ using Unity.Entities;
 using Unity.Burst;
 using Unity.Physics;
 
-[BurstCompile]
 public partial class ChangeColliderSystem : ISystem
 {
     [BurstCompile]
     public partial struct ChangeColliderJob : IJobEntity
     {
-        [BurstCompile]
         [WithAll(typeof(ChangeColliderFilterJob))]
         public void Execute(ref PhysicsCollider collider)
         {
             collider.Value.Value.SetCollisionFilter(CollisionFilter.Zero);
         }
     }
-
-    [BurstCompile]
-    public void OnCreate(ref SystemState state) { }
-
-    [BurstCompile]
-    public void OnDestroy(ref SystemState state) { }
 
     [BurstCompile]
     public void OnUpdate(ref SystemState state)

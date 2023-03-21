@@ -23,7 +23,7 @@ To upgrade from Physics 0.51 to 1.0, you need to do the following:
 
 The way that Transforms work in Entities 1.0 has changed. This section contains information on how to upgrade your project to work with the new Transforms. For further information on how Transforms work in Entities, see the [Transforms in Entities](transforms-intro.md) documentation. 
 
-The Transform system is under active development and subject to change up until the 1.0 release. The original, deprecated transform system is available via the `ENABLE_TRANSFORM_V1` define until then.
+The Transform system is under active development and subject to change up until the 1.0 release.
 
 ### LocalTransform
 There are three new transform components. See the [Using Transforms](transforms-using.md) document. For upgrade purposes, however, the only new component of importance is `LocalTransform`:

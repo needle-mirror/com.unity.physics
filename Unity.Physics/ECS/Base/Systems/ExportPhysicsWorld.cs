@@ -62,35 +62,26 @@ namespace Unity.Physics.Systems
 
         internal struct IntegrityComponentHandles
         {
-#if !ENABLE_TRANSFORM_V1
+
             public ComponentTypeHandle<LocalTransform> LocalTransformType;
-#else
-            public ComponentTypeHandle<Translation> PositionType;
-            public ComponentTypeHandle<Rotation> RotationType;
-#endif
+
             public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
             public ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
 
             public IntegrityComponentHandles(ref SystemState state)
             {
-#if !ENABLE_TRANSFORM_V1
+
                 LocalTransformType = state.GetComponentTypeHandle<LocalTransform>(true);
-#else
-                PositionType = state.GetComponentTypeHandle<Translation>(true);
-                RotationType = state.GetComponentTypeHandle<Rotation>(true);
-#endif
+
                 PhysicsColliderType = state.GetComponentTypeHandle<PhysicsCollider>(true);
                 PhysicsVelocityType = state.GetComponentTypeHandle<PhysicsVelocity>(true);
             }
 
             public void Update(ref SystemState state)
             {
-#if !ENABLE_TRANSFORM_V1
+
                 LocalTransformType.Update(ref state);
-#else
-                PositionType.Update(ref state);
-                RotationType.Update(ref state);
-#endif
+
                 PhysicsColliderType.Update(ref state);
                 PhysicsVelocityType.Update(ref state);
             }
@@ -100,12 +91,9 @@ namespace Unity.Physics.Systems
         {
             m_IntegrityCheckHandles.Update(ref state);
 
-#if !ENABLE_TRANSFORM_V1
+
             var localTransformType = m_IntegrityCheckHandles.LocalTransformType;
-#else
-            var positionType = m_IntegrityCheckHandles.PositionType;
-            var rotationType = m_IntegrityCheckHandles.RotationType;
-#endif
+
             var physicsColliderType = m_IntegrityCheckHandles.PhysicsColliderType;
             var physicsVelocityType = m_IntegrityCheckHandles.PhysicsVelocityType;
 
@@ -114,12 +102,9 @@ namespace Unity.Physics.Systems
             var checkDynamicBodyIntegrity = new CheckDynamicBodyIntegrity
             {
                 IntegrityCheckMap = buildPhysicsData.IntegrityCheckMap,
-#if !ENABLE_TRANSFORM_V1
+
                 LocalTransformType = localTransformType,
-#else
-                PositionType = positionType,
-                RotationType = rotationType,
-#endif
+
                 PhysicsVelocityType = physicsVelocityType,
                 PhysicsColliderType = physicsColliderType
             };
@@ -145,12 +130,9 @@ namespace Unity.Physics.Systems
         [BurstCompile]
         internal struct CheckDynamicBodyIntegrity : IJobChunk
         {
-#if !ENABLE_TRANSFORM_V1
+
             [ReadOnly] public ComponentTypeHandle<LocalTransform> LocalTransformType;
-#else
-            [ReadOnly] public ComponentTypeHandle<Translation> PositionType;
-            [ReadOnly] public ComponentTypeHandle<Rotation> RotationType;
-#endif
+
             [ReadOnly] public ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
             [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
             public NativeParallelHashMap<uint, long> IntegrityCheckMap;
@@ -169,21 +151,12 @@ namespace Unity.Physics.Systems
                 Assert.IsFalse(useEnabledMask);
                 DecrementIfExists(IntegrityCheckMap, chunk.GetOrderVersion());
                 DecrementIfExists(IntegrityCheckMap, chunk.GetChangeVersion(ref PhysicsVelocityType));
-#if !ENABLE_TRANSFORM_V1
+
                 if (chunk.Has(ref LocalTransformType))
                 {
                     DecrementIfExists(IntegrityCheckMap, chunk.GetChangeVersion(ref LocalTransformType));
                 }
-#else
-                if (chunk.Has(ref PositionType))
-                {
-                    DecrementIfExists(IntegrityCheckMap, chunk.GetChangeVersion(ref PositionType));
-                }
-                if (chunk.Has(ref RotationType))
-                {
-                    DecrementIfExists(IntegrityCheckMap, chunk.GetChangeVersion(ref RotationType));
-                }
-#endif
+
                 if (chunk.Has(ref PhysicsColliderType))
                 {
                     DecrementIfExists(IntegrityCheckMap, chunk.GetChangeVersion(ref PhysicsColliderType));

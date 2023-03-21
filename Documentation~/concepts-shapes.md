@@ -24,7 +24,7 @@ To improve the performance and robustness of collision detection, you can config
 
 To create this bevel radius, Unity Physics inflates a collider's hull to create a slightly larger outer shell, while aiming to preserve the original shape. It simultaneously inverts the collision geometry's vertices slightly, which creates rounded corners. These corners become more rounded the larger the bevel radius is, so you should aim to keep the bevel radius quite small.
 
- Use the **Bevel Radius** property on a collider to set up an area of tolerance. The recommended default value is 0.5.
+ Use the **Bevel Radius** property on a collider to set up an area of tolerance. The recommended default value is 0.05.
 
 ### Compound shapes
 

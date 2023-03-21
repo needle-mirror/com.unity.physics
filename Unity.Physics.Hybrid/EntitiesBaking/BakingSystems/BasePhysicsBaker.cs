@@ -68,47 +68,33 @@ namespace Unity.Physics.Authoring
         /// <param name="bodyTransform">Transformation of this entity.</param>
         /// <param name="motionType">Motion type of this entity. Default is BodyMotionType.Static.</param>
         /// <param name="hasPropagateLocalToWorld">Specifies whether this entity already has the PropagateLocalToWorld component. Default is false.</param>
-        protected void PostProcessTransform(Transform bodyTransform, BodyMotionType motionType = BodyMotionType.Static, bool hasPropagateLocalToWorld = false)
+        protected void PostProcessTransform(Transform bodyTransform, BodyMotionType motionType = BodyMotionType.Static)
         {
             if (NeedsPostProcessTransform(bodyTransform, IsStatic(), motionType, out PhysicsPostProcessData data))
             {
                 // We need to set manual override so we can add CompositeScale and prevent NonUniformScale from been added
-                GetEntity(TransformUsageFlags.ManualOverride);
+                var entity = GetEntity(TransformUsageFlags.ManualOverride);
 
                 // Need to add all the necessary transform elements
-                AddComponent(new LocalToWorld { Value = bodyTransform.localToWorldMatrix });
+                AddComponent(entity, new LocalToWorld { Value = bodyTransform.localToWorldMatrix });
 
-#if !ENABLE_TRANSFORM_V1
+
                 if (HasNonIdentityScale(bodyTransform))
                 {
                     // Any non-identity scale at authoring time is baked into the physics collision shape/mass data.
                     // In this case, the LocalTransform scale field should be set to 1.0 to avoid double-scaling
-                    // within the physics simulation. We bake the scale into the PostTransformScale to make sure the object
+                    // within the physics simulation. We bake the scale into the PostTransformMatrix to make sure the object
                     // is rendered correctly.
                     // TODO(DOTS-7098): should potentially add a tag component here to indicate that scale is baked in?
-                    var compositeScale = float3x3.Scale(bodyTransform.localScale);
-                    AddComponent(new PostTransformScale { Value = compositeScale });
-                    if (!hasPropagateLocalToWorld)
-                    {
-                        // Add PropagateLocalToWorld component if not yet present.
-                        AddComponent<PropagateLocalToWorld>();
-                    }
+                    var compositeScale = float4x4.Scale(bodyTransform.localScale);
+                    AddComponent(entity, new PostTransformMatrix { Value = compositeScale });
                 }
                 var uniformScale = 1.0f;
                 LocalTransform transform = LocalTransform.FromPositionRotationScale(bodyTransform.localPosition,
                     bodyTransform.localRotation, uniformScale);
-                AddComponent(transform);
-                AddComponent((WorldTransform)transform);
-#else
-                AddComponent(new Translation { Value = bodyTransform.localPosition });
-                AddComponent(new Rotation { Value = bodyTransform.localRotation });
+                AddComponent(entity, transform);
 
-                if (HasNonIdentityScale(bodyTransform))
-                {
-                    AddComponent(new CompositeScale() { Value = float4x4.Scale(bodyTransform.localScale) });
-                }
-#endif
-                AddComponent(data);
+                AddComponent(entity, data);
             }
         }
     }

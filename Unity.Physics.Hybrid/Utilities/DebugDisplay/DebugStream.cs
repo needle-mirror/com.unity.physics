@@ -2,26 +2,51 @@ using Unity.Mathematics;
 using Unity.Physics.Systems;
 using UnityEngine;
 using Unity.Entities;
+using Unity.Transforms;
 
 namespace Unity.Physics.Authoring
 {
+    [WorldSystemFilter(WorldSystemFilterFlags.Editor)]
+    [UpdateInGroup(typeof(SimulationSystemGroup))]
+    [UpdateAfter(typeof(TransformSystemGroup))]
+    public partial class PhysicsDisplayDebugGroup : ComponentSystemGroup
+    {
+    }
+
     /// <summary>
     /// A system which cleans physics debug display data from the previous frame.
     /// In case of using multiple worlds feature, in order for debug display to work properly
     /// on multiple worlds, you need to disable the update of this system in either main physics group (<see cref="PhysicsSystemGroup"/>)
     /// or in the custom physics group, whichever updates later in the loop.
     /// </summary>
-    [UpdateInGroup(typeof(PhysicsInitializeGroup))]
-    public partial class CleanPhysicsDebugDataSystem : SystemBase
+
+    [WorldSystemFilter(WorldSystemFilterFlags.Default)]
+    [UpdateInGroup(typeof(BeforePhysicsSystemGroup))]
+    public partial struct CleanPhysicsDebugDataSystem_Default : ISystem
     {
-        protected override void OnCreate()
+        void OnCreate(ref SystemState state)
         {
-            RequireForUpdate<PhysicsDebugDisplayData>();
+            state.RequireForUpdate<PhysicsDebugDisplayData>();
         }
 
-        protected override void OnUpdate()
+        void OnUpdate(ref SystemState state)
         {
-            Unity.DebugDisplay.DebugDisplay.Clear();
+            DebugDisplay.DebugDisplay.Clear();
+        }
+    }
+
+    [WorldSystemFilter(WorldSystemFilterFlags.Editor)]
+    [UpdateInGroup(typeof(PhysicsDisplayDebugGroup))]
+    public partial struct CleanPhysicsDebugDataSystem_Editor : ISystem
+    {
+        void OnCreate(ref SystemState state)
+        {
+            state.RequireForUpdate<PhysicsDebugDisplayData>();
+        }
+
+        void OnUpdate(ref SystemState state)
+        {
+            DebugDisplay.DebugDisplay.Clear();
         }
     }
 
@@ -35,10 +60,7 @@ namespace Unity.Physics.Authoring
     /// 4) Data will be drawn when PhysicsDebugDisplaySystem's OnUpdate() is called.
     /// IMPORTANT: Drawing works only in Editor mode.
     /// </summary>
-    [RequireMatchingQueriesForUpdate]
-    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
-    [UpdateAfter(typeof(PhysicsSystemGroup))]
-    public partial class PhysicsDebugDisplaySystem : SystemBase
+    public abstract partial class PhysicsDebugDisplaySystem : SystemBase
     {
 #if UNITY_EDITOR
         DrawComponent m_DrawComponent;
@@ -185,7 +207,7 @@ namespace Unity.Physics.Authoring
             Unity.DebugDisplay.Triangle.Draw(vertex0, vertex1, vertex2, normal, color);
         }
 
-        private void ResetColliderDisplayData()
+        protected void ResetColliderDisplayData()
         {
             DrawMeshUtility.ClearTRS();
             AppendMeshColliders.GetMeshes.ClearReferenceMeshes();
@@ -193,7 +215,6 @@ namespace Unity.Physics.Authoring
 
         protected override void OnUpdate()
         {
-            SystemAPI.GetSingletonRW<PhysicsDebugDisplayData>();
 #if UNITY_EDITOR
             CompleteDependency();
 
@@ -202,4 +223,18 @@ namespace Unity.Physics.Authoring
 #endif
         }
     }
+
+    [WorldSystemFilter(WorldSystemFilterFlags.Default)]
+    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
+    [UpdateAfter(typeof(PhysicsSystemGroup))]
+    [RequireMatchingQueriesForUpdate]
+    public partial class PhysicsDebugDisplaySystem_Default : PhysicsDebugDisplaySystem
+    {}
+
+    [WorldSystemFilter(WorldSystemFilterFlags.Editor)]
+    [UpdateAfter(typeof(CleanPhysicsDebugDataSystem_Editor))]
+    [UpdateInGroup(typeof(PhysicsDisplayDebugGroup))]
+    [RequireMatchingQueriesForUpdate]
+    public partial class PhysicsDebugDisplaySystem_Editor : PhysicsDebugDisplaySystem
+    {}
 }

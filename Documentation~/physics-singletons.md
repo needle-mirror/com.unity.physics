@@ -12,25 +12,18 @@ Retrieving the `PhysicsWorld` is also possible by getting the `BuildPhysicsWorld
 // ISystem version
 [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
 [UpdateBefore(typeof(PhysicsSystemGroup))] // Make sure that the running order of systems is correct
-[BurstCompile]
 public partial struct CastRayISystemExample : ISystem
 {
+    [BurstCompile]
     public partial struct CastRayJob : IJob
     {
         public PhysicsWorldSingleton World;
         
-        [BurstCompile]
         public void Execute()
         {
             World.CastRay(...);
         }
     }
-
-    [BurstCompile]
-    public void OnCreate(ref SystemState state){}
-
-    [BurstCompile]
-    public void OnDestroy(ref SystemState state){}
     
     [BurstCompile]
     public void OnUpdate(ref SystemState state)

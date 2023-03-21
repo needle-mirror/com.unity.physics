@@ -9,16 +9,22 @@ using Unity.Physics.Systems;
 
 namespace Unity.Physics.Authoring
 {
+#if UNITY_EDITOR
+
     // A system which draws any collision events produced by the physics step system
     [RequireMatchingQueriesForUpdate]
     [UpdateInGroup(typeof(AfterPhysicsSystemGroup))]
     [BurstCompile]
     internal partial struct DisplayCollisionEventsSystem : ISystem
     {
+        public void OnCreate(ref SystemState state)
+        {
+            state.RequireForUpdate<PhysicsDebugDisplayData>();
+        }
+
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-#if UNITY_EDITOR
             if (!SystemAPI.TryGetSingleton(out PhysicsDebugDisplayData debugDisplay) || debugDisplay.DrawCollisionEvents == 0)
                 return;
 
@@ -26,7 +32,6 @@ namespace Unity.Physics.Authoring
             {
                 World = SystemAPI.GetSingleton<PhysicsWorldSingleton>().PhysicsWorld
             }.Schedule(SystemAPI.GetSingleton<SimulationSingleton>(), state.Dependency);
-#endif
         }
 
         // Job which iterates over collision events and writes display info to a PhysicsDebugDisplaySystem.
@@ -63,6 +68,7 @@ namespace Unity.Physics.Authoring
             }
         }
     }
+#endif
 }
 
 #endif

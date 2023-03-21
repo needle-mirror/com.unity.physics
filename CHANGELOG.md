@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.0-pre.65] - 2023-03-21
+
+### Changed
+
+* Updated Burst version in use to 1.8.3
+* Debug display systems now only update when the PhysicsDebugDisplayData component is present (e.g., through the PhysicsDebugDisplayAuthoring game object component) and are only created within the editor.
+
+### Fixed
+
+* Physics Debug Display for enabled Collider Edges now draws correctly if the collider scale is modified during runtime
+* Debug display systems no longer stall and instead execute their jobs asynchronously
+* Debug draw of collider faces and AABBs now account for uniform scaling of the rigid body
+* Rigidbody components that move in PlayMode will now correctly snap back to their original position when exiting PlayMode while the containing sub scene is open for editing. As part of the fix, the classic PhysX-based physics simulation is now temporarily and globally disabled while in PlayMode with an open sub scene that contains classic Rigidbody authoring components. The Unity Physics-based physics simulation is unaffected during that time.
+
+
 ## [1.0.0-pre.44] - 2023-02-13
 
 ### Added
@@ -69,6 +84,10 @@
 * Fixed a bug in which scale value was read from LocalTransform array even if the array had zero size.
 * It is now possible to enable impulse events feature using Constraint creation methods.
 * When baking a configurable joint into a motor, the Break Force and Break Torque now update the Max Impulse for breakable events
+* Duplicate component error when switching Smoothing type to anything but None in Physics Body
+* Immediately reset component in PhysicsShapeAuthoring's Reset() function to avoid sequential coupling issues
+* During conversion from Game Object physics joints to Unity Physics joints the joint's spring coefficient is correctly considered.
+* Physics debug display now shows colliders again in edit mode and not only in play mode
 
 
 ## [1.0.0-exp.12] - 2022-10-19

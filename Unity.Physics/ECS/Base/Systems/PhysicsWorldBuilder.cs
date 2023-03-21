@@ -101,13 +101,7 @@ namespace Unity.Physics.Systems
                     {
                         LocalToWorldType = componentHandles.LocalToWorldType,
                         ParentType = componentHandles.ParentType,
-#if !ENABLE_TRANSFORM_V1
                         LocalTransformType = componentHandles.LocalTransformType,
-#else
-                        PositionType = componentHandles.PositionType,
-                        RotationType = componentHandles.RotationType,
-                        ScaleType = componentHandles.ScaleType,
-#endif
                         PhysicsColliderType = componentHandles.PhysicsColliderType,
                         m_LastSystemVersion = lastSystemVersion,
                         Result = haveStaticBodiesChanged
@@ -144,14 +138,9 @@ namespace Unity.Physics.Systems
                         EntityType = componentHandles.EntityType,
                         LocalToWorldType = componentHandles.LocalToWorldType,
                         ParentType = componentHandles.ParentType,
-#if !ENABLE_TRANSFORM_V1
+
                         LocalTransformType = componentHandles.LocalTransformType,
-                        PostTransformScaleType = componentHandles.PostTransformScaleType,
-#else
-                        PositionType = componentHandles.PositionType,
-                        RotationType = componentHandles.RotationType,
-                        ScaleType = componentHandles.ScaleType,
-#endif
+                        PostTransformMatrixType = componentHandles.PostTransformMatrixType,
                         PhysicsColliderType = componentHandles.PhysicsColliderType,
                         PhysicsCustomTagsType = componentHandles.PhysicsCustomTagsType,
 
@@ -164,14 +153,8 @@ namespace Unity.Physics.Systems
 
                     var createMotionsJob = new Jobs.CreateMotions
                     {
-#if !ENABLE_TRANSFORM_V1
                         LocalTransformType = componentHandles.LocalTransformType,
-                        PostTransformScaleType = componentHandles.PostTransformScaleType,
-#else
-                        PositionType = componentHandles.PositionType,
-                        RotationType = componentHandles.RotationType,
-                        ScaleType = componentHandles.ScaleType,
-#endif
+                        PostTransformMatrixType = componentHandles.PostTransformMatrixType,
                         PhysicsVelocityType = componentHandles.PhysicsVelocityType,
                         PhysicsMassType = componentHandles.PhysicsMassType,
                         PhysicsMassOverrideType = componentHandles.PhysicsMassOverrideType,
@@ -198,14 +181,9 @@ namespace Unity.Physics.Systems
                         EntityType = componentHandles.EntityType,
                         LocalToWorldType = componentHandles.LocalToWorldType,
                         ParentType = componentHandles.ParentType,
-#if !ENABLE_TRANSFORM_V1
+
                         LocalTransformType = componentHandles.LocalTransformType,
-                        PostTransformScaleType = componentHandles.PostTransformScaleType,
-#else
-                        PositionType = componentHandles.PositionType,
-                        RotationType = componentHandles.RotationType,
-                        ScaleType = componentHandles.ScaleType,
-#endif
+                        PostTransformMatrixType = componentHandles.PostTransformMatrixType,
                         PhysicsColliderType = componentHandles.PhysicsColliderType,
                         PhysicsCustomTagsType = componentHandles.PhysicsCustomTagsType,
 
@@ -378,14 +356,8 @@ namespace Unity.Physics.Systems
                     EntityType = componentHandles.EntityType,
                     LocalToWorldType = componentHandles.LocalToWorldType,
                     ParentType = componentHandles.ParentType,
-#if !ENABLE_TRANSFORM_V1
                     LocalTransformType = componentHandles.LocalTransformType,
-                    PostTransformScaleType = componentHandles.PostTransformScaleType,
-#else
-                    PositionType = componentHandles.PositionType,
-                    RotationType = componentHandles.RotationType,
-                    ScaleType = componentHandles.ScaleType,
-#endif
+                    PostTransformMatrixType = componentHandles.PostTransformMatrixType,
                     PhysicsColliderType = componentHandles.PhysicsColliderType,
                     PhysicsCustomTagsType = componentHandles.PhysicsCustomTagsType,
 
@@ -397,14 +369,8 @@ namespace Unity.Physics.Systems
 
                 new Jobs.CreateMotions
                 {
-#if !ENABLE_TRANSFORM_V1
                     LocalTransformType = componentHandles.LocalTransformType,
-                    PostTransformScaleType = componentHandles.PostTransformScaleType,
-#else
-                    PositionType = componentHandles.PositionType,
-                    RotationType = componentHandles.RotationType,
-                    ScaleType = componentHandles.ScaleType,
-#endif
+                    PostTransformMatrixType = componentHandles.PostTransformMatrixType,
                     PhysicsVelocityType = componentHandles.PhysicsVelocityType,
                     PhysicsMassType = componentHandles.PhysicsMassType,
                     PhysicsMassOverrideType = componentHandles.PhysicsMassOverrideType,
@@ -428,17 +394,10 @@ namespace Unity.Physics.Systems
                     EntityType = componentHandles.EntityType,
                     LocalToWorldType = componentHandles.LocalToWorldType,
                     ParentType = componentHandles.ParentType,
-#if !ENABLE_TRANSFORM_V1
                     LocalTransformType = componentHandles.LocalTransformType,
-                    PostTransformScaleType = componentHandles.PostTransformScaleType,
-#else
-                    PositionType = componentHandles.PositionType,
-                    RotationType = componentHandles.RotationType,
-                    ScaleType = componentHandles.ScaleType,
-#endif
+                    PostTransformMatrixType = componentHandles.PostTransformMatrixType,
                     PhysicsColliderType = componentHandles.PhysicsColliderType,
                     PhysicsCustomTagsType = componentHandles.PhysicsCustomTagsType,
-
                     FirstBodyIndex = numDynamicBodies,
                     RigidBodies = world.Bodies,
                     EntityBodyIndexMap = world.CollisionWorld.EntityBodyIndexMap.AsParallelWriter(),
@@ -492,13 +451,7 @@ namespace Unity.Physics.Systems
             {
                 [ReadOnly] public ComponentTypeHandle<LocalToWorld> LocalToWorldType;
                 [ReadOnly] public ComponentTypeHandle<Parent> ParentType;
-#if !ENABLE_TRANSFORM_V1
                 [ReadOnly] public ComponentTypeHandle<LocalTransform> LocalTransformType;
-#else
-                [ReadOnly] public ComponentTypeHandle<Translation> PositionType;
-                [ReadOnly] public ComponentTypeHandle<Rotation> RotationType;
-                [ReadOnly] public ComponentTypeHandle<Scale> ScaleType;
-#endif
                 [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
                 [NativeDisableParallelForRestriction]
                 public NativeReference<int> Result;
@@ -510,13 +463,7 @@ namespace Unity.Physics.Systems
                     Assert.IsFalse(useEnabledMask);
                     bool didBatchChange =
                         chunk.DidChange(ref LocalToWorldType, m_LastSystemVersion)       ||
-#if !ENABLE_TRANSFORM_V1
                         chunk.DidChange(ref LocalTransformType, m_LastSystemVersion)     ||
-#else
-                        chunk.DidChange(ref PositionType, m_LastSystemVersion)           ||
-                        chunk.DidChange(ref ScaleType, m_LastSystemVersion)              ||
-                        chunk.DidChange(ref RotationType, m_LastSystemVersion)           ||
-#endif
                         chunk.DidChange(ref PhysicsColliderType, m_LastSystemVersion)    ||
                         chunk.DidOrderChange(m_LastSystemVersion);
                     if (didBatchChange)
@@ -561,14 +508,8 @@ namespace Unity.Physics.Systems
                 [ReadOnly] public EntityTypeHandle EntityType;
                 [ReadOnly] public ComponentTypeHandle<LocalToWorld> LocalToWorldType;
                 [ReadOnly] public ComponentTypeHandle<Parent> ParentType;
-#if !ENABLE_TRANSFORM_V1
                 [ReadOnly] public ComponentTypeHandle<LocalTransform> LocalTransformType;
-                [ReadOnly] public ComponentTypeHandle<PostTransformScale> PostTransformScaleType;
-#else
-                [ReadOnly] public ComponentTypeHandle<Translation> PositionType;
-                [ReadOnly] public ComponentTypeHandle<Rotation> RotationType;
-                [ReadOnly] public ComponentTypeHandle<Scale> ScaleType;
-#endif
+                [ReadOnly] public ComponentTypeHandle<PostTransformMatrix> PostTransformMatrixType;
                 [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
                 [ReadOnly] public ComponentTypeHandle<PhysicsCustomTags> PhysicsCustomTagsType;
                 [ReadOnly] public int FirstBodyIndex;
@@ -582,13 +523,7 @@ namespace Unity.Physics.Systems
                     int firstEntityIndexInQuery = ChunkBaseEntityIndices[unfilteredChunkIndex];
                     NativeArray<PhysicsCollider> chunkColliders = chunk.GetNativeArray(ref PhysicsColliderType);
                     NativeArray<LocalToWorld> chunkLocalToWorlds = chunk.GetNativeArray(ref LocalToWorldType);
-#if !ENABLE_TRANSFORM_V1
                     NativeArray<LocalTransform> chunkLocalTransforms = chunk.GetNativeArray(ref LocalTransformType);
-#else
-                    NativeArray<Translation> chunkPositions = chunk.GetNativeArray(ref PositionType);
-                    NativeArray<Rotation> chunkRotations = chunk.GetNativeArray(ref RotationType);
-                    NativeArray<Scale> chunkScales = chunk.GetNativeArray(ref ScaleType);
-#endif
                     NativeArray<Entity> chunkEntities = chunk.GetNativeArray(EntityType);
                     NativeArray<PhysicsCustomTags> chunkCustomTags = chunk.GetNativeArray(ref PhysicsCustomTagsType);
 
@@ -596,14 +531,8 @@ namespace Unity.Physics.Systems
                     bool hasChunkPhysicsCustomTagsType = chunk.Has(ref PhysicsCustomTagsType);
                     bool hasChunkParentType = chunk.Has(ref ParentType);
                     bool hasChunkLocalToWorldType = chunkLocalToWorlds.IsCreated;
-#if !ENABLE_TRANSFORM_V1
                     bool hasChunkLocalTransformType = chunkLocalTransforms.IsCreated;
-                    bool hasPostTransformScaleType = chunk.Has(ref PostTransformScaleType);
-#else
-                    bool hasChunkPositionType = chunkPositions.IsCreated;
-                    bool hasChunkRotationType = chunkRotations.IsCreated;
-                    bool hasChunkScaleType = chunkScales.IsCreated;
-#endif
+                    bool hasPostTransformMatrixType = chunk.Has(ref PostTransformMatrixType);
 
                     RigidTransform worldFromBody = RigidTransform.identity;
                     var entityEnumerator =
@@ -623,7 +552,6 @@ namespace Unity.Physics.Systems
                         }
                         else
                         {
-#if !ENABLE_TRANSFORM_V1
                             if (hasChunkLocalTransformType)
                             {
                                 worldFromBody.pos = chunkLocalTransforms[i].Position;
@@ -634,26 +562,6 @@ namespace Unity.Physics.Systems
                                 worldFromBody.pos = chunkLocalToWorlds[i].Position;
                                 worldFromBody.rot = Math.DecomposeRigidBodyOrientation(chunkLocalToWorlds[i].Value);
                             }
-#else
-                            if (hasChunkPositionType)
-                            {
-                                worldFromBody.pos = chunkPositions[i].Value;
-                            }
-                            else if (hasChunkLocalToWorldType)
-                            {
-                                worldFromBody.pos = chunkLocalToWorlds[i].Position;
-                            }
-
-                            if (hasChunkRotationType)
-                            {
-                                worldFromBody.rot = chunkRotations[i].Value;
-                            }
-                            else if (hasChunkLocalToWorldType)
-                            {
-                                var localToWorld = chunkLocalToWorlds[i].Value;
-                                worldFromBody.rot = Math.DecomposeRigidBodyOrientation(localToWorld);
-                            }
-#endif
                         }
 
                         // GameObjects with non-identity scale have their scale baked into their collision shape and mass, so
@@ -665,17 +573,10 @@ namespace Unity.Physics.Systems
                         // TODO(DOTS-7098): More robust check here?
                         float scale = 1.0f;
 
-#if !ENABLE_TRANSFORM_V1
-                        if (!hasPostTransformScaleType && hasChunkLocalTransformType)
+                        if (!hasPostTransformMatrixType && hasChunkLocalTransformType)
                         {
                             scale = chunkLocalTransforms[i].Scale;
                         }
-#else
-                        if (hasChunkScaleType)
-                        {
-                            scale = chunkScales[i].Value;
-                        }
-#endif
 
                         RigidBodies[rbIndex] = new RigidBody
                         {
@@ -694,14 +595,8 @@ namespace Unity.Physics.Systems
             [BurstCompile]
             internal struct CreateMotions : IJobChunk
             {
-#if !ENABLE_TRANSFORM_V1
                 [ReadOnly] public ComponentTypeHandle<LocalTransform> LocalTransformType;
-                [ReadOnly] public ComponentTypeHandle<PostTransformScale> PostTransformScaleType;
-#else
-                [ReadOnly] public ComponentTypeHandle<Translation> PositionType;
-                [ReadOnly] public ComponentTypeHandle<Rotation> RotationType;
-                [ReadOnly] public ComponentTypeHandle<Scale> ScaleType;
-#endif
+                [ReadOnly] public ComponentTypeHandle<PostTransformMatrix> PostTransformMatrixType;
                 [ReadOnly] public ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
                 [ReadOnly] public ComponentTypeHandle<PhysicsMass> PhysicsMassType;
                 [ReadOnly] public ComponentTypeHandle<PhysicsMassOverride> PhysicsMassOverrideType;
@@ -716,13 +611,7 @@ namespace Unity.Physics.Systems
                 public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
                 {
                     int firstEntityIndexInQuery = ChunkBaseEntityIndices[unfilteredChunkIndex];
-#if !ENABLE_TRANSFORM_V1
                     NativeArray<LocalTransform> chunkLocalTransforms = chunk.GetNativeArray(ref LocalTransformType);
-#else
-                    NativeArray<Translation> chunkPositions = chunk.GetNativeArray(ref PositionType);
-                    NativeArray<Rotation> chunkRotations = chunk.GetNativeArray(ref RotationType);
-                    NativeArray<Scale> chunkScales = chunk.GetNativeArray(ref ScaleType);
-#endif
                     NativeArray<PhysicsVelocity> chunkVelocities = chunk.GetNativeArray(ref PhysicsVelocityType);
                     NativeArray<PhysicsMass> chunkMasses = chunk.GetNativeArray(ref PhysicsMassType);
                     NativeArray<PhysicsMassOverride> chunkMassOverrides = chunk.GetNativeArray(ref PhysicsMassOverrideType);
@@ -736,12 +625,8 @@ namespace Unity.Physics.Systems
                     bool hasChunkPhysicsDampingType = chunkDampings.IsCreated;
                     bool hasChunkPhysicsMassType = chunkMasses.IsCreated;
                     bool hasChunkPhysicsMassOverrideType = chunkMassOverrides.IsCreated;
-#if !ENABLE_TRANSFORM_V1
-                    bool hasPostTransformScale = chunk.Has(ref PostTransformScaleType);
+                    bool hasPostTransformMatrix = chunk.Has(ref PostTransformMatrixType);
                     bool hasChunkLocalTransformType = chunkLocalTransforms.IsCreated;
-#else
-                    bool hasChunkScaleType = chunkScales.IsCreated;
-#endif
                     // Note: Transform and AngularExpansionFactor could be calculated from PhysicsCollider.MassProperties
                     // However, to avoid the cost of accessing the collider we assume an infinite mass at the origin of a ~1m^3 box.
                     // For better performance with spheres, or better behavior for larger and/or more irregular colliders
@@ -777,24 +662,17 @@ namespace Unity.Physics.Systems
                         var hasInfiniteMass = isKinematic || mass.HasInfiniteMass;
                         float gravityFactor = hasInfiniteMass ? 0 : hasChunkPhysicsGravityFactorType ? chunkGravityFactors[i].Value : defaultGravityFactor;
 
-#if !ENABLE_TRANSFORM_V1
                         // GameObjects with non-identity scale have their scale baked into their collision shape and mass, so
                         // the entity's transform scale (if any) should not be applied again here. Entities that did not go
                         // through baking should apply their uniform scale value to the physics mass here.
-                        // Baking also adds a PostTransformScale component to apply the GameObject's authored scale in the
+                        // Baking also adds a PostTransformMatrix component to apply the GameObject's authored scale in the
                         // rendering code, so we test for that component to determine whether the entity's current scale
                         // should be applied or ignored.
                         // TODO(DOTS-7098): More robust check here?
-                        if (!hasPostTransformScale && hasChunkLocalTransformType)
+                        if (!hasPostTransformMatrix && hasChunkLocalTransformType)
                         {
                             mass = mass.ApplyScale(chunkLocalTransforms[i].Scale);
                         }
-#else
-                        if (hasChunkScaleType)
-                        {
-                            mass = mass.ApplyScale(chunkScales[i].Value);
-                        }
-#endif
 
                         MotionVelocities[motionIndex] = new MotionVelocity
                         {
@@ -828,8 +706,6 @@ namespace Unity.Physics.Systems
                         var isKinematic = !hasChunkPhysicsMassType || (hasChunkPhysicsMassOverrideType && chunkMassOverrides[i].IsKinematic != 0) || !chunk.IsComponentEnabled(ref SimulateType, i);
                         // If the Body is Kinematic no resistive damping should be applied to it.
 
-#if !ENABLE_TRANSFORM_V1
-
                         quaternion bodyRotationInWorld = quaternion.identity;
                         float3 bodyPosInWorld = float3.zero;
 
@@ -846,30 +722,17 @@ namespace Unity.Physics.Systems
                             // should be applied or ignored.
                             // TODO(DOTS-7098): More robust check here?
 
-                            if (!hasPostTransformScale)
+                            if (!hasPostTransformMatrix)
                             {
                                 mass = mass.ApplyScale(chunkLocalTransforms[i].Scale);
                             }
                         }
 
-#else
-                        if (hasChunkScaleType)
-                        {
-                            mass = mass.ApplyScale(chunkScales[i].Value);
-                        }
-#endif
-
                         MotionDatas[motionIndex] = new MotionData
                         {
                             WorldFromMotion = new RigidTransform(
-#if !ENABLE_TRANSFORM_V1
                                 math.mul(bodyRotationInWorld, mass.InertiaOrientation),
-                                math.rotate(bodyRotationInWorld, mass.CenterOfMass) + bodyPosInWorld
-#else
-                                math.mul(chunkRotations[i].Value, mass.InertiaOrientation),
-                                math.rotate(chunkRotations[i].Value, mass.CenterOfMass) + chunkPositions[i].Value
-#endif
-                                ),
+                                math.rotate(bodyRotationInWorld, mass.CenterOfMass) + bodyPosInWorld),
                             BodyFromMotion = new RigidTransform(mass.InertiaOrientation, mass.CenterOfMass),
                             LinearDamping = isKinematic || mass.HasInfiniteMass ? 0.0f : damping.Linear,
                             AngularDamping = isKinematic || mass.HasInfiniteInertia ? 0.0f : damping.Angular

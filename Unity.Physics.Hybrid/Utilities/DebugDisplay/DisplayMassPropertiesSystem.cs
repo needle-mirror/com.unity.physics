@@ -1,4 +1,3 @@
-using Unity.Physics;
 using Unity.Physics.Systems;
 using Unity.Collections;
 using Unity.Entities;
@@ -8,15 +7,21 @@ using Unity.Burst;
 
 namespace Unity.Physics.Authoring
 {
+#if UNITY_EDITOR
+
     /// Create and dispatch a DisplayMassPropertiesJob
     [UpdateInGroup(typeof(AfterPhysicsSystemGroup))]
     [BurstCompile]
     internal partial struct DisplayMassPropertiesSystem : ISystem
     {
+        public void OnCreate(ref SystemState state)
+        {
+            state.RequireForUpdate<PhysicsDebugDisplayData>();
+        }
+
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-#if UNITY_EDITOR
             if (!SystemAPI.TryGetSingleton(out PhysicsDebugDisplayData debugDisplay) || debugDisplay.DrawMassProperties == 0)
                 return;
 
@@ -26,7 +31,6 @@ namespace Unity.Physics.Authoring
                 MotionDatas = world.MotionDatas,
                 MotionVelocities = world.MotionVelocities
             }.Schedule(world.MotionDatas.Length, 16, state.Dependency);
-#endif
         }
 
         // Job to write mass properties info to a rendering buffer for any moving bodies
@@ -70,4 +74,5 @@ namespace Unity.Physics.Authoring
             }
         }
     }
+#endif
 }

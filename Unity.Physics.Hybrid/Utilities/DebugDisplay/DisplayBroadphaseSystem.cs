@@ -8,6 +8,8 @@ using Unity.Physics.Systems;
 
 namespace Unity.Physics.Authoring
 {
+#if UNITY_EDITOR
+
     /// Job which walks the broadphase tree and displays the
     /// bounding box of leaf nodes.
     [BurstCompile]
@@ -59,10 +61,13 @@ namespace Unity.Physics.Authoring
     [BurstCompile]
     internal partial struct DisplayBroadphaseAabbsSystem : ISystem
     {
-        [BurstCompile]
+        public void OnCreate(ref SystemState state)
+        {
+            state.RequireForUpdate<PhysicsDebugDisplayData>();
+        }
+
         public void OnUpdate(ref SystemState state)
         {
-#if UNITY_EDITOR
             if (!SystemAPI.TryGetSingleton(out PhysicsDebugDisplayData debugDisplay) || debugDisplay.DrawBroadphase == 0)
                 return;
 
@@ -73,7 +78,7 @@ namespace Unity.Physics.Authoring
                 StaticNodes = broadphase.StaticTree.Nodes,
                 DynamicNodes = broadphase.DynamicTree.Nodes,
             }.Schedule(state.Dependency);
-#endif
         }
     }
+#endif
 }

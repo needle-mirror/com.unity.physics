@@ -8,7 +8,6 @@ namespace Unity.Physics.GraphicsIntegration
     /// A component to indicate that the graphical representation of a dynamic rigid body's motion should be smoothed when the rendering framerate is greater than the fixed step rate used by physics.
     /// When used on its own, it indicates that smoothing should extrapolate into the future based on the body's current velocity.
     /// The result is thus up-to-date, but can mis-predict the body's transformations since any future collision response has not yet been resolved.
-    /// Note that when used, the values of the body's LocalToWorld matrix are modified, and may differ from the data in its <see cref="WorldTransform"/> component.
     /// See also <seealso cref="PhysicsGraphicalInterpolationBuffer"/>.
     /// </summary>
     [WriteGroup(typeof(LocalToWorld))]

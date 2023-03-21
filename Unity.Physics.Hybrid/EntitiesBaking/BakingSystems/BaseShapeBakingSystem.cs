@@ -121,8 +121,6 @@ namespace Unity.Physics.Authoring
             {
                 // Associate the blob hash to the GO Instance ID
                 var hash = colliderData.ShapeComputationalData.Instance.Hash;
-                var convertedAuthoringInstanceID = colliderData.ShapeComputationalData.Instance.ConvertedAuthoringInstanceID;
-                localBlobComputationContext.AssociateBlobAssetWithUnityObject(hash, convertedAuthoringInstanceID);
 
                 if (localBlobComputationContext.NeedToComputeBlobAsset(hash))
                 {

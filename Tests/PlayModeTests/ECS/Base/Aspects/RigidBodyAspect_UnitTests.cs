@@ -7,7 +7,9 @@ using Unity.Mathematics;
 using Unity.Physics.Extensions;
 using Unity.Transforms;
 using Unity.Physics.Aspects;
+using UnityEngine;
 using static Unity.Entities.SystemAPI;
+using ForceMode = Unity.Physics.Extensions.ForceMode;
 
 namespace Unity.Physics.Tests.Aspects
 {
@@ -59,16 +61,8 @@ namespace Unity.Physics.Tests.Aspects
                 pc.Value = BoxCollider.Create(geometry);
             }
 
-#if !ENABLE_TRANSFORM_V1
             LocalTransform tl = LocalTransform.FromPositionRotationScale(AspectTestUtils.DefaultPos, AspectTestUtils.DefaultRot, 1.0f);
-            WorldTransform tw = (WorldTransform)tl;
-            LocalToWorld ltw = new LocalToWorld { Value = tw.ToMatrix() };
-#else
-            Translation t = new Translation { Value = AspectTestUtils.DefaultPos };
-            Rotation r = new Rotation { Value = AspectTestUtils.DefaultRot };
-            Scale s = new Scale { Value = 1.0f };
-            LocalToWorld ltw = new LocalToWorld { Value = new float4x4(r.Value, t.Value) };
-#endif
+            LocalToWorld ltw = new LocalToWorld { Value = tl.ToMatrix() };
 
             PhysicsVelocity pv = AspectTestUtils.DefaultVelocity;
             PhysicsMass pm = AspectTestUtils.DefaultMass;
@@ -80,14 +74,7 @@ namespace Unity.Physics.Tests.Aspects
 
             // Add index, transform, scale, localToWorld, collider
             manager.AddSharedComponent<PhysicsWorldIndex>(body, worldIndex);
-#if !ENABLE_TRANSFORM_V1
             manager.AddComponentData<LocalTransform>(body, tl);
-            manager.AddComponentData<WorldTransform>(body, tw);
-#else
-            manager.AddComponentData<Translation>(body, t);
-            manager.AddComponentData<Rotation>(body, r);
-            manager.AddComponentData<Scale>(body, s);
-#endif
             manager.AddComponentData<LocalToWorld>(body, ltw);
             manager.AddComponentData<PhysicsCollider>(body, pc);
             manager.AddComponentData<PhysicsDamping>(body, pd);
@@ -113,17 +100,10 @@ namespace Unity.Physics.Tests.Aspects
                     goto case BodyType.KINEMATIC_MASS_OVERRIDE;
 
                 case BodyType.SCALED_DYNAMIC:
-#if !ENABLE_TRANSFORM_V1
+
                     var localTransform = manager.GetComponentData<LocalTransform>(body);
                     localTransform.Scale = AspectTestUtils.NonIdentityScale;
                     manager.SetComponentData<LocalTransform>(body, localTransform);
-                    var worldTransform = manager.GetComponentData<WorldTransform>(body);
-                    worldTransform.Scale = AspectTestUtils.NonIdentityScale;
-                    manager.SetComponentData<WorldTransform>(body, worldTransform);
-#else
-                    s = new Scale {Value = AspectTestUtils.NonIdentityScale };
-                    manager.SetComponentData<Scale>(body, s);
-#endif
                     goto case BodyType.DYNAMIC;
 
                 case BodyType.KINEMATIC_MASS_OVERRIDE:
@@ -609,13 +589,12 @@ namespace Unity.Physics.Tests.Aspects
                     float3 impulse = new float3(1.0f, 2.0f, 3.0f);
                     PhysicsVelocity pv = AspectTestUtils.DefaultVelocity;
 
-#if !ENABLE_TRANSFORM_V1
-                    pv.ApplyLinearImpulse(aspect.m_Mass.ValueRO, aspect.m_TransformAspect.WorldScale, impulse);
-#else
-                    pv.ApplyLinearImpulse(aspect.m_Mass.ValueRO, aspect.m_TransformAspect.m_Scale.ValueRO.Value, impulse);
-#endif
+                    pv.ApplyLinearImpulse(aspect.m_Mass.ValueRO, aspect.m_Transform.ValueRO.Scale, impulse);
+
                     aspect.ApplyLinearImpulseWorldSpace(impulse);
 
+                    Console.WriteLine($"~~~ 1 {pv.Linear}");
+                    Console.WriteLine($"~~~ 2 {aspect.LinearVelocity}");
                     Assert.AreEqual(math.all(pv.Linear == aspect.LinearVelocity), true);
                     Assert.AreEqual(math.all(pv.Angular == aspect.AngularVelocityLocalSpace), true);
 
@@ -628,17 +607,11 @@ namespace Unity.Physics.Tests.Aspects
                 {
                     float3 impulse = new float3(1.0f, 2.0f, 3.0f);
                     PhysicsVelocity pv = AspectTestUtils.DefaultVelocity;
-#if !ENABLE_TRANSFORM_V1
-                    float3 impulseBodySpace = math.rotate(math.inverse(aspect.m_TransformAspect.WorldRotation), impulse);
-#else
-                    float3 impulseBodySpace = math.rotate(math.inverse(aspect.m_TransformAspect.Rotation), impulse);
-#endif
+                    float3 impulseBodySpace = math.rotate(math.inverse(aspect.m_Transform.ValueRO.Rotation), impulse);
                     float3 impulseMotionSpace = math.rotate(math.inverse(aspect.BodyFromMotion_Rot), impulseBodySpace);
-#if !ENABLE_TRANSFORM_V1
-                    pv.ApplyAngularImpulse(aspect.m_Mass.ValueRO, aspect.m_TransformAspect.WorldScale, impulseMotionSpace);
-#else
-                    pv.ApplyAngularImpulse(aspect.m_Mass.ValueRO, aspect.m_TransformAspect.m_Scale.ValueRO.Value, impulseMotionSpace);
-#endif
+
+                    pv.ApplyAngularImpulse(aspect.m_Mass.ValueRO, aspect.m_Transform.ValueRO.Scale, impulseMotionSpace);
+
                     aspect.ApplyAngularImpulseWorldSpace(impulse);
 
                     Assert.AreEqual(math.all(pv.Linear == aspect.LinearVelocity), true);
@@ -654,22 +627,12 @@ namespace Unity.Physics.Tests.Aspects
                     float3 impulse = new float3(1.0f, 2.0f, 3.0f);
                     PhysicsVelocity pv = AspectTestUtils.DefaultVelocity;
 
-#if !ENABLE_TRANSFORM_V1
-                    pv.ApplyLinearImpulse(aspect.m_Mass.ValueRO, aspect.m_TransformAspect.WorldScale, impulse);
-#else
-                    pv.ApplyLinearImpulse(aspect.m_Mass.ValueRO, aspect.m_TransformAspect.m_Scale.ValueRO.Value, impulse);
-#endif
-#if !ENABLE_TRANSFORM_V1
-                    float3 impulseBodySpace = math.rotate(math.inverse(aspect.m_TransformAspect.WorldRotation), impulse);
-#else
-                    float3 impulseBodySpace = math.rotate(math.inverse(aspect.m_TransformAspect.Rotation), impulse);
-#endif
+                    pv.ApplyLinearImpulse(aspect.m_Mass.ValueRO, aspect.m_Transform.ValueRO.Scale, impulse);
+                    float3 impulseBodySpace = math.rotate(math.inverse(aspect.m_Transform.ValueRO.Rotation), impulse);
                     float3 impulseMotionSpace = math.rotate(math.inverse(aspect.BodyFromMotion_Rot), impulseBodySpace);
-#if !ENABLE_TRANSFORM_V1
-                    pv.ApplyAngularImpulse(aspect.m_Mass.ValueRO, aspect.m_TransformAspect.WorldScale, impulseMotionSpace);
-#else
-                    pv.ApplyAngularImpulse(aspect.m_Mass.ValueRO, aspect.m_TransformAspect.m_Scale.ValueRO.Value, impulseMotionSpace);
-#endif
+
+                    pv.ApplyAngularImpulse(aspect.m_Mass.ValueRO, aspect.m_Transform.ValueRO.Scale, impulseMotionSpace);
+
                     aspect.ApplyLinearImpulseWorldSpace(impulse);
                     aspect.ApplyAngularImpulseWorldSpace(impulse);
 
@@ -687,11 +650,8 @@ namespace Unity.Physics.Tests.Aspects
                     float3 point = new float3(1.0f, 2.0f, 3.0f);
                     PhysicsVelocity pv = AspectTestUtils.DefaultVelocity;
 
-#if !ENABLE_TRANSFORM_V1
-                    pv.ApplyImpulse(aspect.m_Mass.ValueRO, aspect.Position, aspect.Rotation, aspect.m_TransformAspect.WorldScale, impulse, point);
-#else
-                    pv.ApplyImpulse(aspect.m_Mass.ValueRO, aspect.Position, aspect.Rotation, aspect.m_TransformAspect.m_Scale.ValueRO.Value, impulse, point);
-#endif
+                    pv.ApplyImpulse(aspect.m_Mass.ValueRO, aspect.Position, aspect.Rotation, aspect.m_Transform.ValueRO.Scale, impulse, point);
+
                     aspect.ApplyImpulseAtPointWorldSpace(impulse, point);
 
                     Assert.AreEqual(math.all(pv.Linear == aspect.LinearVelocity), true);

@@ -93,7 +93,8 @@ namespace Unity.Physics.Authoring
     {
         public override void Bake(PhysicsStepAuthoring authoring)
         {
-            AddComponent(authoring.AsComponent);
+            var entity = GetEntity(TransformUsageFlags.Dynamic);
+            AddComponent(entity, authoring.AsComponent);
         }
     }
 }

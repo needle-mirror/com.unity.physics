@@ -7,6 +7,11 @@ namespace Unity.DebugDisplay
     {
         internal int value;
 
+        public const int kMaxColors = 256;
+        public const int staticColorCount = 248;
+        public const int dynamicColorCount = kMaxColors - staticColorCount;
+        public const int dynamicColorIndex = staticColorCount;
+
         /// <summary>
         /// Black.
         /// </summary>
@@ -131,6 +136,25 @@ namespace Unity.DebugDisplay
         /// OrangeRed.
         /// </summary>
         public static readonly ColorIndex OrangeRed = new ColorIndex{value = 55}; //(0x00, 0x41, 0xff)
+
+        /// Max value is staticColorCount - 1 {247} at the moment.
+
+        /// Next values can change at runtime.
+
+        /// <summary>
+        /// DynamicMesh - Dynamic Color.
+        /// </summary>
+        public static readonly ColorIndex DynamicMesh = new ColorIndex{value = dynamicColorIndex};
+
+        /// <summary>
+        /// StaticMesh - Dynamic Color.
+        /// </summary>
+        public static readonly ColorIndex StaticMesh = new ColorIndex{value = dynamicColorIndex + 1};
+
+        /// <summary>
+        /// KinematicMesh - Dynamic Color.
+        /// </summary>
+        public static readonly ColorIndex KinematicMesh = new ColorIndex{value = dynamicColorIndex + 2};
 
         internal static ColorIndex Foreground(int value)
         {

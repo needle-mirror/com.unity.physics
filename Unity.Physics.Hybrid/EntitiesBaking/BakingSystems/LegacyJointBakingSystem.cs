@@ -45,8 +45,8 @@ namespace Unity.Physics.Authoring
 
         protected PhysicsConstrainedBodyPair GetConstrainedBodyPair(in LegacyJoint joint) =>
             new PhysicsConstrainedBodyPair(
-                GetEntity(joint.gameObject),
-                joint.connectedBody == null ? Entity.Null : GetEntity(joint.connectedBody),
+                GetEntity(joint.gameObject, TransformUsageFlags.Dynamic),
+                joint.connectedBody == null ? Entity.Null : GetEntity(joint.connectedBody, TransformUsageFlags.Dynamic),
                 joint.enableCollision
             );
 
@@ -88,7 +88,7 @@ namespace Unity.Physics.Authoring
             );
             bodyAFromJoint = new BodyFrame(math.mul(math.inverse(worldFromBodyA), legacyWorldFromJointA));
 
-            var connectedEntity = GetEntity(joint.connectedBody);
+            var connectedEntity = GetEntity(joint.connectedBody, TransformUsageFlags.Dynamic);
             var isConnectedBodyConverted =
                 joint.connectedBody == null || connectedEntity != Entity.Null;
 
@@ -289,7 +289,7 @@ namespace Unity.Physics.Authoring
 
             foreach (var joint in joints)
             {
-                var jointEntity = CreateAdditionalEntity();
+                var jointEntity = CreateAdditionalEntity(TransformUsageFlags.Dynamic);
                 AddSharedComponent(jointEntity, new PhysicsWorldIndex(worldIndex));
 
                 AddComponent(jointEntity, constrainedBodyPair);
@@ -522,7 +522,7 @@ namespace Unity.Physics.Authoring
             );
 
             RigidTransform worldFromBodyA = Math.DecomposeRigidBodyTransform(joint.transform.localToWorldMatrix);
-            var connectedEntity = GetEntity(joint.connectedBody);
+            var connectedEntity = GetEntity(joint.connectedBody, TransformUsageFlags.Dynamic);
             RigidTransform worldFromBodyB = connectedEntity == Entity.Null
                 ? RigidTransform.identity
                 : Math.DecomposeRigidBodyTransform(joint.connectedBody.transform.localToWorldMatrix);
@@ -560,7 +560,7 @@ namespace Unity.Physics.Authoring
                 Position = joint.anchor
             };
 
-            var connectedEntity = GetEntity(joint.connectedBody);
+            var connectedEntity = GetEntity(joint.connectedBody, TransformUsageFlags.Dynamic);
             var isConnectedBodyConverted =
                 joint.connectedBody == null || connectedEntity != Entity.Null;
 
@@ -629,7 +629,7 @@ namespace Unity.Physics.Authoring
             var jointFrameA = BodyFrame.Identity;
             jointFrameA.Position = joint.anchor;
 
-            var connectedEntity = GetEntity(joint.connectedBody);
+            var connectedEntity = GetEntity(joint.connectedBody, TransformUsageFlags.Dynamic);
 
             var isConnectedBodyConverted =
                 joint.connectedBody == null || connectedEntity != Entity.Null;

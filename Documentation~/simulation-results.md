@@ -31,7 +31,6 @@ See example below.
 ```csharp
 [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
 [UpdateBefore(typeof(PhysicsSimulationGroup))] // We are updating before `PhysicsSimulationGroup` - this means that we will get the events of the previous frame
-[BurstCompile]
 public partial struct GetNumCollisionEventsSystem : ISystem
 {
     [BurstCompile]
@@ -72,7 +71,6 @@ See example below.
 ```csharp
 [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
 [UpdateAfter(typeof(PhysicsSimulationGroup))] // We are updating after `PhysicsSimulationGroup` - this means that we will get the events of the current frame.
-[BurstCompile]
 public partial struct GetNumTriggerEventsSystem : ISystem
 {
     [BurstCompile]

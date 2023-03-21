@@ -3,9 +3,9 @@
   "category": "Unity",
   "description": "Unity's C# stateless physics library.\n\nBuilt on top of the Unity C# DOTS framework, Unity Physics is network-ready, completely customizable, and built for performance out of the box. Whether you're building the next mobile hit or a new networked multiplayer console experience, Unity Physics leverages the Burst compiler and Job system to scale across a range of hardware.",
   "dependencies": {
-    "com.unity.burst": "1.8.2",
-    "com.unity.collections": "2.1.0-pre.11",
-    "com.unity.entities": "1.0.0-pre.44",
+    "com.unity.burst": "1.8.3",
+    "com.unity.collections": "2.1.0-pre.18",
+    "com.unity.entities": "1.0.0-pre.65",
     "com.unity.mathematics": "1.2.6",
     "com.unity.test-framework": "1.3.2",
     "com.unity.modules.imgui": "1.0.0",
@@ -18,17 +18,17 @@
   "name": "com.unity.physics",
   "unity": "2022.2",
   "unityRelease": "2f1",
-  "version": "1.0.0-pre.44",
+  "version": "1.0.0-pre.65",
   "_upm": {
-    "changelog": "### Added\n\n* legacy icons to the physics authoring components `PhysicsShape` and `PhysicsBody`.\n* Help icon now always points to latest version of documentation for physics authoring components\n* Unit tests for Motors\n* Unit tests for some Jacobian methods\n* Internal API to help with connecting bodyB to bodyA for joints/motor configuration\n\n### Changed\n\n* Added functions that allow you to set impulse event threshold on all constraint joints, or only one of them.\n* Replaced PhysicsTransformAspect with TransformAspect\n* Increased testing of position motor in Position Motor demo scene, and re-enabled Position Motor package test.\n* Cleanup and simplification of position motor joint code\n* Use of `TransformAspect.WorldPosition`, `TransformAspect.WorldRotation`, `TransformAspect.WorldScale` when using Transform_V2 instead of `TransformAspect.Position`, `TransformAspect.Rotation`, `TransformAspect.Scale`.\n* `BaseShapeBakingSystem` and `BuildCompoundCollidersBakingSystem` have been modified to use `IJobEntity` instead of `Entities.ForEach()`.\n\n### Removed\n\n* `Attributes.cs` script has been removed since the `com.unity.properties` package is part of the editor as a module.\n* the gap left due to the old references being removed on the .asmdef files.\n\n### Fixed\n\n* Fixed bug when an extra ConfigurableJoint constraint was created when baking a motored Configurable Joint\n* Fixed bug where target wasn't calculated correctly when baking a motored Configurable Joint\n* Duplicate component error when switching Smoothing type to anything but None in Physics Body\n* Immediately reset component in PhysicsShapeAuthoring's Reset() function to avoid sequential coupling issues\n* During conversion from Game Object physics joints to Unity Physics joints the joint's spring coefficient is correctly considered."
+    "changelog": "### Changed\n\n* Updated Burst version in use to 1.8.3\n* Debug display systems now only update when the PhysicsDebugDisplayData component is present (e.g., through the PhysicsDebugDisplayAuthoring game object component) and are only created within the editor.\n\n### Fixed\n\n* Physics Debug Display for enabled Collider Edges now draws correctly if the collider scale is modified during runtime\n* Debug display systems no longer stall and instead execute their jobs asynchronously\n* Debug draw of collider faces and AABBs now account for uniform scaling of the rigid body\n* Rigidbody components that move in PlayMode will now correctly snap back to their original position when exiting PlayMode while the containing sub scene is open for editing. As part of the fix, the classic PhysX-based physics simulation is now temporarily and globally disabled while in PlayMode with an open sub scene that contains classic Rigidbody authoring components. The Unity Physics-based physics simulation is unaffected during that time."
   },
   "upmCi": {
-    "footprint": "44edb1c704b64f6428efd638000b3212a30d111a"
+    "footprint": "f926c40e04cf9c7f48868ea9f3fbbec777ed971c"
   },
   "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.physics@1.0/manual/index.html",
   "repository": {
     "url": "https://github.cds.internal.unity3d.com/unity/dots.git",
     "type": "git",
-    "revision": "0e572178431e16c09c6c434c873bf0c60e52a5e9"
+    "revision": "85530c484ef7afedc5b128081152ec5e1f6f30e2"
   }
 }

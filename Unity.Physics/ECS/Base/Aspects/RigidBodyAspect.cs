@@ -8,95 +8,6 @@ using Unity.Physics.Extensions;
 
 namespace Unity.Physics.Aspects
 {
-#if ENABLE_TRANSFORM_V1
-    // This method exists just to keep things working with Transform v1
-    public struct WorldTransform
-    {
-        public float3 Position;
-        public float Scale;
-        public quaternion Rotation;
-
-        public readonly float3 TransformPoint(float3 point) =>
-            Position + math.rotate(Rotation, point) * Scale;
-
-        public readonly float3 InverseTransformPoint(float3 point) =>
-            math.rotate(math.conjugate(Rotation), point - Position) / Scale;
-
-        public readonly WorldTransform Inverse()
-        {
-            var inverseRotation = math.conjugate(Rotation);
-            var inverseScale = 1.0f / Scale;
-            return new WorldTransform
-            {
-                Position = -math.rotate(inverseRotation, Position) * inverseScale,
-                Scale = inverseScale,
-                Rotation = inverseRotation,
-            };
-        }
-    }
-#endif
-
-#if ENABLE_TRANSFORM_V1
-    internal readonly partial struct PhysicsTransformAspect : IAspect
-    {
-        public WorldTransform WorldTransform
-        {
-            get
-            {
-                return new WorldTransform
-                {
-                    Position = Position,
-                    Rotation = Rotation,
-                    Scale = Scale
-                };
-            }
-            set
-            {
-                Position = value.Position;
-                Rotation = value.Rotation;
-                Scale = value.Scale;
-            }
-        }
-
-        [Optional]
-        public readonly RefRW<Unity.Transforms.Scale> m_Scale;
-
-        [Optional]
-        public readonly TransformAspect m_TransformAspect;
-
-        public float3 Position
-        {
-            get => m_TransformAspect.LocalPosition;
-            set => m_TransformAspect.LocalPosition = value;
-        }
-
-        public quaternion Rotation
-        {
-            get => m_TransformAspect.LocalRotation;
-            set => m_TransformAspect.LocalRotation = value;
-        }
-
-        public float Scale
-        {
-            get => m_Scale.IsValid ? m_Scale.ValueRO.Value : 1.0f;
-            set
-            {
-                if (m_Scale.IsValid)
-                {
-                    m_Scale.ValueRW.Value = value;
-                }
-                else
-                {
-                    // Don't throw error if someone tries to set uniform scale
-                    if (value != 1.0f)
-                    {
-                        SafetyChecks.ThrowInvalidOperationException("Scale component missing");
-                    }
-                }
-            }
-        }
-    }
-#endif
     internal static class AspectConstants
     {
         public static readonly float k_MinMass = 0.0001f;
@@ -109,11 +20,8 @@ namespace Unity.Physics.Aspects
 /// </summary>
     public readonly partial struct RigidBodyAspect : IAspect
     {
-#if !ENABLE_TRANSFORM_V1
-        internal readonly TransformAspect m_TransformAspect;
-#else
-        internal readonly PhysicsTransformAspect m_TransformAspect;
-#endif
+        internal readonly RefRW<LocalTransform> m_Transform;
+
         internal readonly RefRW<PhysicsVelocity> m_Velocity;
 
         [Optional]
@@ -133,10 +41,10 @@ namespace Unity.Physics.Aspects
         /// <summary>   Gets or sets the world transform of this aspect. </summary>
         ///
         /// <value> The world space transform. </value>
-        public WorldTransform WorldFromBody
+        public LocalTransform WorldFromBody
         {
-            get => m_TransformAspect.WorldTransform;
-            set => m_TransformAspect.WorldTransform = value;
+            get => m_Transform.ValueRO;
+            set => m_Transform.ValueRW = value;
         }
 
         /// <summary>   Gets or sets the world space position. </summary>
@@ -144,13 +52,8 @@ namespace Unity.Physics.Aspects
         /// <value> The world space position. </value>
         public float3 Position
         {
-#if !ENABLE_TRANSFORM_V1
-            get => m_TransformAspect.WorldPosition;
-            set => m_TransformAspect.WorldPosition = value;
-#else
-            get => m_TransformAspect.Position;
-            set => m_TransformAspect.Position = value;
-#endif
+            get => m_Transform.ValueRO.Position;
+            set => m_Transform.ValueRW.Position = value;
         }
 
         /// <summary>   Gets or sets the world space rotation. </summary>
@@ -158,13 +61,8 @@ namespace Unity.Physics.Aspects
         /// <value> The world space rotation. </value>
         public quaternion Rotation
         {
-#if !ENABLE_TRANSFORM_V1
-            get => m_TransformAspect.WorldRotation;
-            set => m_TransformAspect.WorldRotation = value;
-#else
-            get => m_TransformAspect.Rotation;
-            set => m_TransformAspect.Rotation = value;
-#endif
+            get => m_Transform.ValueRO.Rotation;
+            set => m_Transform.ValueRW.Rotation = value;
         }
 
         /// <summary>   Gets or sets the uniform scale. </summary>
@@ -172,13 +70,8 @@ namespace Unity.Physics.Aspects
         /// <value> The scale. </value>
         public float Scale
         {
-#if !ENABLE_TRANSFORM_V1
-            get => m_TransformAspect.WorldScale;
-            set => m_TransformAspect.WorldScale = value;
-#else
-            get => m_TransformAspect.Scale;
-            set => m_TransformAspect.Scale = value;
-#endif
+            get => m_Transform.ValueRO.Scale;
+            set => m_Transform.ValueRW.Scale = value;
         }
 
         // Internal helper methods:

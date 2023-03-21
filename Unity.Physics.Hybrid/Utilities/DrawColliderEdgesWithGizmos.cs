@@ -203,19 +203,6 @@ namespace Unity.Physics.Authoring
                         break;
                 }
             }
-
-            static void DrawColliderEdges(BlobAssetReference<Collider> collider, RigidTransform worldFromCollider, bool drawVertices)
-            {
-                DrawColliderEdges((Collider*)collider.GetUnsafePtr(), worldFromCollider, drawVertices);
-            }
-
-            public void DrawConnectivity(RigidBody body, bool drawVertices = false)
-            {
-                if (body.Collider.Value.Type == ColliderType.Convex)
-                    DrawColliderEdges((ConvexCollider*)body.Collider.GetUnsafePtr(), body.WorldFromBody, drawVertices);
-            }
-
-            public void DrawMeshEdges(RigidBody body) => DrawColliderEdges((MeshCollider*)body.Collider.GetUnsafePtr(), body.WorldFromBody);
         }
     }
 }

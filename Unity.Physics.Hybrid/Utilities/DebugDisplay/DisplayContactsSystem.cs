@@ -10,6 +10,8 @@ using Unity.Physics.Systems;
 
 namespace Unity.Physics.Authoring
 {
+#if UNITY_EDITOR
+
     // A system which draws all contact points produced by the physics step system
     [RequireMatchingQueriesForUpdate]
     [UpdateInGroup(typeof(PhysicsSimulationGroup))]
@@ -18,15 +20,18 @@ namespace Unity.Physics.Authoring
     [BurstCompile]
     internal partial struct DisplayContactsSystem : ISystem
     {
+        public void OnCreate(ref SystemState state)
+        {
+            state.RequireForUpdate<PhysicsDebugDisplayData>();
+        }
+
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-#if UNITY_EDITOR
             if (!SystemAPI.TryGetSingleton(out PhysicsDebugDisplayData debugDisplay) || debugDisplay.DrawContacts == 0)
                 return;
             var world = SystemAPI.GetSingleton<PhysicsWorldSingleton>().PhysicsWorld;
             state.Dependency = new DisplayContactsJob {}.Schedule(SystemAPI.GetSingleton<SimulationSingleton>(), ref world, state.Dependency);
-#endif
         }
 
         // Job which iterates over contacts from narrowphase and writes to display.
@@ -41,6 +46,6 @@ namespace Unity.Physics.Authoring
             }
         }
     }
+#endif
 }
-
 #endif

@@ -43,7 +43,7 @@ namespace Unity.Physics.Authoring
             DrawContacts = DrawContacts ? 1 : 0,
             DrawCollisionEvents = DrawCollisionEvents ? 1 : 0,
             DrawTriggerEvents = DrawTriggerEvents ? 1 : 0,
-            DrawJoints = DrawJoints ? 1 : 0
+            DrawJoints = DrawJoints ? 1 : 0,
         };
     }
 
@@ -51,7 +51,8 @@ namespace Unity.Physics.Authoring
     {
         public override void Bake(PhysicsDebugDisplayAuthoring authoring)
         {
-            AddComponent(authoring.AsComponent);
+            var entity = GetEntity(TransformUsageFlags.Dynamic);
+            AddComponent(entity, authoring.AsComponent);
         }
     }
 }

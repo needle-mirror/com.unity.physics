@@ -42,15 +42,11 @@ namespace Unity.Physics.Authoring
             {
                 if (((int)authoring.TargetPhysicsWorld & (1 << i)) == 0)
                     continue;
-                var proxyEnt = CreateAdditionalEntity(TransformUsageFlags.WriteGlobalTransform | TransformUsageFlags.ReadLocalToWorld);
-                AddComponent(proxyEnt, new CustomPhysicsProxyDriver {rootEntity = GetEntity(), FirstOrderGain = authoring.FirstOrderGain});
-#if !ENABLE_TRANSFORM_V1
+                var proxyEnt = CreateAdditionalEntity(TransformUsageFlags.Dynamic | TransformUsageFlags.WorldSpace);
+                AddComponent(proxyEnt, new CustomPhysicsProxyDriver {rootEntity = GetEntity(TransformUsageFlags.Dynamic), FirstOrderGain = authoring.FirstOrderGain});
+
                 AddComponent(proxyEnt, default(LocalTransform));
-                AddComponent(proxyEnt, default(WorldTransform));
-#else
-                AddComponent(proxyEnt, default(Translation));
-                AddComponent(proxyEnt, default(Rotation));
-#endif
+
                 AddComponent(proxyEnt, default(PhysicsMass));
                 AddComponent(proxyEnt, default(PhysicsVelocity));
                 AddComponent(proxyEnt, default(PhysicsCollider));

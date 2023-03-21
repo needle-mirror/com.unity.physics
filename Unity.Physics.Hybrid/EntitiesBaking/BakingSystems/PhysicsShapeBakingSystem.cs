@@ -26,12 +26,12 @@ namespace Unity.Physics.Authoring
             var child = shapeGameObject;
             var shapeInstanceID = shape.GetInstanceID();
 
-            var bodyEntity = GetEntity(body);
+            var bodyEntity = GetEntity(body, TransformUsageFlags.Dynamic);
 
             // prepare the static root
             if (isStaticBody)
             {
-                var staticRootMarker = CreateAdditionalEntity(TransformUsageFlags.Default, true, "StaticRootBakeMarker");
+                var staticRootMarker = CreateAdditionalEntity(TransformUsageFlags.Dynamic, true, "StaticRootBakeMarker");
                 AddComponent(staticRootMarker, new BakeStaticRoot() { Body = bodyEntity, ConvertedBodyInstanceID = body.transform.GetInstanceID() });
             }
 
@@ -42,8 +42,8 @@ namespace Unity.Physics.Authoring
             {
                 AuthoringComponentId = shapeInstanceID,
                 BodyEntity = bodyEntity,
-                ShapeEntity = GetEntity(shapeGameObject),
-                ChildEntity = GetEntity(child),
+                ShapeEntity = GetEntity(shapeGameObject, TransformUsageFlags.Dynamic),
+                ChildEntity = GetEntity(child, TransformUsageFlags.Dynamic),
                 BodyFromShape = ColliderInstanceBaking.GetCompoundFromChild(shapeTransform, bodyTransform),
             };
 
@@ -61,17 +61,18 @@ namespace Unity.Physics.Authoring
                 // If they are legacy Colliders and PhysicsShapeAuthoring in the same object, the PhysicsShapeAuthoring will add this
                 if (physicsShapeComponents.Count > 0 && physicsShapeComponents[0].GetInstanceID() == shapeInstanceID)
                 {
-                    AddSharedComponent(new PhysicsWorldIndex());
+                    var entity = GetEntity(TransformUsageFlags.Dynamic);
+                    AddSharedComponent(entity, new PhysicsWorldIndex());
 
-                    AddComponent(new PhysicsCompoundData()
+                    AddComponent(entity, new PhysicsCompoundData()
                     {
                         AssociateBlobToBody = false,
                         ConvertedBodyInstanceID = shapeInstanceID,
                         Hash = default,
                     });
-                    AddComponent<PhysicsRootBaked>();
-                    AddComponent<PhysicsCollider>();
-                    AddBuffer<PhysicsColliderKeyEntityPair>();
+                    AddComponent<PhysicsRootBaked>(entity);
+                    AddComponent<PhysicsCollider>(entity);
+                    AddBuffer<PhysicsColliderKeyEntityPair>(entity);
 
                     PostProcessTransform(bodyTransform);
                 }

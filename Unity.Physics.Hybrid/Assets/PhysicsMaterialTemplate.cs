@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace Unity.Physics.Authoring
 {
-    [CreateAssetMenu(menuName = "Entities/Physics/Physics Material Template")]
+    [CreateAssetMenu(menuName = "Unity Physics/Physics Material Template", fileName = "Physics Material Template", order = 508)]
     [HelpURL(HelpURLs.PhysicsMaterialTemplate)]
     public sealed class PhysicsMaterialTemplate : ScriptableObject, IPhysicsMaterialProperties
     {

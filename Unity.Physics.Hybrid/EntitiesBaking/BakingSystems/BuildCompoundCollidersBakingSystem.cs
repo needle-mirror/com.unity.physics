@@ -249,9 +249,6 @@ namespace Unity.Physics.Authoring
                         int resultIndex = deduplicationHashMap[rootBaking.Hash];
                         blobComputationContext.AddComputedBlobAsset(rootBaking.Hash, deferredCompoundResults[resultIndex].Result);
                     }
-
-                    // Register the hash to the body authoring object
-                    blobComputationContext.AssociateBlobAssetWithUnityObject(rootBaking.Hash, rootBaking.ConvertedBodyInstanceID);
                 }
             }
         }

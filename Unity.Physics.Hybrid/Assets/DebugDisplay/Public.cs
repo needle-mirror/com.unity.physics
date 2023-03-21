@@ -11,7 +11,7 @@ namespace Unity.DebugDisplay
         {
             var oldi = 0;
             var oldd = math.lengthsq(rgba - Unmanaged.Instance.Data.m_ColorData[0]);
-            for (var i = 1; i < Unmanaged.kMaxColors; ++i)
+            for (var i = 1; i < ColorIndex.kMaxColors; ++i)
             {
                 var newd = math.lengthsq(rgba - Unmanaged.Instance.Data.m_ColorData[0]);
                 if (newd < oldd)

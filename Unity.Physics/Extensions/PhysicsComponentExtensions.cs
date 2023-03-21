@@ -49,23 +49,6 @@ namespace Unity.Physics.Extensions
             return scaledBodyMass;
         }
 
-#if ENABLE_TRANSFORM_V1
-        /// <summary>
-        /// Obsolete. Use <see cref="ApplyScale(Unity.Physics.PhysicsMass,float)"/> instead.
-        /// </summary>
-        /// <param name="pm">       The body's <see cref="PhysicsMass"/> component. </param>
-        /// <param name="scale"> The body's uniform scale. If this value is approximately 1.0, the function will
-        /// early-out with no effect.</param>
-        ///
-        /// <returns>   A body's physics mass with respect to it's scale. </returns>
-        [Obsolete("This variant will be removed with Transform V1; use the V2-compatible version instead.", true)]
-        public static PhysicsMass ApplyScale(in this PhysicsMass pm, in Scale scale)
-        {
-            return pm.ApplyScale(scale.Value);
-        }
-
-#endif
-
         /// <summary>
         /// Get a body's effective mass in a given direction and from a particular point in world space.
         /// </summary>
@@ -82,21 +65,6 @@ namespace Unity.Physics.Extensions
         /// <returns>   A body's effective mass with respect to the specified point and impulse. </returns>
         public static float GetEffectiveMass(in this PhysicsMass bodyMass, in float3 bodyPosition, in quaternion bodyOrientation, float3 impulse, float3 point) =>
             PhysicsWorldExtensions.GetEffectiveMassImpl(GetCenterOfMassWorldSpace(bodyMass, bodyPosition, bodyOrientation), bodyMass.InverseInertia, impulse, point);
-#if ENABLE_TRANSFORM_V1
-        /// <summary>
-        /// Obsolete. Use <see cref="GetEffectiveMass(Unity.Physics.PhysicsMass,Unity.Mathematics.float3,Unity.Mathematics.quaternion,Unity.Mathematics.float3,Unity.Mathematics.float3)"/> instead.
-        /// </summary>
-        /// <param name="bodyMass">         The body mass. </param>
-        /// <param name="bodyPosition">     The body position. </param>
-        /// <param name="bodyOrientation">  The body orientation. </param>
-        /// <param name="impulse">          The impulse. </param>
-        /// <param name="point">            The point. </param>
-        ///
-        /// <returns>   A body's effective mass with respect to the specified point and impulse. </returns>
-        [Obsolete("This variant will be removed with Transform V1; use the V2-compatible version instead.", true)]
-        public static float GetEffectiveMass(in this PhysicsMass bodyMass, in Translation bodyPosition, in Rotation bodyOrientation, float3 impulse, float3 point) =>
-            PhysicsWorldExtensions.GetEffectiveMassImpl(GetCenterOfMassWorldSpace(bodyMass, bodyPosition.Value, bodyOrientation.Value), bodyMass.InverseInertia, impulse, point);
-#endif
 
         /// <summary>
         /// Get a body's effective mass in a given direction and from a particular point in world space.
@@ -117,27 +85,6 @@ namespace Unity.Physics.Extensions
             return PhysicsWorldExtensions.GetEffectiveMassImpl(com, scaledMass.InverseInertia, impulse, point);
         }
 
-#if ENABLE_TRANSFORM_V1
-        /// <summary>
-        /// Obsolete. Use <see cref="GetEffectiveMass(Unity.Physics.PhysicsMass,Unity.Mathematics.float3,Unity.Mathematics.quaternion,float,Unity.Mathematics.float3,Unity.Mathematics.float3)"/> instead.
-        /// </summary>
-        ///
-        /// <param name="bodyMass">         The body's <see cref="PhysicsMass"/> component. </param>
-        /// <param name="bodyPosition">     The body's world-space position. </param>
-        /// <param name="bodyOrientation">  The body's world-space rotation. </param>
-        /// <param name="bodyScale">        The body's uniform scale. </param>
-        /// <param name="impulse">          An impulse in world space. </param>
-        /// <param name="point">            A point in world space. </param>
-        ///
-        /// <returns>   A body's effective mass with respect to the specified point and impulse. </returns>
-        [Obsolete("This variant will be removed with Transform V1; use the V2-compatible version instead.", true)]
-        public static float GetEffectiveMass(in this PhysicsMass bodyMass, in Translation bodyPosition, in Rotation bodyOrientation, in Scale bodyScale, float3 impulse, float3 point)
-        {
-            return bodyMass.GetEffectiveMass(bodyPosition.Value, bodyOrientation.Value, bodyScale.Value, impulse, point);
-        }
-
-#endif
-
         /// <summary>   Get the center of mass in world space. </summary>
         ///
         /// <param name="bodyMass">         The body's <see cref="PhysicsMass"/> component. </param>
@@ -148,21 +95,6 @@ namespace Unity.Physics.Extensions
         /// <returns>   The center of mass in world space. </returns>
         public static float3 GetCenterOfMassWorldSpace(in this PhysicsMass bodyMass, float bodyScale, in float3 bodyPosition, in quaternion bodyOrientation) =>
             math.rotate(bodyOrientation, bodyMass.CenterOfMass * bodyScale) + bodyPosition;
-#if ENABLE_TRANSFORM_V1
-        /// <summary>
-        /// Obsolete. Use <see cref="GetCenterOfMassWorldSpace(Unity.Physics.PhysicsMass,float,Unity.Mathematics.float3,Unity.Mathematics.quaternion)"/> instead.
-        /// </summary>
-        ///
-        /// <param name="bodyMass">         The body's <see cref="PhysicsMass"/> component. </param>
-        /// <param name="bodyScale">        The body's uniform scale. </param>
-        /// <param name="bodyPosition">     The body's world-space position. </param>
-        /// <param name="bodyOrientation">  The body's world-space rotation. </param>
-        ///
-        /// <returns>   The center of mass in world space. </returns>
-        [Obsolete("This variant will be removed with Transform V1; use the V2-compatible version instead.", true)]
-        public static float3 GetCenterOfMassWorldSpace(in this PhysicsMass bodyMass, in Scale bodyScale, in Translation bodyPosition, in Rotation bodyOrientation) =>
-            bodyMass.GetCenterOfMassWorldSpace(bodyScale.Value, bodyPosition.Value, bodyOrientation.Value);
-#endif
 
         /// <summary>
         /// Get the center of mass in world space. Assumes that there is no scale.
@@ -176,21 +108,6 @@ namespace Unity.Physics.Extensions
         /// <returns>   The center of mass world space. </returns>
         public static float3 GetCenterOfMassWorldSpace(in this PhysicsMass bodyMass, in float3 bodyPosition, in quaternion bodyOrientation) =>
             bodyMass.GetCenterOfMassWorldSpace(1.0f, bodyPosition, bodyOrientation);
-#if ENABLE_TRANSFORM_V1
-        /// <summary>
-        /// Obsolete. Use <see cref="GetCenterOfMassWorldSpace(Unity.Physics.PhysicsMass, in Unity.Mathematics.float3, Unity.Mathematics.quaternion)"/> instead.
-        /// </summary>
-        /// <seealso cref="GetCenterOfMassWorldSpace(in Unity.Physics.PhysicsMass,float,in Unity.Mathematics.float3,in Unity.Mathematics.quaternion)"/>
-        ///
-        /// <param name="bodyMass">         The body mass. </param>
-        /// <param name="bodyPosition">     The body position. </param>
-        /// <param name="bodyOrientation">  The body orientation. </param>
-        ///
-        /// <returns>   The center of mass world space. </returns>
-        [Obsolete("This variant will be removed with Transform V1; use the V2-compatible version instead.", true)]
-        public static float3 GetCenterOfMassWorldSpace(in this PhysicsMass bodyMass, in Translation bodyPosition, in Rotation bodyOrientation) =>
-            bodyMass.GetCenterOfMassWorldSpace(1.0f, bodyPosition.Value, bodyOrientation.Value);
-#endif
 
         /// <summary>   Set the center of mass in world space. </summary>
         ///
@@ -204,24 +121,6 @@ namespace Unity.Physics.Extensions
             math.rotate(math.inverse(bodyOrientation), com);
             bodyMass.CenterOfMass = com;
         }
-
-#if ENABLE_TRANSFORM_V1
-        /// <summary>
-        /// Obsolete. Use <see cref="SetCenterOfMassWorldSpace(ref Unity.Physics.PhysicsMass, Unity.Mathematics.float3, Unity.Mathematics.quaternion, Unity.Mathematics.float3)"/> instead.
-        /// </summary>
-        ///
-        /// <param name="bodyMass">        [in,out] The body's <see cref="PhysicsMass"/> component. </param>
-        /// <param name="bodyPosition">     The body's world-space position. </param>
-        /// <param name="bodyOrientation">  The body's world-space rotation. </param>
-        /// <param name="com">              A position in world space for the new Center Of Mass. </param>
-        [Obsolete("This variant will be removed with Transform V1; use the V2-compatible version instead.", true)]
-        public static void SetCenterOfMassWorldSpace(ref this PhysicsMass bodyMass, in Translation bodyPosition,
-            in Rotation bodyOrientation, float3 com)
-        {
-            bodyMass.SetCenterOfMassWorldSpace(bodyPosition.Value, bodyOrientation.Value, com);
-        }
-
-#endif
 
         /// <summary>   Get the linear velocity of a rigid body at a given point (in world space) </summary>
         ///
@@ -240,26 +139,6 @@ namespace Unity.Physics.Extensions
             return PhysicsWorldExtensions.GetLinearVelocityImpl(worldFromMotion, bodyVelocity.Angular, bodyVelocity.Linear, point);
         }
 
-#if ENABLE_TRANSFORM_V1
-        /// <summary>
-        /// Obsolete. Use <see cref="GetLinearVelocity(Unity.Physics.PhysicsVelocity,Unity.Physics.PhysicsMass,Unity.Mathematics.float3,Unity.Mathematics.quaternion,Unity.Mathematics.float3)"/> instead.
-        /// </summary>
-        ///
-        /// <param name="bodyVelocity">     The body's <see cref="PhysicsVelocity"/> component. </param>
-        /// <param name="bodyMass">         The body's <see cref="PhysicsMass"/> component. </param>
-        /// <param name="bodyPosition">     The body's world-space position. </param>
-        /// <param name="bodyOrientation">  The body's world-space rotation. </param>
-        /// <param name="point">            A reference position in world space. </param>
-        ///
-        /// <returns>   The linear velocity of a rigid body at a given point (in world space) </returns>
-        [Obsolete("This variant will be removed with Transform V1; use the V2-compatible version instead.", true)]
-        public static float3 GetLinearVelocity(in this PhysicsVelocity bodyVelocity, PhysicsMass bodyMass, Translation bodyPosition, Rotation bodyOrientation, float3 point)
-        {
-            return bodyVelocity.GetLinearVelocity(bodyMass, bodyPosition.Value, bodyOrientation.Value, point);
-        }
-
-#endif
-
         /// <summary>   Get the world-space angular velocity of a rigid body. </summary>
         ///
         /// <param name="bodyVelocity">     The body's <see cref="PhysicsVelocity"/> component. </param>
@@ -272,24 +151,6 @@ namespace Unity.Physics.Extensions
             quaternion worldFromMotion = math.mul(bodyOrientation, bodyMass.InertiaOrientation);
             return math.rotate(worldFromMotion, bodyVelocity.Angular);
         }
-
-#if ENABLE_TRANSFORM_V1
-        /// <summary>
-        /// Obsolete. Use <see cref="GetAngularVelocityWorldSpace(Unity.Physics.PhysicsVelocity,Unity.Physics.PhysicsMass,Unity.Mathematics.quaternion)"/> instead.
-        /// </summary>
-        ///
-        /// <param name="bodyVelocity">     The body's <see cref="PhysicsVelocity"/> component. </param>
-        /// <param name="bodyMass">         The body's <see cref="PhysicsMass"/> component. </param>
-        /// <param name="bodyOrientation">  The body's world-space rotation. </param>
-        ///
-        /// <returns>   The angular velocity of a rigid body in world space. </returns>
-        [Obsolete("This variant will be removed with Transform V1; use the V2-compatible version instead.", true)]
-        public static float3 GetAngularVelocityWorldSpace(in this PhysicsVelocity bodyVelocity, in PhysicsMass bodyMass, in Rotation bodyOrientation)
-        {
-            return bodyVelocity.GetAngularVelocityWorldSpace(bodyMass, bodyOrientation.Value);
-        }
-
-#endif
 
         /// <summary>   Set the world-space angular velocity of a rigid body. </summary>
         ///
@@ -304,24 +165,6 @@ namespace Unity.Physics.Extensions
             float3 angularVelocityInertiaSpace = math.rotate(math.inverse(inertiaOrientationInWorldSpace), angularVelocity);
             bodyVelocity.Angular = angularVelocityInertiaSpace;
         }
-
-#if ENABLE_TRANSFORM_V1
-        /// <summary>
-        /// Obsolete. Use <see cref="SetAngularVelocityWorldSpace(ref Unity.Physics.PhysicsVelocity,Unity.Physics.PhysicsMass,Unity.Mathematics.quaternion,Unity.Mathematics.float3)"/> instead.
-        /// </summary>
-        ///
-        /// <param name="bodyVelocity">    [in,out] The body's <see cref="PhysicsVelocity"/> component. </param>
-        /// <param name="bodyMass">         The body's <see cref="PhysicsMass"/> component. </param>
-        /// <param name="bodyOrientation">  The body's world-space rotation. </param>
-        /// <param name="angularVelocity"> An angular velocity in world space specifying radians per
-        /// second about each axis. </param>
-        [Obsolete("This variant will be removed with Transform V1; use the V2-compatible version instead.", true)]
-        public static void SetAngularVelocityWorldSpace(ref this PhysicsVelocity bodyVelocity, in PhysicsMass bodyMass, in Rotation bodyOrientation, in float3 angularVelocity)
-        {
-            bodyVelocity.SetAngularVelocityWorldSpace(bodyMass, bodyOrientation.Value, angularVelocity);
-        }
-
-#endif
 
         /// <summary>
         /// Converts a force into an impulse based on the force mode and the bodies mass and inertia
@@ -346,28 +189,6 @@ namespace Unity.Physics.Extensions
             }
             scaledBodyMass.GetImpulseFromForce(force, mode, timestep, out impulse, out impulseMass);
         }
-
-#if ENABLE_TRANSFORM_V1
-        /// <summary>
-        /// Obsolete. Use <see cref="GetImpulseFromForce(Unity.Physics.PhysicsMass,float,Unity.Mathematics.float3,Unity.Physics.Extensions.ForceMode,float, out Unity.Mathematics.float3, out Unity.Mathematics.float3)"/> instead.
-        /// </summary>
-        ///
-        /// <param name="bodyMass">     The body's <see cref="PhysicsMass"/> component. </param>
-        /// <param name="bodyScale">    The body's uniform scale. </param>
-        /// <param name="force">        The force to be applied to a body. </param>
-        /// <param name="mode">         The method used to apply the force to its targets. </param>
-        /// <param name="timestep">     The change in time from the current to the next frame. </param>
-        /// <param name="impulse">     [out] A returned impulse proportional to the provided 'force' and
-        /// based on the supplied 'mode'. </param>
-        /// <param name="impulseMass"> [out] A returned PhysicsMass component to be passed to an Apply
-        /// function. </param>
-        [Obsolete("This variant will be removed with Transform V1; use the V2-compatible version instead.", true)]
-        public static void GetImpulseFromForce(in this PhysicsMass bodyMass, in Scale bodyScale, in float3 force, in ForceMode mode, in float timestep, out float3 impulse, out PhysicsMass impulseMass)
-        {
-            bodyMass.GetImpulseFromForce(bodyScale.Value, force, mode, timestep, out impulse, out impulseMass);
-        }
-
-#endif
 
         /// <summary>
         /// Converts a force into an impulse based on the force mode and the bodies mass and inertia
@@ -506,47 +327,6 @@ namespace Unity.Physics.Extensions
             bodyVelocity.ApplyImpulse(impulseMass, bodyPosition, bodyOrientation, impulse, closestHitPositionWorld);
         }
 
-#if ENABLE_TRANSFORM_V1
-        /// <summary>
-        /// Obsolete. Use <see cref="ApplyExplosionForce(ref Unity.Physics.PhysicsVelocity,Unity.Physics.PhysicsMass,Unity.Physics.PhysicsCollider,Unity.Mathematics.float3,Unity.Mathematics.quaternion,float,float,Unity.Mathematics.float3,float,float,Unity.Mathematics.float3,Unity.Physics.CollisionFilter,float,Unity.Physics.Extensions.ForceMode)"/> instead.
-        /// </summary>
-        ///
-        /// <param name="bodyVelocity">      [in,out] The body's <see cref="PhysicsVelocity"/> component. </param>
-        /// <param name="bodyMass">             The body's <see cref="PhysicsMass"/> component. </param>
-        /// <param name="bodyCollider">         The body's <see cref="PhysicsCollider"/> component. </param>
-        /// <param name="bodyPosition">         The body's world-space position. </param>
-        /// <param name="bodyOrientation">      The body's world-space rotation. </param>
-        /// <param name="bodyScale">            The body's world-space scale. </param>
-        /// <param name="explosionForce">    The force of the explosion (which may be modified by
-        /// distance). </param>
-        /// <param name="explosionPosition"> The centre of the sphere within which the explosion has its
-        /// effect. </param>
-        /// <param name="explosionRadius">   The radius of the sphere within which the explosion has its
-        /// effect. </param>
-        /// <param name="timestep">          The change in time from the current to the next frame. </param>
-        /// <param name="up">                A vector defining the up direction, generally a unit vector
-        /// in the opposite direction to <see cref="PhysicsStep"/>.Gravity. </param>
-        /// <param name="explosionFilter">   Filter determining whether an explosion should be applied to
-        /// the body. </param>
-        /// <param name="upwardsModifier">   (Optional) Adjustment to the apparent position of the
-        /// explosion to make it seem to lift objects. </param>
-        /// <param name="mode">              (Optional) The method used to apply the force to its targets. </param>
-        [Obsolete("This variant will be removed with Transform V1; use the V2-compatible version instead.", true)]
-        public static void ApplyExplosionForce(
-            ref this PhysicsVelocity bodyVelocity, in PhysicsMass bodyMass, in PhysicsCollider bodyCollider,
-            in Translation bodyPosition, in Rotation bodyOrientation, in Scale bodyScale,
-            float explosionForce, in float3 explosionPosition, in float explosionRadius,
-            in float timestep, in float3 up, in CollisionFilter explosionFilter,
-            in float upwardsModifier = 0, ForceMode mode = ForceMode.Force)
-        {
-            bodyVelocity.ApplyExplosionForce(bodyMass, bodyCollider, bodyPosition.Value, bodyOrientation.Value,
-                bodyScale.Value,
-                explosionForce, explosionPosition, explosionRadius, timestep, up, explosionFilter,
-                upwardsModifier, mode);
-        }
-
-#endif
-
         /// <summary>
         /// Converts a force into an impulse based on the force mode and the bodies mass and inertia
         /// properties. Equivalent to UnityEngine.Rigidbody.AddExplosionForce. ExplosionFilter is set to
@@ -577,37 +357,6 @@ namespace Unity.Physics.Extensions
                 explosionPosition, explosionRadius, timestep, up, CollisionFilter.Default, upwardsModifier, mode);
         }
 
-#if ENABLE_TRANSFORM_V1
-        /// <summary>
-        /// Obsolete. Use <see cref="ApplyExplosionForce(ref Unity.Physics.PhysicsVelocity,Unity.Physics.PhysicsMass,Unity.Physics.PhysicsCollider,Unity.Mathematics.float3,Unity.Mathematics.quaternion,float,Unity.Mathematics.float3,float,float,Unity.Mathematics.float3,float,Unity.Physics.Extensions.ForceMode)"/> instead.
-        /// </summary>
-        ///
-        /// <param name="bodyVelocity">         [in,out] The body velocity. </param>
-        /// <param name="bodyMass">             The body mass. </param>
-        /// <param name="bodyCollider">         The body collider. </param>
-        /// <param name="bodyPosition">         The body position. </param>
-        /// <param name="bodyOrientation">      The body orientation. </param>
-        /// <param name="explosionForce">       The explosion force. </param>
-        /// <param name="explosionPosition">    The explosion position. </param>
-        /// <param name="explosionRadius">      The explosion radius. </param>
-        /// <param name="timestep">             The timestep. </param>
-        /// <param name="up">                   The up. </param>
-        /// <param name="upwardsModifier">      (Optional) The upwards modifier. </param>
-        /// <param name="mode">                 (Optional) The mode. </param>
-        [Obsolete("This variant will be removed with Transform V1; use the V2-compatible version instead.", true)]
-        public static void ApplyExplosionForce(
-            ref this PhysicsVelocity bodyVelocity, in PhysicsMass bodyMass, in PhysicsCollider bodyCollider,
-            in Translation bodyPosition, in Rotation bodyOrientation,
-            float explosionForce, in float3 explosionPosition, in float explosionRadius,
-            in float timestep, in float3 up,
-            in float upwardsModifier = 0, ForceMode mode = ForceMode.Force)
-        {
-            bodyVelocity.ApplyExplosionForce(bodyMass, bodyCollider, bodyPosition.Value, bodyOrientation.Value, 1.0f, explosionForce,
-                explosionPosition, explosionRadius, timestep, up, CollisionFilter.Default, upwardsModifier, mode);
-        }
-
-#endif
-
         /// <summary>   Applies the impulse. </summary>
         ///
         /// <param name="pv">       [in,out] The velocity. </param>
@@ -620,25 +369,6 @@ namespace Unity.Physics.Extensions
         {
             pv.ApplyImpulse(pm, t, r, 1.0f, impulse, point);
         }
-
-#if ENABLE_TRANSFORM_V1
-        /// <summary>
-        /// Obsolete. use <see cref="ApplyImpulse(ref Unity.Physics.PhysicsVelocity,Unity.Physics.PhysicsMass,Unity.Mathematics.float3,Unity.Mathematics.quaternion,Unity.Mathematics.float3,Unity.Mathematics.float3)"/> instead.
-        /// </summary>
-        ///
-        /// <param name="pv">       [in,out] The velocity. </param>
-        /// <param name="pm">       The mass. </param>
-        /// <param name="t">        The body position. </param>
-        /// <param name="r">        The body rotation. </param>
-        /// <param name="impulse">  The impulse. </param>
-        /// <param name="point">    The point. </param>
-        [Obsolete("This variant will be removed with Transform V1; use the V2-compatible version instead.", true)]
-        public static void ApplyImpulse(ref this PhysicsVelocity pv, in PhysicsMass pm, in Translation t, in Rotation r, in float3 impulse, in float3 point)
-        {
-            pv.ApplyImpulse(pm, t.Value, r.Value, 1.0f, impulse, point);
-        }
-
-#endif
 
         /// <summary>   Applies the impulse. </summary>
         ///
@@ -668,27 +398,6 @@ namespace Unity.Physics.Extensions
             }
         }
 
-#if ENABLE_TRANSFORM_V1
-        /// <summary>
-        /// Obsolete. Use <see cref="ApplyImpulse(ref Unity.Physics.PhysicsVelocity,Unity.Physics.PhysicsMass,Unity.Mathematics.float3,Unity.Mathematics.quaternion,float,Unity.Mathematics.float3,Unity.Mathematics.float3)"/> instead.
-        /// </summary>
-        ///
-        /// <param name="pv">           [in,out] The velocity. </param>
-        /// <param name="pm">           The mass. </param>
-        /// <param name="t">            The body position. </param>
-        /// <param name="r">            Tge body rotation. </param>
-        /// <param name="bodyScale">    The body scale. </param>
-        /// <param name="impulse">      The impulse. </param>
-        /// <param name="point">        The point. </param>
-        [Obsolete("This variant will be removed with Transform V1; use the V2-compatible version instead.", true)]
-        public static void ApplyImpulse(ref this PhysicsVelocity pv, in PhysicsMass pm, in Translation t, in Rotation r,
-            in Scale bodyScale, in float3 impulse, in float3 point)
-        {
-            pv.ApplyImpulse(pm, t.Value, r.Value, bodyScale.Value, impulse, point);
-        }
-
-#endif
-
         /// <summary>   Applies the linear impulse. </summary>
         ///
         /// <param name="velocityData"> [in,out] Information describing the velocity. </param>
@@ -711,23 +420,6 @@ namespace Unity.Physics.Extensions
             velocityData.ApplyLinearImpulse(scaledMass, impulse);
         }
 
-#if ENABLE_TRANSFORM_V1
-        /// <summary>
-        /// Obsolete. Use <see cref="ApplyLinearImpulse(ref Unity.Physics.PhysicsVelocity,Unity.Physics.PhysicsMass,float, Unity.Mathematics.float3)"/> instead.
-        /// </summary>
-        ///
-        /// <param name="velocityData"> [in,out] Information describing the velocity. </param>
-        /// <param name="massData">     Information describing the mass. </param>
-        /// <param name="bodyScale">    The body scale. </param>
-        /// <param name="impulse">      The impulse. </param>
-        [Obsolete("This variant will be removed with Transform V1; use the V2-compatible version instead.", true)]
-        public static void ApplyLinearImpulse(ref this PhysicsVelocity velocityData, in PhysicsMass massData, in Scale bodyScale, in float3 impulse)
-        {
-            velocityData.ApplyLinearImpulse(massData, bodyScale.Value, impulse);
-        }
-
-#endif
-
         /// <summary>   Applies the angular impulse. </summary>
         ///
         /// <param name="velocityData"> [in,out] Information describing the velocity. </param>
@@ -749,23 +441,6 @@ namespace Unity.Physics.Extensions
             var scaledMass = massData.ApplyScale(bodyScale);
             velocityData.ApplyAngularImpulse(scaledMass, impulse);
         }
-
-#if ENABLE_TRANSFORM_V1
-        /// <summary>
-        /// Obsolete. Use <see cref="ApplyAngularImpulse(ref Unity.Physics.PhysicsVelocity,Unity.Physics.PhysicsMass,float,Unity.Mathematics.float3)"/> instead.
-        /// </summary>
-        ///
-        /// <param name="velocityData"> [in,out] Information describing the velocity. </param>
-        /// <param name="massData">     Information describing the mass. </param>
-        /// <param name="bodyScale">    The body scale. </param>
-        /// <param name="impulse">      The impulse. </param>
-        [Obsolete("This variant will be removed with Transform V1; use the V2-compatible version instead.", true)]
-        public static void ApplyAngularImpulse(ref this PhysicsVelocity velocityData, in PhysicsMass massData, in Scale bodyScale, in float3 impulse)
-        {
-            velocityData.ApplyAngularImpulse(massData, bodyScale.Value, impulse);
-        }
-
-#endif
 
         /// <summary>
         /// Compute a future position and orientation for a dynamic rigid body based on its current

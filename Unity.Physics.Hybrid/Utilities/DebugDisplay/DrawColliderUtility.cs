@@ -1,11 +1,14 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
-using Unity.Burst;
 using Unity.Mathematics;
 using UnityEngine;
 using Unity.Collections;
 using Unity.DebugDisplay;
 using UnityEditor;
+using Matrix4x4 = UnityEngine.Matrix4x4;
+using Quaternion = UnityEngine.Quaternion;
+using Vector3 = UnityEngine.Vector3;
 
 namespace Unity.Physics.Authoring
 {
@@ -20,6 +23,21 @@ namespace Unity.Physics.Authoring
         internal static List<Matrix4x4> staticCapsules;
         internal static List<Matrix4x4> staticCylinders;
         internal static List<Matrix4x4> staticCubes;
+
+        public struct PrimitiveInfo
+        {
+            public enum PrimitiveFlags : byte
+            {
+                Sphere = 1 << 0,
+                Capsule = 1 << 1,
+                Cylinder = 1 << 2,
+                Box = 1 << 3,
+                Dynamic = 1 << 4
+            }
+
+            public float4x4 Trs;
+            public PrimitiveFlags Flags;
+        }
 
 #if UNITY_EDITOR
         private static readonly UnityEngine.Material meshDynamicFacesMaterial =
@@ -103,72 +121,6 @@ namespace Unity.Physics.Authoring
             }
         }
 
-        // Takes the output from the primitive NativeList in the DisplayCollidersSystem and puts it into a C# List.
-        // These Lists are used during the PhysicsDebugDisplaySystem.OnUpdate to render the collider faces
-        internal static void SaveTRSList(NativeList<DisplayBodyColliders.PrimitiveInfo> primitives)
-        {
-            if (dynamicSpheres == null || dynamicCapsules == null || dynamicCylinders == null
-                || dynamicCubes == null || staticSpheres == null || staticCapsules == null || staticCylinders == null || staticCubes == null)
-            {
-                return;
-            }
-
-            for (int i = 0; i < primitives.Length; i++)
-            {
-                DisplayBodyColliders.PrimitiveInfo primitive = primitives[i];
-                Matrix4x4 trs = primitive.Trs;
-
-                var isDynamic = (primitive.Flags & DisplayBodyColliders.PrimitiveInfo.PrimitiveFlags.Dynamic) != 0;
-                if (trs.ValidTRS())
-                {
-                    if ((primitive.Flags & DisplayBodyColliders.PrimitiveInfo.PrimitiveFlags.Box) != 0)
-                    {
-                        if (isDynamic)
-                        {
-                            dynamicCubes.Add(trs);
-                        }
-                        else
-                        {
-                            staticCubes.Add(trs);
-                        }
-                    }
-                    else if ((primitive.Flags & DisplayBodyColliders.PrimitiveInfo.PrimitiveFlags.Sphere) != 0)
-                    {
-                        if (isDynamic)
-                        {
-                            dynamicSpheres.Add(trs);
-                        }
-                        else
-                        {
-                            staticSpheres.Add(trs);
-                        }
-                    }
-                    else if ((primitive.Flags & DisplayBodyColliders.PrimitiveInfo.PrimitiveFlags.Capsule) != 0)
-                    {
-                        if (isDynamic)
-                        {
-                            dynamicCapsules.Add(trs);
-                        }
-                        else
-                        {
-                            staticCapsules.Add(trs);
-                        }
-                    }
-                    else if ((primitive.Flags & DisplayBodyColliders.PrimitiveInfo.PrimitiveFlags.Cylinder) != 0)
-                    {
-                        if (isDynamic)
-                        {
-                            dynamicCylinders.Add(trs);
-                        }
-                        else
-                        {
-                            staticCylinders.Add(trs);
-                        }
-                    }
-                }
-            }
-        }
-
         internal static void DrawPrimitiveMeshes()
         {
             if (dynamicSpheres != null && dynamicSpheres.Count > 0) DrawBatches(PrimitiveType.Sphere, dynamicSpheres, true);
@@ -206,39 +158,121 @@ namespace Unity.Physics.Authoring
         }
     }
 
+    public readonly struct ColliderGeometry : IDisposable
+    {
+        public readonly NativeArray<Vector3> VerticesArray;
+        public readonly NativeArray<int> IndicesArray;
+        public readonly NativeArray<Vector3> EdgesArray;
+
+        public ColliderGeometry(NativeArray<Vector3> vertices, NativeArray<int> indices, NativeArray<Vector3> edgesArray)
+        {
+            VerticesArray = vertices;
+            IndicesArray = indices;
+            EdgesArray = edgesArray;
+        }
+
+        public void Dispose()
+        {
+            VerticesArray.Dispose();
+            IndicesArray.Dispose();
+            EdgesArray.Dispose();
+        }
+    }
+
+    public struct PrimitiveColliderGeometries : IDisposable
+    {
+        public ColliderGeometry CapsuleGeometry;
+        public ColliderGeometry BoxGeometry;
+        public ColliderGeometry CylinderGeometry;
+        public ColliderGeometry SphereGeometry;
+
+        public void Dispose()
+        {
+            CapsuleGeometry.Dispose();
+            BoxGeometry.Dispose();
+            CylinderGeometry.Dispose();
+            SphereGeometry.Dispose();
+        }
+    }
+
     static class DrawColliderUtility
     {
-        private static readonly DebugDisplay.ColorIndex DebugDynamicColor = DebugDisplay.ColorIndex.OrangeRed;
-        private static readonly DebugDisplay.ColorIndex DebugStaticColor = DebugDisplay.ColorIndex.Grey12;
+        private static readonly DebugDisplay.ColorIndex DebugDynamicColor = DebugDisplay.ColorIndex.DynamicMesh;
+        private static readonly DebugDisplay.ColorIndex DebugStaticColor = DebugDisplay.ColorIndex.StaticMesh;
+        private static readonly DebugDisplay.ColorIndex DebugKinematicColor = DebugDisplay.ColorIndex.KinematicMesh;
 
-        public static DebugDisplay.ColorIndex GetColorIndex(bool isDynamic)
+#if UNITY_EDITOR
+        private static void CreateGeometryArray(MeshType meshType, out ColliderGeometry outGeometry)
         {
-            if (isDynamic)
+            var vertices = new List<Vector3>();
+            var indices = new List<int>();
+            DebugMeshCache.GetMesh(meshType).GetVertices(vertices);
+            DebugMeshCache.GetMesh(meshType).GetIndices(indices, 0);
+
+            // We want to simplify the capsule wireframe
+            if (meshType == MeshType.Capsule)
             {
-                return DebugDynamicColor;
+                outGeometry = new ColliderGeometry(
+                    vertices.ToNativeArray(Allocator.Persistent),
+                    indices.ToNativeArray(Allocator.Persistent),
+                    DrawColliderUtility.CreateCapsuleWireFrame(Allocator.Persistent));
             }
-            else //is static
+            else
             {
-                return DebugStaticColor;
+                outGeometry = new ColliderGeometry(
+                    vertices.ToNativeArray(Allocator.Persistent),
+                    indices.ToNativeArray(Allocator.Persistent),
+                    new NativeArray<Vector3>(0, Allocator.Persistent));
             }
         }
 
-        [BurstDiscard]
-        public static void DrawPrimitiveSphereEdges(float radius, float3 center, RigidTransform wfc)
+        internal static void CreateGeometries(out PrimitiveColliderGeometries primitiveColliderGeometries)
+        {
+            CreateGeometryArray(MeshType.Capsule, out var capsuleGeometry);
+            CreateGeometryArray(MeshType.Cube, out var boxGeometry);
+            CreateGeometryArray(MeshType.Cylinder, out var cylinderGeometry);
+            CreateGeometryArray(MeshType.Sphere, out var sphereGeometry);
+
+            primitiveColliderGeometries = new PrimitiveColliderGeometries()
+            {
+                CapsuleGeometry = capsuleGeometry,
+                BoxGeometry = boxGeometry,
+                CylinderGeometry = cylinderGeometry,
+                SphereGeometry = sphereGeometry
+            };
+        }
+
+#endif
+
+        public static DebugDisplay.ColorIndex GetColorIndex(BodyMotionType motionType)
+        {
+            if (motionType == BodyMotionType.Dynamic)
+            {
+                return DebugDynamicColor;
+            }
+
+            if (motionType == BodyMotionType.Kinematic)
+            {
+                return DebugKinematicColor;
+            }
+
+            return DebugStaticColor;
+        }
+
+        public static void DrawPrimitiveSphereEdges(float radius, float3 center, RigidTransform wfc, ref ColliderGeometry sphereGeometry, float uniformScale)
         {
             var edgesColor = DebugDisplay.ColorIndex.Green;
-            var shapeScale = new float3(1.0f, 1.0f, 1.0f);
-            shapeScale = radius * shapeScale;
+            var shapeScale = new float3(radius * 2.0f); // Radius to scale : Multiple by 2
 
-            var sphereVertexList = DisplayBodyColliderEdges.SphereVertexList;
-            var sphereList = DisplayBodyColliderEdges.SphereList;
+            var sphereVerticesList = sphereGeometry.VerticesArray;
+            var sphereIndicesList = sphereGeometry.IndicesArray;
 
             var i = 0;
-            while (i < sphereList.Count)
+            while (i < sphereIndicesList.Length)
             {
-                var a = math.transform(wfc, center + shapeScale * sphereVertexList[sphereList[i + 0]]);
-                var b = math.transform(wfc, center + shapeScale * sphereVertexList[sphereList[i + 1]]);
-                var c = math.transform(wfc, center + shapeScale * sphereVertexList[sphereList[i + 2]]);
+                var a = math.transform(wfc, center + uniformScale * shapeScale * sphereVerticesList[sphereIndicesList[i + 0]]);
+                var b = math.transform(wfc, center + uniformScale * shapeScale * sphereVerticesList[sphereIndicesList[i + 1]]);
+                var c = math.transform(wfc, center + uniformScale * shapeScale * sphereVerticesList[sphereIndicesList[i + 2]]);
                 i += 3;
 
                 PhysicsDebugDisplaySystem.Line(a, b, edgesColor);
@@ -247,31 +281,126 @@ namespace Unity.Physics.Authoring
             }
         }
 
-        [BurstDiscard]
-        public static void DrawPrimitiveCapsuleEdges(float radius, float height, float3 center, RigidTransform wfc)
+        public static void DrawPrimitiveSphereFaces(float radius, float3 center, RigidTransform wfc, ref ColliderGeometry sphereGeometry, ColorIndex color, float uniformScale)
         {
-            var edgesColor = DebugDisplay.ColorIndex.Green;
-            var shapeScale = new float3(2.0f * radius, height, 2.0f * radius);
+            var shapeScale = new float3(radius * 2.0f) * uniformScale;
 
-            var capsuleEdgeList = DisplayBodyColliderEdges.CapsuleEdgeList;
+            var sphereVerticesList = sphereGeometry.VerticesArray;
+            var sphereIndicesList = sphereGeometry.IndicesArray;
 
             var i = 0;
-            while (i < capsuleEdgeList.Count)
+            while (i < sphereIndicesList.Length)
             {
-                var a = center + shapeScale * capsuleEdgeList[i];
-                var b = center + shapeScale * capsuleEdgeList[i + 1];
-                i += 2;
+                var a = math.transform(wfc, center + shapeScale * sphereVerticesList[sphereIndicesList[i + 0]]);
+                var b = math.transform(wfc, center + shapeScale * sphereVerticesList[sphereIndicesList[i + 1]]);
+                var c = math.transform(wfc, center + shapeScale * sphereVerticesList[sphereIndicesList[i + 2]]);
+                i += 3;
 
-                PhysicsDebugDisplaySystem.Line(math.transform(wfc, a), math.transform(wfc, b), edgesColor);
+                PhysicsDebugDisplaySystem.Triangle(a, b, c, math.cross(a, b), color);
             }
         }
 
-        private static void SetDiscSectionPoints(NativeArray<float3> dest, int count, float3 normalAxis, float3 from, float angle, float radius)
+        public static void DrawPrimitiveCapsuleEdges(float radius, float height, float3 center, Quaternion orientation, RigidTransform wfc, ref ColliderGeometry capsuleGeometry, float uniformScale)
         {
-            float3 startingPoint = math.normalize(from) * radius;
+            var edgesColor = DebugDisplay.ColorIndex.Green;
+            var shapeScale = new float3(2.0f * radius, height, 2.0f * radius) * uniformScale;
+
+            var capsuleEdges = capsuleGeometry.EdgesArray;
+
+            var i = 0;
+            while (i < capsuleEdges.Length)
+            {
+                var a = math.transform(wfc, center + math.rotate(orientation, shapeScale * capsuleEdges[i + 0]));
+                var b = math.transform(wfc, center + math.rotate(orientation, shapeScale * capsuleEdges[i + 1]));
+                i += 2;
+
+                PhysicsDebugDisplaySystem.Line(a, b, edgesColor);
+            }
+        }
+
+        public static void DrawPrimitiveCapsuleFaces(float radius, float height, float3 center, Quaternion orientation, RigidTransform wfc, ref ColliderGeometry capsuleGeometry, ColorIndex color, float uniformScale)
+        {
+            var shapeScale = new float3(2.0f * radius, height, 2.0f * radius);
+
+            var capsuleVerticesArray = capsuleGeometry.VerticesArray;
+            var capsuleIndicesArray = capsuleGeometry.IndicesArray;
+
+            var i = 0;
+            while (i < capsuleIndicesArray.Length)
+            {
+                var a = math.transform(wfc, center + math.rotate(orientation, uniformScale * shapeScale * capsuleVerticesArray[capsuleIndicesArray[i]]));
+                var b = math.transform(wfc, center + math.rotate(orientation, uniformScale * shapeScale * capsuleVerticesArray[capsuleIndicesArray[i + 1]]));
+                var c = math.transform(wfc, center + math.rotate(orientation, uniformScale * shapeScale * capsuleVerticesArray[capsuleIndicesArray[i + 2]]));
+                i += 3;
+
+                PhysicsDebugDisplaySystem.Triangle(a, b, c, math.cross(a, b), color);
+            }
+        }
+
+        public static void DrawPrimitiveBoxFaces(float3 size, float3 center, Quaternion orientation, RigidTransform wfc, ref ColliderGeometry boxGeometry, ColorIndex color, float uniformScale)
+        {
+            var boxVerticesArray = boxGeometry.VerticesArray;
+            var boxIndicesArray = boxGeometry.IndicesArray;
+
+            var i = 0;
+            while (i < boxIndicesArray.Length)
+            {
+                var a = math.transform(wfc, center + math.rotate(orientation, uniformScale * size * boxVerticesArray[boxIndicesArray[i]]));
+                var b = math.transform(wfc, center + math.rotate(orientation, uniformScale * size * boxVerticesArray[boxIndicesArray[i + 1]]));
+                var c = math.transform(wfc, center + math.rotate(orientation, uniformScale * size * boxVerticesArray[boxIndicesArray[i + 2]]));
+                i += 3;
+
+                PhysicsDebugDisplaySystem.Triangle(a, b, c, math.cross(a, b), color);
+            }
+        }
+
+        public static void DrawPrimitiveCylinderEdges(float radius, float height, float3 center, Quaternion orientation, RigidTransform wfc, ref ColliderGeometry cylinderGeometry, float uniformScale)
+        {
+            var edgesColor = DebugDisplay.ColorIndex.Green;
+            var shapeScale = new float3(2.0f * radius, height * 0.5f, 2.0f * radius) * uniformScale;
+
+            var cylinderVerticesArray = cylinderGeometry.VerticesArray;
+            var cylinderIndicesArray = cylinderGeometry.IndicesArray;
+
+            var i = 0;
+            while (i < cylinderIndicesArray.Length)
+            {
+                var a = math.transform(wfc, center + math.rotate(orientation, shapeScale * cylinderVerticesArray[cylinderIndicesArray[i]]));
+                var b = math.transform(wfc, center + math.rotate(orientation, shapeScale * cylinderVerticesArray[cylinderIndicesArray[i + 1]]));
+                var c = math.transform(wfc, center + shapeScale * math.rotate(orientation, cylinderVerticesArray[cylinderIndicesArray[i + 2]]));
+                i += 3;
+
+                PhysicsDebugDisplaySystem.Line(a, b, edgesColor);
+                PhysicsDebugDisplaySystem.Line(a, c, edgesColor);
+                PhysicsDebugDisplaySystem.Line(b, c, edgesColor);
+            }
+        }
+
+        public static void DrawPrimitiveCylinderFaces(float radius, float height, float3 center, Quaternion orientation, RigidTransform wfc, ref ColliderGeometry cylinderGeometry, ColorIndex color, float uniformScale)
+        {
+            var shapeScale = new float3(2.0f * radius, height * 0.5f, 2.0f * radius);
+
+            var cylinderVerticesArray = cylinderGeometry.VerticesArray;
+            var cylinderIndicesArray = cylinderGeometry.IndicesArray;
+
+            var i = 0;
+            while (i < cylinderIndicesArray.Length)
+            {
+                var a = math.transform(wfc, center + math.rotate(orientation, uniformScale * shapeScale * cylinderVerticesArray[cylinderIndicesArray[i]]));
+                var b = math.transform(wfc, center + math.rotate(orientation, uniformScale * shapeScale * cylinderVerticesArray[cylinderIndicesArray[i + 1]]));
+                var c = math.transform(wfc, center + shapeScale * math.rotate(orientation, uniformScale * cylinderVerticesArray[cylinderIndicesArray[i + 2]]));
+                i += 3;
+
+                PhysicsDebugDisplaySystem.Triangle(a, b, c, math.cross(a, b), color);
+            }
+        }
+
+        private static void SetDiscSectionPoints(NativeArray<Vector3> dest, int count, Vector3 normalAxis, Vector3 from, float angle, float radius)
+        {
+            Vector3 startingPoint = math.normalize(from) * radius;
             var step = angle * math.PI / 180f;
             var r = quaternion.AxisAngle(normalAxis, step / (count - 1));
-            float3 tangent = startingPoint;
+            Vector3 tangent = startingPoint;
             for (int i = 0; i < count; i++)
             {
                 dest[i] = tangent;
@@ -279,11 +408,11 @@ namespace Unity.Physics.Authoring
             }
         }
 
-        private static void GetWireArcSegments(ref NativeArray<float3> segmentArray, int segmentIndex, float3 center,
-            float3 normal, float3 from, float angle, float radius)
+        private static void GetWireArcSegments(ref NativeArray<Vector3> segmentArray, int segmentIndex, Vector3 center,
+            Vector3 normal, Vector3 from, float angle, float radius)
         {
             const int kMaxArcPoints = 15;
-            NativeArray<float3> sPoints = new NativeArray<float3>(kMaxArcPoints, Allocator.Temp);
+            NativeArray<Vector3> sPoints = new NativeArray<Vector3>(kMaxArcPoints, Allocator.Temp);
 
             SetDiscSectionPoints(sPoints, kMaxArcPoints, normal, from, angle, radius); //scaled by radius
 
@@ -311,7 +440,7 @@ namespace Unity.Physics.Authoring
         // Create a wireframe capsule with a default orientation along the y-axis. Use the general method of DrawWireArc
         // declared in GizmoUtil.cpp and with CapsuleBoundsHandle.DrawWireframe(). Output is an array that comprises
         // pairs of vertices to be used in the drawing of Capsule Collider Edges.
-        public static NativeArray<float3> DrawCapsuleWireFrame()
+        public static NativeArray<Vector3> CreateCapsuleWireFrame(Allocator allocator)
         {
             const float radius = 0.5f;
             const float height = 2.0f;
@@ -326,7 +455,7 @@ namespace Unity.Physics.Authoring
             var center2 = center - heightAx1 * (height * 0.5f - radius);
 
             // 15 segments * 2 float3s * 4 arcs + 4 lines * 2 float3s = 128 (+2 circles = 188)
-            NativeArray<float3> capsuleEdges = new NativeArray<float3>(128, Allocator.Temp); //or 188 if want extra circles
+            NativeArray<Vector3> capsuleEdges = new NativeArray<Vector3>(128, allocator); //or 188 if want extra circles
 
             GetWireArcSegments(ref capsuleEdges, 0, center1, heightAx2, heightAx3, 180f, radius);
             GetWireArcSegments(ref capsuleEdges, 30, center2, heightAx2, heightAx3, -180f, radius);

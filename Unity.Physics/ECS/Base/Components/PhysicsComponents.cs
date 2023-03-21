@@ -222,31 +222,6 @@ namespace Unity.Physics
             );
             return velocity;
         }
-
-#if ENABLE_TRANSFORM_V1
-        /// <summary>
-        /// Obsolete. Use <see cref="CalculateVelocityToTarget(Unity.Physics.PhysicsMass,Unity.Mathematics.float3,Unity.Mathematics.quaternion,Unity.Mathematics.RigidTransform,float)"/> instead.
-        /// </summary>
-        ///
-        /// <param name="bodyMass">         The body's <see cref="PhysicsMass"/> component. </param>
-        /// <param name="bodyPosition">     The body's world-space position. </param>
-        /// <param name="bodyOrientation">  The body's world-space rotation. </param>
-        /// <param name="targetTransform">  The desired translation and rotation values the body should
-        /// move to in world space. </param>
-        /// <param name="stepFrequency">   The step frequency in the simulation where the body's motion
-        /// is solved (i.e., 1 / FixedDeltaTime). </param>
-        ///
-        /// <returns>   The calculated velocity to target. </returns>
-        [Obsolete("This variant will be removed with Transform V1; use the V2-compatible version instead.", true)]
-        public static PhysicsVelocity CalculateVelocityToTarget(
-            in PhysicsMass bodyMass, in Translation bodyPosition, in Rotation bodyOrientation,
-            in RigidTransform targetTransform, in float stepFrequency
-        )
-        {
-            return CalculateVelocityToTarget(bodyMass, bodyPosition.Value, bodyOrientation.Value, targetTransform, stepFrequency);
-        }
-
-#endif
     }
 
     /// <summary>

@@ -18,30 +18,16 @@ using LegacyMeshCollider = UnityEngine.MeshCollider;
 
 namespace Unity.Physics.Tests.Authoring
 {
-    // mirrors some functionality in SubSceneConversionTests
+    // Conversion system integration tests for physics shapes, including legacy physics
     class PhysicsShapeConversionSystem_SubScene_IntegrationTests
+        : ConversionSystem_SubScene_IntegrationTestsFixture
     {
-        string TemporaryAssetsPath { get; set; }
-
         UnityMesh NonReadableMesh { get; set; }
 
-        World PreviousGameObjectInjectionWorld { get; set; }
-
-        PlayerLoopSystem PreviousPlayerLoop { get; set; }
-
-        static readonly Regex k_NonWords = new Regex(@"\W");
-
         [OneTimeSetUp]
-        public void OneTimeSetUp()
+        protected new void OneTimeSetUp()
         {
-            // set up temporary GameObject injection world
-            PreviousGameObjectInjectionWorld = World.DefaultGameObjectInjectionWorld;
-            PreviousPlayerLoop = PlayerLoop.GetCurrentPlayerLoop();
-            World.DefaultGameObjectInjectionWorld = default;
-            DefaultWorldInitialization.DefaultLazyEditModeInitialize();
-
-            // create folder for temporary assets
-            TemporaryAssetsPath = AssetDatabase.GUIDToAssetPath(AssetDatabase.CreateFolder("Assets", "SubScene_IntegrationTests"));
+            base.OneTimeSetUp();
 
             // create non-readable mesh asset
             NonReadableMesh = UnityMesh.Instantiate(Resources.GetBuiltinResource<UnityMesh>("New-Cylinder.fbx"));
@@ -50,77 +36,13 @@ namespace Unity.Physics.Tests.Authoring
             AssetDatabase.CreateAsset(NonReadableMesh, $"{TemporaryAssetsPath}/NonReadableMesh.asset");
         }
 
-        [OneTimeTearDown]
-        public void OneTimeTearDown()
-        {
-            // restore GameObject injection world
-            if (World.DefaultGameObjectInjectionWorld != default)
-                World.DefaultGameObjectInjectionWorld.Dispose();
-            if (PreviousGameObjectInjectionWorld != default && !PreviousGameObjectInjectionWorld.IsCreated)
-                PreviousGameObjectInjectionWorld = default;
-            World.DefaultGameObjectInjectionWorld = PreviousGameObjectInjectionWorld;
-            PlayerLoop.SetPlayerLoop(PreviousPlayerLoop);
-
-            // open an empty scene
-            EditorSceneManager.SetActiveScene(EditorSceneManager.NewScene(NewSceneSetup.EmptyScene));
-
-            // clean up scene dependency cache
-            const string k_SceneDependencyCachePath = "Assets/SceneDependencyCache";
-            if (AssetDatabase.IsValidFolder(k_SceneDependencyCachePath))
-                AssetDatabase.DeleteAsset(k_SceneDependencyCachePath);
-
-            // delete all temporary assets
-            AssetDatabase.DeleteAsset(TemporaryAssetsPath);
-        }
-
-        string TestNameWithoutSpecialCharacters =>
-            k_NonWords.Replace(TestContext.CurrentContext.Test.Name, string.Empty);
-
-        SubScene CreateSubScene(Action createSubSceneObjects)
-        {
-            // create sub-scene with objects
-            var subScene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene);
-            var subScenePath = $"{TemporaryAssetsPath}/{TestNameWithoutSpecialCharacters}-subScene.unity";
-            AssetDatabase.DeleteAsset(subScenePath);
-            createSubSceneObjects.Invoke();
-            EditorSceneManager.SaveScene(subScene, subScenePath);
-
-            // create parent scene
-            var parentScene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene);
-            var parentScenePath = $"{TemporaryAssetsPath}/{TestNameWithoutSpecialCharacters}-parentScene.unity";
-            AssetDatabase.DeleteAsset(parentScenePath);
-
-            // create GameObject with SubScene component
-            var subSceneMB = new GameObject(subScene.name).AddComponent<SubScene>();
-            Undo.RecordObject(subSceneMB, "Assign sub-scene");
-            subSceneMB.SceneAsset = AssetDatabase.LoadAssetAtPath<SceneAsset>(subScenePath);
-            subSceneMB.AutoLoadScene = true;
-            EditorSceneManager.SaveScene(parentScene, parentScenePath);
-            SceneManager.SetActiveScene(parentScene);
-
-            return subSceneMB;
-        }
-
-        void CreateSubSceneAndAssert<T>(Action<T> configureSubSceneObject, ColliderType expectedColliderType)
+        void CreateSubSceneAndValidate<T>(Action<T> configureSubSceneObject, ColliderType expectedColliderType)
             where T : Component
         {
-            // create sub-scene
-            var subScene = CreateSubScene(() =>
-            {
-                var shape = new GameObject(TestNameWithoutSpecialCharacters).AddComponent<T>();
-                configureSubSceneObject(shape);
-            });
-
-            // convert and load sub-scene
-            var world = World.DefaultGameObjectInjectionWorld;
-            var sceneEntity = SceneSystem.LoadSceneAsync(world.Unmanaged, subScene.SceneGUID, new SceneSystem.LoadParameters
-            {
-                Flags = SceneLoadFlags.BlockOnImport | SceneLoadFlags.BlockOnStreamIn
-            });
-            // TODO: Editor doesn't update if it doesn't have focus, so we must explicitly update the world to process the load.
-            world.Update();
+            CreateAndLoadSubScene(configureSubSceneObject);
 
             // check result
+            var world = World.DefaultGameObjectInjectionWorld;
             using (var group = world.EntityManager.CreateEntityQuery(typeof(PhysicsCollider)))
             using (var bodies = group.ToComponentDataArray<PhysicsCollider>(Allocator.Persistent))
             {
@@ -128,22 +50,20 @@ namespace Unity.Physics.Tests.Authoring
                 Assume.That(bodies[0].IsValid, Is.True);
                 Assert.That(bodies[0].Value.Value.Type, Is.EqualTo(expectedColliderType));
             }
-
-            SceneSystem.UnloadScene(world.Unmanaged, sceneEntity);
         }
 
         [Test]
         public void PhysicsShapeConversionSystem_WhenShapeIsConvexWithNonReadableMesh_IsInSubScene_DoesNotThrow() =>
-            CreateSubSceneAndAssert<PhysicsShapeAuthoring>(shape => shape.SetConvexHull(default, NonReadableMesh), ColliderType.Convex);
+            CreateSubSceneAndValidate<PhysicsShapeAuthoring>(shape => shape.SetConvexHull(default, NonReadableMesh), ColliderType.Convex);
 
         [Test]
         public void PhysicsShapeConversionSystem_WhenShapeIsMeshWithNonReadableMesh_IsInSubScene_DoesNotThrow() =>
-            CreateSubSceneAndAssert<PhysicsShapeAuthoring>(shape => shape.SetMesh(NonReadableMesh), ColliderType.Mesh);
+            CreateSubSceneAndValidate<PhysicsShapeAuthoring>(shape => shape.SetMesh(NonReadableMesh), ColliderType.Mesh);
 
 #if LEGACY_PHYSICS
         [Test]
         public void LegacyShapeConversionSystem_WhenShapeIsConvexWithNonReadableMesh_IsInSubScene_DoesNotThrow() =>
-            CreateSubSceneAndAssert<LegacyMeshCollider>(
+            CreateSubSceneAndValidate<LegacyMeshCollider>(
                 shape =>
                 {
                     shape.sharedMesh = NonReadableMesh;
@@ -154,7 +74,7 @@ namespace Unity.Physics.Tests.Authoring
 
         [Test]
         public void LegacyShapeConversionSystem_WhenShapeIsMeshWithNonReadableMesh_IsInSubScene_DoesNotThrow() =>
-            CreateSubSceneAndAssert<LegacyMeshCollider>(
+            CreateSubSceneAndValidate<LegacyMeshCollider>(
                 shape =>
                 {
                     shape.sharedMesh = NonReadableMesh;

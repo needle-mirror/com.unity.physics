@@ -16,7 +16,7 @@ namespace Unity.Physics.Systems
     // This is done to prevent race conditions if users put someting to UpdateIn[PhysicsInitializeGroup].
     // They shouldn't be doing so, but it is nice to prevent unresolvable race conditions.
     [UpdateInGroup(typeof(PhysicsInitializeGroup), OrderLast = true)]
-    internal class PhysicsInitializeGroupInternal : ComponentSystemGroup
+    internal partial class PhysicsInitializeGroupInternal : ComponentSystemGroup
     {
     }
 
@@ -203,12 +203,9 @@ namespace Unity.Physics.Systems
             [BurstCompile]
             internal struct RecordDynamicBodyIntegrity : IJobChunk
             {
-#if !ENABLE_TRANSFORM_V1
+
                 [ReadOnly] public ComponentTypeHandle<LocalTransform> LocalTransformType;
-#else
-                [ReadOnly] public ComponentTypeHandle<Translation> PositionType;
-                [ReadOnly] public ComponentTypeHandle<Rotation> RotationType;
-#endif
+
                 [ReadOnly] public ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
                 [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
 
@@ -232,21 +229,12 @@ namespace Unity.Physics.Systems
                     Assert.IsFalse(useEnabledMask);
                     AddOrIncrement(IntegrityCheckMap, chunk.GetOrderVersion());
                     AddOrIncrement(IntegrityCheckMap, chunk.GetChangeVersion(ref PhysicsVelocityType));
-#if !ENABLE_TRANSFORM_V1
+
                     if (chunk.Has(ref LocalTransformType))
                     {
                         AddOrIncrement(IntegrityCheckMap, chunk.GetChangeVersion(ref LocalTransformType));
                     }
-#else
-                    if (chunk.Has(ref PositionType))
-                    {
-                        AddOrIncrement(IntegrityCheckMap, chunk.GetChangeVersion(ref PositionType));
-                    }
-                    if (chunk.Has(ref RotationType))
-                    {
-                        AddOrIncrement(IntegrityCheckMap, chunk.GetChangeVersion(ref RotationType));
-                    }
-#endif
+
                     if (chunk.Has(ref PhysicsColliderType))
                     {
                         AddOrIncrement(IntegrityCheckMap, chunk.GetChangeVersion(ref PhysicsColliderType));
@@ -280,12 +268,9 @@ namespace Unity.Physics.Systems
             var dynamicBodyIntegrity = new Jobs.RecordDynamicBodyIntegrity
             {
                 IntegrityCheckMap = integrityCheckMap,
-#if !ENABLE_TRANSFORM_V1
+
                 LocalTransformType = buildPhysicsData.PhysicsData.ComponentHandles.LocalTransformType,
-#else
-                PositionType = buildPhysicsData.PhysicsData.ComponentHandles.PositionType,
-                RotationType = buildPhysicsData.PhysicsData.ComponentHandles.RotationType,
-#endif
+
                 PhysicsVelocityType = buildPhysicsData.PhysicsData.ComponentHandles.PhysicsVelocityType,
                 PhysicsColliderType = buildPhysicsData.PhysicsData.ComponentHandles.PhysicsColliderType
             };
@@ -524,7 +509,7 @@ namespace Unity.Physics.Systems
 
     [UpdateInGroup(typeof(PhysicsSimulationGroup))]
     [BurstCompile]
-    internal struct DummySimulationSystem : ISystem
+    internal partial struct DummySimulationSystem : ISystem
     {
         [BurstCompile]
         public void OnCreate(ref SystemState state)

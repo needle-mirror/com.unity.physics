@@ -18,13 +18,14 @@ namespace Unity.Physics.Authoring
 
     class PhysicsBodyAuthoringBaker : BasePhysicsBaker<PhysicsBodyAuthoring>
     {
-        public static List<UnityEngine.Collider> colliderComponents = new List<UnityEngine.Collider>();
-        public static List<PhysicsShapeAuthoring> physicsShapeComponents = new List<PhysicsShapeAuthoring>();
+        internal List<UnityEngine.Collider> colliderComponents = new List<UnityEngine.Collider>();
+        internal List<PhysicsShapeAuthoring> physicsShapeComponents = new List<PhysicsShapeAuthoring>();
 
         public override void Bake(PhysicsBodyAuthoring authoring)
         {
+            var entity = GetEntity(TransformUsageFlags.Dynamic);
             // To process later in the Baking System
-            AddComponent(new PhysicsBodyAuthoringData
+            AddComponent(entity, new PhysicsBodyAuthoringData
             {
                 IsDynamic = (authoring.MotionType == BodyMotionType.Dynamic),
                 Mass = authoring.Mass,
@@ -32,34 +33,33 @@ namespace Unity.Physics.Authoring
                 CustomMassDistribution = authoring.CustomMassDistribution
             });
 
-            AddSharedComponent(new PhysicsWorldIndex(authoring.WorldIndex));
+            AddSharedComponent(entity, new PhysicsWorldIndex(authoring.WorldIndex));
 
             var bodyTransform = GetComponent<Transform>();
 
             var motionType = authoring.MotionType;
             var hasSmoothing = authoring.Smoothing != BodySmoothing.None;
-            var hasPropagateLocalToWorld = hasSmoothing;
 
-            PostProcessTransform(bodyTransform, motionType, hasPropagateLocalToWorld);
+            PostProcessTransform(bodyTransform, motionType);
 
             var customTags = authoring.CustomTags;
             if (!customTags.Equals(CustomPhysicsBodyTags.Nothing))
-                AddComponent(new PhysicsCustomTags { Value = customTags.Value });
+                AddComponent(entity, new PhysicsCustomTags { Value = customTags.Value });
 
             // Check that there is at least one collider in the hierarchy to add these three
             GetComponentsInChildren(colliderComponents);
             GetComponentsInChildren(physicsShapeComponents);
             if (colliderComponents.Count > 0 || physicsShapeComponents.Count > 0)
             {
-                AddComponent(new PhysicsCompoundData()
+                AddComponent(entity, new PhysicsCompoundData()
                 {
                     AssociateBlobToBody = false,
                     ConvertedBodyInstanceID = authoring.GetInstanceID(),
                     Hash = default,
                 });
-                AddComponent<PhysicsRootBaked>();
-                AddComponent<PhysicsCollider>();
-                AddBuffer<PhysicsColliderKeyEntityPair>();
+                AddComponent<PhysicsRootBaked>(entity);
+                AddComponent<PhysicsCollider>(entity);
+                AddBuffer<PhysicsColliderKeyEntityPair>(entity);
             }
 
             if (authoring.MotionType == BodyMotionType.Static || IsStatic())
@@ -67,7 +67,7 @@ namespace Unity.Physics.Authoring
 
             var massProperties = MassProperties.UnitSphere;
 
-            AddComponent(authoring.MotionType == BodyMotionType.Dynamic ?
+            AddComponent(entity, authoring.MotionType == BodyMotionType.Dynamic ?
                 PhysicsMass.CreateDynamic(massProperties, authoring.Mass) :
                 PhysicsMass.CreateKinematic(massProperties));
 
@@ -76,19 +76,19 @@ namespace Unity.Physics.Authoring
                 Linear = authoring.InitialLinearVelocity,
                 Angular = authoring.InitialAngularVelocity
             };
-            AddComponent(physicsVelocity);
+            AddComponent(entity, physicsVelocity);
 
             if (authoring.MotionType == BodyMotionType.Dynamic)
             {
                 // TODO make these optional in editor?
-                AddComponent(new PhysicsDamping
+                AddComponent(entity, new PhysicsDamping
                 {
                     Linear = authoring.LinearDamping,
                     Angular = authoring.AngularDamping
                 });
                 if (authoring.GravityFactor != 1)
                 {
-                    AddComponent(new PhysicsGravityFactor
+                    AddComponent(entity, new PhysicsGravityFactor
                     {
                         Value = authoring.GravityFactor
                     });
@@ -96,7 +96,7 @@ namespace Unity.Physics.Authoring
             }
             else if (authoring.MotionType == BodyMotionType.Kinematic)
             {
-                AddComponent(new PhysicsGravityFactor
+                AddComponent(entity, new PhysicsGravityFactor
                 {
                     Value = 0
                 });
@@ -104,13 +104,10 @@ namespace Unity.Physics.Authoring
 
             if (hasSmoothing)
             {
-                AddComponent(new PhysicsGraphicalSmoothing());
-#if !ENABLE_TRANSFORM_V1
-                AddComponent(new PropagateLocalToWorld());
-#endif
+                AddComponent(entity, new PhysicsGraphicalSmoothing());
                 if (authoring.Smoothing == BodySmoothing.Interpolation)
                 {
-                    AddComponent(new PhysicsGraphicalInterpolationBuffer
+                    AddComponent(entity, new PhysicsGraphicalInterpolationBuffer
                     {
                         PreviousTransform = Math.DecomposeRigidBodyTransform(bodyTransform.localToWorldMatrix),
                         PreviousVelocity = physicsVelocity,

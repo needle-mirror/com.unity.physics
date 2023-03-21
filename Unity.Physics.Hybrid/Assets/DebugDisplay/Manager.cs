@@ -46,9 +46,7 @@ namespace Unity.DebugDisplay
         internal EightK      m_EightK;
         internal TriangleBuffer m_TriangleBuffer;
 
-        internal const int kMaxColors = 256;
-
-        internal bool initialized;
+        private bool initialized;
 
         internal UnsafeArray<float4> m_ColorData;
 
@@ -56,7 +54,7 @@ namespace Unity.DebugDisplay
         {
             if (initialized == false)
             {
-                var pal = stackalloc byte[256 * 3]
+                var pal = stackalloc byte[ColorIndex.staticColorCount * 3]
                 {
                     0x00, 0x00, 0x00, 0x00, 0x00, 0xaa, 0x00, 0xaa, 0x00, 0x00, 0xaa, 0xaa,
                     0xaa, 0x00, 0x00, 0xaa, 0x00, 0xaa, 0xaa, 0x55, 0x00, 0xaa, 0xaa, 0xaa,
@@ -119,13 +117,16 @@ namespace Unity.DebugDisplay
                     0x41, 0x2c, 0x2c, 0x41, 0x30, 0x2c, 0x41, 0x34, 0x2c, 0x41, 0x3c, 0x2c,
                     0x41, 0x41, 0x2c, 0x3c, 0x41, 0x2c, 0x34, 0x41, 0x2c, 0x30, 0x41, 0x2c,
                     0x2c, 0x41, 0x2c, 0x2c, 0x41, 0x30, 0x2c, 0x41, 0x34, 0x2c, 0x41, 0x3c,
-                    0x2c, 0x41, 0x41, 0x2c, 0x3c, 0x41, 0x2c, 0x34, 0x41, 0x2c, 0x30, 0x41,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+                    0x2c, 0x41, 0x41, 0x2c, 0x3c, 0x41, 0x2c, 0x34, 0x41, 0x2c, 0x30, 0x41
                 };
-                m_ColorData = new UnsafeArray<float4>(kMaxColors);
-                for (var i = 0; i < kMaxColors; ++i)
+
+                // Initialize and fill color data with static colors, and placeholders dynamic colors
+                m_ColorData = new UnsafeArray<float4>(ColorIndex.kMaxColors);
+                for (var i = 0; i < ColorIndex.staticColorCount; ++i)
                     m_ColorData[i] = new float4(pal[i * 3 + 2],  pal[i * 3 + 1], pal[i * 3 + 0], 255) / 255.0f;
+                for (var i = 0; i < ColorIndex.dynamicColorCount; ++i)
+                    m_ColorData[ColorIndex.staticColorCount + i] = float4.zero;
+
                 m_TextBuffer.Initialize();
                 m_GraphBuffer.Initialize();
                 m_LineBuffer.Initialize();
@@ -237,6 +238,32 @@ namespace Unity.DebugDisplay
             instance?.Dispose();
         }
 
+        private void UpdateDynamicColorsData()
+        {
+#if ENABLE_PHYSICS && UNITY_EDITOR
+            // Update ColorData for meshes
+            Unmanaged.Instance.Data.m_ColorData[ColorIndex.DynamicMesh.value] = new float4(
+                PhysicsVisualizationSettings.rigidbodyColor.r,
+                PhysicsVisualizationSettings.rigidbodyColor.g,
+                PhysicsVisualizationSettings.rigidbodyColor.b,
+                PhysicsVisualizationSettings.rigidbodyColor.a); // Dynamic
+            Unmanaged.Instance.Data.m_ColorData[ColorIndex.StaticMesh.value] = new float4(
+                PhysicsVisualizationSettings.staticColor.r,
+                PhysicsVisualizationSettings.staticColor.g,
+                PhysicsVisualizationSettings.staticColor.b,
+                PhysicsVisualizationSettings.staticColor.a); // Static
+            Unmanaged.Instance.Data.m_ColorData[ColorIndex.KinematicMesh.value] = new float4(
+                PhysicsVisualizationSettings.kinematicColor.r,
+                PhysicsVisualizationSettings.kinematicColor.g,
+                PhysicsVisualizationSettings.kinematicColor.b,
+                PhysicsVisualizationSettings.kinematicColor.a); // Kinematic
+#else
+            Unmanaged.Instance.Data.m_ColorData[ColorIndex.DynamicMesh.value] = Unmanaged.Instance.Data.m_ColorData[ColorIndex.BrightRed.value];
+            Unmanaged.Instance.Data.m_ColorData[ColorIndex.StaticMesh.value] = Unmanaged.Instance.Data.m_ColorData[ColorIndex.BrightBlack.value];
+            Unmanaged.Instance.Data.m_ColorData[ColorIndex.KinematicMesh.value] = Unmanaged.Instance.Data.m_ColorData[ColorIndex.BrightBlue.value];
+#endif
+        }
+
         internal void CopyFromCpuToGpu()
         {
             // Recreate compute buffer if needed.
@@ -254,6 +281,8 @@ namespace Unity.DebugDisplay
                 resources.lineMaterial.SetBuffer("colorBuffer", m_ColorBuffer);
                 resources.meshMaterial.SetBuffer("colorBuffer", m_ColorBuffer);
             }
+
+            UpdateDynamicColorsData();
 
             if (m_TextCellBuffer == null || m_TextCellBuffer.count != Unmanaged.Instance.Data.m_TextBuffer.m_Screen.m_Cell.Length)
             {

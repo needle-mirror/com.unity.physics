@@ -16,6 +16,11 @@ namespace Unity.Physics
         /// The Origin point of the Ray in query space.
         /// </summary>
         /// <value> Point vector coordinate. </value>
+        /// <remarks>
+        /// If the origin of the ray is an entity in a transform hierarchy, the entity's <see cref="LocalTransform"/>
+        /// component only stores its position relative to its parent entity. In this case, to compute the entity's
+        /// world-space transform for ray-casting purposes, use the <see cref="Unity.Transforms.Helpers.ComputeWorldTransformMatrix"/> method.
+        /// </remarks>
         public float3 Origin;
 
         /// <summary>

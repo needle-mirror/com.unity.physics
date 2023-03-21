@@ -44,19 +44,16 @@ namespace Unity.Physics.GraphicsIntegration
                 All = new ComponentType[]
                 {
                     typeof(PhysicsVelocity),
-#if !ENABLE_TRANSFORM_V1
+
                     typeof(LocalTransform),
-#else
-                    typeof(Translation),
-                    typeof(Rotation),
-#endif
+
                     typeof(PhysicsGraphicalInterpolationBuffer),
                     typeof(PhysicsWorldIndex)
                 },
                 Options = EntityQueryOptions.FilterWriteGroup
             });
             RequireForUpdate(InterpolatedDynamicBodiesQuery);
-#if !ENABLE_TRANSFORM_V1
+
 #if !UNITY_DOTSRUNTIME
             // UpdateInterpolationBuffersJob copies from specific byte offsets of the transform components, so
             // let's make sure the offsets haven't changed!
@@ -64,8 +61,7 @@ namespace Unity.Physics.GraphicsIntegration
             Assert.AreEqual(UnsafeUtility.SizeOf<float3>() + UnsafeUtility.SizeOf<float>(),
                 UnsafeUtility.GetFieldOffset(typeof(LocalTransform).GetField("Rotation")));
 #endif
-#else
-#endif
+
         }
 
         protected override void OnUpdate()
@@ -74,12 +70,9 @@ namespace Unity.Physics.GraphicsIntegration
             InterpolatedDynamicBodiesQuery.SetSharedComponentFilter(bpwd.WorldFilter);
             Dependency = new UpdateInterpolationBuffersJob
             {
-#if !ENABLE_TRANSFORM_V1
+
                 LocalTransformType = GetComponentTypeHandle<LocalTransform>(true),
-#else
-                TranslationType = GetComponentTypeHandle<Translation>(true),
-                RotationType = GetComponentTypeHandle<Rotation>(true),
-#endif
+
                 PhysicsVelocityType = GetComponentTypeHandle<PhysicsVelocity>(true),
                 InterpolationBufferType = GetComponentTypeHandle<PhysicsGraphicalInterpolationBuffer>()
             }.ScheduleParallel(InterpolatedDynamicBodiesQuery, Dependency);
@@ -95,15 +88,10 @@ namespace Unity.Physics.GraphicsIntegration
         {
             /// <summary>   Physics velocity component type handle. (Readonly) </summary>
             [ReadOnly] public ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
-#if !ENABLE_TRANSFORM_V1
+
             /// <summary>   Transform component type handle. (Readonly) </summary>
             [ReadOnly] public ComponentTypeHandle<LocalTransform> LocalTransformType;
-#else
-            /// <summary>   Translation component type handle. (Readonly) </summary>
-            [ReadOnly] public ComponentTypeHandle<Translation> TranslationType;
-            /// <summary>   Rotation component type handle. (Readonly) </summary>
-            [ReadOnly] public ComponentTypeHandle<Rotation> RotationType;
-#endif
+
             /// <summary>   PhysicsGraphicalInterpolationBuffer component type handle.. </summary>
             public ComponentTypeHandle<PhysicsGraphicalInterpolationBuffer> InterpolationBufferType;
 
@@ -111,32 +99,27 @@ namespace Unity.Physics.GraphicsIntegration
             {
                 Assert.IsFalse(useEnabledMask);
                 NativeArray<PhysicsVelocity> physicsVelocities = chunk.GetNativeArray(ref PhysicsVelocityType);
-#if !ENABLE_TRANSFORM_V1
+
                 NativeArray<LocalTransform> localTransforms = chunk.GetNativeArray(ref LocalTransformType);
-#else
-                NativeArray<Translation> positions = chunk.GetNativeArray(ref TranslationType);
-                NativeArray<Rotation> orientations = chunk.GetNativeArray(ref RotationType);
-#endif
+
                 NativeArray<PhysicsGraphicalInterpolationBuffer> interpolationBuffers = chunk.GetNativeArray(ref InterpolationBufferType);
 
                 unsafe
                 {
-#if !ENABLE_TRANSFORM_V1
+
                     var srcTransforms = localTransforms.GetUnsafeReadOnlyPtr();
-#else
-#endif
+
                     var dst = interpolationBuffers.GetUnsafePtr();
                     var count = chunk.Count;
 
                     var sizeBuffer = UnsafeUtility.SizeOf<PhysicsGraphicalInterpolationBuffer>();
-#if !ENABLE_TRANSFORM_V1
+
                     var sizeTransform = UnsafeUtility.SizeOf<LocalTransform>();
-#else
-#endif
+
                     var sizeOrientation = UnsafeUtility.SizeOf<quaternion>();
                     var sizePosition = UnsafeUtility.SizeOf<float3>();
                     var sizeVelocity = UnsafeUtility.SizeOf<PhysicsVelocity>();
-#if !ENABLE_TRANSFORM_V1
+
                     // These hardcoded byte offsets into LocalTransform are validated in OnCreate()
                     int srcPositionOffset = 0;
                     int srcOrientationOffset = sizePosition + UnsafeUtility.SizeOf<float>();
@@ -160,26 +143,7 @@ namespace Unity.Physics.GraphicsIntegration
                         physicsVelocities.GetUnsafeReadOnlyPtr(), sizeVelocity,
                         sizeVelocity, count
                     );
-#else
-                    UnsafeUtility.MemCpyStride(
-                        dst, sizeBuffer,
-                        orientations.GetUnsafeReadOnlyPtr(), sizeOrientation,
-                        sizeOrientation,
-                        count
-                    );
-                    UnsafeUtility.MemCpyStride(
-                        (void*)((long)dst + sizeOrientation), sizeBuffer,
-                        positions.GetUnsafeReadOnlyPtr(), sizePosition,
-                        sizePosition,
-                        count
-                    );
-                    UnsafeUtility.MemCpyStride(
-                        (void*)((long)dst + sizeOrientation + sizePosition), sizeBuffer,
-                        physicsVelocities.GetUnsafeReadOnlyPtr(), sizeVelocity,
-                        sizeVelocity,
-                        count
-                    );
-#endif
+
                 }
             }
         }

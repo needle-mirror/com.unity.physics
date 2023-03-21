@@ -25,7 +25,6 @@ In the code below, we will apply an impulse to the RigidBody with index 3
 [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
 [UpdateAfter(typeof(PhysicsInitializeGroup))]
 [UpdateBefore(typeof(PhysicsSimulationGroup))]
-[BurstCompile]
 public partial struct ApplyImpulseSystem : ISystem
 {
     [BurstCompile]
@@ -81,7 +80,6 @@ Specialised jobs require [SimulationSingleton](physics-singletons.md) and `Physi
 [UpdateInGroup(typeof(PhysicsSimulationGroup))]
 [UpdateAfter(typeof(PhysicsCreateBodyPairsGroup))]
 [UpdateBefore(typeof(PhysicsCreateContactsGroup))]
-[BurstCompile]
 public partial struct DisableDynamicDynamicPairsSystem : ISystem
 {
     [BurstCompile]

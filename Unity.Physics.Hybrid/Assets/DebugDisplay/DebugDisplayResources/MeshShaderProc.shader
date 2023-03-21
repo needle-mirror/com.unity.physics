@@ -6,12 +6,10 @@ Shader "MeshShaderProc" {
 	{
 		Pass
 		{
-            Tags{ "Queue" = "Transparent" "RenderType" = "Transparent" "RenderPipeline" = "UniversalRenderPipeline"}
-
-			ZWrite on
-			ZTest Always
-            Cull Back
-			Blend One One
+            ZWrite on
+		    ZTest LEqual
+            Blend SrcAlpha OneMinusSrcAlpha
+            Offset -0.2, -1
 
             CGPROGRAM
 
@@ -37,20 +35,19 @@ Shader "MeshShaderProc" {
 			};
 
 			StructuredBuffer<instanceData> meshBuffer;
-
 			struct v2f
 			{
 				float4 pos : SV_POSITION;
 			    half3 worldNormal : TEXCOORD0;
 				float4 color : TEXCOORD1;
-
 			};
 
-			v2f vert(uint vid : SV_VertexID, float3 normal : NORMAL)
+			v2f vert(uint vid : SV_VertexID)
 			{
 			    float4 pos;
-                uint offset = vid / 3;
-			    uint vertex = vid % 3;
+                const uint offset = vid / 3;
+			    const uint vertex = vid % 3;
+
 			    if (vertex == 0)
 			        pos = meshBuffer[offset].m_vertex0;
 			    else if (vertex==1)
@@ -58,17 +55,16 @@ Shader "MeshShaderProc" {
 			    else //if (vertex==2)
 			        pos = meshBuffer[offset].m_vertex2;
 
-				float4 worldPos = float4(pos.xyz, 1);
+				const float4 worldPos = float4(pos.xyz, 1);
 				v2f o;
 				o.pos = UnityObjectToClipPos(worldPos);
-			    o.worldNormal = UnityObjectToWorldNormal(normal);
 				o.color = Palette(pos.w);
 				return o;
 			}
 
 			fixed4 frag(v2f i) : SV_Target
 			{
-			    return i.color; //colour passed by ColourIndex in DebugDraw.Draw code
+			    return i.color;
 			}
 
 			ENDCG

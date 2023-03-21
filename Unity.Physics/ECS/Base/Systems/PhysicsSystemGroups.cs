@@ -11,7 +11,7 @@ namespace Unity.Physics.Systems
     /// that order.
     /// </summary>
     [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
-    public class PhysicsSystemGroup : ComponentSystemGroup
+    public partial class PhysicsSystemGroup : ComponentSystemGroup
     {
     }
 
@@ -154,7 +154,7 @@ namespace Unity.Physics.Systems
     /// </summary>
     [UpdateInGroup(typeof(PhysicsSystemGroup))]
     [UpdateBefore(typeof(PhysicsSimulationGroup))]
-    public class PhysicsInitializeGroup : ComponentSystemGroup
+    public partial class PhysicsInitializeGroup : ComponentSystemGroup
     {
     }
 
@@ -167,7 +167,7 @@ namespace Unity.Physics.Systems
     [UpdateInGroup(typeof(PhysicsSystemGroup))]
     [UpdateAfter(typeof(PhysicsInitializeGroup))]
     [UpdateBefore(typeof(ExportPhysicsWorld))]
-    public class PhysicsSimulationGroup : ComponentSystemGroup
+    public partial class PhysicsSimulationGroup : ComponentSystemGroup
     {
     }
 
@@ -178,7 +178,7 @@ namespace Unity.Physics.Systems
     /// </summary>
     [UpdateInGroup(typeof(PhysicsSimulationGroup))]
     [UpdateBefore(typeof(PhysicsCreateContactsGroup))]
-    public class PhysicsCreateBodyPairsGroup : ComponentSystemGroup
+    public partial class PhysicsCreateBodyPairsGroup : ComponentSystemGroup
     {
     }
 
@@ -191,7 +191,7 @@ namespace Unity.Physics.Systems
     [UpdateInGroup(typeof(PhysicsSimulationGroup))]
     [UpdateAfter(typeof(PhysicsCreateBodyPairsGroup))]
     [UpdateBefore(typeof(PhysicsCreateJacobiansGroup))]
-    public class PhysicsCreateContactsGroup : ComponentSystemGroup
+    public partial class PhysicsCreateContactsGroup : ComponentSystemGroup
     {
     }
 
@@ -204,7 +204,7 @@ namespace Unity.Physics.Systems
     [UpdateInGroup(typeof(PhysicsSimulationGroup))]
     [UpdateAfter(typeof(PhysicsCreateContactsGroup))]
     [UpdateBefore(typeof(PhysicsSolveAndIntegrateGroup))]
-    public class PhysicsCreateJacobiansGroup : ComponentSystemGroup
+    public partial class PhysicsCreateJacobiansGroup : ComponentSystemGroup
     {
     }
 
@@ -215,7 +215,7 @@ namespace Unity.Physics.Systems
     /// </summary>
     [UpdateInGroup(typeof(PhysicsSimulationGroup))]
     [UpdateAfter(typeof(PhysicsCreateJacobiansGroup))]
-    public class PhysicsSolveAndIntegrateGroup : ComponentSystemGroup
+    public partial class PhysicsSolveAndIntegrateGroup : ComponentSystemGroup
     {
     }
 
@@ -227,7 +227,7 @@ namespace Unity.Physics.Systems
     /// </summary>
     [UpdateInGroup(typeof(PhysicsSystemGroup))]
     [UpdateBefore(typeof(PhysicsInitializeGroup))]
-    public class BeforePhysicsSystemGroup : ComponentSystemGroup
+    public partial class BeforePhysicsSystemGroup : ComponentSystemGroup
     {
     }
 
@@ -239,7 +239,7 @@ namespace Unity.Physics.Systems
     /// </summary>
     [UpdateInGroup(typeof(PhysicsSystemGroup))]
     [UpdateAfter(typeof(ExportPhysicsWorld))]
-    public class AfterPhysicsSystemGroup : ComponentSystemGroup
+    public partial class AfterPhysicsSystemGroup : ComponentSystemGroup
     {
     }
 }

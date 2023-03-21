@@ -17,8 +17,9 @@ namespace Unity.Physics.Authoring
     {
         public override void Bake(PhysicsRenderEntityAuthoring authoring)
         {
-            var renderEntity = new PhysicsRenderEntity { Entity = GetEntity(authoring.RenderEntity) };
-            AddComponent(renderEntity);
+            var renderEntity = new PhysicsRenderEntity { Entity = GetEntity(authoring.RenderEntity, TransformUsageFlags.Dynamic) };
+            var entity = GetEntity(TransformUsageFlags.Dynamic);
+            AddComponent(entity, renderEntity);
         }
     }
 }

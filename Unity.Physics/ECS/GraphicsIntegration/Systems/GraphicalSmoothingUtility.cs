@@ -133,19 +133,19 @@ namespace Unity.Physics.GraphicsIntegration
         /// <param name="compositeScales">The CompositeScale values in the chunk, if any.</param>
         /// <returns>A LocalToWorld matrix to use in place of those produced by default.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-#if !ENABLE_TRANSFORM_V1
+
         public static LocalToWorld BuildLocalToWorld(
             int i, RigidTransform transform,
             float uniformScale,
-            bool hasPostTransformScale,
-            NativeArray<PostTransformScale> postTransformScales
+            bool hasPostTransformMatrix,
+            NativeArray<PostTransformMatrix> postTransformMatrices
         )
         {
             var tr = new float4x4(transform);
             // TODO(DOTS-7098): More robust check here?
-            if (hasPostTransformScale)
+            if (hasPostTransformMatrix)
             {
-                var m = new float4x4(postTransformScales[i].Value, float3.zero);
+                var m = postTransformMatrices[i].Value;
                 return new LocalToWorld { Value = math.mul(new float4x4(transform), m) };
             }
             else if (uniformScale != 0)
@@ -154,29 +154,6 @@ namespace Unity.Physics.GraphicsIntegration
                 return new LocalToWorld { Value = new float4x4(transform) };
         }
 
-#else
-        public static LocalToWorld BuildLocalToWorld(
-            int i, RigidTransform transform,
-            bool hasAnyScale,
-            bool hasNonUniformScale, NativeArray<NonUniformScale> nonUniformScales,
-            bool hasScale, NativeArray<Scale> scales,
-            NativeArray<CompositeScale> compositeScales
-        )
-        {
-            var tr = new float4x4(transform);
 
-            if (!hasAnyScale)
-                return new LocalToWorld { Value = tr };
-
-            var scale = hasNonUniformScale
-                ? float4x4.Scale(nonUniformScales[i].Value)
-                : hasScale
-                ? float4x4.Scale(new float3(scales[i].Value))
-                : compositeScales[i].Value;
-
-            return new LocalToWorld { Value = math.mul(tr, scale) };
-        }
-
-#endif
     }
 }
