@@ -12,19 +12,14 @@ To use the Unity Physics package, you must have Unity version 2022.2.0b8 and lat
 
 To install the package, open the Package Manager window (**Window &gt; Package Manager**) and perform one of the following options:
 
-* [Add the package by its name](xref:upm-ui-quick)
+* [Add the package by its name](xref:upm-ui-quick) (com.unity.physics)
 * [Add the package from its Git URL](xref:upm-ui-giturl)
 
 ## Known issues
 
-* Handles Gizmos in the scene window do not follow physics bodies when sub scene is open during play mode time, this results with an incorrect respawning position after simulation. Either converting game objects to prefabs or close the sub scene before running the scene.
-* Physics colliders gizmos are not being displayed within a sub scene during the edit mode. Physics colliders are displayed outside sub scenes.
 * Compound collider gets created even if children are disabled in Editor's game object hierarchy.
 * Mesh collider types contacting results in a wrong behaviour by getting glued to each other as if they were joints.
-* Enabling the `Draw Collider` toggle button within the `Physics Debug Display` results in errors being displayed in the console window and breaking the scene.
 * Mesh collider simplification: if primitive scale is smaller than 0.018f, selecting entities in the scene view throws error.
-* The rotational motor does not behave as expected in some cases (spins unexpectedly or does not move at all).
-* Adding a rigidbody to a game object in a sub scene, causes it to disappear from game and scene view.
 * Moving the child of a game object in a sub scene results in exceptions, when both parent and child have traditional colliders (e.g. box collider component) but no rigidbodies.
 
 ## Additional resources
@@ -33,3 +28,4 @@ To install the package, open the Package Manager window (**Window &gt; Package M
 * [Upgrade guide](upgrade-guide.md)
 * [What's new](whats-new.md)
 * [ECS packages](ecs-packages.md)
+* [Prerelease (1.0.0-pre.65) documentation](pre-release.md)

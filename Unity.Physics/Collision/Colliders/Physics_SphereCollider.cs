@@ -84,7 +84,7 @@ namespace Unity.Physics
         ///
         /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
         public static BlobAssetReference<Collider> Create(SphereGeometry geometry) =>
-            Create(geometry, CollisionFilter.Default, Material.Default);
+            CreateInternal(geometry, CollisionFilter.Default, Material.Default);
 
         /// <summary>   Creates a new BlobAssetReference&lt;Collider&gt; </summary>
         ///
@@ -93,7 +93,7 @@ namespace Unity.Physics
         ///
         /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
         public static BlobAssetReference<Collider> Create(SphereGeometry geometry, CollisionFilter filter) =>
-            Create(geometry, filter, Material.Default);
+            CreateInternal(geometry, filter, Material.Default);
 
         /// <summary>   Creates a new BlobAssetReference&lt;Collider&gt; </summary>
         ///
@@ -102,36 +102,16 @@ namespace Unity.Physics
         /// <param name="material"> The material. </param>
         ///
         /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
-        public static BlobAssetReference<Collider> Create(SphereGeometry geometry, CollisionFilter filter, Material material)
-        {
-            unsafe
-            {
-                var collider = default(SphereCollider);
-                collider.Initialize(geometry, filter, material);
-                return BlobAssetReference<Collider>.Create(&collider, sizeof(SphereCollider));
-            }
-        }
+        public static BlobAssetReference<Collider> Create(SphereGeometry geometry, CollisionFilter filter, Material material) =>
+            CreateInternal(geometry, filter, material);
 
         /// <summary>   Initializes the sphere collider, enables it to be created on stack. </summary>
         ///
         /// <param name="geometry"> The geometry. </param>
         /// <param name="filter">   Specifies the filter. </param>
         /// <param name="material"> The material. </param>
-        public void Initialize(SphereGeometry geometry, CollisionFilter filter, Material material)
-        {
-            m_Header.Type = ColliderType.Sphere;
-            m_Header.CollisionType = CollisionType.Convex;
-            m_Header.Version = 0;
-            m_Header.Magic = 0xff;
-            m_Header.Filter = filter;
-            m_Header.Material = material;
-
-            ConvexHull.VerticesBlob.Offset = UnsafeEx.CalculateOffset(ref m_Vertex, ref ConvexHull.VerticesBlob);
-            ConvexHull.VerticesBlob.Length = 1;
-            // note: no faces
-
-            SetGeometry(geometry);
-        }
+        public void Initialize(SphereGeometry geometry, CollisionFilter filter, Material material) =>
+            InitializeInternal(geometry, filter, material);
 
         /// <summary>   Sets a geometry. </summary>
         ///
@@ -143,6 +123,37 @@ namespace Unity.Physics
             m_Header.Version++;
             ConvexHull.ConvexRadius = geometry.Radius;
             m_Vertex = geometry.Center;
+        }
+
+        #endregion
+
+        #region Internal Construction
+
+        internal static BlobAssetReference<Collider> CreateInternal(SphereGeometry geometry, CollisionFilter filter, Material material, uint internalID = 0)
+        {
+            unsafe
+            {
+                var collider = default(SphereCollider);
+                collider.InitializeInternal(geometry, filter, material, internalID);
+                return BlobAssetReference<Collider>.Create(&collider, sizeof(SphereCollider));
+            }
+        }
+
+        void InitializeInternal(SphereGeometry geometry, CollisionFilter filter, Material material, uint forceUniqueBlobID = 0)
+        {
+            m_Header.Type = ColliderType.Sphere;
+            m_Header.CollisionType = CollisionType.Convex;
+            m_Header.Version = 0;
+            m_Header.Magic = 0xff;
+            m_Header.ForceUniqueBlobID = forceUniqueBlobID;
+            m_Header.Filter = filter;
+            m_Header.Material = material;
+
+            ConvexHull.VerticesBlob.Offset = UnsafeEx.CalculateOffset(ref m_Vertex, ref ConvexHull.VerticesBlob);
+            ConvexHull.VerticesBlob.Length = 1;
+            // note: no faces
+
+            SetGeometry(geometry);
         }
 
         #endregion

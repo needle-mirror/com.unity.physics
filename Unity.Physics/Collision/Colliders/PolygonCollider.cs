@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -8,18 +9,30 @@ namespace Unity.Physics
     /// <summary>
     /// A flat convex collider with either 3 or 4 coplanar vertices (ie, a triangle or a quad)
     /// </summary>
+    [StructLayout(LayoutKind.Explicit)]
     public struct PolygonCollider : IConvexCollider
     {
         // Header
-        private ConvexColliderHeader m_Header;
-        internal ConvexHull ConvexHull;
+        [FieldOffset(0)]
+        ConvexColliderHeader m_Header;  // 32 bytes
+        [FieldOffset(32)]
+        internal ConvexHull ConvexHull; // 52 bytes
 
         // Convex hull data
-        // Todo: would be nice to use the actual types here but C# only likes fixed arrays of builtin types
-        private unsafe fixed byte m_Vertices[sizeof(float) * 3 * 4];     // float3[4]
-        private unsafe fixed byte m_FacePlanes[sizeof(float) * 4 * 2];   // Plane[2]
-        private unsafe fixed byte m_Faces[4 * 2];                        // ConvexHull.Face[2]
-        private unsafe fixed byte m_FaceVertexIndices[sizeof(byte) * 8]; // byte[8]
+        [StructLayout(LayoutKind.Sequential, Size = 96)]
+        struct ConvexHullData
+        {
+            // Todo: would be nice to use the actual types here but C# only likes fixed arrays of builtin types
+
+            // FacePlanes memory needs to be 16-byte aligned
+            public unsafe fixed byte FacePlanes[sizeof(float) * 4 * 2];   // Plane[2],              32 bytes
+            public unsafe fixed byte Vertices[sizeof(float) * 3 * 4];     // float3[4],             48 bytes
+            public unsafe fixed byte Faces[4 * 2];                        // ConvexHull.Face[2],    8 bytes
+            public unsafe fixed byte FaceVertexIndices[8];                // byte[8]                8 bytes
+        }
+
+        [FieldOffset(96)]
+        ConvexHullData m_ConvexHullData; // 96 bytes
 
         /// <summary>   Gets a value indicating whether this object is triangle. </summary>
         ///
@@ -84,7 +97,10 @@ namespace Unity.Physics
                 var collider = new PolygonCollider();
                 collider.InitAsTriangle(vertex0, vertex1, vertex2, filter, material);
 
-                return BlobAssetReference<Collider>.Create(&collider, UnsafeUtility.SizeOf<PolygonCollider>());
+                var blob = BlobAssetReference<Collider>.Create(&collider, UnsafeUtility.SizeOf<PolygonCollider>());
+                var polyCollider = (PolygonCollider*)blob.GetUnsafePtr();
+                SafetyChecks.Check16ByteAlignmentAndThrow(polyCollider->m_ConvexHullData.FacePlanes, nameof(ConvexHullData.FacePlanes));
+                return blob;
             }
         }
 
@@ -97,7 +113,7 @@ namespace Unity.Physics
         ///
         /// <returns>   The new quad. </returns>
         public static BlobAssetReference<Collider> CreateQuad(float3 vertex0, float3 vertex1, float3 vertex2, float3 vertex3) =>
-            CreateQuad(vertex0, vertex1, vertex2, vertex3, CollisionFilter.Default, Material.Default);
+            CreateQuadInternal(vertex0, vertex1, vertex2, vertex3, CollisionFilter.Default, Material.Default);
 
         /// <summary>   Creates a quad. </summary>
         ///
@@ -109,7 +125,7 @@ namespace Unity.Physics
         ///
         /// <returns>   The new quad. </returns>
         public static BlobAssetReference<Collider> CreateQuad(float3 vertex0, float3 vertex1, float3 vertex2, float3 vertex3, CollisionFilter filter) =>
-            CreateQuad(vertex0, vertex1, vertex2, vertex3, filter, Material.Default);
+            CreateQuadInternal(vertex0, vertex1, vertex2, vertex3, filter, Material.Default);
 
         /// <summary>   Creates a quad. </summary>
         ///
@@ -121,7 +137,14 @@ namespace Unity.Physics
         /// <param name="material"> The material. </param>
         ///
         /// <returns>   The new quad. </returns>
-        public static BlobAssetReference<Collider> CreateQuad(float3 vertex0, float3 vertex1, float3 vertex2, float3 vertex3, CollisionFilter filter, Material material)
+        public static BlobAssetReference<Collider> CreateQuad(float3 vertex0, float3 vertex1, float3 vertex2, float3 vertex3, CollisionFilter filter, Material material) =>
+            CreateQuadInternal(vertex0, vertex1, vertex2, vertex3, filter, material);
+
+        #endregion
+
+        #region Internal Construction
+
+        internal static BlobAssetReference<Collider> CreateQuadInternal(float3 vertex0, float3 vertex1, float3 vertex2, float3 vertex3, CollisionFilter filter, Material material, uint internalID = 0)
         {
             unsafe
             {
@@ -132,7 +155,7 @@ namespace Unity.Physics
                 SafetyChecks.CheckCoplanarAndThrow(vertex0, vertex1, vertex2, vertex3, nameof(vertex3));
 
                 PolygonCollider collider = default;
-                collider.InitAsQuad(vertex0, vertex1, vertex2, vertex3, filter, material);
+                collider.InitAsQuad(vertex0, vertex1, vertex2, vertex3, filter, material, internalID);
                 return BlobAssetReference<Collider>.Create(&collider, UnsafeUtility.SizeOf<PolygonCollider>());
             }
         }
@@ -149,9 +172,9 @@ namespace Unity.Physics
             SetAsTriangle(vertex0, vertex1, vertex2);
         }
 
-        internal void InitAsQuad(float3 vertex0, float3 vertex1, float3 vertex2, float3 vertex3, CollisionFilter filter, Material material)
+        internal void InitAsQuad(float3 vertex0, float3 vertex1, float3 vertex2, float3 vertex3, CollisionFilter filter, Material material, uint internalID = 0)
         {
-            Init(filter, material);
+            Init(filter, material, internalID);
             SetAsQuad(vertex0, vertex1, vertex2, vertex3);
         }
 
@@ -165,16 +188,16 @@ namespace Unity.Physics
 
             fixed(PolygonCollider* collider = &this)
             {
-                float3* vertices = (float3*)(&collider->m_Vertices[0]);
+                float3* vertices = (float3*)(&collider->m_ConvexHullData.Vertices[0]);
                 vertices[0] = v0;
                 vertices[1] = v1;
                 vertices[2] = v2;
 
-                ConvexHull.Face* faces = (ConvexHull.Face*)(&collider->m_Faces[0]);
+                ConvexHull.Face* faces = (ConvexHull.Face*)(&collider->m_ConvexHullData.Faces[0]);
                 faces[0] = new ConvexHull.Face { FirstIndex = 0, NumVertices = 3, MinHalfAngleCompressed = 0xff };
                 faces[1] = new ConvexHull.Face { FirstIndex = 3, NumVertices = 3, MinHalfAngleCompressed = 0xff };
 
-                byte* index = &collider->m_FaceVertexIndices[0];
+                byte* index = &collider->m_ConvexHullData.FaceVertexIndices[0];
                 *index++ = 0; *index++ = 1; *index++ = 2;
                 *index++ = 2; *index++ = 1; *index++ = 0;
             }
@@ -192,17 +215,17 @@ namespace Unity.Physics
 
             fixed(PolygonCollider* collider = &this)
             {
-                float3* vertices = (float3*)(&collider->m_Vertices[0]);
+                float3* vertices = (float3*)(&collider->m_ConvexHullData.Vertices[0]);
                 vertices[0] = v0;
                 vertices[1] = v1;
                 vertices[2] = v2;
                 vertices[3] = v3;
 
-                ConvexHull.Face* faces = (ConvexHull.Face*)(&collider->m_Faces[0]);
+                ConvexHull.Face* faces = (ConvexHull.Face*)(&collider->m_ConvexHullData.Faces[0]);
                 faces[0] = new ConvexHull.Face { FirstIndex = 0, NumVertices = 4, MinHalfAngleCompressed = 0xff };
                 faces[1] = new ConvexHull.Face { FirstIndex = 4, NumVertices = 4, MinHalfAngleCompressed = 0xff };
 
-                byte* index = &collider->m_FaceVertexIndices[0];
+                byte* index = &collider->m_ConvexHullData.FaceVertexIndices[0];
                 *index++ = 0; *index++ = 1; *index++ = 2; *index++ = 3;
                 *index++ = 3; *index++ = 2; *index++ = 1; *index++ = 0;
             }
@@ -210,11 +233,12 @@ namespace Unity.Physics
             SetPlanes();
         }
 
-        unsafe void Init(CollisionFilter filter, Material material)
+        unsafe void Init(CollisionFilter filter, Material material, uint forceUniqueBlobID = 0)
         {
             m_Header.CollisionType = CollisionType.Convex;
             m_Header.Version = 0;
             m_Header.Magic = 0xff;
+            m_Header.ForceUniqueBlobID = forceUniqueBlobID;
             m_Header.Filter = filter;
             m_Header.Material = material;
 
@@ -222,16 +246,16 @@ namespace Unity.Physics
 
             fixed(PolygonCollider* collider = &this)
             {
-                ConvexHull.VerticesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_Vertices[0], ref ConvexHull.VerticesBlob);
+                ConvexHull.VerticesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_ConvexHullData.Vertices[0], ref ConvexHull.VerticesBlob);
                 ConvexHull.VerticesBlob.Length = 4;
 
-                ConvexHull.FacePlanesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_FacePlanes[0], ref ConvexHull.FacePlanesBlob);
+                ConvexHull.FacePlanesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_ConvexHullData.FacePlanes[0], ref ConvexHull.FacePlanesBlob);
                 ConvexHull.FacePlanesBlob.Length = 2;
 
-                ConvexHull.FacesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_Faces[0], ref ConvexHull.FacesBlob);
+                ConvexHull.FacesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_ConvexHullData.Faces[0], ref ConvexHull.FacesBlob);
                 ConvexHull.FacesBlob.Length = 2;
 
-                ConvexHull.FaceVertexIndicesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_FaceVertexIndices[0], ref ConvexHull.FaceVertexIndicesBlob);
+                ConvexHull.FaceVertexIndicesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_ConvexHullData.FaceVertexIndices[0], ref ConvexHull.FaceVertexIndicesBlob);
                 ConvexHull.FaceVertexIndicesBlob.Length = 8;
 
                 // No connectivity needed

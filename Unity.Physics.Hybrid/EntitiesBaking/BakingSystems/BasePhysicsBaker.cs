@@ -1,17 +1,7 @@
-#if LEGACY_PHYSICS
-using System.Collections.Generic;
-using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
-using Unity.Physics.GraphicsIntegration;
 using Unity.Transforms;
 using UnityEngine;
-using LegacyRigidBody = UnityEngine.Rigidbody;
-using LegacyCollider = UnityEngine.Collider;
-using LegacyBox = UnityEngine.BoxCollider;
-using LegacyCapsule = UnityEngine.CapsuleCollider;
-using LegacyMesh = UnityEngine.MeshCollider;
-using LegacySphere = UnityEngine.SphereCollider;
 
 namespace Unity.Physics.Authoring
 {
@@ -99,4 +89,3 @@ namespace Unity.Physics.Authoring
         }
     }
 }
-#endif

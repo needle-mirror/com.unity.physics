@@ -27,6 +27,16 @@ namespace Unity.Physics
         public float Radius { get => m_Radius; set => m_Radius = value; }
         private float m_Radius;
 
+        /// <summary>   The center of the capsule. </summary>
+        ///
+        /// <returns> The center. </returns>
+        public float3 GetCenter() => math.lerp(Vertex0, Vertex1, 0.5f);
+
+        /// <summary>   The height of the capsule. </summary>
+        ///
+        /// <returns> The height. </returns>
+        public float GetHeight() => 2f * Radius + math.length(Vertex1 - Vertex0);
+
         /// <summary>   Tests if this CapsuleGeometry is considered equal to another. </summary>
         ///
         /// <param name="other">    The capsule geometry to compare to this object. </param>
@@ -104,7 +114,7 @@ namespace Unity.Physics
         ///
         /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
         public static BlobAssetReference<Collider> Create(CapsuleGeometry geometry) =>
-            Create(geometry, CollisionFilter.Default, Material.Default);
+            CreateInternal(geometry, CollisionFilter.Default, Material.Default);
 
         /// <summary>   Creates a new BlobAssetReference&lt;Collider&gt; </summary>
         ///
@@ -113,7 +123,7 @@ namespace Unity.Physics
         ///
         /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
         public static BlobAssetReference<Collider> Create(CapsuleGeometry geometry, CollisionFilter filter) =>
-            Create(geometry, filter, Material.Default);
+            CreateInternal(geometry, filter, Material.Default);
 
         /// <summary>   Creates a new BlobAssetReference&lt;Collider&gt; </summary>
         ///
@@ -122,27 +132,28 @@ namespace Unity.Physics
         /// <param name="material"> The material. </param>
         ///
         /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
-        public static BlobAssetReference<Collider> Create(CapsuleGeometry geometry, CollisionFilter filter, Material material)
-        {
-            unsafe
-            {
-                var collider = default(CapsuleCollider);
-                collider.Initialize(geometry, filter, material);
-                return BlobAssetReference<Collider>.Create(&collider, sizeof(CapsuleCollider));
-            }
-        }
+        public static BlobAssetReference<Collider> Create(CapsuleGeometry geometry, CollisionFilter filter, Material material) =>
+            CreateInternal(geometry, filter, material);
+
+        #endregion
+
+        #region  Internal Construction
 
         /// <summary>   Initializes the capsule collider, enables it to be created on stack. </summary>
         ///
         /// <param name="geometry"> The geometry. </param>
         /// <param name="filter">   Specifies the filter. </param>
         /// <param name="material"> The material. </param>
-        public void Initialize(CapsuleGeometry geometry, CollisionFilter filter, Material material)
+        public void Initialize(CapsuleGeometry geometry, CollisionFilter filter, Material material) =>
+            InitializeInternal(geometry, filter, material);
+
+        public void InitializeInternal(CapsuleGeometry geometry, CollisionFilter filter, Material material, uint forceUniqueBlobID = 0)
         {
             m_Header.Type = ColliderType.Capsule;
             m_Header.CollisionType = CollisionType.Convex;
             m_Header.Version = 0;
             m_Header.Magic = 0xff;
+            m_Header.ForceUniqueBlobID = forceUniqueBlobID;
             m_Header.Filter = filter;
             m_Header.Material = material;
 
@@ -151,6 +162,16 @@ namespace Unity.Physics
             // note: no faces
 
             SetGeometry(geometry);
+        }
+
+        internal static BlobAssetReference<Collider> CreateInternal(CapsuleGeometry geometry, CollisionFilter filter, Material material, uint internalID = 0)
+        {
+            unsafe
+            {
+                var collider = default(CapsuleCollider);
+                collider.InitializeInternal(geometry, filter, material, internalID);
+                return BlobAssetReference<Collider>.Create(&collider, sizeof(CapsuleCollider));
+            }
         }
 
         /// <summary>   Sets a geometry. </summary>

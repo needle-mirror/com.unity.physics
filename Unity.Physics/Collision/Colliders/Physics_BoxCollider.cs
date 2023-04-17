@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -64,25 +65,38 @@ namespace Unity.Physics
     }
 
     /// <summary>   A collider in the shape of a box. </summary>
+    [StructLayout(LayoutKind.Explicit)]
     public struct BoxCollider : IConvexCollider
     {
         // Header
-        private ConvexColliderHeader m_Header;
-        internal ConvexHull ConvexHull;
+        [FieldOffset(0)]
+        ConvexColliderHeader m_Header;  // 32 bytes
+        [FieldOffset(32)]
+        internal ConvexHull ConvexHull; // 52 bytes
+        [FieldOffset(84)]
+        float3 m_Center;                // 12 bytes
 
         // Convex hull data
-        // Todo: would be nice to use the actual types here but C# only likes fixed arrays of builtin types..
-        private unsafe fixed byte m_Vertices[sizeof(float) * 3 * 8];         // float3[8]
-        private unsafe fixed byte m_FacePlanes[sizeof(float) * 4 * 6];       // Plane[6]
-        private unsafe fixed byte m_Faces[4 * 6];                            // ConvexHull.Face[6]
-        private unsafe fixed byte m_FaceVertexIndices[sizeof(byte) * 24];    // byte[24]
-        private unsafe fixed byte m_VertexEdges[4 * 8];                      // ConvexHull.Edge[8]
-        private unsafe fixed byte m_FaceLinks[4 * 24];                       // ConvexHull.Edge[24]
+        [StructLayout(LayoutKind.Sequential, Size = 368)]
+        struct ConvexHullData
+        {
+            // Todo: would be nice to use the actual types here but C# only likes fixed arrays of builtin types..
 
-        // Box parameters
-        private float3 m_Center;
-        private quaternion m_Orientation;
-        private float3 m_Size;
+            // FacePlanes memory needs to be 16-byte aligned
+            public unsafe fixed byte FacePlanes[sizeof(float) * 4 * 6];       // Plane[6],               96 bytes
+            public unsafe fixed byte Vertices[sizeof(float) * 3 * 8];         // float3[8],              96 bytes
+            public unsafe fixed byte Faces[4 * 6];                            // ConvexHull.Face[6],     24 bytes
+            public unsafe fixed byte FaceVertexIndices[sizeof(byte) * 24];    // byte[24],               24 bytes
+            public unsafe fixed byte VertexEdges[4 * 8];                      // ConvexHull.Edge[8],     32 bytes
+            public unsafe fixed byte FaceLinks[4 * 24];                       // ConvexHull.Edge[24],    96 bytes
+        };
+
+        [FieldOffset(96)]
+        ConvexHullData m_ConvexHullData;    // 368 bytes
+        [FieldOffset(464)]
+        quaternion m_Orientation;           // 16 bytes
+        [FieldOffset(480)]
+        float3 m_Size;                      // 12 bytes
 
         /// <summary>   Gets the center. </summary>
         ///
@@ -133,7 +147,7 @@ namespace Unity.Physics
         ///
         /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
         public static BlobAssetReference<Collider> Create(BoxGeometry geometry) =>
-            Create(geometry, CollisionFilter.Default, Material.Default);
+            CreateInternal(geometry, CollisionFilter.Default, Material.Default);
 
         /// <summary>   Creates a new BlobAssetReference&lt;Collider&gt; </summary>
         ///
@@ -142,7 +156,7 @@ namespace Unity.Physics
         ///
         /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
         public static BlobAssetReference<Collider> Create(BoxGeometry geometry, CollisionFilter filter) =>
-            Create(geometry, filter, Material.Default);
+            CreateInternal(geometry, filter, Material.Default);
 
         /// <summary>   Creates a new BlobAssetReference&lt;Collider&gt; </summary>
         ///
@@ -151,22 +165,35 @@ namespace Unity.Physics
         /// <param name="material"> The material. </param>
         ///
         /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
-        public static BlobAssetReference<Collider> Create(BoxGeometry geometry, CollisionFilter filter, Material material)
-        {
-            unsafe
-            {
-                var collider = default(BoxCollider);
-                collider.Initialize(geometry, filter, material);
-                return BlobAssetReference<Collider>.Create(&collider, sizeof(BoxCollider));
-            }
-        }
+        public static BlobAssetReference<Collider> Create(BoxGeometry geometry, CollisionFilter filter, Material material) =>
+            CreateInternal(geometry, filter, material);
 
         /// <summary>   Initializes the box collider, enables it to be created on stack. </summary>
         ///
         /// <param name="geometry"> The geometry. </param>
         /// <param name="filter">   Specifies the filter. </param>
         /// <param name="material"> The material. </param>
-        public void Initialize(BoxGeometry geometry, CollisionFilter filter, Material material)
+        public void Initialize(BoxGeometry geometry, CollisionFilter filter, Material material) =>
+            InitializeInternal(geometry, filter, material);
+
+        #endregion
+
+        #region Internal Construction
+
+        internal static BlobAssetReference<Collider> CreateInternal(BoxGeometry geometry, CollisionFilter filter, Material material, uint internalID = 0)
+        {
+            unsafe
+            {
+                var collider = default(BoxCollider);
+                collider.InitializeInternal(geometry, filter, material, internalID);
+                var blob = BlobAssetReference<Collider>.Create(&collider, sizeof(BoxCollider));
+                var boxCollider = (BoxCollider*)blob.GetUnsafePtr();
+                SafetyChecks.Check16ByteAlignmentAndThrow(boxCollider->m_ConvexHullData.FacePlanes, nameof(ConvexHullData.FacePlanes));
+                return blob;
+            }
+        }
+
+        void InitializeInternal(BoxGeometry geometry, CollisionFilter filter, Material material, uint forceUniqueBlobID = 0)
         {
             unsafe
             {
@@ -174,31 +201,32 @@ namespace Unity.Physics
                 m_Header.CollisionType = CollisionType.Convex;
                 m_Header.Version = 0;
                 m_Header.Magic = 0xff;
+                m_Header.ForceUniqueBlobID = forceUniqueBlobID;
                 m_Header.Filter = filter;
                 m_Header.Material = material;
 
                 // Build immutable convex data
                 fixed(BoxCollider* collider = &this)
                 {
-                    ConvexHull.VerticesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_Vertices[0], ref ConvexHull.VerticesBlob);
+                    ConvexHull.VerticesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_ConvexHullData.Vertices[0], ref ConvexHull.VerticesBlob);
                     ConvexHull.VerticesBlob.Length = 8;
 
-                    ConvexHull.FacePlanesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_FacePlanes[0], ref ConvexHull.FacePlanesBlob);
+                    ConvexHull.FacePlanesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_ConvexHullData.FacePlanes[0], ref ConvexHull.FacePlanesBlob);
                     ConvexHull.FacePlanesBlob.Length = 6;
 
-                    ConvexHull.FacesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_Faces[0], ref ConvexHull.FacesBlob.Offset);
+                    ConvexHull.FacesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_ConvexHullData.Faces[0], ref ConvexHull.FacesBlob.Offset);
                     ConvexHull.FacesBlob.Length = 6;
 
-                    ConvexHull.FaceVertexIndicesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_FaceVertexIndices[0], ref ConvexHull.FaceVertexIndicesBlob);
+                    ConvexHull.FaceVertexIndicesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_ConvexHullData.FaceVertexIndices[0], ref ConvexHull.FaceVertexIndicesBlob);
                     ConvexHull.FaceVertexIndicesBlob.Length = 24;
 
-                    ConvexHull.VertexEdgesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_VertexEdges[0], ref ConvexHull.VertexEdgesBlob);
+                    ConvexHull.VertexEdgesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_ConvexHullData.VertexEdges[0], ref ConvexHull.VertexEdgesBlob);
                     ConvexHull.VertexEdgesBlob.Length = 8;
 
-                    ConvexHull.FaceLinksBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_FaceLinks[0], ref ConvexHull.FaceLinksBlob);
+                    ConvexHull.FaceLinksBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_ConvexHullData.FaceLinks[0], ref ConvexHull.FaceLinksBlob);
                     ConvexHull.FaceLinksBlob.Length = 24;
 
-                    ConvexHull.Face* faces = (ConvexHull.Face*)(&collider->m_Faces[0]);
+                    ConvexHull.Face* faces = (ConvexHull.Face*)(&collider->m_ConvexHullData.Faces[0]);
                     faces[0] = new ConvexHull.Face { FirstIndex = 0, NumVertices = 4, MinHalfAngleCompressed = 0x80 };
                     faces[1] = new ConvexHull.Face { FirstIndex = 4, NumVertices = 4, MinHalfAngleCompressed = 0x80 };
                     faces[2] = new ConvexHull.Face { FirstIndex = 8, NumVertices = 4, MinHalfAngleCompressed = 0x80 };
@@ -206,7 +234,7 @@ namespace Unity.Physics
                     faces[4] = new ConvexHull.Face { FirstIndex = 16, NumVertices = 4, MinHalfAngleCompressed = 0x80 };
                     faces[5] = new ConvexHull.Face { FirstIndex = 20, NumVertices = 4, MinHalfAngleCompressed = 0x80 };
 
-                    byte* index = &collider->m_FaceVertexIndices[0];
+                    byte* index = &collider->m_ConvexHullData.FaceVertexIndices[0];
                     // stackalloc short* instead of byte* because packing size 1 not supported by Burst
                     short* faceVertexIndices = stackalloc short[24] { 2, 6, 4, 0, 1, 5, 7, 3, 1, 0, 4, 5, 7, 6, 2, 3, 3, 2, 0, 1, 7, 5, 4, 6 };
                     for (int i = 0; i < 24; i++)
@@ -214,7 +242,7 @@ namespace Unity.Physics
                         *index++ = (byte)faceVertexIndices[i];
                     }
 
-                    ConvexHull.Edge* vertexEdge = (ConvexHull.Edge*)(&collider->m_VertexEdges[0]);
+                    ConvexHull.Edge* vertexEdge = (ConvexHull.Edge*)(&collider->m_ConvexHullData.VertexEdges[0]);
                     short* vertexEdgeValuePairs = stackalloc short[16] { 4, 2, 2, 0, 4, 1, 4, 0, 5, 2, 5, 1, 0, 1, 5, 0 };
                     for (int i = 0; i < 8; i++)
                     {
@@ -225,7 +253,7 @@ namespace Unity.Physics
                         };
                     }
 
-                    ConvexHull.Edge* faceLink = (ConvexHull.Edge*)(&collider->m_FaceLinks[0]);
+                    ConvexHull.Edge* faceLink = (ConvexHull.Edge*)(&collider->m_ConvexHullData.FaceLinks[0]);
                     short* faceLinkValuePairs = stackalloc short[48]
                     {
                         3,
@@ -309,7 +337,7 @@ namespace Unity.Physics
                 // Clamp to avoid extents < 0
                 float3 he = math.max(0, m_Size * 0.5f - ConvexHull.ConvexRadius); // half extents
 
-                float3* vertices = (float3*)(&collider->m_Vertices[0]);
+                float3* vertices = (float3*)(&collider->m_ConvexHullData.Vertices[0]);
                 vertices[0] = math.transform(transform, new float3(he.x, he.y, he.z));
                 vertices[1] = math.transform(transform, new float3(-he.x, he.y, he.z));
                 vertices[2] = math.transform(transform, new float3(he.x, -he.y, he.z));
@@ -319,7 +347,7 @@ namespace Unity.Physics
                 vertices[6] = math.transform(transform, new float3(he.x, -he.y, -he.z));
                 vertices[7] = math.transform(transform, new float3(-he.x, -he.y, -he.z));
 
-                Plane* planes = (Plane*)(&collider->m_FacePlanes[0]);
+                Plane* planes = (Plane*)(&collider->m_ConvexHullData.FacePlanes[0]);
                 planes[0] = Math.TransformPlane(transform, new Plane(new float3(1, 0, 0), -he.x));
                 planes[1] = Math.TransformPlane(transform, new Plane(new float3(-1, 0, 0), -he.x));
                 planes[2] = Math.TransformPlane(transform, new Plane(new float3(0, 1, 0), -he.y));

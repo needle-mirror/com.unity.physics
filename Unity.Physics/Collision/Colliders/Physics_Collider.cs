@@ -324,8 +324,8 @@ namespace Unity.Physics
         }
 
         /// <summary>
-        /// Sets the friction. In case of a <see cref="CompoundCollider"/>, this 
-        /// behaves as <see cref="SetFriction(System.Single,Unity.Physics.ColliderKey)"/> 
+        /// Sets the friction. In case of a <see cref="CompoundCollider"/>, this
+        /// behaves as <see cref="SetFriction(System.Single,Unity.Physics.ColliderKey)"/>
         /// with ColliderKey.Zero passed in.
         /// </summary>
         ///
@@ -348,8 +348,8 @@ namespace Unity.Physics
             SetMaterialField(material, colliderKey, Material.MaterialField.Friction);
         }
 
-        /// <summary>Gets the restitution. In case of a <see cref="CompoundCollider"/>, 
-        /// this behaves as <see cref="GetRestitution(ColliderKey)"/> with ColliderKey.Zero 
+        /// <summary>Gets the restitution. In case of a <see cref="CompoundCollider"/>,
+        /// this behaves as <see cref="GetRestitution(ColliderKey)"/> with ColliderKey.Zero
         /// passed in</summary>
         ///
         /// <returns>   The restitution. </returns>
@@ -372,7 +372,7 @@ namespace Unity.Physics
         }
 
         /// <summary>
-        /// Sets the restitution. In case of a <see cref="CompoundCollider"/>, 
+        /// Sets the restitution. In case of a <see cref="CompoundCollider"/>,
         /// this behaves as <see cref="SetRestitution(System.Single,Unity.Physics.ColliderKey)"/>
         /// with ColliderKey.Zero passed in.
         /// </summary>
@@ -396,8 +396,8 @@ namespace Unity.Physics
             SetMaterialField(material, colliderKey, Material.MaterialField.Restitution);
         }
 
-        /// <summary>Gets the collision response. In case of a <see cref="CompoundCollider"/>, 
-        /// this behaves as <see cref="GetCollisionResponse(ColliderKey)"/> with 
+        /// <summary>Gets the collision response. In case of a <see cref="CompoundCollider"/>,
+        /// this behaves as <see cref="GetCollisionResponse(ColliderKey)"/> with
         /// ColliderKey.Zero passed in.</summary>
         ///
         /// <returns>   The collision response. </returns>
@@ -419,8 +419,8 @@ namespace Unity.Physics
             return GetMaterial(colliderKey).CollisionResponse;
         }
 
-        /// <summary>Sets collision response. In case of a <see cref="CompoundCollider"/>, 
-        /// this behaves as <see cref="SetCollisionResponse(CollisionResponsePolicy, ColliderKey)"/> 
+        /// <summary>Sets collision response. In case of a <see cref="CompoundCollider"/>,
+        /// this behaves as <see cref="SetCollisionResponse(CollisionResponsePolicy, ColliderKey)"/>
         /// with ColliderKey.Zero passed in.</summary>
         ///
         /// <param name="collisionResponse">    The collision response. </param>
@@ -1330,8 +1330,14 @@ namespace Unity.Physics
     {
         public ColliderType Type;
         public CollisionType CollisionType;
+
         public byte Version;    // increment whenever the collider data has changed
         public byte Magic;      // always = 0xff (for validation)
+
+        public uint ForceUniqueBlobID;  // ID used to force a unique collider blob in entities.
+                                        // While 0 by default for all colliders by design, the ID can be set to
+                                        // a unique value for a given collider to ensure the collider blob is not
+                                        // shared with other entities when their colliders have identical properties.
 
         public CollisionFilter Filter;
     }
@@ -1341,8 +1347,14 @@ namespace Unity.Physics
     {
         public ColliderType Type;
         public CollisionType CollisionType;
+
         public byte Version;
         public byte Magic;
+
+        public uint ForceUniqueBlobID;  // ID used to force a unique collider blob in entities.
+                                        // While 0 by default for all colliders by design, the ID can be set to
+                                        // a unique value for a given collider to ensure the collider blob is not
+                                        // shared with other entities when their colliders have identical properties.
 
         public CollisionFilter Filter;
         public Material Material;

@@ -1,16 +1,7 @@
-using System;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
-using UnityEngine;
-using LegacyPhysics = UnityEngine.Physics;
-using LegacyCollider = UnityEngine.Collider;
-using LegacyBox = UnityEngine.BoxCollider;
-using LegacyCapsule = UnityEngine.CapsuleCollider;
-using LegacyMesh = UnityEngine.MeshCollider;
-using LegacySphere = UnityEngine.SphereCollider;
-using UnityMesh = UnityEngine.Mesh;
 
 namespace Unity.Physics.Authoring
 {
@@ -18,7 +9,7 @@ namespace Unity.Physics.Authoring
     /// Marks a primary entity as a static root when building the compound colliders.
     /// </summary>
     [TemporaryBakingType]
-    struct StaticOptimizePhysicsBaking : IComponentData { }
+    struct StaticOptimizePhysicsBaking : IComponentData {}
 
     /// <summary>
     /// Component added on additional entities in bakers to mark the static root found during the baking of a collider.

@@ -30,11 +30,6 @@
     ],
     "versionDefines": [
         {
-            "name": "com.unity.modules.physics",
-            "expression": "",
-            "define": "LEGACY_PHYSICS"
-        },
-        {
             "name": "com.unity.dataflowgraph",
             "expression": "",
             "define": "UNITY_DATAFLOWGRAPH_EXISTS"

@@ -203,6 +203,14 @@ namespace Unity.Physics.Authoring
                         break;
                 }
             }
+
+            static void DrawColliderEdges(BlobAssetReference<Collider> collider, RigidTransform worldFromCollider, bool drawVertices)
+            {
+                // Note: this is an internal utility function used for drawing collider edges through blobs assets.
+                // It can be used for drawing colliders in MonoBehavior.OnDrawGizmos() functions.
+                // Function is accessed in samples using System.Type.GetMethod().
+                DrawColliderEdges((Collider*)collider.GetUnsafePtr(), worldFromCollider, drawVertices);
+            }
         }
     }
 }

@@ -1,28 +1,17 @@
 using System;
-using System.IO;
-using System.Text.RegularExpressions;
 using NUnit.Framework;
 using Unity.Collections;
 using Unity.Entities;
-using Unity.Physics.Authoring;
-using Unity.Scenes;
 using UnityEditor;
-using UnityEditor.SceneManagement;
 using UnityEngine;
-using UnityEngine.LowLevel;
-using UnityEngine.SceneManagement;
-using UnityMesh = UnityEngine.Mesh;
-#if LEGACY_PHYSICS
-using LegacyMeshCollider = UnityEngine.MeshCollider;
-#endif
 
 namespace Unity.Physics.Tests.Authoring
 {
     // Conversion system integration tests for physics shapes, including legacy physics
-    class PhysicsShapeConversionSystem_SubScene_IntegrationTests
+    class ColliderConversionSystem_SubScene_IntegrationTests
         : ConversionSystem_SubScene_IntegrationTestsFixture
     {
-        UnityMesh NonReadableMesh { get; set; }
+        UnityEngine.Mesh NonReadableMesh { get; set; }
 
         [OneTimeSetUp]
         protected new void OneTimeSetUp()
@@ -30,7 +19,7 @@ namespace Unity.Physics.Tests.Authoring
             base.OneTimeSetUp();
 
             // create non-readable mesh asset
-            NonReadableMesh = UnityMesh.Instantiate(Resources.GetBuiltinResource<UnityMesh>("New-Cylinder.fbx"));
+            NonReadableMesh = UnityEngine.Mesh.Instantiate(Resources.GetBuiltinResource<UnityEngine.Mesh>("New-Cylinder.fbx"));
             NonReadableMesh.UploadMeshData(true);
             Assume.That(NonReadableMesh.isReadable, Is.False, $"{NonReadableMesh} was readable.");
             AssetDatabase.CreateAsset(NonReadableMesh, $"{TemporaryAssetsPath}/NonReadableMesh.asset");
@@ -53,17 +42,8 @@ namespace Unity.Physics.Tests.Authoring
         }
 
         [Test]
-        public void PhysicsShapeConversionSystem_WhenShapeIsConvexWithNonReadableMesh_IsInSubScene_DoesNotThrow() =>
-            CreateSubSceneAndValidate<PhysicsShapeAuthoring>(shape => shape.SetConvexHull(default, NonReadableMesh), ColliderType.Convex);
-
-        [Test]
-        public void PhysicsShapeConversionSystem_WhenShapeIsMeshWithNonReadableMesh_IsInSubScene_DoesNotThrow() =>
-            CreateSubSceneAndValidate<PhysicsShapeAuthoring>(shape => shape.SetMesh(NonReadableMesh), ColliderType.Mesh);
-
-#if LEGACY_PHYSICS
-        [Test]
-        public void LegacyShapeConversionSystem_WhenShapeIsConvexWithNonReadableMesh_IsInSubScene_DoesNotThrow() =>
-            CreateSubSceneAndValidate<LegacyMeshCollider>(
+        public void ColliderConversionSystem_WhenShapeIsConvexWithNonReadableMesh_IsInSubScene_DoesNotThrow() =>
+            CreateSubSceneAndValidate<UnityEngine.MeshCollider>(
                 shape =>
                 {
                     shape.sharedMesh = NonReadableMesh;
@@ -73,8 +53,8 @@ namespace Unity.Physics.Tests.Authoring
             );
 
         [Test]
-        public void LegacyShapeConversionSystem_WhenShapeIsMeshWithNonReadableMesh_IsInSubScene_DoesNotThrow() =>
-            CreateSubSceneAndValidate<LegacyMeshCollider>(
+        public void ColliderConversionSystem_WhenShapeIsMeshWithNonReadableMesh_IsInSubScene_DoesNotThrow() =>
+            CreateSubSceneAndValidate<UnityEngine.MeshCollider>(
                 shape =>
                 {
                     shape.sharedMesh = NonReadableMesh;
@@ -82,6 +62,5 @@ namespace Unity.Physics.Tests.Authoring
                 },
                 ColliderType.Mesh
             );
-#endif
     }
 }

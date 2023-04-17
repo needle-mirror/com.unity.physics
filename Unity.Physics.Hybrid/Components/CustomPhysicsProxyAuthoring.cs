@@ -8,10 +8,17 @@ namespace Unity.Physics.Authoring
     /// <summary>
     /// This authoring component will create multiple proxy entities in different physics worlds.
     /// </summary>
+#if UNITY_2021_2_OR_NEWER
+    [Icon(k_IconPath)]
+#endif
     [AddComponentMenu("Entities/Physics/Custom Physics Proxy")]
     [HelpURL(HelpURLs.CustomPhysicsProxyAuthoring)]
     public sealed class CustomPhysicsProxyAuthoring : MonoBehaviour
     {
+#if UNITY_2021_2_OR_NEWER
+        const string k_IconPath = "Packages/com.unity.physics/Unity.Physics.Editor/Editor Default Resources/Icons/d_Rigidbody@64.png";
+#endif
+
         [Range(0f, 1f)]
         [Tooltip("Coefficient in range [0,1] denoting how much the client body will be driven by position (teleported), while the rest of position diff will be velocity-driven")]
         public float FirstOrderGain = 0.0f;

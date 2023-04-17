@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -84,25 +85,45 @@ namespace Unity.Physics
     }
 
     /// <summary>   A collider in the shape of a cylinder. </summary>
+    [StructLayout(LayoutKind.Explicit)]
     public struct CylinderCollider : IConvexCollider
     {
         // Header
-        private ConvexColliderHeader m_Header;
-        internal ConvexHull ConvexHull;
+        [FieldOffset(0)]
+        ConvexColliderHeader m_Header;  // 32 bytes
+        [FieldOffset(32)]
+        internal ConvexHull ConvexHull; // 52 bytes
+
+        [FieldOffset(84)]
+        float3 m_Center;                // 12 bytes
 
         // Convex hull data, sized for the maximum allowed number of cylinder faces
-        // Todo: would be nice to use the actual types here but C# only likes fixed arrays of builtin types..
-        private unsafe fixed byte m_Vertices[sizeof(float) * 3 * 2 * CylinderGeometry.MaxSideCount];
-        private unsafe fixed byte m_FacePlanes[sizeof(float) * 4 * (2 + CylinderGeometry.MaxSideCount)];
-        private unsafe fixed byte m_Faces[4 * (2 + CylinderGeometry.MaxSideCount)];
-        private unsafe fixed byte m_FaceVertexIndices[sizeof(byte) * 6 * CylinderGeometry.MaxSideCount];
+        [StructLayout(LayoutKind.Sequential, Size = 1640)]
+        struct ConvexHullData
+        {
+            // Todo: would be nice to use the actual types here but C# only likes fixed arrays of builtin types..
 
-        // Cylinder parameters
-        private float3 m_Center;
-        private quaternion m_Orientation;
-        private float m_Height;
-        private float m_Radius;
-        private int m_SideCount;
+            // FacePlanes memory needs to be 16-byte aligned
+            public unsafe fixed byte FacePlanes[sizeof(float) * 4 * (2 + CylinderGeometry.MaxSideCount)];   // 544 bytes
+            public unsafe fixed byte Vertices[sizeof(float) * 3 * 2 * CylinderGeometry.MaxSideCount];       // 768 bytes
+            public unsafe fixed byte Faces[4 * (2 + CylinderGeometry.MaxSideCount)];                        // 136 bytes
+            public unsafe fixed byte FaceVertexIndices[6 * CylinderGeometry.MaxSideCount];                  // 192 bytes
+        }
+
+        [FieldOffset(96)]
+        ConvexHullData m_ConvexHullData;    // 1640 bytes
+
+        [FieldOffset(1736)]
+        quaternion m_Orientation;           // 16 bytes
+        [FieldOffset(1752)]
+        float m_Height;                     // 4 bytes
+        [FieldOffset(1756)]
+        float m_Radius;                     // 4 bytes
+        [FieldOffset(1760)]
+        int m_SideCount;                    // 4 bytes
+
+        [FieldOffset(1764)]
+        MassProperties m_MassProperties;    // 4 bytes
 
         /// <summary>   Gets the center. </summary>
         ///
@@ -183,22 +204,35 @@ namespace Unity.Physics
         /// <param name="material"> The material. </param>
         ///
         /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
-        public static BlobAssetReference<Collider> Create(CylinderGeometry geometry, CollisionFilter filter, Material material)
-        {
-            unsafe
-            {
-                var collider = default(CylinderCollider);
-                collider.Initialize(geometry, filter, material);
-                return BlobAssetReference<Collider>.Create(&collider, sizeof(CylinderCollider));
-            }
-        }
+        public static BlobAssetReference<Collider> Create(CylinderGeometry geometry, CollisionFilter filter,  Material material) =>
+            CreateInternal(geometry, filter, material);
 
         /// <summary>   Initializes the cylinder collider, enables it to be created on stack. </summary>
         ///
         /// <param name="geometry"> The geometry. </param>
         /// <param name="filter">   Specifies the filter. </param>
         /// <param name="material"> The material. </param>
-        public void Initialize(CylinderGeometry geometry, CollisionFilter filter, Material material)
+        public void Initialize(CylinderGeometry geometry, CollisionFilter filter, Material material) =>
+            InitializeInternal(geometry, filter, material);
+
+        #endregion
+
+        #region Internal Construction
+
+        internal static BlobAssetReference<Collider> CreateInternal(CylinderGeometry geometry, CollisionFilter filter, Material material, uint internalID = 0)
+        {
+            unsafe
+            {
+                var collider = default(CylinderCollider);
+                collider.InitializeInternal(geometry, filter, material, internalID);
+                var blob = BlobAssetReference<Collider>.Create(&collider, sizeof(CylinderCollider));
+                var cylCollider = (CylinderCollider*)(blob.GetUnsafePtr());
+                SafetyChecks.Check16ByteAlignmentAndThrow(cylCollider->m_ConvexHullData.FacePlanes, nameof(ConvexHullData.FacePlanes));
+                return blob;
+            }
+        }
+
+        void InitializeInternal(CylinderGeometry geometry, CollisionFilter filter, Material material, uint forceUniqueBlobID = 0)
         {
             unsafe
             {
@@ -206,23 +240,23 @@ namespace Unity.Physics
                 m_Header.CollisionType = CollisionType.Convex;
                 m_Header.Version = 0;
                 m_Header.Magic = 0xff;
+                m_Header.ForceUniqueBlobID = forceUniqueBlobID;
                 m_Header.Filter = filter;
                 m_Header.Material = material;
-                MemorySize = UnsafeUtility.SizeOf<CylinderCollider>();
 
                 // Initialize immutable convex data
                 fixed(CylinderCollider* collider = &this)
                 {
-                    ConvexHull.VerticesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_Vertices[0], ref ConvexHull.VerticesBlob);
+                    ConvexHull.VerticesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_ConvexHullData.Vertices[0], ref ConvexHull.VerticesBlob);
                     ConvexHull.VerticesBlob.Length = 0;
 
-                    ConvexHull.FacePlanesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_FacePlanes[0], ref ConvexHull.FacePlanesBlob);
+                    ConvexHull.FacePlanesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_ConvexHullData.FacePlanes[0], ref ConvexHull.FacePlanesBlob);
                     ConvexHull.FacePlanesBlob.Length = 0;
 
-                    ConvexHull.FacesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_Faces[0], ref ConvexHull.FacesBlob);
+                    ConvexHull.FacesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_ConvexHullData.Faces[0], ref ConvexHull.FacesBlob);
                     ConvexHull.FacesBlob.Length = 0;
 
-                    ConvexHull.FaceVertexIndicesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_FaceVertexIndices[0], ref ConvexHull.FaceVertexIndicesBlob);
+                    ConvexHull.FaceVertexIndicesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_ConvexHullData.FaceVertexIndices[0], ref ConvexHull.FaceVertexIndicesBlob);
                     ConvexHull.FaceVertexIndicesBlob.Length = 0;
 
                     // No connectivity
@@ -261,7 +295,7 @@ namespace Unity.Physics
             fixed(CylinderCollider* collider = &this)
             {
                 // vertices
-                float3* vertices = (float3*)(&collider->m_Vertices[0]);
+                float3* vertices = (float3*)(&collider->m_ConvexHullData.Vertices[0]);
                 var arcStep = 2f * (float)math.PI / m_SideCount;
                 for (var i = 0; i < m_SideCount; i++)
                 {
@@ -272,7 +306,7 @@ namespace Unity.Physics
                 }
 
                 // planes
-                Plane* planes = (Plane*)(&collider->m_FacePlanes[0]);
+                Plane* planes = (Plane*)(&collider->m_ConvexHullData.FacePlanes[0]);
                 planes[0] = Math.TransformPlane(transform, new Plane(new float3(0f, 0f, -1f), -halfHeight));
                 planes[1] = Math.TransformPlane(transform, new Plane(new float3(0f, 0f, 1f), -halfHeight));
                 float d = radius * math.cos((float)math.PI / m_SideCount);
@@ -283,8 +317,8 @@ namespace Unity.Physics
                 }
 
                 // faces
-                ConvexHull.Face* faces = (ConvexHull.Face*)(&collider->m_Faces[0]);
-                byte* indices = (byte*)(&collider->m_FaceVertexIndices[0]);
+                ConvexHull.Face* faces = (ConvexHull.Face*)(&collider->m_ConvexHullData.Faces[0]);
+                byte* indices = (byte*)(&collider->m_ConvexHullData.FaceVertexIndices[0]);
                 float halfAngle = (float)math.PI * 0.25f;
                 {
                     faces[0].FirstIndex = 0;
@@ -319,7 +353,7 @@ namespace Unity.Physics
                 }
             }
 
-            MassProperties = new MassProperties
+            m_MassProperties = new MassProperties
             {
                 MassDistribution = new MassDistribution
                 {
@@ -351,7 +385,7 @@ namespace Unity.Physics
         /// <summary>   Gets the memory size. </summary>
         ///
         /// <value> The size of the memory. </value>
-        public int MemorySize { get; private set; }
+        public int MemorySize => UnsafeUtility.SizeOf<CylinderCollider>();
 
         /// <summary>   Gets or sets the material. </summary>
         ///
@@ -376,7 +410,7 @@ namespace Unity.Physics
         /// <summary>   Gets the mass properties. </summary>
         ///
         /// <value> The mass properties. </value>
-        public MassProperties MassProperties { get; private set; }
+        public MassProperties MassProperties => m_MassProperties;
 
         /// <summary>   Calculates the aabb. </summary>
         ///

@@ -203,7 +203,7 @@ namespace Unity.Physics.Authoring
             // if shear is very nearly identity, hash it as identity
             // TODO: quantize shear
             shear = math.mul(shear, math.inverse(orientation));
-            if (!PhysicsShapeExtensions.HasShear(new float4x4(shear, 0f)))
+            if (!new float4x4(shear, 0f).HasShear())
                 shear = float3x3.identity;
 
             // round orientation using precision inversely proportional to scaled mesh size

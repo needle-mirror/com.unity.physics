@@ -123,39 +123,39 @@ namespace Unity.Physics.Authoring
             return output;
         }
 
-        static BlobAssetReference<Collider> CalculateBasicBlobAsset(ref ShapeComputationDataBaking shapeData)
+        static BlobAssetReference<Collider> CalculateBasicBlobAsset(in ShapeComputationDataBaking shapeData)
         {
             switch (shapeData.ShapeType)
             {
                 case ShapeType.Box:
                 {
-                    return BoxCollider.Create(
-                        shapeData.BoxProperties, shapeData.CollisionFilter, shapeData.Material
+                    return BoxCollider.CreateInternal(
+                        shapeData.BoxProperties, shapeData.CollisionFilter, shapeData.Material, shapeData.ForceUniqueIdentifier
                     );
                 }
                 case ShapeType.Capsule:
                 {
-                    return CapsuleCollider.Create(
-                        shapeData.CapsuleProperties, shapeData.CollisionFilter, shapeData.Material
+                    return CapsuleCollider.CreateInternal(
+                        shapeData.CapsuleProperties, shapeData.CollisionFilter, shapeData.Material, shapeData.ForceUniqueIdentifier
                     );
                 }
                 case ShapeType.Cylinder:
                 {
-                    return CylinderCollider.Create(
-                        shapeData.CylinderProperties, shapeData.CollisionFilter, shapeData.Material
+                    return CylinderCollider.CreateInternal(
+                        shapeData.CylinderProperties, shapeData.CollisionFilter, shapeData.Material, shapeData.ForceUniqueIdentifier
                     );
                 }
                 case ShapeType.Plane:
                 {
                     var v = shapeData.PlaneVertices;
-                    return PolygonCollider.CreateQuad(
-                        v.c0, v.c1, v.c2, v.c3, shapeData.CollisionFilter, shapeData.Material
+                    return PolygonCollider.CreateQuadInternal(
+                        v.c0, v.c1, v.c2, v.c3, shapeData.CollisionFilter, shapeData.Material, shapeData.ForceUniqueIdentifier
                     );
                 }
                 case ShapeType.Sphere:
                 {
-                    return SphereCollider.Create(
-                        shapeData.SphereProperties, shapeData.CollisionFilter, shapeData.Material
+                    return SphereCollider.CreateInternal(
+                        shapeData.SphereProperties, shapeData.CollisionFilter, shapeData.Material, shapeData.ForceUniqueIdentifier
                     );
                 }
                 // Note : Mesh and Hull are not computed here as they are in a separated set of jobs

@@ -18,12 +18,10 @@ using Unity.Mathematics;
 
 namespace Unity.Physics
 {
-    //TODO: collect all other defines in the codebase here and move to it's own file
     static class CompilationSymbols
     {
-        //TODO: change this to UNITY_DOTS_DEBUG, as that is the defacto debuging define in above entities .17
-
-        public const string SafetyChecksSymbol = "ENABLE_UNITY_COLLECTIONS_CHECKS";
+        public const string CollectionsChecksSymbol = "ENABLE_UNITY_COLLECTIONS_CHECKS";
+        public const string DebugChecksSymbol = "UNITY_DOTS_DEBUG";
     }
 
     //Empty data container used to register mappings between collider headers and actual C# collider types
@@ -78,7 +76,7 @@ namespace Unity.Physics
 
     static class SafetyChecks
     {
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static unsafe void CheckColliderTypeAndThrow<ExpectedType>(ColliderType type)
             where ExpectedType : ICollider
         {
@@ -96,84 +94,96 @@ namespace Unity.Physics
                 throw new Exception($"Collider types do not match. Expected {dummyHeader.Type}, but was {type}.");
         }
 
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void CheckMaterialGetterValid(ColliderType type, ColliderKey colliderKey, in FixedString32Bytes methodName)
         {
             if (type == ColliderType.Compound && colliderKey == ColliderKey.Empty)
                 throw new InvalidOperationException($"Calling {methodName}() on a CompoundCollider requires a non-empty ColliderKey!");
         }
 
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void CheckSimulationStageAndThrow(SimulationScheduleStage currentStage, SimulationScheduleStage expectedStage)
         {
             if (currentStage != expectedStage)
                 throw new Exception($"It is not possible to do the operation in {currentStage} simulation stage. Required stage is {expectedStage}");
         }
 
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static unsafe void Check4ByteAlignmentAndThrow(void* data, in FixedString32Bytes paramName)
         {
-            if (((long)data & 0x3) != 0)
-                throw new InvalidOperationException($"{paramName} must be 4-byte aligned.");
+            CheckAlignmentAndThrow(data, 4, paramName);
         }
 
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
+        public static unsafe void Check16ByteAlignmentAndThrow(void* data, in FixedString32Bytes paramName)
+        {
+            CheckAlignmentAndThrow(data, 16, paramName);
+        }
+
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
+        public static unsafe void CheckAlignmentAndThrow(void* data, uint alignment, in FixedString32Bytes paramName)
+        {
+            if (((ulong)data & (alignment - 1)) != 0)
+                throw new InvalidOperationException($"{paramName} must be {alignment}-byte aligned.");
+        }
+
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void CheckAreEqualAndThrow(SimulationType expected, SimulationType actual)
         {
             if (actual != expected)
                 throw new ArgumentException($"Simulation type {actual} is not supported. This method should only be called when using {expected}.");
         }
 
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void CheckFiniteAndThrow(float3 value, FixedString32Bytes paramName)
         {
             if (math.any(!math.isfinite(value)))
                 throw new ArgumentException($"{value} was not finite.", $"{paramName}");
         }
 
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void CheckFiniteAndPositiveAndThrow(float3 value, in FixedString32Bytes paramName)
         {
             if (math.any(value < 0f) || math.any(!math.isfinite(value)))
                 throw new ArgumentOutOfRangeException($"{paramName}", $"{value} is not positive and finite.");
         }
 
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void CheckIndexAndThrow(int index, int length, int min = 0)
         {
             if (index < min || index >= length)
                 throw new IndexOutOfRangeException($"Index {index} is out of range [{min}, {length}].");
         }
 
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void CheckLengthSmallerThanCapacityAndThrow(int length, int capacity)
         {
             if (length > capacity)
                 throw new ArgumentOutOfRangeException($"Length {length} is above max capacity of {capacity}");
         }
 
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void CheckInRangeAndThrow(int value, int2 range, in FixedString32Bytes paramName)
         {
             if (value < range.x || value > range.y)
                 throw new ArgumentOutOfRangeException($"{paramName}", $"{value} is out of range [{range.x}, {range.y}].");
         }
 
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void CheckInRangeAndThrow(float value, float2 range, in FixedString32Bytes paramName)
         {
             if (value < range.x || value > range.y)
                 throw new ArgumentOutOfRangeException($"{paramName}", $"{value} is out of range [{range.x}, {range.y}].");
         }
 
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void CheckWithinThresholdAndThrow(float value, float threshold, in FixedString32Bytes paramName)
         {
             if (value < -threshold || value > threshold)
                 throw new ArgumentOutOfRangeException($"{paramName}", $"{value} cannot exceed threshold of {threshold}");
         }
 
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void CheckNotEmptyAndThrow<T>(NativeArray<T> array, in FixedString32Bytes paramName) where T : struct
         {
             if (!array.IsCreated || array.Length == 0)
@@ -182,7 +192,7 @@ namespace Unity.Physics
 
         #region Geometry Validation
 
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void CheckCoplanarAndThrow(float3 vertex0, float3 vertex1, float3 vertex2, float3 vertex3, in FixedString32Bytes paramName)
         {
             var normal = math.normalize(math.cross(vertex1 - vertex0, vertex2 - vertex0));
@@ -190,7 +200,7 @@ namespace Unity.Physics
                 throw new ArgumentException("Vertices are not co-planar", $"{paramName}");
         }
 
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void CheckTriangleIndicesInRangeAndThrow(NativeArray<int3> triangles, int numVertices, in FixedString32Bytes paramName)
         {
             for (var i = 0; i < triangles.Length; ++i)
@@ -228,7 +238,7 @@ namespace Unity.Physics
                 throw new ArgumentException($"{propertyName} {q} is not valid.", $"{paramName}");
         }
 
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void CheckValidAndThrow(NativeArray<float3> points, in FixedString32Bytes pointsName, in ConvexHullGenerationParameters generationParameters, in FixedString32Bytes paramName)
         {
             Geometry_CheckFiniteAndPositiveAndThrow(generationParameters.BevelRadius, paramName, nameof(ConvexHullGenerationParameters.BevelRadius));
@@ -237,7 +247,7 @@ namespace Unity.Physics
                 CheckFiniteAndThrow(points[i], pointsName);
         }
 
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void CheckValidAndThrow(in BoxGeometry geometry, in FixedString32Bytes paramName)
         {
             Geometry_CheckFiniteAndThrow(geometry.Center, paramName, nameof(BoxGeometry.Center));
@@ -248,7 +258,7 @@ namespace Unity.Physics
                 throw new ArgumentException($"{paramName}", $"{nameof(BoxGeometry.BevelRadius)} must be greater than or equal to and);less than or equal to half the smallest size dimension.");
         }
 
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void CheckValidAndThrow(in CapsuleGeometry geometry, in FixedString32Bytes paramName)
         {
             Geometry_CheckFiniteAndThrow(geometry.Vertex0, paramName, nameof(CapsuleGeometry.Vertex0));
@@ -256,7 +266,7 @@ namespace Unity.Physics
             Geometry_CheckFiniteAndPositiveAndThrow(geometry.Radius, paramName, nameof(CapsuleGeometry.Radius));
         }
 
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void CheckValidAndThrow(in CylinderGeometry geometry, in FixedString32Bytes paramName)
         {
             Geometry_CheckFiniteAndThrow(geometry.Center, paramName, nameof(CylinderGeometry.Center));
@@ -270,7 +280,7 @@ namespace Unity.Physics
                 throw new ArgumentException($"{paramName}", $"{nameof(CylinderGeometry.SideCount)} must be greater than or equal to {CylinderGeometry.MinSideCount} and less than or equal to {CylinderGeometry.MaxSideCount}.");
         }
 
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void CheckValidAndThrow(in SphereGeometry geometry, in FixedString32Bytes paramName)
         {
             Geometry_CheckFiniteAndThrow(geometry.Center, paramName, nameof(SphereGeometry.Center));
@@ -281,16 +291,16 @@ namespace Unity.Physics
 
         #region Throw Exceptions
 
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void ThrowInvalidOperationException(FixedString128Bytes message = default) => throw new InvalidOperationException($"{message}");
 
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void ThrowNotImplementedException() => throw new NotImplementedException();
 
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void ThrowNotSupportedException(FixedString64Bytes message = default) => throw new NotSupportedException($"{message}");
 
-        [Conditional(CompilationSymbols.SafetyChecksSymbol)]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void ThrowArgumentException(in FixedString32Bytes paramName, FixedString64Bytes message = default) =>
             throw new ArgumentException($"{message}", $"{paramName}");
 

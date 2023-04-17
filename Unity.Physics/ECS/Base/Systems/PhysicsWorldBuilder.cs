@@ -12,6 +12,7 @@ using Unity.Physics.Extensions;
 namespace Unity.Physics.Systems
 {
     /// <summary>   Utilities for building a physics world. </summary>
+    [BurstCompile]
     public static class PhysicsWorldBuilder
     {
         /// <summary>

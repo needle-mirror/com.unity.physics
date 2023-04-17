@@ -268,7 +268,7 @@ namespace Unity.Physics.Tests.Aspects
             protected override void OnUpdate()
             {
                 Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
-                RigidBodyAspect aspect = GetAspectRW<RigidBodyAspect>(aspectEntity);
+                RigidBodyAspect aspect = GetAspect<RigidBodyAspect>(aspectEntity);
 
                 // Transforms
                 Assert.AreEqual(math.all(aspect.Position == AspectTestUtils.DefaultPos), true);
@@ -307,7 +307,7 @@ namespace Unity.Physics.Tests.Aspects
             protected override void OnUpdate()
             {
                 Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
-                RigidBodyAspect aspect = GetAspectRW<RigidBodyAspect>(aspectEntity);
+                RigidBodyAspect aspect = GetAspect<RigidBodyAspect>(aspectEntity);
 
                 Assert.AreEqual(aspect.HasInfiniteInertia, true);
                 Assert.AreEqual(aspect.HasInfiniteMass, false);
@@ -322,7 +322,7 @@ namespace Unity.Physics.Tests.Aspects
             protected override void OnUpdate()
             {
                 Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
-                RigidBodyAspect aspect = GetAspectRW<RigidBodyAspect>(aspectEntity);
+                RigidBodyAspect aspect = GetAspect<RigidBodyAspect>(aspectEntity);
 
                 Assert.AreEqual(aspect.HasInfiniteInertia, false);
                 Assert.AreEqual(aspect.HasInfiniteMass, true);
@@ -337,7 +337,7 @@ namespace Unity.Physics.Tests.Aspects
             protected override void OnUpdate()
             {
                 Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
-                RigidBodyAspect aspect = GetAspectRW<RigidBodyAspect>(aspectEntity);
+                RigidBodyAspect aspect = GetAspect<RigidBodyAspect>(aspectEntity);
 
                 Assert.AreEqual(aspect.HasInfiniteInertia, true);
                 Assert.AreEqual(aspect.HasInfiniteMass, true);
@@ -353,7 +353,7 @@ namespace Unity.Physics.Tests.Aspects
             protected override void OnUpdate()
             {
                 Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
-                RigidBodyAspect aspect = GetAspectRW<RigidBodyAspect>(aspectEntity);
+                RigidBodyAspect aspect = GetAspect<RigidBodyAspect>(aspectEntity);
 
                 Assert.AreEqual(aspect.HasInfiniteInertia, true);
                 Assert.AreEqual(aspect.HasInfiniteMass, true);
@@ -388,7 +388,7 @@ namespace Unity.Physics.Tests.Aspects
             protected override void OnUpdate()
             {
                 Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
-                RigidBodyAspect aspect = GetAspectRW<RigidBodyAspect>(aspectEntity);
+                RigidBodyAspect aspect = GetAspect<RigidBodyAspect>(aspectEntity);
 
                 Assert.AreEqual(aspect.HasInfiniteInertia, true);
                 Assert.AreEqual(aspect.HasInfiniteMass, true);
@@ -406,7 +406,7 @@ namespace Unity.Physics.Tests.Aspects
             protected override void OnUpdate()
             {
                 Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
-                RigidBodyAspect aspect = GetAspectRW<RigidBodyAspect>(aspectEntity);
+                RigidBodyAspect aspect = GetAspect<RigidBodyAspect>(aspectEntity);
 
                 // pos, rot
                 {
@@ -538,7 +538,7 @@ namespace Unity.Physics.Tests.Aspects
             protected override void OnUpdate()
             {
                 Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
-                RigidBodyAspect aspect = GetAspectRW<RigidBodyAspect>(aspectEntity);
+                RigidBodyAspect aspect = GetAspect<RigidBodyAspect>(aspectEntity);
 
                 // scale modification
                 {
@@ -572,7 +572,7 @@ namespace Unity.Physics.Tests.Aspects
             protected override void OnUpdate()
             {
                 Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
-                RigidBodyAspect aspect = GetAspectRW<RigidBodyAspect>(aspectEntity);
+                RigidBodyAspect aspect = GetAspect<RigidBodyAspect>(aspectEntity);
 
                 // GetVelocityAtPoint
                 {

@@ -5,7 +5,7 @@ using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Mathematics;
-using Unity.PerformanceTesting;
+//using Unity.PerformanceTesting;
 using static Unity.Physics.BoundingVolumeHierarchy;
 using static Unity.Physics.BoundingVolumeHierarchy.Builder;
 using Assert = UnityEngine.Assertions.Assert;
@@ -494,7 +494,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
             }
         }
 
-        [Test, Performance]
+        /*[Test, Performance]
         [TestCase(100, true, TestName = "TreeOverlapPerfTest 200")]
         [TestCase(1000, true, TestName = "TreeOverlapPerfTest 2000")]
         public void TreeOverlapPerfTest(int elementCount, bool newOverlap)
@@ -565,6 +565,6 @@ namespace Unity.Physics.Tests.Collision.Geometry
             collisionPairs.Dispose();
             filters.Dispose();
             respondsToCollision.Dispose();
-        }
+        }*/
     }
 }

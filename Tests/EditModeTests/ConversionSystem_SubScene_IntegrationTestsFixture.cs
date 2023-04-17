@@ -72,7 +72,7 @@ namespace Unity.Physics.Tests.Authoring
         protected string TestNameWithoutSpecialCharacters =>
             k_NonWords.Replace(TestContext.CurrentContext.Test.Name, string.Empty);
 
-        private SubScene CreateSubScene(Action createSubSceneObjects)
+        protected SubScene CreateSubScene(Action createSubSceneObjects)
         {
             // create sub-scene with objects
             var subScene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene);

@@ -232,7 +232,7 @@ namespace Unity.Physics.Tests.Aspects
             protected override void OnUpdate()
             {
                 Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
-                ColliderAspect aspect = GetAspectRW<ColliderAspect>(aspectEntity);
+                ColliderAspect aspect = GetAspect<ColliderAspect>(aspectEntity);
 
                 Assert.IsTrue(aspect.CollisionType == CollisionType.Convex);
                 TestNonCompoundProperties(aspect);
@@ -245,7 +245,7 @@ namespace Unity.Physics.Tests.Aspects
             protected override void OnUpdate()
             {
                 Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
-                ColliderAspect aspect = GetAspectRW<ColliderAspect>(aspectEntity);
+                ColliderAspect aspect = GetAspect<ColliderAspect>(aspectEntity);
 
                 Assert.IsTrue(aspect.CollisionType == CollisionType.Composite);
                 Assert.IsTrue(aspect.Type == ColliderType.Mesh);
@@ -259,7 +259,7 @@ namespace Unity.Physics.Tests.Aspects
             protected override void OnUpdate()
             {
                 Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
-                ColliderAspect aspect = GetAspectRW<ColliderAspect>(aspectEntity);
+                ColliderAspect aspect = GetAspect<ColliderAspect>(aspectEntity);
 
                 Assert.IsTrue(aspect.CollisionType == CollisionType.Composite);
                 Assert.IsTrue(aspect.Type == ColliderType.Compound);
@@ -452,7 +452,7 @@ namespace Unity.Physics.Tests.Aspects
             protected override void OnUpdate()
             {
                 Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
-                ColliderAspect aspect = SystemAPI.GetAspectRW<ColliderAspect>(aspectEntity);
+                ColliderAspect aspect = SystemAPI.GetAspect<ColliderAspect>(aspectEntity);
 
                 Assert.IsTrue(aspect.CollisionType == CollisionType.Composite);
                 Assert.IsTrue(aspect.Type == ColliderType.Compound);
@@ -538,7 +538,7 @@ namespace Unity.Physics.Tests.Aspects
             protected unsafe override void OnUpdate()
             {
                 Entity aspectEntity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
-                ColliderAspect aspect = GetAspectRW<ColliderAspect>(aspectEntity);
+                ColliderAspect aspect = GetAspect<ColliderAspect>(aspectEntity);
 
                 // Check that self-filtering works
                 {

@@ -6,30 +6,32 @@ For performance reasons, you should try to avoid using a mesh during physics –
 
 The most important property of a `PhysicsCollider` is a `BlobAssetReference` to the Collider data used by the physics simulation (which is in a format optimized for collision queries). Each of the Collider types implement an `ICollider` interface, and for each Collider type, there is a static `Create()` function, which takes parameters specific to the shape. For example, a `SphereCollider` is built from a position and a radius, while a `ConvexCollider` is built from a point cloud.
 
->**Note:** It is possible to create a Collider which has a null `BlobAssetReference`. Unity Physics still simulates the body, but it cannot collide with anything. This can be useful in some particular scenarios – for example you can connect such a body to another body using a joint, and feed the simulated positions into your skinning system.
+>[!NOTE]
+>It is possible to create a Collider which has a null `BlobAssetReference`. Unity Physics still simulates the body, but it cannot collide with anything. This can be useful in some particular scenarios – for example you can connect such a body to another body using a joint, and feed the simulated positions into your skinning system.
 
-## Collider Materials
+## Collider types
+Various collider types are supported in Unity Physics. The collider type of every `PhysicsCollider` is defined by its `Collider` blob and can be obtained through the `Collider.ColliderType` property.
 
-The Collider also stores a Material, which describes how it reacts when in collision with other objects.
+| Type            | Name               | Description                                                                                                                           |
+|-----------------|--------------------|---------------------------------------------------------------------------------------------------------------------------------------|
+| Convex          | `ConvexCollider`   | A collider in the shape of an arbitrary convex hull created from a set of 3D points.                                                  |
+| Sphere          | `SphereCollider`   | A collider in the shape of a sphere defined by a radius.                                                                              |
+| Capsule         | `CapsuleCollider`  | A collider in the shape of a capsule formed by an inner line segment and a radius.                                                    |
+| Triangle / Quad | `PolygonCollider`  | A flat convex collider with either 3 or 4 coplanar vertices forming either a triangle or a quad, respectively.                        |
+| Box             | `BoxCollider`      | A collider in the shape of a box represented by a local center position and a 3D size parameter, defining the three box side lengths. |
+| Cylinder        | `CylinderCollider` | A collider in the shape of a cylinder represented by a local position and orientation, and a cylinder height and radius.              |
+| Mesh            | `MeshCollider`     | A collider representing a mesh comprised of triangles and quads.                                                                      |
+| Compound        | `CompoundCollider` | A collider containing instances of other colliders.                                                                                   |
+| Terrain         | `TerrainCollider`  | A collider representing a terrain described by a uniform grid of height samples.                                                      |
 
-The [restitution](https://en.wikipedia.org/wiki/Coefficient_of_restitution) of a Material determines how "bouncy" the Material is. The higher the restitution, the more velocity is preserved when the object collides with another. A value of zero indicates that the object should not bounce at all, while a value of one indicates that all the speed of the object should be preserved.
+## Scaling colliders
+All collider types can be uniformly scaled at run-time when they belong to a dynamic rigid body. This can be achieved by modifying the `Scale` member in the entity's `LocalTransform` component.
 
->**Note:** Due to numerical imprecision and approximations inside the physics simulation, a body with a restitution of **1** will eventually come to rest.
+Besides uniform scaling, additional non-uniform and type specific scaling can be achieved through use of the individual collider types' geometric parameters. 
+For example, a box could be scaled by modifying its width, length and height, or a cylinder could be changed in height or radius, etc.
+Only primitive types (Sphere, Box, Capsule and Cylinder) support such non-uniform scaling. Mesh collider types (Mesh, Convex and Terrain) and compound colliders can not be modified.
 
-The [coefficient of friction](https://en.wikipedia.org/wiki/Friction) of a body relates how "sticky" an object is when another object is sliding along its surface. This is the ratio between the force pushing down on the surface and the force pushing against the relative velocities between the bodies. A value of zero means that friction would not slow down the body, while higher values indicate that more energy should be lost.
-
-Both friction and restitution have a `CombinePolicy` property which determines how the engine should merge two different values. For example, you may want to always use the largest or smallest value in a collision.
-
-In addition to these, a Material also has a set of flags, which enable special behaviors during the physics simulation. The most important are represented by the `CollisionResponsePolicy`:
-
-* `Collide`: regular collider.
-* `RaiseTriggerEvents`: if this flag is enabled, the Collider is treated as a "detector" rather than as a physical body. This means it cannot receive forces from a collision, instead, it will raise an event to signify that an overlap occurred. For example, you can use this to determine when your player enters a specific region.
-* `CollideRaiseCollisionEvents`: this is similar to the previous flag, but still allows the body to push other bodies normally. The events that the simulation raises can then be used to determine how objects are colliding. This would, for example, allow you to play sound events.
-* `None`: collider moves and intercepts queries, but generates no collision response and no events.
-
-A Material template asset can be created in the **Create > Entities > Physics > Physics Material Template** menu, in the project window.
-
-![Material Template](images/material-template.png)
+For a demonstration of both uniform and non-uniform scaling at runtime, please refer to the [Unity Physics Samples](https://github.com/Unity-Technologies/EntityComponentSystemSamples/). 
 
 ## The Collision filter
 
@@ -107,7 +109,8 @@ This kind of behaviour is useful in some scenarios. Suppose you had an elevator 
 
 To inform the simulation of masses, you can use the `PhysicsMass` component. This tells Unity Physics how a Collider reacts to an impulse. It stores the mass and [inertia tensor](https://en.wikipedia.org/wiki/Moment_of_inertia) for that entity as well as a transform describing the orientation of the inertia tensor and center of mass.
 
->**Note:** Some of these values are stored as inverses, which speeds up many of the internal physics calculations. It also allows you to specify infinite values, by setting the relevant component to zero.
+>[!NOTE]
+>Some of these values are stored as inverses, which speeds up many of the internal physics calculations. It also allows you to specify infinite values, by setting the relevant component to zero.
 
 While you can provide these values yourself, it is not necessary in many cases; the `ICollider` for a Collider interface has a `MassProperties` property, where appropriate values are calculated for you automatically. You might find it more useful to use the calculated `MassProperties` property as a starting point, and then scale them – for example, by multiplying the mass by ten for an extra-heavy gameplay object.
 

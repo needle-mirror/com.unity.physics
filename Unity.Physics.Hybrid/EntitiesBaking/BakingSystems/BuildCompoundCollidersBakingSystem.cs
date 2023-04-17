@@ -332,7 +332,6 @@ namespace Unity.Physics.Authoring
             combinedJobHandle.Complete();
 
             // Check for unused StaticOptimizeEntity roots
-            var manager = EntityManager;
             var ecb = new EntityCommandBuffer(WorldUpdateAllocator);
             foreach (var(_, entity) in SystemAPI.Query<RefRO<StaticOptimizePhysicsBaking>>()
                      .WithEntityAccess()

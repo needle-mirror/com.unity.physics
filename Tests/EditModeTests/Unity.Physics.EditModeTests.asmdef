@@ -31,12 +31,6 @@
     "defineConstraints": [
         "UNITY_INCLUDE_TESTS"
     ],
-    "versionDefines": [
-        {
-            "name": "com.unity.modules.physics",
-            "expression": "",
-            "define": "LEGACY_PHYSICS"
-        }
-    ],
+    "versionDefines": [],
     "noEngineReferences": false
 }

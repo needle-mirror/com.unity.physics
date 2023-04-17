@@ -34,7 +34,7 @@ namespace Unity.Physics.Authoring
 
         public static void Append<T>(ref this NativeList<byte> bytes, in NativeArray<T> data) where T : unmanaged
         {
-            if (data.IsCreated)
+            if (data.Length != 0)
                 bytes.AddRange(data.Reinterpret<T, byte>());
         }
 

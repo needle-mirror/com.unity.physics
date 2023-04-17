@@ -1,10 +1,10 @@
 using System;
-using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
 using Unity.Collections;
 using Unity.Entities;
-using Unity.Entities.Conversion;
+using Unity.Physics.Authoring;
+using Unity.Transforms;
 using UnityEngine;
 using UnityEngine.TestTools;
 
@@ -12,6 +12,33 @@ namespace Unity.Physics.Tests.Authoring
 {
     abstract class BaseHierarchyConversionTest
     {
+        protected readonly PhysicsWorldIndex k_DefaultWorldIndex = new PhysicsWorldIndex();
+
+        protected static readonly Regex k_NonReadableMeshPattern = new Regex(@"\b((un)?readable|Read\/Write|(non-)?accessible)\b");
+
+        public static readonly TestCaseData[] k_ExplicitPhysicsBodyHierarchyTestCases =
+        {
+            new TestCaseData(
+                BodyMotionType.Static,
+                new EntityQueryDesc { All = new ComponentType[] { typeof(PhysicsCollider), typeof(Parent) } }
+            ).SetName("Static has parent"),
+            new TestCaseData(
+                BodyMotionType.Dynamic,
+                new EntityQueryDesc { All = new ComponentType[] { typeof(PhysicsCollider) }, None = new ComponentType[] { typeof(Parent), typeof(PreviousParent) } }
+            ).SetName("Dynamic is unparented"),
+            new TestCaseData(
+                BodyMotionType.Kinematic,
+                new EntityQueryDesc { All = new ComponentType[] { typeof(PhysicsCollider) }, None = new ComponentType[] { typeof(Parent), typeof(PreviousParent) } }
+            ).SetName("Kinematic is unparented"),
+        };
+
+        protected static readonly TestCaseData[] k_ExplicitRigidbodyHierarchyTestCases =
+        {
+            // no means to produce hierarchy of explicit static bodies with legacy
+            k_ExplicitPhysicsBodyHierarchyTestCases[1],
+            k_ExplicitPhysicsBodyHierarchyTestCases[2]
+        };
+
         protected void CreateHierarchy(
             Type[] rootComponentTypes, Type[] parentComponentTypes, Type[] childComponentTypes
         )
@@ -67,7 +94,7 @@ namespace Unity.Physics.Tests.Authoring
         protected void TestConvertedData<T>(Action<T> checkValue) where T : unmanaged, IComponentData =>
             TestConvertedData((Action<NativeArray<T>>)(components => { checkValue(components[0]); }), 1);
 
-        protected static Entity ConvertBakeGameObject(GameObject go, World world, BlobAssetStore blobAssetStore)
+        public static Entity ConvertBakeGameObject(GameObject go, World world, BlobAssetStore blobAssetStore)
         {
 #if UNITY_EDITOR
             // We need to use an intermediate world as BakingUtility.BakeGameObjects cleans up previously baked
@@ -76,14 +103,11 @@ namespace Unity.Physics.Tests.Authoring
             // entity in the final world
             using var intermediateWorld = new World("BakingWorld");
             BakingUtility.BakeGameObjects(intermediateWorld, new GameObject[] {go}, new BakingSettings(BakingUtility.BakingFlags.AddEntityGUID, blobAssetStore));
-
             var bakingSystem = intermediateWorld.GetExistingSystemManaged<BakingSystem>();
             var intermediateEntity = bakingSystem.GetEntity(go);
             var intermediateEntityGuid = intermediateWorld.EntityManager.GetComponentData<EntityGuid>(intermediateEntity);
-
             // Copy the world
             world.EntityManager.MoveEntitiesFrom(intermediateWorld.EntityManager);
-
             // Search for the entity in the final world by comparing the EntityGuid from entity in the intermediate world
             var query = world.EntityManager.CreateEntityQuery(new ComponentType[] {typeof(EntityGuid)});
             using var entityArray = query.ToEntityArray(Allocator.TempJob);
@@ -128,7 +152,10 @@ namespace Unity.Physics.Tests.Authoring
         protected void TestConvertedSharedData<T, S>(Action<T> checkValue, S sharedComponent)
             where T : unmanaged, IComponentData
             where S : unmanaged, ISharedComponentData =>
-            TestConvertedSharedData((Action<NativeArray<T>>)(components => { checkValue(components[0]); }), 1, sharedComponent);
+            TestConvertedSharedData((Action<NativeArray<T>>)(components =>
+            {
+                checkValue?.Invoke(components[0]);
+            }), 1, sharedComponent);
 
         protected void TestConvertedSharedData<T, S>(Action<NativeArray<T>> checkValues, int assumeCount, S sharedComponent)
             where T : unmanaged, IComponentData
@@ -157,6 +184,29 @@ namespace Unity.Physics.Tests.Authoring
             {
                 world.Dispose();
             }
+        }
+
+        protected void TestMeshData(int numExpectedMeshSections, int[] numExpectedPrimitivesPerSection, bool[][] quadPrimitiveExpectedFlags)
+        {
+            TestConvertedSharedData<PhysicsCollider, PhysicsWorldIndex>(meshCollider =>
+            {
+                unsafe
+                {
+                    ref var mesh = ref ((MeshCollider*)meshCollider.ColliderPtr)->Mesh;
+                    Assume.That(mesh.Sections.Length, Is.EqualTo(numExpectedMeshSections), $"Expected {numExpectedMeshSections} section(s) on mesh collider.");
+                    for (int i = 0; i < numExpectedMeshSections; ++i)
+                    {
+                        ref var section = ref mesh.Sections[i];
+                        var numPrimitives = numExpectedPrimitivesPerSection[i];
+                        Assume.That(section.PrimitiveFlags.Length, Is.EqualTo(numPrimitives), $"Expected {numPrimitives} primitive(s) in {i}'th mesh section.");
+                        for (int j = 0; j < numPrimitives; ++j)
+                        {
+                            var isQuad = quadPrimitiveExpectedFlags[i][j];
+                            Assert.That(section.PrimitiveFlags[j] & Mesh.PrimitiveFlags.IsQuad, isQuad ? Is.EqualTo(Mesh.PrimitiveFlags.IsQuad) : Is.Not.EqualTo(Mesh.PrimitiveFlags.IsQuad), $"Expected primitive {j} in section {i} to be " + (isQuad ? "a quad" : "not a quad") + " on mesh collider.");
+                        }
+                    }
+                }
+            }, k_DefaultWorldIndex);
         }
 
         protected void VerifyLogsException<T>(Regex message = null) where T : Exception

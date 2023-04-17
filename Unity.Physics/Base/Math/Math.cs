@@ -497,62 +497,18 @@ namespace Unity.Physics
             return toEuler(q, order);
         }
 
-        /// <summary>
-        /// Returns the angle in degrees between /from/ and /to/. This is always the smallest.
-        /// </summary>
-        ///
-        /// <param name="from"> Source for the. </param>
-        /// <param name="to">   to. </param>
-        ///
-        /// <returns>   A float. </returns>
-        internal static float Angle(float3 from, float3 to)
+        internal static bool HasShear(this float4x4 m)
         {
-            // sqrt(a) * sqrt(b) = sqrt(a * b) -- valid for real numbers
-            var denominator = math.sqrt(math.lengthsq(from) * math.lengthsq(to));
-            if (denominator < Constants.UnityEpsilonNormalSqrt)
-                return 0F;
-
-            var dot = math.clamp(math.dot(from, to) / denominator, -1F, 1F);
-            return math.degrees(math.acos(dot));
-        }
-
-        /// <summary>
-        /// The smaller of the two possible angles between the two vectors is returned, therefore the
-        /// result will never be greater than 180 degrees or smaller than -180 degrees. If you imagine
-        /// the from and to vectors as lines on a piece of paper, both originating from the same point,
-        /// then the /axis/ vector would point up out of the paper. The measured angle between the two
-        /// vectors would be positive in a clockwise direction and negative in an anti-clockwise
-        /// direction.
-        /// </summary>
-        ///
-        /// <param name="from"> Source for the. </param>
-        /// <param name="to">   to. </param>
-        /// <param name="axis"> The axis. </param>
-        ///
-        /// <returns>   A float. </returns>
-        internal static float SignedAngle(float3 from, float3 to, float3 axis)
-        {
-            var unsignedAngle = Angle(from, to);
-            var sign = math.sign(math.dot(math.cross(from, to), axis));
-            return unsignedAngle * sign;
-        }
-
-        /// <summary>
-        /// Projects a vector onto a plane defined by a normal orthogonal to the plane.
-        /// </summary>
-        ///
-        /// <param name="vector">       The vector. </param>
-        /// <param name="planeNormal">  The plane normal. </param>
-        ///
-        /// <returns>   A float3. </returns>
-        internal static float3 ProjectOnPlane(float3 vector, float3 planeNormal)
-        {
-            var sqrMag = math.dot(planeNormal, planeNormal);
-            if (sqrMag < Constants.UnityEpsilon)
-                return vector;
-
-            var dot = math.dot(vector, planeNormal);
-            return vector - planeNormal * (dot / sqrMag);
+            // scale each axis by abs of its max component in order to work with very large/small scales
+            var rs0 = m.c0.xyz / math.max(math.cmax(math.abs(m.c0.xyz)), float.Epsilon);
+            var rs1 = m.c1.xyz / math.max(math.cmax(math.abs(m.c1.xyz)), float.Epsilon);
+            var rs2 = m.c2.xyz / math.max(math.cmax(math.abs(m.c2.xyz)), float.Epsilon);
+            // verify all axes are orthogonal
+            const float k_Zero = 1e-6f;
+            return
+                math.abs(math.dot(rs0, rs1)) > k_Zero ||
+                math.abs(math.dot(rs0, rs2)) > k_Zero ||
+                math.abs(math.dot(rs1, rs2)) > k_Zero;
         }
 
         /// <summary>
@@ -581,8 +537,15 @@ namespace Unity.Physics
         public static quaternion DecomposeRigidBodyOrientation(in float4x4 localToWorld) =>
             quaternion.LookRotationSafe(localToWorld.c2.xyz, localToWorld.c1.xyz);
 
+        /// <summary>
+        /// Obtain 3-dimensional scale vector of the provided 4x4 transformation matrix, the components
+        /// of which represent the lengths of the three orthonormal basis vectors forming the 3x3 rotational sub-matrix,
+        /// respectively.
+        /// </summary>
+        /// <param name="matrix">The 4x4 transformation matrix.</param>
+        /// <returns></returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static float3 DecomposeScale(this float4x4 matrix) =>
+        public static float3 DecomposeScale(this float4x4 matrix) =>
             new float3(math.length(matrix.c0.xyz), math.length(matrix.c1.xyz), math.length(matrix.c2.xyz));
     }
 }

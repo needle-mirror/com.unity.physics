@@ -32,10 +32,10 @@ namespace Unity.Physics.Authoring
             for (int i = 0; i < joints.Length; ++i)
             {
                 var bodyPair = bodyPairs[i];
-                var localToWorldA = bodyPair.EntityA != Entity.Null
+                var localToWorldA = bodyPair.EntityA != Entity.Null && state.EntityManager.HasComponent<LocalToWorld>(bodyPair.EntityA)
                     ? state.EntityManager.GetComponentData<LocalToWorld>(bodyPair.EntityA).Value
                     : float4x4.identity;
-                var localToWorldB = bodyPair.EntityB != Entity.Null
+                var localToWorldB = bodyPair.EntityB != Entity.Null && state.EntityManager.HasComponent<LocalToWorld>(bodyPair.EntityB)
                     ? state.EntityManager.GetComponentData<LocalToWorld>(bodyPair.EntityB).Value
                     : float4x4.identity;
 

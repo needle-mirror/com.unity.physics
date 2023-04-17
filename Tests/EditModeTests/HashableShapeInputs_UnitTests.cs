@@ -4,7 +4,6 @@ using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Physics.Authoring;
-using UnityMesh = UnityEngine.Mesh;
 
 namespace Unity.Physics.Tests.Authoring
 {
@@ -13,11 +12,11 @@ namespace Unity.Physics.Tests.Authoring
         [OneTimeSetUp]
         public void OneTimeSetUp() => HashUtility.Initialize();
 
-        static UnityMesh MeshA => UnityEngine.Resources.GetBuiltinResource<UnityMesh>("New-Plane.fbx");
-        static UnityMesh MeshB => UnityEngine.Resources.GetBuiltinResource<UnityMesh>("New-Cylinder.fbx");
+        static UnityEngine.Mesh MeshA => UnityEngine.Resources.GetBuiltinResource<UnityEngine.Mesh>("New-Plane.fbx");
+        static UnityEngine.Mesh MeshB => UnityEngine.Resources.GetBuiltinResource<UnityEngine.Mesh>("New-Cylinder.fbx");
 
         static Hash128 GetHash128_FromMesh(
-            UnityMesh mesh, float4x4 leafToBody,
+            UnityEngine.Mesh mesh, float4x4 leafToBody,
             ConvexHullGenerationParameters convexHullGenerationParameters = default,
             Material material = default,
             CollisionFilter filter = default,
@@ -100,8 +99,8 @@ namespace Unity.Physics.Tests.Authoring
 
         [TestCaseSource(nameof(k_GetHash128TestCases))]
         public bool GetHash128_WhenDifferentInputs_CheckEquality(
-            uint ida, UnityMesh ma, ConvexHullGenerationParameters ha, Material mta, CollisionFilter fa,
-            uint idb, UnityMesh mb, ConvexHullGenerationParameters hb, Material mtb, CollisionFilter fb
+            uint ida, UnityEngine.Mesh ma, ConvexHullGenerationParameters ha, Material mta, CollisionFilter fa,
+            uint idb, UnityEngine.Mesh mb, ConvexHullGenerationParameters hb, Material mtb, CollisionFilter fb
         )
         {
             var a = GetHash128_FromMesh(ma, float4x4.identity, ha, mta, fa, float4x4.identity, uniqueIdentifier: ida);

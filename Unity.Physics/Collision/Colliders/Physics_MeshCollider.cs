@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -11,11 +12,13 @@ namespace Unity.Physics
     /// header, it is followed by variable sized data in memory. Therefore this struct must always be
     /// passed by reference, never by value.
     /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
     public struct MeshCollider : ICompositeCollider
     {
         internal ColliderHeader m_Header;
         Aabb m_Aabb;
-        internal Mesh Mesh;
+        int m_MemorySize;
+        internal Mesh Mesh; // Note: Mesh must be the last member. It is immediately followed by the mesh data (see Mesh.Init()).
 
         // followed by variable sized mesh data
 
@@ -28,7 +31,7 @@ namespace Unity.Physics
         ///
         /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
         public static BlobAssetReference<Collider> Create(NativeArray<float3> vertices, NativeArray<int3> triangles) =>
-            Create(vertices, triangles, CollisionFilter.Default, Material.Default);
+            CreateInternal(vertices, triangles, CollisionFilter.Default, Material.Default);
 
         /// <summary>   Creates a new BlobAssetReference&lt;Collider&gt; </summary>
         ///
@@ -38,7 +41,7 @@ namespace Unity.Physics
         ///
         /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
         public static BlobAssetReference<Collider> Create(NativeArray<float3> vertices, NativeArray<int3> triangles, CollisionFilter filter) =>
-            Create(vertices, triangles, filter, Material.Default);
+            CreateInternal(vertices, triangles, filter, Material.Default);
 
         /// <summary>   Creates a new BlobAssetReference&lt;Collider&gt; </summary>
         ///
@@ -48,7 +51,14 @@ namespace Unity.Physics
         /// <param name="material">     The material. </param>
         ///
         /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
-        public static BlobAssetReference<Collider> Create(NativeArray<float3> vertices, NativeArray<int3> triangles, CollisionFilter filter, Material material)
+        public static BlobAssetReference<Collider> Create(NativeArray<float3> vertices, NativeArray<int3> triangles, CollisionFilter filter, Material material) =>
+            CreateInternal(vertices, triangles, filter, material);
+
+        #endregion
+
+        #region Internal Construction
+
+        internal static BlobAssetReference<Collider> CreateInternal(NativeArray<float3> vertices, NativeArray<int3> triangles, CollisionFilter filter, Material material, uint forceUniqueBlobID = 0)
         {
             unsafe
             {
@@ -116,16 +126,12 @@ namespace Unity.Physics
                 // Initialize it
                 {
                     UnsafeUtility.MemClear(meshCollider, totalColliderSize);
-                    meshCollider->MemorySize = totalColliderSize;
+                    meshCollider->m_MemorySize = totalColliderSize;
                     meshCollider->m_Header.Type = ColliderType.Mesh;
                     meshCollider->m_Header.CollisionType = CollisionType.Composite;
-                    meshCollider->m_Header.Version++;
+                    meshCollider->m_Header.Version = 0;
                     meshCollider->m_Header.Magic = 0xff;
-
-                    meshCollider->m_Header.Type = ColliderType.Mesh;
-                    meshCollider->m_Header.CollisionType = CollisionType.Composite;
-                    meshCollider->m_Header.Version += 1;
-                    meshCollider->m_Header.Magic = 0xff;
+                    meshCollider->m_Header.ForceUniqueBlobID = forceUniqueBlobID;
 
                     ref var mesh = ref meshCollider->Mesh;
 
@@ -171,7 +177,7 @@ namespace Unity.Physics
         /// <summary>   The total size of the collider in memory. </summary>
         ///
         /// <value> The size of the memory. </value>
-        public int MemorySize { get; private set; }
+        public int MemorySize => m_MemorySize;
 
         /// <summary>   Gets the collision filter. </summary>
         ///

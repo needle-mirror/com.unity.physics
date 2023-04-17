@@ -1,10 +1,15 @@
 # Multiple worlds - simulating groups of bodies separately
 
 It is possible to simulate groups of bodies totally separately from each other, in separate physics worlds. Each body in each world is represented by a separate Entity and each Entity must have all components that are needed for physics simulation in its world. `PhysicsWorldIndex.Value` denotes the index of physics world that the Entity belongs to (0 is the default value and represents the main world). Note that Entities for different physics worlds will be stored in separate ECS chunks, due to different values of the shared component.
-To enable custom simulation of bodies in non-default worlds, it is needed to:
+To enable custom simulation of bodies in non-default worlds, you need to:
+- Assign the respective bodies to different worlds
 - Create a system group which derives from `CustomPhysicsSystemGroup`
 - Make an empty constructor that is calling the constructor from `CustomPhysicsSystemGroup`, providing it with world index value and a flag indicating whether to share static bodies between worlds.
 - Optionally override `Pre/PostGroupUpdateCallback()` or `AddExistingSystemsToUpdate` (covered below).
+
+## Assigning bodies to different worlds
+By default, bodies are assigned to the main physics world (world index 0).
+In order to assign a body to a different world, add a `PhysicsWorldIndexAuthoring` component to the GameObject you want to modify alongside its `Rigidbody` component and then set its `World Index` property to the desired value. 
 
 ## CustomPhysicsSystemGroup
 

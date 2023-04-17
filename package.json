@@ -3,11 +3,10 @@
   "category": "Unity",
   "description": "Unity's C# stateless physics library.\n\nBuilt on top of the Unity C# DOTS framework, Unity Physics is network-ready, completely customizable, and built for performance out of the box. Whether you're building the next mobile hit or a new networked multiplayer console experience, Unity Physics leverages the Burst compiler and Job system to scale across a range of hardware.",
   "dependencies": {
-    "com.unity.burst": "1.8.3",
-    "com.unity.collections": "2.1.0-pre.18",
-    "com.unity.entities": "1.0.0-pre.65",
+    "com.unity.burst": "1.8.4",
+    "com.unity.collections": "2.1.4",
+    "com.unity.entities": "1.0.8",
     "com.unity.mathematics": "1.2.6",
-    "com.unity.test-framework": "1.3.2",
     "com.unity.modules.imgui": "1.0.0",
     "com.unity.modules.jsonserialize": "1.0.0"
   },
@@ -17,18 +16,26 @@
   ],
   "name": "com.unity.physics",
   "unity": "2022.2",
-  "unityRelease": "2f1",
-  "version": "1.0.0-pre.65",
+  "unityRelease": "15f1",
+  "version": "1.0.8",
+  "samples": [
+    {
+      "displayName": "Custom Physics Authoring",
+      "description": "Provides a custom authoring experience for creating rigid bodies and colliders for Unity Physics.",
+      "importPath": "Authoring",
+      "path": "Samples~/CustomPhysicsAuthoring"
+    }
+  ],
   "_upm": {
-    "changelog": "### Changed\n\n* Updated Burst version in use to 1.8.3\n* Debug display systems now only update when the PhysicsDebugDisplayData component is present (e.g., through the PhysicsDebugDisplayAuthoring game object component) and are only created within the editor.\n\n### Fixed\n\n* Physics Debug Display for enabled Collider Edges now draws correctly if the collider scale is modified during runtime\n* Debug display systems no longer stall and instead execute their jobs asynchronously\n* Debug draw of collider faces and AABBs now account for uniform scaling of the rigid body\n* Rigidbody components that move in PlayMode will now correctly snap back to their original position when exiting PlayMode while the containing sub scene is open for editing. As part of the fix, the classic PhysX-based physics simulation is now temporarily and globally disabled while in PlayMode with an open sub scene that contains classic Rigidbody authoring components. The Unity Physics-based physics simulation is unaffected during that time."
+    "changelog": "### Added\n\n* Add `PhysicsWorldIndexAuthoring` component which allows specifying non-default world indices for bodies which are modeled using a `Rigidbody` component.\n\n### Changed\n\n* With the removal of the custom Unity Physics authoring experience, a behavior change has been introduced when mixing built-in physics authoring components with custom physics authoring components. It is now no longer supported to add built-in colliders, such as the Box Collider, to a rigid body created using the `PhysicsBodyAuthoring` component. The inverse however, adding `PhysicsShapeAuthoring` components to a rigid body created using the built-in `Rigidbody` component, is still supported.\n* Updated Burst version to 1.8.4\n\n### Removed\n\n* UpgradePhysicsData window has been removed.\n* The custom Unity Physics authoring experience, built around the `PhysicsBodyAuthoring` and `PhysicsShapeAuthoring` components, has been removed from the package and turned into a package sample. It is recommended to use the built-in physics authoring components instead, e.g., the `Rigidbody` and collider components. To continue using the custom authoring experience in your projects, simply import the _Custom Physics Authoring_ sample from the Unity Physics package into your project via the Package Manager window.\n* Dependency on com.unity.test-framework\n\n### Fixed\n\n* Colliders created from PhysicsShapeAuthoring components with the \"Force Unique\" flag set to true now are ensured to have unique collider blobs that are not shared across rigid bodies when they have identical properties, thus enabling runtime modification of individual colliders."
   },
   "upmCi": {
-    "footprint": "f926c40e04cf9c7f48868ea9f3fbbec777ed971c"
+    "footprint": "ce12a996e109b52cd29212f682a3090cb7109bba"
   },
   "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.physics@1.0/manual/index.html",
   "repository": {
     "url": "https://github.cds.internal.unity3d.com/unity/dots.git",
     "type": "git",
-    "revision": "85530c484ef7afedc5b128081152ec5e1f6f30e2"
+    "revision": "25dfb648cd0fabcf13fed46219e5fbe0fdabe4ac"
   }
 }

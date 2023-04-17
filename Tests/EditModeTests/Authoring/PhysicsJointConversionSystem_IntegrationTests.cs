@@ -1,14 +1,7 @@
-#if LEGACY_PHYSICS
 using System;
 using NUnit.Framework;
 using Unity.Mathematics;
 using UnityEngine;
-using LegacyCharacter = UnityEngine.CharacterJoint;
-using LegacyConfigurable = UnityEngine.ConfigurableJoint;
-using LegacyFixed = UnityEngine.FixedJoint;
-using LegacyHinge = UnityEngine.HingeJoint;
-using LegacyJoint = UnityEngine.Joint;
-using LegacySpring = UnityEngine.SpringJoint;
 
 namespace Unity.Physics.Tests.Authoring
 {
@@ -16,27 +9,27 @@ namespace Unity.Physics.Tests.Authoring
     {
         static object[] JointTestCases =
         {
-            new object[] { typeof(LegacyHinge), 1},
-            new object[] { typeof(LegacyFixed), 1 },
-            new object[] { typeof(LegacySpring), 1 },
-            new object[] { typeof(LegacyCharacter), 2 },
-            new object[] { typeof(LegacyConfigurable), 2 },
+            new object[] { typeof(UnityEngine.HingeJoint), 1},
+            new object[] { typeof(UnityEngine.FixedJoint), 1 },
+            new object[] { typeof(UnityEngine.SpringJoint), 1 },
+            new object[] { typeof(UnityEngine.CharacterJoint), 2 },
+            new object[] { typeof(UnityEngine.ConfigurableJoint), 2 },
         };
 
         static object[] MultiJointTestCases =
         {
-            new object[] { typeof(LegacyHinge), 2},
-            new object[] { typeof(LegacyFixed), 2 },
-            new object[] { typeof(LegacySpring), 2 },
-            new object[] { typeof(LegacyCharacter), 4 },
-            new object[] { typeof(LegacyConfigurable), 4 },
+            new object[] { typeof(UnityEngine.HingeJoint), 2},
+            new object[] { typeof(UnityEngine.FixedJoint), 2 },
+            new object[] { typeof(UnityEngine.SpringJoint), 2 },
+            new object[] { typeof(UnityEngine.CharacterJoint), 4 },
+            new object[] { typeof(UnityEngine.ConfigurableJoint), 4 },
         };
 
         [TestCaseSource(nameof(JointTestCases))]
         public void ConversionSystems_WhenGOHasJoint_IsEnableCollisionFlagSet(Type jointType, int count)
         {
             CreateHierarchy(new[] { jointType }, Array.Empty<Type>(), Array.Empty<Type>());
-            Root.GetComponent<LegacyJoint>().enableCollision = true;
+            Root.GetComponent<UnityEngine.Joint>().enableCollision = true;
 
             TestConvertedData<PhysicsConstrainedBodyPair>(pair =>
             {
@@ -49,8 +42,8 @@ namespace Unity.Physics.Tests.Authoring
         public void ConversionSystems_WhenGOHasJoint_AndUsesBreakForce_ConvertsToMaxImpulse(Type jointType, int count)
         {
             CreateHierarchy(new[] { jointType }, Array.Empty<Type>(), Array.Empty<Type>());
-            var legacyJoint = Root.GetComponent<LegacyJoint>();
-            legacyJoint.breakForce = 1.0f;
+            var joint = Root.GetComponent<UnityEngine.Joint>();
+            joint.breakForce = 1.0f;
 
             TestConvertedData<PhysicsJoint>(joints =>
             {
@@ -61,7 +54,7 @@ namespace Unity.Physics.Tests.Authoring
                     {
                         if (constraints[j].Type == ConstraintType.Linear)
                         {
-                            Assume.That(constraints[j].MaxImpulse, Is.EqualTo(new float3(legacyJoint.breakForce * Time.fixedDeltaTime)));
+                            Assume.That(constraints[j].MaxImpulse, Is.EqualTo(new float3(joint.breakForce * Time.fixedDeltaTime)));
                             Assume.That(constraints[j].ShouldRaiseImpulseEvents, Is.EqualTo(true));
                         }
                     }
@@ -73,8 +66,8 @@ namespace Unity.Physics.Tests.Authoring
         public void ConversionSystems_WhenGOHasJoint_AndUsesBreakTorque_ConvertsToMaxImpulse(Type jointType, int count)
         {
             CreateHierarchy(new[] { jointType }, Array.Empty<Type>(), Array.Empty<Type>());
-            var legacyJoint = Root.GetComponent<LegacyJoint>();
-            legacyJoint.breakTorque = 1.0f;
+            var joint = Root.GetComponent<UnityEngine.Joint>();
+            joint.breakTorque = 1.0f;
 
             TestConvertedData<PhysicsJoint>(joints =>
             {
@@ -85,7 +78,7 @@ namespace Unity.Physics.Tests.Authoring
                     {
                         if (constraints[j].Type == ConstraintType.Angular)
                         {
-                            Assume.That(constraints[j].MaxImpulse, Is.EqualTo(new float3(legacyJoint.breakTorque * Time.fixedDeltaTime)));
+                            Assume.That(constraints[j].MaxImpulse, Is.EqualTo(new float3(joint.breakTorque * Time.fixedDeltaTime)));
                             Assume.That(constraints[j].ShouldRaiseImpulseEvents, Is.EqualTo(true));
                         }
                     }
@@ -111,10 +104,10 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasSpringJoint_IsMinDistanceValueSet()
         {
-            CreateHierarchy(new[] { typeof(LegacySpring) }, Array.Empty<Type>(), Array.Empty<Type>());
-            Root.GetComponent<LegacySpring>().minDistance = 100f;
+            CreateHierarchy(new[] { typeof(UnityEngine.SpringJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
+            Root.GetComponent<UnityEngine.SpringJoint>().minDistance = 100f;
             var expectedMin =
-                math.min(Root.GetComponent<LegacySpring>().minDistance, Root.GetComponent<LegacySpring>().maxDistance);
+                math.min(Root.GetComponent<UnityEngine.SpringJoint>().minDistance, Root.GetComponent<UnityEngine.SpringJoint>().maxDistance);
 
             TestConvertedData<PhysicsJoint>(j =>
             {
@@ -126,10 +119,10 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasSpringJoint_IsMaxDistanceValueSet()
         {
-            CreateHierarchy(new[] { typeof(LegacySpring) }, Array.Empty<Type>(), Array.Empty<Type>());
-            Root.GetComponent<LegacySpring>().maxDistance = 100f;
+            CreateHierarchy(new[] { typeof(UnityEngine.SpringJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
+            Root.GetComponent<UnityEngine.SpringJoint>().maxDistance = 100f;
             var expectedMax =
-                math.max(Root.GetComponent<LegacySpring>().minDistance, Root.GetComponent<LegacySpring>().maxDistance);
+                math.max(Root.GetComponent<UnityEngine.SpringJoint>().minDistance, Root.GetComponent<UnityEngine.SpringJoint>().maxDistance);
 
             TestConvertedData<PhysicsJoint>(j =>
             {
@@ -141,8 +134,8 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasHingeJoint_WhenUseLimitsHasValue_FinalConstraintIsAllLinearAxesLocked([Values] bool useLimits)
         {
-            CreateHierarchy(new[] { typeof(LegacyHinge) }, Array.Empty<Type>(), Array.Empty<Type>());
-            var joint = Root.GetComponent<LegacyHinge>();
+            CreateHierarchy(new[] { typeof(UnityEngine.HingeJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
+            var joint = Root.GetComponent<UnityEngine.HingeJoint>();
             joint.useLimits = useLimits;
 
             TestConvertedData<PhysicsJoint>(j =>
@@ -167,8 +160,8 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasHingeJoint_AndDoesNotUseLimits_FirstConstraintIsOtherAngularAxesLocked()
         {
-            CreateHierarchy(new[] { typeof(LegacyHinge) }, Array.Empty<Type>(), Array.Empty<Type>());
-            var joint = Root.GetComponent<LegacyHinge>();
+            CreateHierarchy(new[] { typeof(UnityEngine.HingeJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
+            var joint = Root.GetComponent<UnityEngine.HingeJoint>();
             joint.useLimits = false;
 
             TestConvertedData<PhysicsJoint>(j =>
@@ -193,8 +186,8 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasHingeJoint_AndUsesLimits_FirstConstraintIsLimitedAxisWithProperHandedness()
         {
-            CreateHierarchy(new[] { typeof(LegacyHinge) }, Array.Empty<Type>(), Array.Empty<Type>());
-            var joint = Root.GetComponent<LegacyHinge>();
+            CreateHierarchy(new[] { typeof(UnityEngine.HingeJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
+            var joint = Root.GetComponent<UnityEngine.HingeJoint>();
             joint.useLimits = true;
             var limits = new float2(-15f, 35f);
             joint.limits = new JointLimits { min = limits.x, max = limits.y };
@@ -222,7 +215,7 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasCharacterJoint_FinalConstraintIsAllLinearAxesLocked()
         {
-            CreateHierarchy(new[] { typeof(CharacterJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
+            CreateHierarchy(new[] { typeof(UnityEngine.CharacterJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
 
             TestConvertedData<PhysicsJoint>(joints =>
             {
@@ -249,8 +242,8 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasCharacterJoint_FirstConstraintIsAngularXLimitsWithProperHandedness()
         {
-            CreateHierarchy(new[] { typeof(CharacterJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
-            var joint = Root.GetComponent<CharacterJoint>();
+            CreateHierarchy(new[] { typeof(UnityEngine.CharacterJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
+            var joint = Root.GetComponent<UnityEngine.CharacterJoint>();
             var limits = new float2(-15f, 35f);
             joint.lowTwistLimit = new SoftJointLimit { limit = limits.x };
             joint.highTwistLimit = new SoftJointLimit { limit = limits.y };
@@ -282,8 +275,8 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasCharacterJoint_SecondConstraintIsAngularYLimitWithProperHandedness()
         {
-            CreateHierarchy(new[] { typeof(CharacterJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
-            var joint = Root.GetComponent<CharacterJoint>();
+            CreateHierarchy(new[] { typeof(UnityEngine.CharacterJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
+            var joint = Root.GetComponent<UnityEngine.CharacterJoint>();
             const float limit = 45f;
             joint.lowTwistLimit = new SoftJointLimit { limit = 0f };
             joint.highTwistLimit = new SoftJointLimit { limit = 0f };
@@ -315,8 +308,8 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasCharacterJoint_FinalConstraintAngularZLimitWithProperHandedness()
         {
-            CreateHierarchy(new[] { typeof(CharacterJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
-            var joint = Root.GetComponent<CharacterJoint>();
+            CreateHierarchy(new[] { typeof(UnityEngine.CharacterJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
+            var joint = Root.GetComponent<UnityEngine.CharacterJoint>();
             const float limit = 45f;
             joint.lowTwistLimit = new SoftJointLimit { limit = 0f };
             joint.highTwistLimit = new SoftJointLimit { limit = 0f };
@@ -348,8 +341,8 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasConfigurableJoint_LinearMotionAndAngularMotionFree_JointHasNoConstraints()
         {
-            CreateHierarchy(new[] { typeof(LegacyConfigurable) }, Array.Empty<Type>(), Array.Empty<Type>());
-            var joint = Root.GetComponent<LegacyConfigurable>();
+            CreateHierarchy(new[] { typeof(UnityEngine.ConfigurableJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
+            var joint = Root.GetComponent<UnityEngine.ConfigurableJoint>();
             joint.xMotion = ConfigurableJointMotion.Free;
             joint.yMotion = ConfigurableJointMotion.Free;
             joint.zMotion = ConfigurableJointMotion.Free;
@@ -363,8 +356,8 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasConfigurableJoint_WithMixedLinearAndAngularMotionLockedOrLimited_HasMaxConstraints()
         {
-            CreateHierarchy(new[] { typeof(LegacyConfigurable) }, Array.Empty<Type>(), Array.Empty<Type>());
-            var joint = Root.GetComponent<LegacyConfigurable>();
+            CreateHierarchy(new[] { typeof(UnityEngine.ConfigurableJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
+            var joint = Root.GetComponent<UnityEngine.ConfigurableJoint>();
             joint.xMotion = ConfigurableJointMotion.Limited;
             joint.yMotion = ConfigurableJointMotion.Limited;
             joint.zMotion = ConfigurableJointMotion.Locked;
@@ -392,8 +385,8 @@ namespace Unity.Physics.Tests.Authoring
             bool expectedConstrainedX, bool expectedConstrainedY, bool expectedConstrainedZ
         )
         {
-            CreateHierarchy(new[] { typeof(LegacyConfigurable) }, Array.Empty<Type>(), Array.Empty<Type>());
-            var joint = Root.GetComponent<LegacyConfigurable>();
+            CreateHierarchy(new[] { typeof(UnityEngine.ConfigurableJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
+            var joint = Root.GetComponent<UnityEngine.ConfigurableJoint>();
             joint.xMotion = linearXMotion;
             joint.yMotion = linearYMotion;
             joint.zMotion = linearZMotion;
@@ -421,8 +414,8 @@ namespace Unity.Physics.Tests.Authoring
             bool expectedConstrainedX, bool expectedConstrainedY, bool expectedConstrainedZ
         )
         {
-            CreateHierarchy(new[] { typeof(LegacyConfigurable) }, Array.Empty<Type>(), Array.Empty<Type>());
-            var joint = Root.GetComponent<LegacyConfigurable>();
+            CreateHierarchy(new[] { typeof(UnityEngine.ConfigurableJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
+            var joint = Root.GetComponent<UnityEngine.ConfigurableJoint>();
             joint.xMotion = ConfigurableJointMotion.Free;
             joint.yMotion = ConfigurableJointMotion.Free;
             joint.zMotion = ConfigurableJointMotion.Free;
@@ -441,8 +434,8 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasConfigurableJoint_AngularMotion__AllAxesAreLimited()
         {
-            CreateHierarchy(new[] { typeof(LegacyConfigurable) }, Array.Empty<Type>(), Array.Empty<Type>());
-            var joint = Root.GetComponent<LegacyConfigurable>();
+            CreateHierarchy(new[] { typeof(UnityEngine.ConfigurableJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
+            var joint = Root.GetComponent<UnityEngine.ConfigurableJoint>();
             joint.xMotion = ConfigurableJointMotion.Free;
             joint.yMotion = ConfigurableJointMotion.Free;
             joint.zMotion = ConfigurableJointMotion.Free;
@@ -466,8 +459,8 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasConfigurableJoint_AngularXLimitsConvertToProperHandedness()
         {
-            CreateHierarchy(new[] { typeof(LegacyConfigurable) }, Array.Empty<Type>(), Array.Empty<Type>());
-            var joint = Root.GetComponent<LegacyConfigurable>();
+            CreateHierarchy(new[] { typeof(UnityEngine.ConfigurableJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
+            var joint = Root.GetComponent<UnityEngine.ConfigurableJoint>();
             joint.xMotion = ConfigurableJointMotion.Free;
             joint.yMotion = ConfigurableJointMotion.Free;
             joint.zMotion = ConfigurableJointMotion.Free;
@@ -504,8 +497,8 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasConfigurableJoint_AngularYLimitConvertsToProperHandedness()
         {
-            CreateHierarchy(new[] { typeof(LegacyConfigurable) }, Array.Empty<Type>(), Array.Empty<Type>());
-            var joint = Root.GetComponent<LegacyConfigurable>();
+            CreateHierarchy(new[] { typeof(UnityEngine.ConfigurableJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
+            var joint = Root.GetComponent<UnityEngine.ConfigurableJoint>();
             joint.xMotion = ConfigurableJointMotion.Free;
             joint.yMotion = ConfigurableJointMotion.Free;
             joint.zMotion = ConfigurableJointMotion.Free;
@@ -542,8 +535,8 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void ConversionSystems_WhenGOHasConfigurableJoint_AngularZLimitConvertsToProperHandedness()
         {
-            CreateHierarchy(new[] { typeof(LegacyConfigurable) }, Array.Empty<Type>(), Array.Empty<Type>());
-            var joint = Root.GetComponent<LegacyConfigurable>();
+            CreateHierarchy(new[] { typeof(UnityEngine.ConfigurableJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
+            var joint = Root.GetComponent<UnityEngine.ConfigurableJoint>();
             joint.xMotion = ConfigurableJointMotion.Free;
             joint.yMotion = ConfigurableJointMotion.Free;
             joint.zMotion = ConfigurableJointMotion.Free;
@@ -609,4 +602,3 @@ namespace Unity.Physics.Tests.Authoring
         */
     }
 }
-#endif

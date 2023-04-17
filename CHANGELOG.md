@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.0.8] - 2023-04-17
+
+### Added
+
+* Add `PhysicsWorldIndexAuthoring` component which allows specifying non-default world indices for bodies which are modeled using a `Rigidbody` component.
+
+### Changed
+
+* With the removal of the custom Unity Physics authoring experience, a behavior change has been introduced when mixing built-in physics authoring components with custom physics authoring components. It is now no longer supported to add built-in colliders, such as the Box Collider, to a rigid body created using the `PhysicsBodyAuthoring` component. The inverse however, adding `PhysicsShapeAuthoring` components to a rigid body created using the built-in `Rigidbody` component, is still supported.
+* Updated Burst version to 1.8.4
+
+### Removed
+
+* UpgradePhysicsData window has been removed.
+* The custom Unity Physics authoring experience, built around the `PhysicsBodyAuthoring` and `PhysicsShapeAuthoring` components, has been removed from the package and turned into a package sample. It is recommended to use the built-in physics authoring components instead, e.g., the `Rigidbody` and collider components. To continue using the custom authoring experience in your projects, simply import the _Custom Physics Authoring_ sample from the Unity Physics package into your project via the Package Manager window.
+* Dependency on com.unity.test-framework
+
+### Fixed
+
+* Colliders created from PhysicsShapeAuthoring components with the "Force Unique" flag set to true now are ensured to have unique collider blobs that are not shared across rigid bodies when they have identical properties, thus enabling runtime modification of individual colliders.
+
 ## [1.0.0-pre.65] - 2023-03-21
 
 ### Changed
@@ -197,22 +218,49 @@
 * Simplified math to improve performance in `CalculateTwistAngle()`
 * Fixed a bug in `ConvexHullBuilder.Compact()` where triangle indices in links were not properly updated after remapping.
 
-### Security
+### Changed
+* Package Dependencies
+    * `com.unity.entities` to version `0.51.1`
+    * `com.unity.physics` to version `0.51.1`
+    * `com.unity.collections` to version `1.4.0`
 
+## [0.51.0] - 2022-05-04
 
+### Changed
+* Package Dependencies
+    * `com.unity.burst` to version `1.6.6`
+    * `com.unity.entities` to version `0.51.0`
+    * `com.unity.mathematics` to version `1.2.6`
+    * `com.unity.physics` to version `0.51.0`
+    * `com.unity.collections` to version `1.3.1`
+
+## [0.50.0] - 2021-09-17
+
+### Changed
+
+* Upgraded com.unity.burst to 1.5.5
+* Adjusted code to remove obsolete APIs across all jobs inheriting IJobEntityBatch
+* Resources/ (used by Debug Draw) has been renamed DebugDisplayResources/ and now loads assets differently
+
+### Removed
+
+* All usages of PhysicsExclude from Demo and Runtime code.
+
+### Fixed
+
+* An issue with the rendering pipeline used for the package samples, which caused none of the samples to render post conversion
+* An issue with the materials present in the samples as their colors were no longer correct
 
 
 ## [0.10.0] - 2021-09-17
 
 ### Changed
 
-* Upgraded com.unity.burst to 1.5.5
 * Adjusted code to remove obsolete APIs across all jobs inheriting IJobEntityBatch
 
 ### Removed
 
 * All usages of PhysicsExclude from Demo and Runtime code.
-
 
 
 ## [0.10.0-preview.1] - 2021-06-25

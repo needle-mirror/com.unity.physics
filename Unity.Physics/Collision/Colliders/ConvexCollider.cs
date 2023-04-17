@@ -122,11 +122,20 @@ namespace Unity.Physics
         public static BlobAssetReference<Collider> Create(
             NativeArray<float3> points, ConvexHullGenerationParameters generationParameters, CollisionFilter filter, Material material
         ) =>
-            Create(points, generationParameters, filter, material, k_MaxVertices, k_MaxFaces, k_MaxFaceVertices);
+            CreateInternal(points, generationParameters, filter, material, k_MaxVertices, k_MaxFaces, k_MaxFaceVertices);
 
-        internal static BlobAssetReference<Collider> Create(
+        #endregion
+
+        #region Internal Construction
+
+        internal static BlobAssetReference<Collider> CreateInternal(
+            NativeArray<float3> points, ConvexHullGenerationParameters generationParameters, CollisionFilter filter, Material material, uint internalID = 0
+        ) =>
+            CreateInternal(points, generationParameters, filter, material, k_MaxVertices, k_MaxFaces, k_MaxFaceVertices, internalID);
+
+        internal static BlobAssetReference<Collider> CreateInternal(
             NativeArray<float3> points, ConvexHullGenerationParameters generationParameters, CollisionFilter filter, Material material,
-            int maxVertices, int maxFaces, int maxFaceVertices
+            int maxVertices, int maxFaces, int maxFaceVertices, uint internalID = 0
         )
         {
             SafetyChecks.CheckValidAndThrow(points, nameof(points), generationParameters, nameof(generationParameters));
@@ -141,10 +150,10 @@ namespace Unity.Physics
                 out var builderConvexRadius
             );
 
-            return Create(builder, builderConvexRadius, filter, material);
+            return CreateInternal(builder, builderConvexRadius, filter, material, internalID);
         }
 
-        internal static unsafe BlobAssetReference<Collider> Create(ConvexHullBuilder builder, float convexRadius, CollisionFilter filter, Material material)
+        internal static unsafe BlobAssetReference<Collider> CreateInternal(ConvexHullBuilder builder, float convexRadius, CollisionFilter filter, Material material, uint forceUniqueBlobID = 0)
         {
             // Convert hull to compact format
             var tempHull = new TempHull(ref builder);
@@ -167,8 +176,9 @@ namespace Unity.Physics
 
                 collider->m_Header.Type = ColliderType.Convex;
                 collider->m_Header.CollisionType = CollisionType.Convex;
-                collider->m_Header.Version = 1;
+                collider->m_Header.Version = 0;
                 collider->m_Header.Magic = 0xff;
+                collider->m_Header.ForceUniqueBlobID = forceUniqueBlobID;
                 collider->m_Header.Filter = filter;
                 collider->m_Header.Material = material;
 
@@ -260,6 +270,8 @@ namespace Unity.Physics
 
             // Copy it into blob
             var asset = BlobAssetReference<Collider>.Create(collider, totalSize);
+            var convexCollider = (ConvexCollider*)asset.GetUnsafePtr();
+            SafetyChecks.Check16ByteAlignmentAndThrow(convexCollider->ConvexHull.PlanesPtr, "ConvexHull.PlanesPtr");
 
             UnsafeUtility.Free(collider, Allocator.Temp);
             return asset;

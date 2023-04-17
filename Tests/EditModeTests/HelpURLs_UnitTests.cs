@@ -2,17 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Text.RegularExpressions;
 using NUnit.Framework;
 using Unity.Physics.Authoring;
-using UnityEditor.PackageManager;
 using UnityEngine;
 
 namespace Unity.Physics.Tests.Authoring
 {
     class HelpURLs_UnitTests
     {
-        static readonly IEnumerable<Type> AllAuthoringTypes = typeof(PhysicsShapeAuthoring).Assembly.GetTypes().Where(
+        static readonly IEnumerable<Type> AllAuthoringTypes = typeof(BaseShapeBakingSystem).Assembly.GetTypes().Where(
             t => t.IsPublic
             && !t.IsAbstract
             && !t.IsGenericType

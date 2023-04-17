@@ -618,7 +618,7 @@ class HullGenerationTest : MonoBehaviour
         BlobAssetReference<Collider> originalColliderRef = default;
         if (builder.Vertices.PeakCount < ConvexCollider.k_MaxVertices)
         {
-            originalColliderRef = ConvexCollider.Create(builder, 0.0f, CollisionFilter.Default, Material.Default);
+            originalColliderRef = ConvexCollider.CreateInternal(builder, 0.0f, CollisionFilter.Default, Material.Default);
         }
 
         // Simplify the hull
@@ -653,7 +653,7 @@ class HullGenerationTest : MonoBehaviour
         m_SimplifiedHull = new ConvexHullBuilderStorage(builder.Vertices.PeakCount, Allocator.Persistent, ref builder);
 
         // Build a shape from the simplified hull
-        BlobAssetReference<Collider> simplifiedColliderRef = ConvexCollider.Create(builder, radius, CollisionFilter.Default, Material.Default);
+        BlobAssetReference<Collider> simplifiedColliderRef = ConvexCollider.CreateInternal(builder, radius, CollisionFilter.Default, Material.Default);
         ConvexCollider* simplifiedCollider = (ConvexCollider*)simplifiedColliderRef.GetUnsafePtr();
         ref ConvexHull simplifiedHull = ref simplifiedCollider->ConvexHull;
 
@@ -752,7 +752,7 @@ class HullGenerationTest : MonoBehaviour
 
         public NativeArray<BlobAssetReference<Collider>> Output;
 
-        public void Execute() => Output[0] = ConvexCollider.Create(
+        public void Execute() => Output[0] = ConvexCollider.CreateInternal(
             Points, GenerationParameters, CollisionFilter.Default, Material.Default,
             MaxVertices, MaxFaces, MaxFaceVertices
         );
