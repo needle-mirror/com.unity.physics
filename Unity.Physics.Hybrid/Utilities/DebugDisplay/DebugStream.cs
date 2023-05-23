@@ -6,6 +6,9 @@ using Unity.Transforms;
 
 namespace Unity.Physics.Authoring
 {
+    /// <summary>
+    /// A component system group that contains the PhysicsDebugDisplay systems.
+    /// </summary>
     [WorldSystemFilter(WorldSystemFilterFlags.Editor)]
     [UpdateInGroup(typeof(SimulationSystemGroup))]
     [UpdateAfter(typeof(TransformSystemGroup))]
@@ -14,12 +17,11 @@ namespace Unity.Physics.Authoring
     }
 
     /// <summary>
-    /// A system which cleans physics debug display data from the previous frame.
+    /// A system which cleans physics debug display data from the previous frame during the simulation.
     /// In case of using multiple worlds feature, in order for debug display to work properly
     /// on multiple worlds, you need to disable the update of this system in either main physics group (<see cref="PhysicsSystemGroup"/>)
-    /// or in the custom physics group, whichever updates later in the loop.
+    /// or in the custom physics group (<see cref="BeforePhysicsSystemGroup"/>), whichever updates later in the loop.
     /// </summary>
-
     [WorldSystemFilter(WorldSystemFilterFlags.Default)]
     [UpdateInGroup(typeof(BeforePhysicsSystemGroup))]
     public partial struct CleanPhysicsDebugDataSystem_Default : ISystem
@@ -35,6 +37,11 @@ namespace Unity.Physics.Authoring
         }
     }
 
+    /// <summary>
+    /// A system which cleans physics debug display data from the previous frame while in edit mode.
+    /// In case of using multiple worlds feature, in order for debug display to work properly
+    /// on multiple worlds, you need to disable the update of this system in editor display physics group (<see cref="PhysicsDisplayDebugGroup"/>).
+    /// </summary>
     [WorldSystemFilter(WorldSystemFilterFlags.Editor)]
     [UpdateInGroup(typeof(PhysicsDisplayDebugGroup))]
     public partial struct CleanPhysicsDebugDataSystem_Editor : ISystem
@@ -52,12 +59,13 @@ namespace Unity.Physics.Authoring
 
     /// <summary>
     /// A system which is responsible for drawing physics debug display data.
-    /// Create a singleton entity with <see cref="PhysicsDebugDisplayData"/> and select what you want to be drawn.
-    /// If you want custom debug draw, you need to:
-    /// 1) Create a system which updates before PhysicsDebugDisplaySystem.
-    /// 2) In OnUpdate() of that system, call GetSingleton<<see cref="PhysicsDebugDisplayData"/>> (even if you are not using it, it is important to do so to properly chain dependencies).
-    /// 3) Afterwards, in OnUpdate() or in scheduled jobs, call one of the exposed draw methods (Line, Arrow, Plane, Triangle, Cone, Box, ...).
-    /// 4) Data will be drawn when PhysicsDebugDisplaySystem's OnUpdate() is called.
+    /// Create a singleton entity with <see cref="PhysicsDebugDisplayData"/> and select what you want to be drawn.<para/>
+    ///
+    /// If you want custom debug draw, you need to:<para/>
+    /// 1) Create a system which updates before PhysicsDebugDisplaySystem.<br/>
+    /// 2) In OnUpdate() of that system, call GetSingleton <see cref="PhysicsDebugDisplayData"/> (even if you are not using it, it is important to do so to properly chain dependencies).<br/>
+    /// 3) Afterwards, in OnUpdate() or in scheduled jobs, call one of the exposed draw methods (Line, Arrow, Plane, Triangle, Cone, Box, ...).<br/>
+    /// 4) Data will be drawn when PhysicsDebugDisplaySystem's OnUpdate() is called.<para/>
     /// IMPORTANT: Drawing works only in Editor mode.
     /// </summary>
     public abstract partial class PhysicsDebugDisplaySystem : SystemBase
@@ -207,7 +215,7 @@ namespace Unity.Physics.Authoring
             Unity.DebugDisplay.Triangle.Draw(vertex0, vertex1, vertex2, normal, color);
         }
 
-        protected void ResetColliderDisplayData()
+        private void ResetColliderDisplayData()
         {
             DrawMeshUtility.ClearTRS();
             AppendMeshColliders.GetMeshes.ClearReferenceMeshes();
@@ -224,6 +232,9 @@ namespace Unity.Physics.Authoring
         }
     }
 
+    /// <summary>
+    /// Draw physics debug display data during simulation
+    /// </summary>
     [WorldSystemFilter(WorldSystemFilterFlags.Default)]
     [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     [UpdateAfter(typeof(PhysicsSystemGroup))]
@@ -231,6 +242,9 @@ namespace Unity.Physics.Authoring
     public partial class PhysicsDebugDisplaySystem_Default : PhysicsDebugDisplaySystem
     {}
 
+    /// <summary>
+    /// Draw physics debug display data when running in the  Editor
+    /// </summary>
     [WorldSystemFilter(WorldSystemFilterFlags.Editor)]
     [UpdateAfter(typeof(CleanPhysicsDebugDataSystem_Editor))]
     [UpdateInGroup(typeof(PhysicsDisplayDebugGroup))]

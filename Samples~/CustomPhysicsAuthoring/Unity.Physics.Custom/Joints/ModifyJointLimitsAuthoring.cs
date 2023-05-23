@@ -167,8 +167,7 @@ namespace Unity.Physics.Authoring
 
     // apply an animated effect to the limits on supported types of joints
     [RequireMatchingQueriesForUpdate]
-    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
-    [UpdateAfter(typeof(PhysicsSystemGroup))]
+    [UpdateInGroup(typeof(PhysicsSystemGroup), OrderLast = true)]
     partial struct ModifyJointLimitsSystem : ISystem
     {
         public void OnUpdate(ref SystemState state)

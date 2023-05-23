@@ -8,6 +8,9 @@ using Hash128 = Unity.Entities.Hash128;
 
 namespace Unity.Physics.Authoring
 {
+    /// <summary>
+    ///     Compound collider baking system.
+    /// </summary>
     [UpdateBefore(typeof(EndColliderBakingSystem))]
     [WorldSystemFilter(WorldSystemFilterFlags.BakingSystem)]
     public partial class BuildCompoundCollidersBakingSystem : SystemBase

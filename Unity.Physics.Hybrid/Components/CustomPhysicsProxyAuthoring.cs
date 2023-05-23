@@ -19,8 +19,12 @@ namespace Unity.Physics.Authoring
         const string k_IconPath = "Packages/com.unity.physics/Unity.Physics.Editor/Editor Default Resources/Icons/d_Rigidbody@64.png";
 #endif
 
+        /// <summary>
+        /// First Order Gain <para/>
+        /// Coefficient in range [0,1] denoting how much the client body will be driven by position (teleported), while the rest of the position diff will be velocity-driven."
+        /// </summary>
         [Range(0f, 1f)]
-        [Tooltip("Coefficient in range [0,1] denoting how much the client body will be driven by position (teleported), while the rest of position diff will be velocity-driven")]
+        [Tooltip("Coefficient in range [0,1] denoting how much the client body will be driven by position (teleported), while the rest of the position diff will be velocity-driven.")]
         public float FirstOrderGain = 0.0f;
 
         /// <summary>
@@ -29,9 +33,13 @@ namespace Unity.Physics.Authoring
         [Flags]
         public enum TargetWorld : byte
         {
+            /// <summary> World with index 0 (default)</summary>
             DefaultWorld = 1,
+            /// <summary> World with index 1 </summary>
             World1 = 2,
+            /// <summary> World with index 2 </summary>
             World2 = 4,
+            /// <summary> World with index 3 </summary>
             World3 = 8
         }
         /// <summary>

@@ -11,10 +11,10 @@ namespace Unity.Physics.Editor
         static class Content
         {
             public static readonly GUIContent SolverStabilizationLabelUnityPhysics = EditorGUIUtility.TrTextContent("Enable Contact Solver Stabilization Heuristic",
-                "Specifies whether contact solver stabilization heuristics should be applied. Enabling this will result in better overall stability of bodies and piles, " +
+                "Specifies whether the contact solver stabilization heuristic should be applied. Enabling this will result in better overall stability of bodies and piles, " +
                 "but may result in behavior artifacts.");
             public static readonly GUIContent SolverStabilizationLabelHavokPhysics = EditorGUIUtility.TrTextContent("Enable Contact Solver Stabilization Heuristic",
-                "Havok Physics already has stable contact solving algorithms due to the ability to cache state, so it doesn't need any additional solver stabilization heuristics.");
+                "Havok Physics already has stable contact solving algorithms due to the ability to cache states, so it doesn't need any additional solver stabilization heuristics.");
         }
 
 #pragma warning disable 649

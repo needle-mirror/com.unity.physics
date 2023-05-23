@@ -19,7 +19,7 @@ namespace Unity.Physics.Authoring
         [ReadOnly] private PrimitiveColliderGeometries Geometries;
         [ReadOnly] private float CollidersEdgesScale;
 
-        public static JobHandle ScheduleJob(in NativeArray<RigidBody> rigidBodies, float collidersEdgesScales, in PrimitiveColliderGeometries geometries, JobHandle inputDeps)
+        internal static JobHandle ScheduleJob(in NativeArray<RigidBody> rigidBodies, float collidersEdgesScales, in PrimitiveColliderGeometries geometries, JobHandle inputDeps)
         {
             return new DisplayColliderEdgesJob
             {

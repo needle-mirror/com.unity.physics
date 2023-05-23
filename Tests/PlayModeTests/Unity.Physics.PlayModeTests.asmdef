@@ -33,6 +33,11 @@
             "name": "com.unity.dataflowgraph",
             "expression": "",
             "define": "UNITY_DATAFLOWGRAPH_EXISTS"
+        },
+        {
+            "name": "com.unity.test-framework.performance",
+            "expression": "0.0",
+            "define": "PHYSICS_ENABLE_PERF_TESTS"
         }
     ],
     "noEngineReferences": false

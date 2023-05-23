@@ -15,7 +15,7 @@ namespace Unity.Physics.Authoring
 
     abstract class ColliderBaker<T> : BaseColliderBaker<T> where T : UnityEngine.Collider
     {
-        public static List<UnityEngine.Collider> colliderComponents = new List<UnityEngine.Collider>();
+        static List<UnityEngine.Collider> colliderComponents = new List<UnityEngine.Collider>();
 
         static readonly IReadOnlyDictionary<PhysicMaterialCombine, Material.CombinePolicy> k_MaterialCombineLookup =
             new Dictionary<PhysicMaterialCombine, Material.CombinePolicy>
@@ -36,7 +36,7 @@ namespace Unity.Physics.Authoring
         }
         static PhysicMaterial s_DefaultMaterial;
 
-        internal Material ProduceMaterial(UnityEngine.Collider collider)
+        Material ProduceMaterial(UnityEngine.Collider collider)
         {
             // n.b. need to manually opt in to collision events with legacy colliders if desired
             var material = new Material();
@@ -82,7 +82,7 @@ namespace Unity.Physics.Authoring
             };
         }
 
-        internal CollisionFilter ProduceCollisionFilter(UnityEngine.Collider collider)
+        CollisionFilter ProduceCollisionFilter(UnityEngine.Collider collider)
         {
             // Declaring the dependency on the GameObject with GetLayer, so the baker rebakes if the layer changes
             var layer = GetLayer(collider);
@@ -97,7 +97,7 @@ namespace Unity.Physics.Authoring
             return collider.enabled;
         }
 
-        protected GameObject GetPrimaryBody(GameObject shape, out bool hasBodyComponent, out bool isStaticBody)
+        GameObject GetPrimaryBody(GameObject shape, out bool hasBodyComponent, out bool isStaticBody)
         {
             var rb = FindFirstEnabledAncestor(shape, FindAncestorBuffer.s_RigidbodiesBuffer);
 
@@ -116,7 +116,7 @@ namespace Unity.Physics.Authoring
             return FindTopmostEnabledAncestor(shape, FindAncestorBuffer.s_CollidersBuffer);
         }
 
-        internal abstract ShapeComputationDataBaking GenerateComputationData(T shapeData, ColliderInstanceBaking colliderInstance, Entity colliderEntity);
+        protected abstract ShapeComputationDataBaking GenerateComputationData(T shapeData, ColliderInstanceBaking colliderInstance, Entity colliderEntity);
 
         ShapeComputationDataBaking GetInputDataFromAuthoringComponent(T shape, Entity colliderEntity)
         {
@@ -217,7 +217,7 @@ namespace Unity.Physics.Authoring
 
     class BoxBaker : ColliderBaker<UnityEngine.BoxCollider>
     {
-        internal override ShapeComputationDataBaking GenerateComputationData(UnityEngine.BoxCollider shape, ColliderInstanceBaking colliderInstance, Entity colliderEntity)
+        protected override ShapeComputationDataBaking GenerateComputationData(UnityEngine.BoxCollider shape, ColliderInstanceBaking colliderInstance, Entity colliderEntity)
         {
             var res = GenerateComputationDataGeneric(shape, colliderInstance);
             res.ShapeType = ShapeType.Box;
@@ -249,7 +249,7 @@ namespace Unity.Physics.Authoring
 
     class SphereBaker : ColliderBaker<UnityEngine.SphereCollider>
     {
-        internal override ShapeComputationDataBaking GenerateComputationData(UnityEngine.SphereCollider shape, ColliderInstanceBaking colliderInstance, Entity colliderEntity)
+        protected override ShapeComputationDataBaking GenerateComputationData(UnityEngine.SphereCollider shape, ColliderInstanceBaking colliderInstance, Entity colliderEntity)
         {
             var res = GenerateComputationDataGeneric(shape, colliderInstance);
             res.ShapeType = ShapeType.Sphere;
@@ -274,7 +274,7 @@ namespace Unity.Physics.Authoring
 
     class CapsuleBaker : ColliderBaker<UnityEngine.CapsuleCollider>
     {
-        internal override ShapeComputationDataBaking GenerateComputationData(UnityEngine.CapsuleCollider shape, ColliderInstanceBaking colliderInstance, Entity colliderEntity)
+        protected override ShapeComputationDataBaking GenerateComputationData(UnityEngine.CapsuleCollider shape, ColliderInstanceBaking colliderInstance, Entity colliderEntity)
         {
             var res = GenerateComputationDataGeneric(shape, colliderInstance);
 
@@ -305,7 +305,7 @@ namespace Unity.Physics.Authoring
 
     class MeshBaker : ColliderBaker<UnityEngine.MeshCollider>
     {
-        internal override ShapeComputationDataBaking GenerateComputationData(UnityEngine.MeshCollider shape, ColliderInstanceBaking colliderInstance, Entity colliderEntity)
+        protected override ShapeComputationDataBaking GenerateComputationData(UnityEngine.MeshCollider shape, ColliderInstanceBaking colliderInstance, Entity colliderEntity)
         {
             UnityEngine.Mesh mesh = shape.sharedMesh;
             if (mesh == null)

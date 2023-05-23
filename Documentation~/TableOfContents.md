@@ -22,6 +22,7 @@
       * [Custom physics materials](custom-materials.md)
     * [Custom bodies](custom-bodies.md)
   * [Physics Debug Display](component-debug-display.md)
+  * [Custom Physics Body Tags](tag-physics-body.md)
 * [Interacting with bodies](interacting-with-bodies.md)
   * [Attracting bodies to an entity](attract-body.md)
   * [Creating bodies in code](create-body.md)

@@ -123,14 +123,13 @@ namespace Unity.Physics.GraphicsIntegration
         /// <summary>
         /// Construct a <c>LocalToWorld</c> matrix for a rigid body's graphical representation.
         /// </summary>
-        /// <param name="i">The index of the rigid body in the chunk.</param>
+        /// <param name="i">The index of the rigid body in the chunk.<br/>
+        ///                 Used to look up the body's <see cref="PostTransformMatrix"/> component in the provided
+        ///                 <c>postTransformMatrices</c> array, if any (see <c>hasPostTransformMatrix</c> parameter).</param>
         /// <param name="transform">The body's world space transform.</param>
-        /// <param name="hasAnyScale"><c>true</c> if the rigid body has any scale component; otherwise, <c>false</c>.</param>
-        /// <param name="hasNonUniformScale"><c>true</c> if the rigid body has a NonUniformScale component; otherwise, <c>false</c>.</param>
-        /// <param name="nonUniformScales">The NonUniformScale values in the chunk, if any.</param>
-        /// <param name="hasScale"><c>true</c> if the rigid body has a Scale component; otherwise, <c>false</c>.</param>
-        /// <param name="scales">The Scale values in the chunk, if any.</param>
-        /// <param name="compositeScales">The CompositeScale values in the chunk, if any.</param>
+        /// <param name="uniformScale">The body's uniform scale.</param>
+        /// <param name="hasPostTransformMatrix"><c>true</c> if the rigid body has a <see cref="PostTransformMatrix"/> component; otherwise, <c>false</c>.</param>
+        /// <param name="postTransformMatrices">The array of post transform matrices in the chunk.</param>
         /// <returns>A LocalToWorld matrix to use in place of those produced by default.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
 
@@ -153,7 +152,5 @@ namespace Unity.Physics.GraphicsIntegration
             else
                 return new LocalToWorld { Value = new float4x4(transform) };
         }
-
-
     }
 }

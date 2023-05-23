@@ -158,13 +158,13 @@ namespace Unity.Physics.Authoring
         }
     }
 
-    public readonly struct ColliderGeometry : IDisposable
+    internal readonly struct ColliderGeometry : IDisposable
     {
-        public readonly NativeArray<Vector3> VerticesArray;
-        public readonly NativeArray<int> IndicesArray;
-        public readonly NativeArray<Vector3> EdgesArray;
+        internal readonly NativeArray<Vector3> VerticesArray;
+        internal readonly NativeArray<int> IndicesArray;
+        internal readonly NativeArray<Vector3> EdgesArray;
 
-        public ColliderGeometry(NativeArray<Vector3> vertices, NativeArray<int> indices, NativeArray<Vector3> edgesArray)
+        internal ColliderGeometry(NativeArray<Vector3> vertices, NativeArray<int> indices, NativeArray<Vector3> edgesArray)
         {
             VerticesArray = vertices;
             IndicesArray = indices;
@@ -179,12 +179,12 @@ namespace Unity.Physics.Authoring
         }
     }
 
-    public struct PrimitiveColliderGeometries : IDisposable
+    internal struct PrimitiveColliderGeometries : IDisposable
     {
-        public ColliderGeometry CapsuleGeometry;
-        public ColliderGeometry BoxGeometry;
-        public ColliderGeometry CylinderGeometry;
-        public ColliderGeometry SphereGeometry;
+        internal ColliderGeometry CapsuleGeometry;
+        internal ColliderGeometry BoxGeometry;
+        internal ColliderGeometry CylinderGeometry;
+        internal ColliderGeometry SphereGeometry;
 
         public void Dispose()
         {

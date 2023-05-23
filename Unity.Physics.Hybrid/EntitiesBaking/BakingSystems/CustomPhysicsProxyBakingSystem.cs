@@ -3,6 +3,9 @@ using Unity.Transforms;
 
 namespace Unity.Physics.Authoring
 {
+    /// <summary>
+    ///     Custom physics proxy baking system
+    /// </summary>
     [UpdateInGroup(typeof(PostBakingSystemGroup))]
     [WorldSystemFilter(WorldSystemFilterFlags.BakingSystem)]
     public partial class CustomPhysicsProxyBakingSystem : SystemBase

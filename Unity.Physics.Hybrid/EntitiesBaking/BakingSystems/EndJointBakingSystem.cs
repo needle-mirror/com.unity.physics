@@ -6,7 +6,7 @@ using UnityComponent = UnityEngine.Component;
 namespace Unity.Physics.Authoring
 {
     /// <summary>
-    /// A system that is updated after all built-in conversion systems that produce <see cref="PhysicsJoint"/>.
+    ///     Baking system, called after all baking systems that produce <see cref="PhysicsJoint"/> components.
     /// </summary>
     [UpdateAfter(typeof(BeginJointBakingSystem))]
     [WorldSystemFilter(WorldSystemFilterFlags.BakingSystem)]

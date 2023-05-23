@@ -7,10 +7,11 @@ namespace Unity.DebugDisplay
     {
         internal int value;
 
-        public const int kMaxColors = 256;
-        public const int staticColorCount = 248;
-        public const int dynamicColorCount = kMaxColors - staticColorCount;
-        public const int dynamicColorIndex = staticColorCount;
+        internal const int kMaxColors = 256;
+        internal const int staticColorCount = 248;
+        internal const int dynamicColorCount = kMaxColors - staticColorCount;
+
+        const int dynamicColorIndex = staticColorCount;
 
         /// <summary>
         /// Black.

@@ -21,8 +21,7 @@ namespace Unity.Physics.Authoring
         [ReadOnly] private PrimitiveColliderGeometries Geometries;
         [ReadOnly] private float CollidersFacesScale;
 
-
-        public static JobHandle ScheduleJob(in NativeArray<RigidBody> rigidBodies, in NativeArray<BodyMotionType> bodiesMotionTypes, float collidersFacesScale, in PrimitiveColliderGeometries geometries, JobHandle inputDeps)
+        internal static JobHandle ScheduleJob(in NativeArray<RigidBody> rigidBodies, in NativeArray<BodyMotionType> bodiesMotionTypes, float collidersFacesScale, in PrimitiveColliderGeometries geometries, JobHandle inputDeps)
         {
             return new DisplayColliderFacesJob
             {

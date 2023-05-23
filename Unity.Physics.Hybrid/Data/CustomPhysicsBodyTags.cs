@@ -3,19 +3,39 @@ using Unity.Mathematics;
 
 namespace Unity.Physics.Authoring
 {
+    /// <summary>
+    /// Custom physics Body Tags.<para/>
+    ///
+    /// A lightweight type containing eight tags that can be individually toggled.
+    /// Designed for tagging of rigid bodies.
+    /// </summary>
     [Serializable]
     public struct CustomPhysicsBodyTags
     {
+        /// <summary>
+        /// Gets a <see cref="CustomPhysicsBodyTags"/> instance with all tags set to true.
+        /// </summary>
         public static CustomPhysicsBodyTags Everything => new CustomPhysicsBodyTags { Value = unchecked((byte)~0) };
+        /// <summary>
+        /// Gets a <see cref="CustomPhysicsBodyTags"/> instance with all tags set to false.
+        /// </summary>
         public static CustomPhysicsBodyTags Nothing => new CustomPhysicsBodyTags { Value = 0 };
 
+        /// <summary> Tag 0 </summary>
         public bool Tag00;
+        /// <summary> Tag 1 </summary>
         public bool Tag01;
+        /// <summary> Tag 2 </summary>
         public bool Tag02;
+        /// <summary> Tag 3 </summary>
         public bool Tag03;
+        /// <summary> Tag 4 </summary>
         public bool Tag04;
+        /// <summary> Tag 5 </summary>
         public bool Tag05;
+        /// <summary> Tag 6 </summary>
         public bool Tag06;
+        /// <summary> Tag 7 </summary>
         public bool Tag07;
 
         internal bool this[int i]
@@ -53,6 +73,11 @@ namespace Unity.Physics.Authoring
             }
         }
 
+        /// <summary>
+        /// A compact bitarray property representing the value of the tags 0 to 7 in a single byte.
+        ///
+        /// The i'th bit in the byte represents the value of the i'th tag, with a 1 corresponding to the true state.
+        /// </summary>
         public byte Value
         {
             get

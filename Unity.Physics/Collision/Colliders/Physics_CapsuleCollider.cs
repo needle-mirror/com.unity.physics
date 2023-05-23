@@ -147,7 +147,7 @@ namespace Unity.Physics
         public void Initialize(CapsuleGeometry geometry, CollisionFilter filter, Material material) =>
             InitializeInternal(geometry, filter, material);
 
-        public void InitializeInternal(CapsuleGeometry geometry, CollisionFilter filter, Material material, uint forceUniqueBlobID = 0)
+        void InitializeInternal(CapsuleGeometry geometry, CollisionFilter filter, Material material, uint forceUniqueBlobID = 0)
         {
             m_Header.Type = ColliderType.Capsule;
             m_Header.CollisionType = CollisionType.Convex;

@@ -4,6 +4,9 @@ using UnityEngine;
 
 namespace Unity.Physics.Authoring
 {
+    /// <summary>
+    ///     Baking system for colliders, called after all other collider baking systems.
+    /// </summary>
     [UpdateAfter(typeof(BeginColliderBakingSystem))]
     [WorldSystemFilter(WorldSystemFilterFlags.BakingSystem)]
     public partial class EndColliderBakingSystem : SystemBase

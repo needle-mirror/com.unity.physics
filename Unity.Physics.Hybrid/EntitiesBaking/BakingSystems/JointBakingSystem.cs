@@ -8,7 +8,7 @@ using FloatRange = Unity.Physics.Math.FloatRange;
 
 namespace Unity.Physics.Authoring
 {
-    public abstract class BaseJointBaker<T> : Baker<T> where T : UnityEngine.Component
+    internal abstract class BaseJointBaker<T> : Baker<T> where T : UnityEngine.Component
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected static quaternion GetJointFrameOrientation(float3 axis, float3 secondaryAxis)

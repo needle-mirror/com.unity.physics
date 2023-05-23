@@ -3,6 +3,9 @@ using Unity.Entities;
 
 namespace Unity.Physics.Authoring
 {
+    /// <summary>
+    ///     Baking system for colliders, called before all other collider baking systems.
+    /// </summary>
     [WorldSystemFilter(WorldSystemFilterFlags.BakingSystem)]
     public partial class BeginColliderBakingSystem : SystemBase
     {

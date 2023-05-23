@@ -1,5 +1,25 @@
 # Changelog
 
+
+## [1.0.10] - 2023-05-23
+
+### Added
+
+* Added missing API documentation and tooltips.
+* preprocessors against performance tests package
+
+### Changed
+
+* Changed visibility of `BaseJointBaker` class. It is now internal.
+* Changed visibility of `ColliderGeometry` struct. It is now internal.
+* Changed visibility of `PrimitiveColliderGeometries` struct. It is now internal.
+
+### Fixed
+
+* The relative velocity in the angular velocity motor is now calculated correctly and the relative orientation between the two connected rigid bodies is correctly taken into account. This makes the motor work properly in all configurations.
+* Prevent issues with update order for `ModifyJointLimitsSystem` in netcode multiplayer use case in which the system could not be placed after the `PhysicsSystemGroup` since both were no longer in the same group.
+
+
 ## [1.0.8] - 2023-04-17
 
 ### Added
@@ -15,7 +35,7 @@
 
 * UpgradePhysicsData window has been removed.
 * The custom Unity Physics authoring experience, built around the `PhysicsBodyAuthoring` and `PhysicsShapeAuthoring` components, has been removed from the package and turned into a package sample. It is recommended to use the built-in physics authoring components instead, e.g., the `Rigidbody` and collider components. To continue using the custom authoring experience in your projects, simply import the _Custom Physics Authoring_ sample from the Unity Physics package into your project via the Package Manager window.
-* Dependency on com.unity.test-framework
+* Depedendency on com.unity.test-framework
 
 ### Fixed
 

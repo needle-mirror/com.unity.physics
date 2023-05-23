@@ -5,16 +5,25 @@ using UnityEngine;
 
 namespace Unity.Physics.Authoring
 {
+    /// <summary>
+    /// Component that specifies if a rigid body is a kinematic body and what its mass is.
+    /// </summary>
     [TemporaryBakingType]
     public struct RigidbodyBakingData : IComponentData
     {
+        /// <summary> Sets rigid body as kinematic body. </summary>
         public bool isKinematic;
+
+        /// <summary> Mass of the rigid body. </summary>
         public float mass;
     }
 
+    /// <summary>
+    /// A baker for a Rigidbody component
+    /// </summary>
     class RigidbodyBaker : BasePhysicsBaker<Rigidbody>
     {
-        public static List<UnityEngine.Collider> colliderComponents = new List<UnityEngine.Collider>();
+        static List<UnityEngine.Collider> colliderComponents = new List<UnityEngine.Collider>();
 
         public override void Bake(Rigidbody authoring)
         {
@@ -89,6 +98,9 @@ namespace Unity.Physics.Authoring
         }
     }
 
+    /// <summary>
+    /// Represents a rigidbody baking system.
+    /// </summary>
     [RequireMatchingQueriesForUpdate]
     [WorldSystemFilter(WorldSystemFilterFlags.BakingSystem)]
     public partial class RigidbodyBakingSystem : SystemBase

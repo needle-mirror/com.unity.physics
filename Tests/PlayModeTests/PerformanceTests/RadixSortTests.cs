@@ -1,4 +1,5 @@
-/*using NUnit.Framework;
+#if PHYSICS_ENABLE_PERF_TESTS
+using NUnit.Framework;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
@@ -161,4 +162,4 @@ namespace Unity.Physics.Tests.PerformanceTests
         }
     }
 }
-*/
+#endif

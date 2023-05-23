@@ -4,13 +4,14 @@ using static Unity.Physics.Math;
 
 namespace Unity.Physics
 {
-    // Solve data for a constraint that limits one degree of angular freedom
+    // Solve data for a constraint that rotates two bodies relative to each other
+    // about a given axis and at a desired angular velocity
     [NoAlias]
     struct AngularVelocityMotorJacobian
     {
-        // Limited axis in motion A space
+        // Rotation axis in motion A space
         public float3 AxisInMotionA;
-        public float3 Target;   //in rad/s
+        public float Target;   // in rad/s
 
         // Index of the limited axis
         public int AxisIndex;
@@ -18,21 +19,11 @@ namespace Unity.Physics
         // Relative orientation of the motions before solving
         public quaternion MotionBFromA;
 
-        // Rotation to joint space from motion space
-        public quaternion MotionAFromJoint;
-        public quaternion MotionBFromJoint;
-
         // Maximum impulse that can be applied to the motor before it caps out (not a breaking impulse)
         public float MaxImpulseOfMotor;
 
         // Accumulated impulse applied over the number of solver iterations
         public float AccumulatedImpulse;
-
-        // Error before solving
-        public float InitialError;
-
-        // Fraction of the position error to correct per step
-        public float Tau;
 
         // Fraction of the velocity error to correct per step
         public float Damping;
@@ -45,19 +36,13 @@ namespace Unity.Physics
         {
             AxisIndex = constraint.ConstrainedAxis1D;
             AxisInMotionA = aFromConstraint.Rotation[AxisIndex];
-            Target = AxisInMotionA * constraint.Target[AxisIndex]; //angular velocity as float3 in rad/s
-            Tau = tau;
+            Target = constraint.Target[AxisIndex]; // scalar target angular velocity in rad/s
             Damping = damping;
 
-            MaxImpulseOfMotor = math.abs(constraint.MaxImpulse.x); //using as magnitude, y&z components are unused
+            MaxImpulseOfMotor = math.abs(constraint.MaxImpulse.x); // using as magnitude, y and z components are unused
             AccumulatedImpulse = 0.0f;
 
             MotionBFromA = math.mul(math.inverse(motionB.WorldFromMotion.rot), motionA.WorldFromMotion.rot);
-            MotionAFromJoint = new quaternion(aFromConstraint.Rotation);
-            MotionBFromJoint = new quaternion(bFromConstraint.Rotation);
-
-            // Calculate the current error: magnitude of target angular velocity, in rad/s
-            InitialError = CalculateError();
         }
 
         // Solve the Jacobian
@@ -68,7 +53,7 @@ namespace Unity.Physics
                 velocityA.AngularVelocity, velocityB.AngularVelocity, stepInput.Timestep);
 
             // Calculate the effective mass
-            float3 axisInMotionB = math.mul(futureMotionBFromA, -AxisInMotionA); //projected onto axis in B
+            float3 axisInMotionB = math.mul(futureMotionBFromA, AxisInMotionA);
             float effectiveMass;
             {
                 float invEffectiveMass = math.csum(AxisInMotionA * AxisInMotionA * velocityA.InverseInertia +
@@ -76,21 +61,19 @@ namespace Unity.Physics
                 effectiveMass = math.select(1.0f / invEffectiveMass, 0.0f, invEffectiveMass == 0.0f);
             }
 
-            var relativeVelocity = math.dot(velocityB.AngularVelocity, axisInMotionB) -
-                math.dot(velocityA.AngularVelocity, AxisInMotionA);
-            float rhs = -(math.dot(Target, axisInMotionB) - relativeVelocity) * Damping;
+            // Compute the current relative angular velocity between the two bodies about the rotation axis
+            var relativeVelocity = math.dot(velocityA.AngularVelocity, AxisInMotionA) -
+                math.dot(velocityB.AngularVelocity, axisInMotionB);
 
-            float impulse = math.mul(effectiveMass, rhs);
+            // Compute the error between the target relative velocity and the current relative velocity
+            float velocityError = Target - relativeVelocity;
+            float velocityCorrection = velocityError * Damping;
+
+            float impulse = math.mul(effectiveMass, velocityCorrection);
             impulse = JacobianUtilities.CapImpulse(impulse, ref AccumulatedImpulse, MaxImpulseOfMotor);
 
             velocityA.ApplyAngularImpulse(impulse * AxisInMotionA);
-            velocityB.ApplyAngularImpulse(impulse * axisInMotionB);
-        }
-
-        // Helper function
-        private float CalculateError()
-        {
-            return math.length(Target); //magnitude of target velocity in rad/s
+            velocityB.ApplyAngularImpulse(-impulse * axisInMotionB);
         }
     }
 }

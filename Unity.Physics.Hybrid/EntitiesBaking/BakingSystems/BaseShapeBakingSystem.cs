@@ -15,6 +15,9 @@ using Hash128 = Unity.Entities.Hash128;
 
 namespace Unity.Physics.Authoring
 {
+    /// <summary>
+    ///     Baking system for colliders.
+    /// </summary>
     [RequireMatchingQueriesForUpdate]
     [UpdateAfter(typeof(BeginColliderBakingSystem))]
     [UpdateBefore(typeof(BuildCompoundCollidersBakingSystem))]

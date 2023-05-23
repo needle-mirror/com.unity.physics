@@ -201,3 +201,9 @@ public partial struct SetFrictionToZeroSystem : ISystem
     }    
 }
 ```
+
+## Fine grained control of modification logics applied
+
+Typically, not all intermediate data is modified the same way. Examples above show how single modification logic is applied with very simple filtering, like disabling only dynamic vs dynamic body collisions. What is typically needed is to have much better control over which subset of intermediate simulation data to modify. On top of that very often is needed to apply different modifications on different subsets of intermediate simulation data.
+
+To achieve both of those check [Custom Physics Body Tags](tag-physics-body.md) section.

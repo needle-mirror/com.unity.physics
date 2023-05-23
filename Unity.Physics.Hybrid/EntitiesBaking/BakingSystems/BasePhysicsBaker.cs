@@ -5,29 +5,50 @@ using UnityEngine;
 
 namespace Unity.Physics.Authoring
 {
+    /// <summary>
+    /// Component that specifies the local to world matrix and scale of an entity
+    /// </summary>
     [TemporaryBakingType]
     public struct PhysicsPostProcessData : IComponentData
     {
+        /// <summary> A matrix that transforms a point from local space into world space </summary>
         public float4x4 LocalToWorldMatrix;
+
+        /// <summary> Represents the global scale of a body </summary>
         public float3 LossyScale;
     }
 
+    /// <summary>
+    /// An empty component that is used to indicate if the root of a compound collider has been baked
+    /// </summary>
     [TemporaryBakingType]
     public struct PhysicsRootBaked : IComponentData {}
 
+    /// <summary>
+    /// Component that specifies data relating to compound colliders and blobs
+    /// </summary>
     [BakingType]
     public struct PhysicsCompoundData : IComponentData
     {
+        /// <summary> A hash associated with a compound collider </summary>
         public Unity.Entities.Hash128 Hash;
+
+        /// <summary> Instance ID of the GameObject associated with the body </summary>
         public int ConvertedBodyInstanceID;
+
+        /// <summary> Indicates if a blob is associated to a collider </summary>
         public bool AssociateBlobToBody;
+
+        /// <summary> A flag to indicate that calculation of a compound blob should be deferred </summary>
         public bool DeferredCompoundBlob;
+
+        /// <summary> A flag to indicate that a compound collider has been calculated </summary>
         public bool RegisterBlob;
     }
 
-    public abstract class BasePhysicsBaker<T> : Baker<T> where T : Component
+    internal abstract class BasePhysicsBaker<T> : Baker<T> where T : Component
     {
-        protected bool NeedsPostProcessTransform(Transform worldTransform, bool gameObjectStatic, BodyMotionType motionType, out PhysicsPostProcessData data)
+        bool NeedsPostProcessTransform(Transform worldTransform, bool gameObjectStatic, BodyMotionType motionType, out PhysicsPostProcessData data)
         {
             Transform transformParent = worldTransform.parent;
             bool haveParentEntity    = transformParent != null;
@@ -57,7 +78,6 @@ namespace Unity.Physics.Authoring
         /// </summary>
         /// <param name="bodyTransform">Transformation of this entity.</param>
         /// <param name="motionType">Motion type of this entity. Default is BodyMotionType.Static.</param>
-        /// <param name="hasPropagateLocalToWorld">Specifies whether this entity already has the PropagateLocalToWorld component. Default is false.</param>
         protected void PostProcessTransform(Transform bodyTransform, BodyMotionType motionType = BodyMotionType.Static)
         {
             if (NeedsPostProcessTransform(bodyTransform, IsStatic(), motionType, out PhysicsPostProcessData data))
