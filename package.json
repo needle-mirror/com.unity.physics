@@ -5,7 +5,7 @@
   "dependencies": {
     "com.unity.burst": "1.8.4",
     "com.unity.collections": "2.1.4",
-    "com.unity.entities": "1.0.10",
+    "com.unity.entities": "1.0.11",
     "com.unity.mathematics": "1.2.6",
     "com.unity.modules.imgui": "1.0.0",
     "com.unity.modules.jsonserialize": "1.0.0"
@@ -17,7 +17,7 @@
   "name": "com.unity.physics",
   "unity": "2022.2",
   "unityRelease": "15f1",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "samples": [
     {
       "displayName": "Custom Physics Authoring",
@@ -27,15 +27,15 @@
     }
   ],
   "_upm": {
-    "changelog": "### Added\n\n* Added missing API documentation and tooltips.\n* preprocessors against performance tests package\n\n### Changed\n\n* Changed visibility of `BaseJointBaker` class. It is now internal.\n* Changed visibility of `ColliderGeometry` struct. It is now internal.\n* Changed visibility of `PrimitiveColliderGeometries` struct. It is now internal.\n\n### Fixed\n\n* The relative velocity in the angular velocity motor is now calculated correctly and the relative orientation between the two connected rigid bodies is correctly taken into account. This makes the motor work properly in all configurations.\n* Prevent issues with update order for `ModifyJointLimitsSystem` in netcode multiplayer use case in which the system could not be placed after the `PhysicsSystemGroup` since both were no longer in the same group."
+    "changelog": "### Changed\n\n* Prevent spawning `ParallelSolverJobs` unnecessarily ahead of time, which was leading to a potentially high overhead in time consumption. Instead, schedule the right number of jobs for the dispatch pair phases created by the scheduler to prevent scheduling and processing overheads. This leads to speed-ups in the time consumed by jobs in the `SolveAndIntegrateSystem` specifically in cases with low to medium joint and contact counts.\n* The `PhysicsColliderKeyEntityPair` buffer is now added only when needed and its internal capacity of the buffer is set to zero, ensuring its content always lives outside of the chunk. This way, we don't unnecessarily increase the rigid body sizes in chunks, allowing for a larger number of rigid bodies in a single chunk, which improves performance.\n\n### Fixed\n\n* Fixed regression in accessibility of `PhysicsShapeAuthoring` API. The functions `GetCapsuleProperties()` and `SetCapsule()` were made internal by accident during the move of the custom physics authoring components from the package API to a package sample and are now public again."
   },
   "upmCi": {
-    "footprint": "cd27e809957826ef3e2ee8c6602ca8a4ec8dbfd9"
+    "footprint": "a9a4878ec6b761534511107bc3cfc9ee023b7d25"
   },
   "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.physics@1.0/manual/index.html",
   "repository": {
     "url": "https://github.cds.internal.unity3d.com/unity/dots.git",
     "type": "git",
-    "revision": "464acdc5351df3c5deeb425d7aa31f4c7b20c0cf"
+    "revision": "81c21934f16a49fc5f826187f07aaea4728d63c3"
   }
 }

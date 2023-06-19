@@ -54,7 +54,6 @@ namespace Unity.Physics.Authoring
                 });
                 AddComponent<PhysicsRootBaked>(entity);
                 AddComponent<PhysicsCollider>(entity);
-                AddBuffer<PhysicsColliderKeyEntityPair>(entity);
             }
 
             // Ignore the rest if the object is static

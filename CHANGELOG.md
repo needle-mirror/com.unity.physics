@@ -1,6 +1,18 @@
 # Changelog
 
 
+## [1.0.11] - 2023-06-19
+
+### Changed
+
+* Prevent spawning `ParallelSolverJobs` unnecessarily ahead of time, which was leading to a potentially high overhead in time consumption. Instead, schedule the right number of jobs for the dispatch pair phases created by the scheduler to prevent scheduling and processing overheads. This leads to speed-ups in the time consumed by jobs in the `SolveAndIntegrateSystem` specifically in cases with low to medium joint and contact counts.
+* The `PhysicsColliderKeyEntityPair` buffer is now added only when needed and its internal capacity of the buffer is set to zero, ensuring its content always lives outside of the chunk. This way, we don't unnecessarily increase the rigid body sizes in chunks, allowing for a larger number of rigid bodies in a single chunk, which improves performance.
+
+### Fixed
+
+* Fixed regression in accessibility of `PhysicsShapeAuthoring` API. The functions `GetCapsuleProperties()` and `SetCapsule()` were made internal by accident during the move of the custom physics authoring components from the package API to a package sample and are now public again.
+
+
 ## [1.0.10] - 2023-05-23
 
 ### Added

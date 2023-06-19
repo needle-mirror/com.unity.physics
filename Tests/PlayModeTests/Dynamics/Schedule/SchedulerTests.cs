@@ -1,14 +1,52 @@
 using NUnit.Framework;
 using Unity.Collections;
-using Unity.Mathematics;
 using static Unity.Physics.DispatchPairSequencer;
 
 namespace Unity.Physics.Tests.Dynamics.Schedule
 {
     // Tests to validate scheduler implementation
+    [TestFixture]
     class SchedulerTests
     {
-        // Regression test.
+        private DispatchPairSequencer Sequencer;
+        private SolverSchedulerInfo SolverSchedulerInfo;
+        private int NumPhases => Sequencer.m_PhaseLookupTableDynamicDynamicPairs.NumPhases;
+        private int BatchSize => CreateDispatchPairPhasesJob.k_MinBatchSize;
+
+        [SetUp]
+        public void SetUp()
+        {
+            Sequencer = DispatchPairSequencer.Create();
+            SolverSchedulerInfo = new SolverSchedulerInfo(NumPhases);
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            Sequencer.Dispose();
+            SolverSchedulerInfo.Dispose();
+        }
+
+        private void CreatePhasedDispatchPairsAndVerify(int numDynamicBodies, NativeArray<DispatchPair> sortedDispatchPairs)
+        {
+            var phasedDispatchPairs = new NativeArray<DispatchPair>(sortedDispatchPairs.Length, Allocator.Temp);
+            var createDispatchPairsJob = new CreateDispatchPairPhasesJob
+            {
+                DispatchPairs = sortedDispatchPairs,
+                NumDynamicBodies = numDynamicBodies,
+                NumPhases = NumPhases,
+                PhasedDispatchPairs = phasedDispatchPairs,
+                PhaseLookupTableDynamicDynamicPairs = Sequencer.m_PhaseLookupTableDynamicDynamicPairs.Table,
+                PhaseLookupTableDynamicStaticPairs = Sequencer.m_PhaseLookupTableDynamicStaticPairs.Table,
+                SolverSchedulerInfo = SolverSchedulerInfo
+            };
+            createDispatchPairsJob.Execute();
+
+            // verify the correctness of the phase info data elements
+            CreateDispatchPairPhasesJob.CheckIntegrity(phasedDispatchPairs, numDynamicBodies, ref SolverSchedulerInfo.PhaseInfo);
+        }
+
+        // Tests scheduler with full batches.
         // It is not very often in current tests that there are full batches of dispatch pairs in solve phases.
         // There was an issue where having 2 full batches (and some overflow pairs) in 2 consecutive phases lead
         // to a race condition in the solver as wrong pairs were being solved in parallel.
@@ -16,11 +54,12 @@ namespace Unity.Physics.Tests.Dynamics.Schedule
         [Test]
         public void TestSchedulerWithFullBatches()
         {
-            DispatchPairSequencer sequencer = DispatchPairSequencer.Create();
+            // This test was written when the batch size was 8. It is important to ensure that the batch size hasn't changed for the validity of this test.
+            // If the batch size changes, the test needs to be updated accordingly.
+            Assert.AreEqual(8, BatchSize);
 
             int numDynamicBodies = 15;
-            var solverSchedulerInfo = new SolverSchedulerInfo(sequencer.m_PhaseLookupTableDynamicDynamicPairs.NumPhases);
-            var phasedDispatchPairs = new NativeArray<DispatchPair>(20, Allocator.Temp);
+
             var sortedDispatchPairs = new NativeArray<DispatchPair>(20, Allocator.Temp);
             {
                 sortedDispatchPairs[0] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyIndexA = 0, BodyIndexB = 1 });
@@ -45,59 +84,46 @@ namespace Unity.Physics.Tests.Dynamics.Schedule
                 sortedDispatchPairs[19] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyIndexA = 1, BodyIndexB = 16 });
             }
 
-            var createDispatchPairsJob = new CreateDispatchPairPhasesJob
-            {
-                DispatchPairs = sortedDispatchPairs,
-                NumDynamicBodies = numDynamicBodies,
-                NumPhases = sequencer.m_PhaseLookupTableDynamicDynamicPairs.NumPhases,
-                PhasedDispatchPairs = phasedDispatchPairs,
-                PhaseLookupTableDynamicDynamicPairs = sequencer.m_PhaseLookupTableDynamicDynamicPairs.Table,
-                PhaseLookupTableDynamicStaticPairs = sequencer.m_PhaseLookupTableDynamicStaticPairs.Table,
-                SolverSchedulerInfo = solverSchedulerInfo
-            };
-            createDispatchPairsJob.Execute();
+            CreatePhasedDispatchPairsAndVerify(numDynamicBodies, sortedDispatchPairs);
+        }
 
-            // Verification
+        // Tests if scheduler correctly fills in the sequential phase in cases in which not all dispatch pairs can be organized into data parallel phases.
+        [Test]
+        public void TestSchedulerWithSequentialPhase()
+        {
+            // Create a star shaped connectivity graph with one shared center node and more than 16 adjacent nodes, forming 16 incident edges.
+            // This will result in a sequential phase with at least 1 element.
+
+            // 1 center node + N+1 adjacent nodes, where N is the number of phases.
+            int numDynamicsBodies = NumPhases + 2;
+
+            // With the last phase being reserved for sequential processing, we expect the first 15 incident
+            // edges (dispatch pairs) to end up in data parallel phases and the remaining 2 in the sequential phase.
+            // However, given that dispatch pairs are added to phases in batches, and that these batches are assumed to be processed sequentially,
+            // we need to create "BatchSize" dispatch pairs between each adjacent node and the center node, to force every phase to be minimally full.
+            int numDispatchPairBatches = numDynamicsBodies - 1;
+            int numDispatchPairs = numDispatchPairBatches * BatchSize;
+            var sortedDispatchPairs = new NativeArray<DispatchPair>(numDispatchPairs, Allocator.Temp);
+            var bodyIndexA = 0;
+            for (int i = 0; i < numDispatchPairBatches; ++i)
             {
-                int dispatchPairCount = 0;
-                for (int i = 0; i < solverSchedulerInfo.NumActivePhases[0]; i++)
+                var bodyIndexB = i + 1;
+                // Create BatchSize dispatch pairs between each adjacent node and the center node.
+                // Note: we are creating joint pairs, not collision pairs, so that we can create more than one between two bodies.
+                // For collision pairs (which will trigger a single contact generation function call per pair in the narrowphase),
+                // we can only ever create one per body pair.
+                for (int j = 0; j < BatchSize; ++j)
                 {
-                    SolverSchedulerInfo.SolvePhaseInfo info = solverSchedulerInfo.PhaseInfo[i];
-                    dispatchPairCount += info.DispatchPairCount;
-
-                    var firstWorkItemIndex = info.FirstWorkItemIndex;
-                    {
-                        for (int j = firstWorkItemIndex; j < firstWorkItemIndex + info.NumWorkItems - 1; j++)
-                        {
-                            for (int k = j + 1; k < j + 1 + info.NumWorkItems; k++)
-                            {
-                                int firstIndex = j * info.BatchSize;
-                                int secondIndex = k * info.BatchSize;
-                                for (int pairIndex1 = firstIndex; pairIndex1 < math.min(firstIndex + info.BatchSize, dispatchPairCount); pairIndex1++)
-                                {
-                                    int aIndex1 = phasedDispatchPairs[pairIndex1].BodyIndexA;
-                                    int bIndex1 = phasedDispatchPairs[pairIndex1].BodyIndexB;
-                                    for (int pairIndex2 = secondIndex; pairIndex2 < math.min(secondIndex + info.BatchSize, dispatchPairCount); pairIndex2++)
-                                    {
-                                        int aIndex2 = phasedDispatchPairs[pairIndex2].BodyIndexA;
-                                        int bIndex2 = phasedDispatchPairs[pairIndex2].BodyIndexB;
-
-                                        // Verify that different batches can't contain same dynamic bodies
-                                        Assert.AreNotEqual(aIndex1, aIndex2);
-                                        if (bIndex1 < numDynamicBodies || bIndex2 < numDynamicBodies)
-                                        {
-                                            Assert.AreNotEqual(bIndex1, bIndex2);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    sortedDispatchPairs[i * BatchSize + j] = DispatchPair.CreateJoint(new BodyIndexPair { BodyIndexA = bodyIndexA, BodyIndexB = bodyIndexB }, 0, 0);
                 }
             }
 
-            solverSchedulerInfo.Dispose();
-            sequencer.Dispose();
+            CreatePhasedDispatchPairsAndVerify(numDynamicsBodies, sortedDispatchPairs);
+
+            // Verify that we get 16 phases, that the last phase is flagged as sequential, and that it contains 2 dispatch pairs.
+            Assert.AreEqual(16, SolverSchedulerInfo.NumActivePhases[0]);
+            Assert.AreEqual(2 * BatchSize, SolverSchedulerInfo.PhaseInfo[15].DispatchPairCount);
+            Assert.IsTrue(SolverSchedulerInfo.PhaseInfo[15].ContainsDuplicateIndices);
         }
     }
 }

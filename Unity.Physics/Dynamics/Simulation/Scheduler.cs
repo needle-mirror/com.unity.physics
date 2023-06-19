@@ -176,6 +176,7 @@ namespace Unity.Physics
                 internal int NumWorkItems; // The amount of "subtasks" of size BatchSize in this phase
                 internal int FirstWorkItemIndex; // The sum of NumWorkItems in all previous phases. Used for output native stream.
                 internal int FirstDispatchPairIndex; // Index into the array of DispatchPairs for this phase.
+                internal bool ContainsDuplicateIndices; // Indicates that there are duplicate body indices across batches within this phase.
             }
 
             [NoAlias]
@@ -184,15 +185,6 @@ namespace Unity.Physics
             internal NativeArray<int> NumActivePhases;
             [NoAlias]
             internal NativeArray<int> NumWorkItems;
-
-            internal int NumPhases => PhaseInfo.Length;
-            internal static int CalculateNumWorkItems(NativeArray<SolvePhaseInfo> phaseInfos)
-            {
-                int numWorkItems = 0;
-                for (int i = 0; i < phaseInfos.Length; i++)
-                    numWorkItems += phaseInfos[i].NumWorkItems;
-                return numWorkItems;
-            }
 
             // For a given work item returns phase id.
             internal int FindPhaseId(int workItemIndex)
@@ -808,7 +800,7 @@ namespace Unity.Physics
             public int NumDynamicBodies;
             public int NumPhases;
 
-            const int k_MinBatchSize = 8;
+            internal const int k_MinBatchSize = 8;
 
             public void Execute()
             {
@@ -838,6 +830,8 @@ namespace Unity.Physics
 
                 int lastPhaseIndex = numPhases - 1;
                 int* numPairsPerPhase = stackalloc int[numPhases];
+                // Note: we use the last phase for all pairs for which we could not find a phase for data parallel processing.
+                // These bodies need to be processed sequentially.
                 numPairsPerPhase[lastPhaseIndex] = 0;
 
                 const byte invalidPhaseId = 0xff;
@@ -882,6 +876,7 @@ namespace Unity.Physics
                             }
                             else
                             {
+                                // We ran out of phases. Put body in last phase.
                                 rigidBodyMask[bodyIndexA] |= (ushort)(1 << lastPhaseIndex);
                                 numPairsPerPhase[lastPhaseIndex]++;
                             }
@@ -989,6 +984,7 @@ namespace Unity.Physics
 
                     info.BatchSize = math.min(k_MinBatchSize, info.DispatchPairCount);
                     info.NumWorkItems = (info.DispatchPairCount + info.BatchSize - 1) / info.BatchSize;
+                    info.ContainsDuplicateIndices = i == lastPhaseIndex && info.NumWorkItems > 1;
                     info.FirstWorkItemIndex = firstWorkItemIndex;
                     info.FirstDispatchPairIndex = numPairs;
 
@@ -1000,49 +996,88 @@ namespace Unity.Physics
                 }
 
                 // Uncomment this code when testing scheduler
-//               CheckIntegrity(phasedDispatchPairs, numDynamicBodies, ref phaseInfo);
+                //CheckIntegrity(phasedDispatchPairs, numDynamicBodies, ref phaseInfo);
 
                 //<todo.eoin.usermod Can we get rid of this max()? Needed if the user wants to add contacts themselves.
-                numWorkItems = math.max(1, SolverSchedulerInfo.CalculateNumWorkItems(phaseInfo));
+                numWorkItems = math.max(1, firstWorkItemIndex);
             }
 
-            private static void CheckIntegrity(NativeArray<DispatchPair> phasedDispatchPairs,
+            internal static void CheckIntegrity(NativeArray<DispatchPair> phasedDispatchPairs,
                 int numDynamicBodies, ref NativeArray<SolverSchedulerInfo.SolvePhaseInfo> solverPhaseInfos)
             {
                 int dispatchPairCount = 0;
+                int expectedFirstWorkItemIndex = 0;
+                int expectedFirstDispatchPairIndex = 0;
                 for (int i = 0; i < solverPhaseInfos.Length; i++)
                 {
                     SolverSchedulerInfo.SolvePhaseInfo info = solverPhaseInfos[i];
+
+                    // make sure the info contains work load. Otherwise, it shouldn't be present.
+                    Assert.IsTrue(info.DispatchPairCount >= 0);
+
+                    // make sure the batch size is valid
+                    Assert.IsTrue((info.BatchSize == 0 && info.DispatchPairCount == 0) || (info.BatchSize > 0 && info.BatchSize <= info.DispatchPairCount));
+
+                    // make sure the number of work items in this phase is valid
+                    int expectedWorkItemCount = info.BatchSize == 0 ? 0 : (int)((info.DispatchPairCount - 1) / info.BatchSize) + 1;
+                    Assert.AreEqual(expectedWorkItemCount, info.NumWorkItems);
+
+                    if (info.NumWorkItems > 0)
+                    {
+                        // make sure the first work item index is as expected
+                        Assert.AreEqual(expectedFirstWorkItemIndex, info.FirstWorkItemIndex);
+                        // make sure the first dispatch pair index is as expected
+                        Assert.AreEqual(expectedFirstDispatchPairIndex, info.FirstDispatchPairIndex);
+                    }
+
+                    // Verify for every phase that it can be processed in parallel. That is, it doesn't contain the same dynamic body twice.
+                    // If it does, it will be indicated via the ContainsDuplicateIndices member.
+                    // Here we make sure that either of this is the case.
                     dispatchPairCount += info.DispatchPairCount;
 
-                    var firstWorkItemIndex = info.FirstWorkItemIndex;
-                    {
-                        for (int j = firstWorkItemIndex; j < firstWorkItemIndex + info.NumWorkItems - 1; j++)
-                        {
-                            for (int k = j + 1; k < j + 1 + info.NumWorkItems; k++)
-                            {
-                                int firstIndex = j * info.BatchSize;
-                                int secondIndex = k * info.BatchSize;
-                                for (int pairIndex1 = firstIndex; pairIndex1 < math.min(firstIndex + info.BatchSize, dispatchPairCount); pairIndex1++)
-                                {
-                                    int aIndex1 = phasedDispatchPairs[pairIndex1].BodyIndexA;
-                                    int bIndex1 = phasedDispatchPairs[pairIndex1].BodyIndexB;
-                                    for (int pairIndex2 = secondIndex; pairIndex2 < math.min(secondIndex + info.BatchSize, dispatchPairCount); pairIndex2++)
-                                    {
-                                        int aIndex2 = phasedDispatchPairs[pairIndex2].BodyIndexA;
-                                        int bIndex2 = phasedDispatchPairs[pairIndex2].BodyIndexB;
+                    // Note: if there is only one work item, we don't need to check for duplicate dynamic bodies since
+                    // the batch size is equal to the number of dispatch pairs in the phase. Therefore, we can by design
+                    // not process the same dynamic body twice in parallel.
+                    // In this case, we will not enter the loop below.
 
-                                        // Verify that different batches can't contain same dynamic bodies
-                                        Assert.AreNotEqual(aIndex1, aIndex2);
-                                        if (bIndex1 < numDynamicBodies || bIndex2 < numDynamicBodies)
-                                        {
-                                            Assert.AreNotEqual(bIndex1, bIndex2);
-                                        }
+                    bool expectDuplicateEntries = info.ContainsDuplicateIndices;
+                    int numDuplicatesFound = 0;
+
+                    for (int j = 0; j < info.NumWorkItems - 1; j++)
+                    {
+                        int firstIndex = info.FirstDispatchPairIndex + j * info.BatchSize;
+                        for (int k = j + 1; k < j + 1 + info.NumWorkItems; k++)
+                        {
+                            int secondIndex = info.FirstDispatchPairIndex + k * info.BatchSize;
+                            for (int pairIndex1 = firstIndex;
+                                 pairIndex1 < math.min(firstIndex + info.BatchSize, dispatchPairCount);
+                                 pairIndex1++)
+                            {
+                                int aIndex1 = phasedDispatchPairs[pairIndex1].BodyIndexA;
+                                int bIndex1 = phasedDispatchPairs[pairIndex1].BodyIndexB;
+                                for (int pairIndex2 = secondIndex;
+                                     pairIndex2 < math.min(secondIndex + info.BatchSize, dispatchPairCount);
+                                     pairIndex2++)
+                                {
+                                    int aIndex2 = phasedDispatchPairs[pairIndex2].BodyIndexA;
+                                    int bIndex2 = phasedDispatchPairs[pairIndex2].BodyIndexB;
+
+                                    numDuplicatesFound += math.select(0, 1, aIndex1 == aIndex2 || aIndex1 == bIndex2);
+                                    // Note: static bodies always appear at the 2nd place in the body pair (a,b). Because there is no danger of a data race
+                                    // with static bodies given that they are immutable, it is allowed to have duplicate static bodies
+                                    // across batches inside a phase. We therefore can (and must) safely ignore them in the duplicate search here.
+                                    if (bIndex1 < numDynamicBodies || bIndex2 < numDynamicBodies)
+                                    {
+                                        numDuplicatesFound += math.select(0, 1, bIndex1 == bIndex2 || bIndex1 == aIndex2);
                                     }
                                 }
                             }
                         }
                     }
+
+                    Assert.IsTrue(!expectDuplicateEntries || numDuplicatesFound > 0);
+                    expectedFirstDispatchPairIndex = dispatchPairCount;
+                    expectedFirstWorkItemIndex += info.NumWorkItems;
                 }
             }
 

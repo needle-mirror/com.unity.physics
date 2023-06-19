@@ -92,7 +92,10 @@ namespace Unity.Physics.Tests.Authoring
         }
 
         protected void TestConvertedData<T>(Action<T> checkValue) where T : unmanaged, IComponentData =>
-            TestConvertedData((Action<NativeArray<T>>)(components => { checkValue(components[0]); }), 1);
+            TestConvertedData<T>((world, entities, components) => { checkValue(components[0]); }, 1);
+
+        protected void TestConvertedData<T>(Action<NativeArray<T>> checkValue, int assumeCount) where T : unmanaged, IComponentData =>
+            TestConvertedData<T>((world, entities, components) => { checkValue(components); }, assumeCount);
 
         public static Entity ConvertBakeGameObject(GameObject go, World world, BlobAssetStore blobAssetStore)
         {
@@ -123,7 +126,7 @@ namespace Unity.Physics.Tests.Authoring
 #endif
         }
 
-        protected void TestConvertedData<T>(Action<NativeArray<T>> checkValues, int assumeCount) where T : unmanaged, IComponentData
+        protected void TestConvertedData<T>(Action<World, NativeArray<Entity>, NativeArray<T>> checkValues, int assumeCount) where T : unmanaged, IComponentData
         {
             var world = new World("Test world");
 
@@ -133,14 +136,11 @@ namespace Unity.Physics.Tests.Authoring
                 {
                     ConvertBakeGameObject(Root, world, blobAssetStore);
 
-                    using (var group = world.EntityManager.CreateEntityQuery(typeof(T)))
-                    {
-                        using (var components = group.ToComponentDataArray<T>(Allocator.Persistent))
-                        {
-                            Assume.That(components, Has.Length.EqualTo(assumeCount));
-                            checkValues(components);
-                        }
-                    }
+                    using var group = world.EntityManager.CreateEntityQuery(typeof(T));
+                    using var components = group.ToComponentDataArray<T>(Allocator.Temp);
+                    using var entities = group.ToEntityArray(Allocator.Temp);
+                    Assume.That(components, Has.Length.EqualTo(assumeCount));
+                    checkValues(world, entities, components);
                 }
             }
             finally
@@ -149,15 +149,36 @@ namespace Unity.Physics.Tests.Authoring
             }
         }
 
+        protected void TestConvertedSharedData<T, S>(S sharedComponent)
+            where T : unmanaged, IComponentData
+            where S : unmanaged, ISharedComponentData =>
+            TestConvertedSharedData<T, S>((world, entities, components) => {}, 1, sharedComponent);
+
         protected void TestConvertedSharedData<T, S>(Action<T> checkValue, S sharedComponent)
             where T : unmanaged, IComponentData
             where S : unmanaged, ISharedComponentData =>
-            TestConvertedSharedData((Action<NativeArray<T>>)(components =>
+            TestConvertedSharedData<T, S>((world, entities, components) =>
             {
                 checkValue?.Invoke(components[0]);
-            }), 1, sharedComponent);
+            }, 1, sharedComponent);
 
-        protected void TestConvertedSharedData<T, S>(Action<NativeArray<T>> checkValues, int assumeCount, S sharedComponent)
+        protected void TestConvertedSharedData<T, S>(Action<World, Entity, T> checkValue, S sharedComponent)
+            where T : unmanaged, IComponentData
+            where S : unmanaged, ISharedComponentData =>
+            TestConvertedSharedData<T, S>((world, entities, components) =>
+            {
+                checkValue?.Invoke(world, entities[0], components[0]);
+            }, 1, sharedComponent);
+
+        protected void TestConvertedSharedData<T, S>(Action<NativeArray<T>> checkValue, int assumeCount, S sharedComponent)
+            where T : unmanaged, IComponentData
+            where S : unmanaged, ISharedComponentData =>
+            TestConvertedSharedData<T, S>((world, entities, components) =>
+            {
+                checkValue?.Invoke(components);
+            }, assumeCount, sharedComponent);
+
+        protected void TestConvertedSharedData<T, S>(Action<World, NativeArray<Entity>, NativeArray<T>> checkValues, int assumeCount, S sharedComponent)
             where T : unmanaged, IComponentData
             where S : unmanaged, ISharedComponentData
         {
@@ -172,11 +193,10 @@ namespace Unity.Physics.Tests.Authoring
                     using (var group = world.EntityManager.CreateEntityQuery(new ComponentType[] { typeof(T), typeof(S) }))
                     {
                         group.AddSharedComponentFilter(sharedComponent);
-                        using (var components = group.ToComponentDataArray<T>(Allocator.Persistent))
-                        {
-                            Assume.That(components, Has.Length.EqualTo(assumeCount));
-                            checkValues(components);
-                        }
+                        using var components = group.ToComponentDataArray<T>(Allocator.Temp);
+                        using var entities = group.ToEntityArray(Allocator.Temp);
+                        Assume.That(components, Has.Length.EqualTo(assumeCount));
+                        checkValues(world, entities, components);
                     }
                 }
             }
@@ -236,9 +256,10 @@ namespace Unity.Physics.Tests.Authoring
                 {
                     ConvertBakeGameObject(Root, world, blobAssetStore);
 
-                    using (var group = world.EntityManager.CreateEntityQuery(typeof(T)))
-                    using (var bodies = group.ToComponentDataArray<T>(Allocator.Persistent))
-                        Assert.That(bodies.Length, Is.EqualTo(0), $"Conversion pipeline produced {typeof(T).Name}");
+                    using var group = world.EntityManager.CreateEntityQuery(typeof(T));
+                    using var components = group.ToComponentDataArray<T>(Allocator.Temp);
+
+                    Assert.That(components.Length, Is.EqualTo(0), $"Conversion pipeline produced {typeof(T).Name}");
                 }
             }
             finally

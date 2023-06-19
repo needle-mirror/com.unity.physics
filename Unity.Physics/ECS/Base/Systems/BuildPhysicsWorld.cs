@@ -203,7 +203,6 @@ namespace Unity.Physics.Systems
             [BurstCompile]
             internal struct RecordDynamicBodyIntegrity : IJobChunk
             {
-
                 [ReadOnly] public ComponentTypeHandle<LocalTransform> LocalTransformType;
 
                 [ReadOnly] public ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;

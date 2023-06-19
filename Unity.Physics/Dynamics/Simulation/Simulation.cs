@@ -231,8 +231,13 @@ namespace Unity.Physics
         // ProcessBodyPairsJob, which outputs contact and joint Jacobians.
         public NativeList<DispatchPairSequencer.DispatchPair> PhasedDispatchPairs;
 
-        // Built by the scheduler. Describes the grouping of PhasedBodyPairs
-        // which informs how we can schedule the solver jobs and where they read info from.
+        // Job handle for the scheduler's job that creates the phased dispatch pairs.
+        // Results will appear in the SolverSchedulerInfo property upon job completion.
+        public JobHandle CreatePhasedDispatchPairsJobHandle;
+
+        // Built by the scheduler. Describes the grouping of phased dispatch pairs for parallel processing
+        // of joints and contacts in the solver.
+        // Informs how we can schedule the solver jobs and what data locations they read info from.
         public DispatchPairSequencer.SolverSchedulerInfo SolverSchedulerInfo;
 
         public NativeStream Contacts;
@@ -433,6 +438,9 @@ namespace Unity.Physics
             handles = m_Scheduler.ScheduleCreatePhasedDispatchPairsJob(
                 ref input.World, ref dynamicVsDynamicBodyPairs, ref dynamicVsStaticBodyPairs, handle,
                 ref StepContext.PhasedDispatchPairs, out StepContext.SolverSchedulerInfo, multiThreaded);
+
+            StepContext.CreatePhasedDispatchPairsJobHandle = handles.FinalExecutionHandle;
+
             handle = handles.FinalExecutionHandle;
             disposeHandle = JobHandle.CombineDependencies(handles.FinalDisposeHandle, disposeHandle);
 
@@ -525,6 +533,13 @@ namespace Unity.Physics
             }
 
             // Solve all Jacobians
+
+            // make sure we know the number of phased dispatch pairs so that we can efficiently schedule the solve jobs in Solver.ScheduleSolveJacobiansJobs() below
+            if (multiThreaded)
+            {
+                StepContext.CreatePhasedDispatchPairsJobHandle.Complete();
+            }
+
             var disposeHandle = m_StepHandles.FinalDisposeHandle;
             Solver.StabilizationData solverStabilizationData = new Solver.StabilizationData(input, SimulationContext);
             m_StepHandles = Solver.ScheduleSolveJacobiansJobs(ref input.World.DynamicsWorld, input.TimeStep, input.NumSolverIterations,

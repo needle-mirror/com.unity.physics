@@ -10,6 +10,11 @@ namespace Unity.Physics.Systems
     /// which calls one of two constructors of this class, and potentially implement some of the
     /// other virtual functions.
     /// </summary>
+    /// <remarks>
+    /// If class that derives CustomPhysicsSystemGroup doesn't need the Simulation to be recreated on each OnStartRunning then it should override
+    /// OnStartRunning and guard instantiation of new Simulation so it happens only once. It also has to override OnStopRunning and move disposing
+    /// of simulation to it's own Dispose method.
+    /// </remarks>
     public abstract partial class CustomPhysicsSystemGroup : CustomPhysicsSystemGroupBase
     {
         private Simulation m_StoredSimulation;
@@ -24,16 +29,30 @@ namespace Unity.Physics.Systems
             m_StoredSimulation = default;
         }
 
-        protected override void OnCreate()
+        /// <summary>
+        /// Creates new simulations for the SystemGroup.
+        /// </summary>
+        /// <remarks>
+        /// It instantiates and initializes a new physics Simulation only if RequireForUpdate condition defined in OnCreated method is met.
+        /// </remarks>
+        protected override void OnStartRunning()
         {
-            base.OnCreate();
+            base.OnStartRunning();
+
             m_StoredSimulation = Simulation.Create();
         }
 
-        protected override void OnDestroy()
+        /// <summary>
+        /// Disposes custom physics simulation when RequireForUpdate condition stops being met.
+        /// </summary>
+        /// <remarks>
+        /// It disposes Simulation if RequireForUpdate condition defined in OnCreated method are not met any more.
+        /// </remarks>
+        protected override void OnStopRunning()
         {
+            base.OnStopRunning();
+
             m_StoredSimulation.Dispose();
-            base.OnDestroy();
         }
 
         /// <summary>

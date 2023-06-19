@@ -62,26 +62,20 @@ namespace Unity.Physics.Systems
 
         internal struct IntegrityComponentHandles
         {
-
             public ComponentTypeHandle<LocalTransform> LocalTransformType;
-
             public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
             public ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
 
             public IntegrityComponentHandles(ref SystemState state)
             {
-
                 LocalTransformType = state.GetComponentTypeHandle<LocalTransform>(true);
-
                 PhysicsColliderType = state.GetComponentTypeHandle<PhysicsCollider>(true);
                 PhysicsVelocityType = state.GetComponentTypeHandle<PhysicsVelocity>(true);
             }
 
             public void Update(ref SystemState state)
             {
-
                 LocalTransformType.Update(ref state);
-
                 PhysicsColliderType.Update(ref state);
                 PhysicsVelocityType.Update(ref state);
             }
@@ -91,9 +85,7 @@ namespace Unity.Physics.Systems
         {
             m_IntegrityCheckHandles.Update(ref state);
 
-
             var localTransformType = m_IntegrityCheckHandles.LocalTransformType;
-
             var physicsColliderType = m_IntegrityCheckHandles.PhysicsColliderType;
             var physicsVelocityType = m_IntegrityCheckHandles.PhysicsVelocityType;
 
@@ -104,7 +96,6 @@ namespace Unity.Physics.Systems
                 IntegrityCheckMap = buildPhysicsData.IntegrityCheckMap,
 
                 LocalTransformType = localTransformType,
-
                 PhysicsVelocityType = physicsVelocityType,
                 PhysicsColliderType = physicsColliderType
             };
@@ -130,9 +121,7 @@ namespace Unity.Physics.Systems
         [BurstCompile]
         internal struct CheckDynamicBodyIntegrity : IJobChunk
         {
-
             [ReadOnly] public ComponentTypeHandle<LocalTransform> LocalTransformType;
-
             [ReadOnly] public ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
             [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
             public NativeParallelHashMap<uint, long> IntegrityCheckMap;

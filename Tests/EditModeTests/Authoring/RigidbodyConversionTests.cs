@@ -57,6 +57,59 @@ namespace Unity.Physics.Tests.Authoring
             VerifyNoDataProduced<PhysicsCollider>();
         }
 
+        static readonly TestCaseData[] k_EntityBufferTestCases =
+        {
+            new TestCaseData(
+                new[] { typeof(Rigidbody), typeof(BoxCollider) },   // parent components
+                Array.Empty<Type>(),                                // child components
+                false,                                              // expect entity buffer
+                0                                                   // expected buffer size
+            ).SetName("RigidbodyConversion_ExpectEntityBufferOrNot_WithSingleCollider"),
+            new TestCaseData(
+                new[] { typeof(Rigidbody) },
+                new[] { typeof(BoxCollider) },
+                true,
+                1
+            ).SetName("RigidbodyConversion_ExpectEntityBufferOrNot_WithSingleColliderInDescendent"),
+            new TestCaseData(
+                new[] { typeof(Rigidbody), typeof(BoxCollider), typeof(BoxCollider) },
+                Array.Empty<Type>(),
+                true,
+                2
+            ).SetName("RigidbodyConversion_ExpectEntityBufferOrNot_WithMultipleColliders"),
+            new TestCaseData(
+                new[] { typeof(Rigidbody) },
+                new[] { typeof(BoxCollider), typeof(BoxCollider) },
+                true,
+                2
+            ).SetName("RigidbodyConversion_ExpectEntityBufferOrNot_WithMultipleCollidersInDescendent"),
+            new TestCaseData(
+                new[] { typeof(Rigidbody), typeof(BoxCollider) },
+                new[] { typeof(BoxCollider), typeof(BoxCollider) },
+                true,
+                3
+            ).SetName("RigidbodyConversion_ExpectEntityBufferOrNot_WithMultipleCollidersInHierarchy")
+        };
+
+        // Make sure there is a PhysicsColliderKeyEntityPair buffer in a rigid body only when needed, and it has the right size if present.
+        [TestCaseSource(nameof(k_EntityBufferTestCases))]
+        public void RigidbodyConversion_ExpectEntityBuffer(Type[] parentComponentTypes, Type[] childComponentTypes, bool expectEntityBuffer, int expectedBufferSize)
+        {
+            CreateHierarchy(parentComponentTypes, childComponentTypes, Array.Empty<Type>());
+            TestConvertedData<PhysicsCollider>((w, e, c) =>
+            {
+                Assert.That(e.Length, Is.EqualTo(1));
+                var entity = e[0];
+                var hasBuffer = w.EntityManager.HasBuffer<PhysicsColliderKeyEntityPair>(entity);
+                Assert.AreEqual(expectEntityBuffer, hasBuffer);
+                if (hasBuffer)
+                {
+                    var buffer = w.EntityManager.GetBuffer<PhysicsColliderKeyEntityPair>(entity);
+                    Assert.That(buffer.Length, Is.EqualTo(expectedBufferSize));
+                }
+            }, 1);
+        }
+
         // Make sure we get the correct mass (infinite) with kinematic bodies
         [Test]
         public void RigidbodyConversion_KinematicCausesInfiniteMass()
@@ -110,9 +163,7 @@ namespace Unity.Physics.Tests.Authoring
             CreateHierarchy(new[] { typeof(Rigidbody) }, Array.Empty<Type>(), Array.Empty<Type>());
 
             // Note: testing for presence of PhysicsVelocity component which is expected for a default rigid body
-            TestConvertedSharedData<PhysicsVelocity, PhysicsWorldIndex>(
-                null,
-                k_DefaultWorldIndex);
+            TestConvertedSharedData<PhysicsVelocity, PhysicsWorldIndex>(k_DefaultWorldIndex);
         }
 
         // Make sure we get the default physics world index when using a default PhysicsWorldIndexAuthoring component
@@ -122,9 +173,7 @@ namespace Unity.Physics.Tests.Authoring
             CreateHierarchy(new[] { typeof(Rigidbody), typeof(PhysicsWorldIndexAuthoring) }, Array.Empty<Type>(), Array.Empty<Type>());
 
             // Note: testing for presence of PhysicsVelocity component which is expected for a default rigid body
-            TestConvertedSharedData<PhysicsVelocity, PhysicsWorldIndex>(
-                null,
-                k_DefaultWorldIndex);
+            TestConvertedSharedData<PhysicsVelocity, PhysicsWorldIndex>(k_DefaultWorldIndex);
         }
 
         // Make sure we get the correct physics world index when using the PhysicsWorldIndexAuthoring component
@@ -135,9 +184,7 @@ namespace Unity.Physics.Tests.Authoring
             Root.GetComponent<PhysicsWorldIndexAuthoring>().WorldIndex = 3;
 
             // Note: testing for presence of PhysicsVelocity component which is expected for a default rigid body
-            TestConvertedSharedData<PhysicsVelocity, PhysicsWorldIndex>(
-                null,
-                new PhysicsWorldIndex(3));
+            TestConvertedSharedData<PhysicsVelocity, PhysicsWorldIndex>(new PhysicsWorldIndex(3));
         }
 
         // Make sure there is no leftover baking data when using the PhysicsWorldIndexAuthoring component

@@ -70,7 +70,7 @@ namespace Unity.Physics
     /// A buffer element used to associate an original Entity with a collider key in a <see cref="CompoundCollider"/>
     /// .
     /// </summary>
-    [InternalBufferCapacity(16)]
+    [InternalBufferCapacity(0)]
     public struct PhysicsColliderKeyEntityPair : IBufferElementData
     {
         /// <summary>   The key. </summary>

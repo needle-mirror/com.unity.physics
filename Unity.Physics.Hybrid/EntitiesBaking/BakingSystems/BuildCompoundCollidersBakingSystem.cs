@@ -1,4 +1,6 @@
 using System;
+using Unity.Burst;
+using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
@@ -196,6 +198,28 @@ namespace Unity.Physics.Authoring
             }
         }
 
+        [BurstCompile]
+        struct AddColliderKeyEntityPairBufferJob : IJobChunk
+        {
+            [ReadOnly] public ComponentTypeHandle<PhysicsCompoundData> PhysicsCompoundDataHandle;
+            public EntityTypeHandle Entities;
+            public EntityCommandBuffer.ParallelWriter ECB;
+
+            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask,
+                in v128 chunkEnabledMask)
+            {
+                var entities = chunk.GetNativeArray(Entities);
+                var compoundDataArray = chunk.GetNativeArray(ref PhysicsCompoundDataHandle);
+                for (int i = 0; i < entities.Length; ++i)
+                {
+                    if (compoundDataArray[i].AssociateBlobToBody)
+                    {
+                        ECB.AddBuffer<PhysicsColliderKeyEntityPair>(unfilteredChunkIndex, entities[i]);
+                    }
+                }
+            }
+        };
+
         [WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)]
         partial struct DeferredResolutionJobHandleJob : IJobEntity
         {
@@ -219,15 +243,12 @@ namespace Unity.Physics.Authoring
                     unsafe
                     {
                         var compoundCollider = (CompoundCollider*)rootCollider.ColliderPtr;
-                        for (uint i = 0; i < compoundCollider->NumChildren; i++)
+                        for (int i = 0; i < compoundCollider->NumChildren; i++)
                         {
-                            var childEntity = compoundCollider->Children[(int)i].Entity;
-                            var childKey = new ColliderKey(compoundCollider->NumColliderKeyBits, i);
-
                             colliderKeyEntityBuffer.Add(new PhysicsColliderKeyEntityPair()
                             {
-                                Entity = childEntity,
-                                Key = childKey
+                                Entity = compoundCollider->Children[i].Entity,
+                                Key = compoundCollider->ConvertChildIndexToColliderKey(i)
                             });
                         }
                     }
@@ -244,14 +265,11 @@ namespace Unity.Physics.Authoring
 
             private void Execute(in PhysicsCompoundData rootBaking)
             {
-                if (rootBaking.AssociateBlobToBody)
+                if (rootBaking.AssociateBlobToBody && rootBaking.RegisterBlob)
                 {
-                    if (rootBaking.RegisterBlob)
-                    {
-                        // Register the blob asset if needed
-                        int resultIndex = deduplicationHashMap[rootBaking.Hash];
-                        blobComputationContext.AddComputedBlobAsset(rootBaking.Hash, deferredCompoundResults[resultIndex].Result);
-                    }
+                    // Register the blob asset if needed
+                    int resultIndex = deduplicationHashMap[rootBaking.Hash];
+                    blobComputationContext.AddComputedBlobAsset(rootBaking.Hash, deferredCompoundResults[resultIndex].Result);
                 }
             }
         }
@@ -315,12 +333,14 @@ namespace Unity.Physics.Authoring
 
             Profiler.EndSample();
 
-            // Update the PhysicsColliderKeyEntityPair buffer
-            JobHandle deferredResolutionJobHandle = new DeferredResolutionJobHandleJob
+            // Add the PhysicsColliderKeyEntityPair buffer to the root entities
+            var ecb = new EntityCommandBuffer(Allocator.TempJob);
+            JobHandle addBufferJobHandle = new AddColliderKeyEntityPairBufferJob
             {
-                deduplicationHashMap = deduplicationHashMap,
-                deferredCompoundResults = deferredCompoundResults
-            }.ScheduleParallel(blobCalculationJobHandle);
+                PhysicsCompoundDataHandle = GetComponentTypeHandle<PhysicsCompoundData>(true),
+                Entities = GetEntityTypeHandle(),
+                ECB = ecb.AsParallelWriter()
+            }.Schedule(m_RootQuery, blobCalculationJobHandle);
 
             // Update the blob assets relation to the authoring component
             JobHandle blobContextUpdateJobHandle = new BlobContextUpdateJobHandleJob
@@ -330,12 +350,22 @@ namespace Unity.Physics.Authoring
                 deferredCompoundResults = deferredCompoundResults
             }.Schedule(blobCalculationJobHandle);
 
-            var combinedJobHandle = JobHandle.CombineDependencies(blobContextUpdateJobHandle, deferredResolutionJobHandle);
+            var combinedJobHandle = JobHandle.CombineDependencies(blobContextUpdateJobHandle, addBufferJobHandle);
 
             combinedJobHandle.Complete();
 
+            ecb.Playback(EntityManager);
+            ecb.Dispose();
+
+            // Update the PhysicsColliderKeyEntityPair buffer
+            new DeferredResolutionJobHandleJob
+            {
+                deduplicationHashMap = deduplicationHashMap,
+                deferredCompoundResults = deferredCompoundResults
+            }.ScheduleParallel(addBufferJobHandle).Complete();
+
             // Check for unused StaticOptimizeEntity roots
-            var ecb = new EntityCommandBuffer(WorldUpdateAllocator);
+            ecb = new EntityCommandBuffer(WorldUpdateAllocator);
             foreach (var(_, entity) in SystemAPI.Query<RefRO<StaticOptimizePhysicsBaking>>()
                      .WithEntityAccess()
                      .WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities))

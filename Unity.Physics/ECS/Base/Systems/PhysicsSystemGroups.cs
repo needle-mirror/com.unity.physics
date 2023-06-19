@@ -69,19 +69,21 @@ namespace Unity.Physics.Systems
         /// </summary>
         protected abstract void PostGroupUpdateCallback();
 
-        protected override void OnCreate()
+        protected override void OnStartRunning()
         {
-            base.OnCreate();
+            base.OnStartRunning();
+
             m_WorldFilter = new PhysicsWorldIndex(m_WorldIndex);
             m_WorldData = new PhysicsWorldData(ref CheckedStateRef, m_WorldFilter);
             if (m_ShareStaticColliders)
                 m_WorldData.StaticEntityGroup.ResetFilter();
         }
 
-        protected override void OnDestroy()
+        protected override void OnStopRunning()
         {
             m_WorldData.Dispose();
-            base.OnDestroy();
+
+            base.OnStopRunning();
         }
 
         protected override void OnUpdate()

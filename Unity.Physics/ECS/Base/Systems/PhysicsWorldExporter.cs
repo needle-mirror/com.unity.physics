@@ -19,7 +19,6 @@ namespace Unity.Physics.Systems
             /// <param name="systemState">  [in,out] State of the system. </param>
             public ExportPhysicsWorldTypeHandles(ref SystemState systemState)
             {
-
                 LocalTransformType = systemState.GetComponentTypeHandle<LocalTransform>(false);
 
                 PhysicsVelocityType = systemState.GetComponentTypeHandle<PhysicsVelocity>(false);
@@ -31,13 +30,11 @@ namespace Unity.Physics.Systems
             /// <param name="systemState">  [in,out] State of the system. </param>
             public void Update(ref SystemState systemState)
             {
-
                 LocalTransformType.Update(ref systemState);
 
                 PhysicsVelocityType.Update(ref systemState);
                 SimulateType.Update(ref systemState);
             }
-
 
             internal ComponentTypeHandle<LocalTransform> LocalTransformType;
 
@@ -70,6 +67,7 @@ namespace Unity.Physics.Systems
                 var chunkBaseEntityIndices =
                     dynamicEntities.CalculateBaseEntityIndexArrayAsync(systemState.WorldUpdateAllocator, inputDep,
                         out var baseIndexJob);
+
                 componentTypeHandles.Update(ref systemState);
                 return new ExportDynamicBodiesJob
                 {
@@ -107,6 +105,7 @@ namespace Unity.Physics.Systems
             {
                 using var chunkBaseEntityIndices = dynamicEntities.CalculateBaseEntityIndexArray(Allocator.TempJob);
                 exportPhysicsWorldHandles.Update(ref systemState);
+
                 new ExportDynamicBodiesJob
                 {
                     MotionVelocities = world.MotionVelocities,
@@ -129,7 +128,6 @@ namespace Unity.Physics.Systems
             [ReadOnly] public NativeArray<MotionVelocity> MotionVelocities;
             [ReadOnly] public NativeArray<MotionData> MotionDatas;
             [ReadOnly] public NativeArray<int> ChunkBaseEntityIndices;
-
 
             public ComponentTypeHandle<LocalTransform> LocalTransformType;
 

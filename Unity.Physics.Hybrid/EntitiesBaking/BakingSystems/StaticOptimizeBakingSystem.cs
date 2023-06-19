@@ -61,8 +61,7 @@ namespace Unity.Physics.Authoring
                 ComponentType.ReadWrite<StaticOptimizePhysicsBaking>(),
                 ComponentType.ReadWrite<PhysicsWorldIndex>(),
                 ComponentType.ReadWrite<PhysicsCompoundData>(),
-                ComponentType.ReadWrite<PhysicsCollider>(),
-                ComponentType.ReadWrite<PhysicsColliderKeyEntityPair>());
+                ComponentType.ReadWrite<PhysicsCollider>());
         }
 
         [BurstCompile]
