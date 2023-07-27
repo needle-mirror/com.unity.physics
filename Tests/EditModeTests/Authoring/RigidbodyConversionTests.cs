@@ -1,21 +1,105 @@
 using System;
 using System.Linq;
 using NUnit.Framework;
+using Unity.Mathematics;
 using Unity.Physics.Authoring;
 using UnityEngine;
+using UnityEngine.TestTools.Utils;
 
 namespace Unity.Physics.Tests.Authoring
 {
     class RigidbodyConversionTests : BaseHierarchyConversionTest
     {
-        // Make sure the Rigidbody mass property is converted to a PhysicsMass component
-        [Test]
-        public void RigidbodyConversion_Mass()
+        // Make sure the Rigidbody mass property is converted to a PhysicsMass component, with and without a collider
+        [TestCase(true)]
+        [TestCase(false)]
+        public void RigidbodyConversion_Mass(bool withCollider)
         {
-            CreateHierarchy(new[] { typeof(Rigidbody) }, Array.Empty<Type>(), Array.Empty<Type>());
-            Root.GetComponent<Rigidbody>().mass = 50f;
+            CreateHierarchy(withCollider ? new[] {typeof(Rigidbody), typeof(BoxCollider)} : new[] {typeof(Rigidbody)},
+                Array.Empty<Type>(), Array.Empty<Type>());
 
-            TestConvertedData<PhysicsMass>(mass => Assert.That(mass.InverseMass, Is.EqualTo(0.02f)));
+            var rb = Root.GetComponent<Rigidbody>();
+            var expectedMass = rb.mass + 42f;
+            rb.mass = expectedMass;
+
+            TestConvertedData<PhysicsMass>(mass =>
+            {
+                Assume.That(mass.InverseMass, Is.EqualTo(1 / expectedMass).Using(FloatEqualityComparer.Instance));
+                if (!withCollider)
+                {
+                    // Spot check the inertia tensor for the default case without collider.
+                    // In this case we expect an inertia tensor of a unit sphere, scaled by the mass.
+                    var expectedInertiaTensor = expectedMass * MassProperties.UnitSphere.MassDistribution.InertiaTensor;
+                    Assume.That((Vector3)mass.InverseInertia, Is.EqualTo(new Vector3(1f / expectedInertiaTensor.x, 1f / expectedInertiaTensor.y, 1f / expectedInertiaTensor.z)).Using(Vector3EqualityComparer.Instance));
+                }
+            });
+        }
+
+        [TestCase(true, true)]
+        [TestCase(true, false)]
+        [TestCase(false, true)]
+        [TestCase(false, false)]
+        public void RigidbodyConversion_AutomaticMassProperties(bool automaticCenterOfMass, bool automaticInertiaTensor)
+        {
+            CreateHierarchy(new[] {typeof(Rigidbody)}, new[] {typeof(BoxCollider)}, Array.Empty<Type>());
+
+            // enable or disable automatic mass properties computation
+            var rb = Root.GetComponent<Rigidbody>();
+            rb.automaticCenterOfMass = automaticCenterOfMass;
+            rb.automaticInertiaTensor = automaticInertiaTensor;
+
+            // set non-default scalar mass (Note: can not be automatically calculated)
+            var expectedMass = rb.mass + 42f;
+            rb.mass = expectedMass;
+
+            // move and resize the child box collider of the root rigid body to induce a different center of mass and inertia tensor
+            var boxGameObject = Parent;
+            boxGameObject.transform.localPosition += new Vector3(1, 2, 3);
+            boxGameObject.transform.localRotation *= Quaternion.Euler(20, 30, 42);
+            var boxCollider = Parent.GetComponent<UnityEngine.BoxCollider>();
+            boxCollider.size += new Vector3(3, 1, 2);
+
+            var expectedBoxMassProperties = MassProperties.CreateBox(boxCollider.size);
+            var expectedInertiaTensor = expectedMass * (automaticInertiaTensor ? (Vector3)expectedBoxMassProperties.MassDistribution.InertiaTensor : rb.inertiaTensor);
+            var expectedCenterOfMass = automaticCenterOfMass ? boxGameObject.transform.localPosition : rb.centerOfMass;
+            var expectedInertiaOrientation = automaticInertiaTensor ? boxGameObject.transform.localRotation : rb.inertiaTensorRotation;
+
+            TestConvertedData<PhysicsMass>(mass =>
+            {
+                Assume.That(mass.InverseMass, Is.EqualTo(1 / expectedMass).Using(FloatEqualityComparer.Instance));
+                Assume.That((Vector3)mass.CenterOfMass, Is.EqualTo(expectedCenterOfMass).Using(Vector3EqualityComparer.Instance));
+                Assume.That((Quaternion)mass.InertiaOrientation, Is.EqualTo(expectedInertiaOrientation).Using(QuaternionEqualityComparer.Instance));
+                Assume.That((Vector3)mass.InverseInertia, Is.EqualTo(new Vector3(1f / expectedInertiaTensor.x, 1f / expectedInertiaTensor.y, 1f / expectedInertiaTensor.z)).Using(Vector3EqualityComparer.Instance));
+            });
+
+            TestConvertedData<PhysicsMass>(mass => Assert.That(mass.InverseMass, Is.EqualTo(1 / expectedMass).Using(FloatEqualityComparer.Instance)));
+        }
+
+        // Make sure a Rigidbody's overridden center of mass and inertia tensor properties are properly migrated to the
+        // PhysicsMass component with and without a collider being present.
+        [TestCase(true)]
+        [TestCase(false)]
+        public void RigidbodyConversion_MassPropertiesOverride(bool withCollider)
+        {
+            CreateHierarchy(withCollider ? new[] {typeof(Rigidbody), typeof(BoxCollider)} : new[] {typeof(Rigidbody)},
+                Array.Empty<Type>(), Array.Empty<Type>());
+
+            var rb = Root.GetComponent<Rigidbody>();
+            rb.automaticInertiaTensor = false;
+            rb.automaticCenterOfMass = false;
+            var expectedCoM = rb.centerOfMass + new Vector3(-1, 2, 42);
+            rb.centerOfMass = expectedCoM;
+            var expectedInertiaTensor = rb.inertiaTensor + new Vector3(42, 1, 2);
+            rb.inertiaTensor = expectedInertiaTensor;
+            var expectedInertiaTensorRotation = rb.inertiaTensorRotation * Quaternion.Euler(-1, 2, 42);
+            rb.inertiaTensorRotation = expectedInertiaTensorRotation;
+
+            TestConvertedData<PhysicsMass>(mass =>
+            {
+                Assume.That((Vector3)mass.CenterOfMass, Is.EqualTo(expectedCoM));
+                Assume.That((Quaternion)mass.InertiaOrientation, Is.EqualTo(expectedInertiaTensorRotation).Using(QuaternionEqualityComparer.Instance));
+                Assume.That((Vector3)mass.InverseInertia, Is.EqualTo(new Vector3(1f / expectedInertiaTensor.x, 1f / expectedInertiaTensor.y, 1f / expectedInertiaTensor.z)).Using(Vector3EqualityComparer.Instance));
+            });
         }
 
         // Make sure the Rigidbody drag property is converted to PhysicsDamping.Linear

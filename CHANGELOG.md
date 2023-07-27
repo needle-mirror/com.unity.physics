@@ -1,6 +1,17 @@
 # Changelog
 
 
+## [1.0.14] - 2023-07-27
+
+### Added
+
+* Added support for overriding mass properties when baking `Rigidbody` authoring components. Now, when setting the `RigidBody.automaticCenterOfMass` or `RigidBody.automaticInertiaTensor` properties to false, the corresponding mass property data values are correctly baked into the Unity Physics rigid body entity and appear as expected in the entity's `PhysicsMass` component.
+
+### Changed
+
+* Updated Burst dependency to version 1.8.7
+
+
 ## [1.0.11] - 2023-06-19
 
 ### Changed

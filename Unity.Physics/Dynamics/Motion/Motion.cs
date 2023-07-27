@@ -24,7 +24,7 @@ namespace Unity.Physics
             {
                 var r = new float3x3(Transform.rot);
                 var r2 = new float3x3(InertiaTensor.x * r.c0, InertiaTensor.y * r.c1, InertiaTensor.z * r.c2);
-                return math.mul(r2, math.inverse(r));
+                return math.mul(r2, math.transpose(r));
             }
         }
     }
@@ -56,6 +56,25 @@ namespace Unity.Physics
             Volume = (4.0f / 3.0f) * (float)math.PI,
             AngularExpansionFactor = 0.0f
         };
+
+        /// <summary>
+        /// Creates mass properties of a box with the provided side lengths, centered on the origin.
+        /// </summary>
+        /// <param name="size">Side lengths of the box along x, y and z.</param>
+        /// <returns>Mass properties of the box.</returns>
+        public static MassProperties CreateBox(in float3 size)
+        {
+            return new MassProperties
+            {
+                MassDistribution = new MassDistribution
+                {
+                    Transform = RigidTransform.identity,
+                    InertiaTensor = new float3(size.y * size.y + size.z * size.z, size.x * size.x + size.z * size.z, size.x * size.x + size.y * size.y) / 12.0f
+                },
+                Volume = size.x * size.y * size.z,
+                AngularExpansionFactor = 0.0f
+            };
+        }
     }
 
     /// <summary>

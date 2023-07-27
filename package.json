@@ -3,9 +3,9 @@
   "category": "Unity",
   "description": "Unity's C# stateless physics library.\n\nBuilt on top of the Unity C# DOTS framework, Unity Physics is network-ready, completely customizable, and built for performance out of the box. Whether you're building the next mobile hit or a new networked multiplayer console experience, Unity Physics leverages the Burst compiler and Job system to scale across a range of hardware.",
   "dependencies": {
-    "com.unity.burst": "1.8.4",
+    "com.unity.burst": "1.8.7",
     "com.unity.collections": "2.1.4",
-    "com.unity.entities": "1.0.11",
+    "com.unity.entities": "1.0.14",
     "com.unity.mathematics": "1.2.6",
     "com.unity.modules.imgui": "1.0.0",
     "com.unity.modules.jsonserialize": "1.0.0"
@@ -15,9 +15,9 @@
     "physics"
   ],
   "name": "com.unity.physics",
-  "unity": "2022.2",
-  "unityRelease": "15f1",
-  "version": "1.0.11",
+  "unity": "2022.3",
+  "unityRelease": "0f1",
+  "version": "1.0.14",
   "samples": [
     {
       "displayName": "Custom Physics Authoring",
@@ -27,15 +27,15 @@
     }
   ],
   "_upm": {
-    "changelog": "### Changed\n\n* Prevent spawning `ParallelSolverJobs` unnecessarily ahead of time, which was leading to a potentially high overhead in time consumption. Instead, schedule the right number of jobs for the dispatch pair phases created by the scheduler to prevent scheduling and processing overheads. This leads to speed-ups in the time consumed by jobs in the `SolveAndIntegrateSystem` specifically in cases with low to medium joint and contact counts.\n* The `PhysicsColliderKeyEntityPair` buffer is now added only when needed and its internal capacity of the buffer is set to zero, ensuring its content always lives outside of the chunk. This way, we don't unnecessarily increase the rigid body sizes in chunks, allowing for a larger number of rigid bodies in a single chunk, which improves performance.\n\n### Fixed\n\n* Fixed regression in accessibility of `PhysicsShapeAuthoring` API. The functions `GetCapsuleProperties()` and `SetCapsule()` were made internal by accident during the move of the custom physics authoring components from the package API to a package sample and are now public again."
+    "changelog": "### Added\n\n* Added support for overriding mass properties when baking `Rigidbody` authoring components. Now, when setting the `RigidBody.automaticCenterOfMass` or `RigidBody.automaticInertiaTensor` properties to false, the corresponding mass property data values are correctly baked into the Unity Physics rigid body entity and appear as expected in the entity's `PhysicsMass` component.\n\n### Changed\n\n* Updated Burst dependency to version 1.8.7"
   },
   "upmCi": {
-    "footprint": "a9a4878ec6b761534511107bc3cfc9ee023b7d25"
+    "footprint": "68bef0b61c072996b5d866d6a757f78fa0d6efce"
   },
   "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.physics@1.0/manual/index.html",
   "repository": {
     "url": "https://github.cds.internal.unity3d.com/unity/dots.git",
     "type": "git",
-    "revision": "81c21934f16a49fc5f826187f07aaea4728d63c3"
+    "revision": "13433ff314ae6503bb855899b83d26a063650441"
   }
 }
