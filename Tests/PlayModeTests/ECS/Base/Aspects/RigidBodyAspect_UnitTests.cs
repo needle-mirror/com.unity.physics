@@ -18,7 +18,7 @@ namespace Unity.Physics.Tests.Aspects
         internal static float3 DefaultPos => new float3(1.0f, 0.0f, 0.0f);
         internal static quaternion DefaultRot => quaternion.AxisAngle(new float3(0.0f, 1.0f, 0.0f), math.radians(45.0f));
         internal static PhysicsVelocity DefaultVelocity => new PhysicsVelocity { Angular = new float3(0.2f, 0.5f, 0.1f), Linear = new float3(0.1f, 0.2f, 0.3f) };
-        internal static PhysicsDamping DefaultDamping => new PhysicsDamping { Angular = 0.75f, Linear = 0.75f };
+        internal static PhysicsDamping DefaultDamping => new PhysicsDamping { Angular = 0.75f, Linear = 0.5f };
         internal static PhysicsMass DefaultMass => PhysicsMass.CreateDynamic(MassProperties.UnitSphere, 3.0f);
         internal static PhysicsGravityFactor DefaultGravityFactor => new PhysicsGravityFactor { Value = 0.50f };
         internal static float NonIdentityScale => 2.0f;
@@ -195,6 +195,12 @@ namespace Unity.Physics.Tests.Aspects
         }
 
         [Test]
+        public void DynamicBody_GetSetDamping_RigidBodyAspect()
+        {
+            RunTest<DynamicBodyGetSetDampingRigidBodyAspect>(BodyType.DYNAMIC);
+        }
+
+        [Test]
         public void KinematicBody_Aspect_No_Mass_Override_PropertyTest()
         {
             RunTest<KinematicNoMassOverridePropertyTest>(BodyType.KINEMATIC_NO_MASS_OVERRIDE);
@@ -328,6 +334,23 @@ namespace Unity.Physics.Tests.Aspects
                 Assert.AreEqual(aspect.HasInfiniteMass, true);
                 Assert.AreEqual(aspect.IsKinematic, false);
                 Assert.AreEqual(aspect.Mass, float.PositiveInfinity);
+            }
+        }
+
+        [DisableAutoCreation]
+        public partial class DynamicBodyGetSetDampingRigidBodyAspect : SystemBase
+        {
+            protected override void OnUpdate()
+            {
+                Entity entity = SystemAPI.GetSingletonEntity<PhysicsCollider>();
+                var rba = GetAspect<RigidBodyAspect>(entity);
+
+                // Overwrite the damping values to access set methods
+                rba.LinearDamping = 0.1f;
+                rba.AngularDamping = 0.2f;
+
+                Assert.AreEqual(rba.LinearDamping, 0.1f);
+                Assert.AreEqual(rba.AngularDamping, 0.2f);
             }
         }
 

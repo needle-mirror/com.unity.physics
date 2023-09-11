@@ -3,9 +3,9 @@
   "category": "Unity",
   "description": "Unity's C# stateless physics library.\n\nBuilt on top of the Unity C# DOTS framework, Unity Physics is network-ready, completely customizable, and built for performance out of the box. Whether you're building the next mobile hit or a new networked multiplayer console experience, Unity Physics leverages the Burst compiler and Job system to scale across a range of hardware.",
   "dependencies": {
-    "com.unity.burst": "1.8.7",
+    "com.unity.burst": "1.8.8",
     "com.unity.collections": "2.1.4",
-    "com.unity.entities": "1.0.14",
+    "com.unity.entities": "1.0.16",
     "com.unity.mathematics": "1.2.6",
     "com.unity.modules.imgui": "1.0.0",
     "com.unity.modules.jsonserialize": "1.0.0"
@@ -17,7 +17,7 @@
   "name": "com.unity.physics",
   "unity": "2022.3",
   "unityRelease": "0f1",
-  "version": "1.0.14",
+  "version": "1.0.16",
   "samples": [
     {
       "displayName": "Custom Physics Authoring",
@@ -27,15 +27,15 @@
     }
   ],
   "_upm": {
-    "changelog": "### Added\n\n* Added support for overriding mass properties when baking `Rigidbody` authoring components. Now, when setting the `RigidBody.automaticCenterOfMass` or `RigidBody.automaticInertiaTensor` properties to false, the corresponding mass property data values are correctly baked into the Unity Physics rigid body entity and appear as expected in the entity's `PhysicsMass` component.\n\n### Changed\n\n* Updated Burst dependency to version 1.8.7"
+    "changelog": "### Changed\n\n* Updated Burst dependency to version 1.8.8\n\n### Fixed\n\n* Bugfix: The `AngularDamping` component of `RigidbodyAspect` is now writing to the correct value instead of to `LinearDamping`\n\n### Security"
   },
   "upmCi": {
-    "footprint": "68bef0b61c072996b5d866d6a757f78fa0d6efce"
+    "footprint": "b22514900af455e8ec10caff22a04b4faf6c2e48"
   },
   "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.physics@1.0/manual/index.html",
   "repository": {
     "url": "https://github.cds.internal.unity3d.com/unity/dots.git",
     "type": "git",
-    "revision": "13433ff314ae6503bb855899b83d26a063650441"
+    "revision": "8f9a34fef643cca2b5f84470ac61c171c1831168"
   }
 }

@@ -242,7 +242,7 @@ namespace Unity.Physics.Aspects
             {
                 if (m_Damping.IsValid)
                 {
-                    m_Damping.ValueRW.Linear = value;
+                    m_Damping.ValueRW.Angular = value;
                 }
                 else
                 {

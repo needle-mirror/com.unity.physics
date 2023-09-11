@@ -1,6 +1,19 @@
 # Changelog
 
 
+## [1.0.16] - 2023-09-11
+
+### Changed
+
+* Updated Burst dependency to version 1.8.8
+
+### Fixed
+
+* Bugfix: The `AngularDamping` component of `RigidbodyAspect` is now writing to the correct value instead of to `LinearDamping`
+
+### Security
+
+
 ## [1.0.14] - 2023-07-27
 
 ### Added
