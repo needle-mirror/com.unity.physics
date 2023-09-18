@@ -5,6 +5,8 @@ using Unity.Mathematics;
 using UnityEngine;
 using Unity.Collections;
 using Unity.DebugDisplay;
+using Unity.Entities;
+using Unity.Transforms;
 using UnityEditor;
 using Matrix4x4 = UnityEngine.Matrix4x4;
 using Quaternion = UnityEngine.Quaternion;
@@ -14,30 +16,15 @@ namespace Unity.Physics.Authoring
 {
     internal static class DrawMeshUtility
     {
-        internal static List<Matrix4x4> dynamicSpheres;
-        internal static List<Matrix4x4> dynamicCapsules;
-        internal static List<Matrix4x4> dynamicCylinders;
-        internal static List<Matrix4x4> dynamicCubes;
+        static List<Matrix4x4> dynamicSpheres;
+        static List<Matrix4x4> dynamicCapsules;
+        static List<Matrix4x4> dynamicCylinders;
+        static List<Matrix4x4> dynamicCubes;
 
-        internal static List<Matrix4x4> staticSpheres;
-        internal static List<Matrix4x4> staticCapsules;
-        internal static List<Matrix4x4> staticCylinders;
-        internal static List<Matrix4x4> staticCubes;
-
-        public struct PrimitiveInfo
-        {
-            public enum PrimitiveFlags : byte
-            {
-                Sphere = 1 << 0,
-                Capsule = 1 << 1,
-                Cylinder = 1 << 2,
-                Box = 1 << 3,
-                Dynamic = 1 << 4
-            }
-
-            public float4x4 Trs;
-            public PrimitiveFlags Flags;
-        }
+        static List<Matrix4x4> staticSpheres;
+        static List<Matrix4x4> staticCapsules;
+        static List<Matrix4x4> staticCylinders;
+        static List<Matrix4x4> staticCubes;
 
 #if UNITY_EDITOR
         private static readonly UnityEngine.Material meshDynamicFacesMaterial =
@@ -197,9 +184,9 @@ namespace Unity.Physics.Authoring
 
     static class DrawColliderUtility
     {
-        private static readonly DebugDisplay.ColorIndex DebugDynamicColor = DebugDisplay.ColorIndex.DynamicMesh;
-        private static readonly DebugDisplay.ColorIndex DebugStaticColor = DebugDisplay.ColorIndex.StaticMesh;
-        private static readonly DebugDisplay.ColorIndex DebugKinematicColor = DebugDisplay.ColorIndex.KinematicMesh;
+        private static readonly ColorIndex DebugDynamicColor = ColorIndex.DynamicMesh;
+        private static readonly ColorIndex DebugStaticColor = ColorIndex.StaticMesh;
+        private static readonly ColorIndex DebugKinematicColor = ColorIndex.KinematicMesh;
 
 #if UNITY_EDITOR
         private static void CreateGeometryArray(MeshType meshType, out ColliderGeometry outGeometry)
@@ -226,6 +213,72 @@ namespace Unity.Physics.Authoring
             }
         }
 
+        public static void GetRigidBodiesFromQuery(ref SystemState state, ref EntityQuery query, ref NativeList<RigidBody> rigidBodiesList)
+        {
+            var entities = query.ToEntityArray(Allocator.Temp);
+            foreach (var entity in entities)
+            {
+                var localToWorld = state.EntityManager.GetComponentData<LocalToWorld>(entity);
+                var collider = state.EntityManager.GetComponentData<PhysicsCollider>(entity);
+                var localTransform = state.EntityManager.GetComponentData<LocalTransform>(entity);
+                CreateRigidBody(localToWorld.Value, localTransform.Scale,
+                    collider.Value, out var rigidBody);
+                rigidBodiesList.Add(rigidBody);
+            }
+        }
+
+        public static void GetBodiesByMotionsFromQuery(ref SystemState state, ref EntityQuery rigidBodiesQuery, ref NativeList<RigidBody> rigidBodies,
+            ref NativeList<BodyMotionType> bodyMotionTypes)
+        {
+            var dynamicEntities = rigidBodiesQuery.ToEntityArray(Allocator.Temp);
+            foreach (var entity in dynamicEntities)
+            {
+                var localToWorld = state.EntityManager.GetComponentData<LocalToWorld>(entity);
+                var collider = state.EntityManager.GetComponentData<PhysicsCollider>(entity);
+                var localTransform = state.EntityManager.GetComponentData<LocalTransform>(entity);
+
+                BodyMotionType motionType = BodyMotionType.Static;
+                if (state.EntityManager.HasComponent<PhysicsMass>(entity))
+                {
+                    var physicsMass = state.EntityManager.GetComponentData<PhysicsMass>(entity);
+                    motionType = physicsMass.IsKinematic ? BodyMotionType.Kinematic : BodyMotionType.Dynamic;
+                }
+
+                CreateRigidBody(localToWorld.Value, localTransform.Scale,
+                    collider.Value, out var rigidBody);
+                rigidBodies.Add(rigidBody);
+                bodyMotionTypes.Add(motionType);
+            }
+        }
+
+        public static void GetBodiesMotionTypesFromWorld(ref PhysicsWorld physicsWorld, ref NativeArray<BodyMotionType> bodyMotionTypes)
+        {
+            for (int index = 0; index < physicsWorld.NumBodies; ++index)
+            {
+                if (index < physicsWorld.NumDynamicBodies)
+                {
+                    bodyMotionTypes[index] = physicsWorld.MotionVelocities[index].IsKinematic
+                        ? BodyMotionType.Kinematic
+                        : BodyMotionType.Dynamic;
+                }
+                else
+                {
+                    bodyMotionTypes[index] = BodyMotionType.Static;
+                }
+            }
+        }
+
+        public static void CreateRigidBody(in float4x4 localToWorld, float scale, BlobAssetReference<Collider> collider, out RigidBody rigidBody)
+        {
+            var rigidTransform = Math.DecomposeRigidBodyTransform(localToWorld);
+            rigidBody = new RigidBody
+            {
+                Collider = collider,
+                WorldFromBody = rigidTransform,
+                Scale = scale
+            };
+        }
+
         internal static void CreateGeometries(out PrimitiveColliderGeometries primitiveColliderGeometries)
         {
             CreateGeometryArray(MeshType.Capsule, out var capsuleGeometry);
@@ -244,7 +297,7 @@ namespace Unity.Physics.Authoring
 
 #endif
 
-        public static DebugDisplay.ColorIndex GetColorIndex(BodyMotionType motionType)
+        public static ColorIndex GetColorIndex(BodyMotionType motionType)
         {
             if (motionType == BodyMotionType.Dynamic)
             {
@@ -275,9 +328,9 @@ namespace Unity.Physics.Authoring
                 var c = math.transform(wfc, center + uniformScale * shapeScale * sphereVerticesList[sphereIndicesList[i + 2]]);
                 i += 3;
 
-                PhysicsDebugDisplaySystem.Line(a, b, edgesColor);
-                PhysicsDebugDisplaySystem.Line(b, c, edgesColor);
-                PhysicsDebugDisplaySystem.Line(c, a, edgesColor);
+                BasePhysicsDebugDisplaySystem.Line(a, b, edgesColor);
+                BasePhysicsDebugDisplaySystem.Line(b, c, edgesColor);
+                BasePhysicsDebugDisplaySystem.Line(c, a, edgesColor);
             }
         }
 
@@ -296,7 +349,7 @@ namespace Unity.Physics.Authoring
                 var c = math.transform(wfc, center + shapeScale * sphereVerticesList[sphereIndicesList[i + 2]]);
                 i += 3;
 
-                PhysicsDebugDisplaySystem.Triangle(a, b, c, math.cross(a, b), color);
+                BasePhysicsDebugDisplaySystem.Triangle(a, b, c, math.cross(a, b), color);
             }
         }
 
@@ -314,7 +367,7 @@ namespace Unity.Physics.Authoring
                 var b = math.transform(wfc, center + math.rotate(orientation, shapeScale * capsuleEdges[i + 1]));
                 i += 2;
 
-                PhysicsDebugDisplaySystem.Line(a, b, edgesColor);
+                BasePhysicsDebugDisplaySystem.Line(a, b, edgesColor);
             }
         }
 
@@ -333,7 +386,7 @@ namespace Unity.Physics.Authoring
                 var c = math.transform(wfc, center + math.rotate(orientation, uniformScale * shapeScale * capsuleVerticesArray[capsuleIndicesArray[i + 2]]));
                 i += 3;
 
-                PhysicsDebugDisplaySystem.Triangle(a, b, c, math.cross(a, b), color);
+                BasePhysicsDebugDisplaySystem.Triangle(a, b, c, math.cross(a, b), color);
             }
         }
 
@@ -350,7 +403,7 @@ namespace Unity.Physics.Authoring
                 var c = math.transform(wfc, center + math.rotate(orientation, uniformScale * size * boxVerticesArray[boxIndicesArray[i + 2]]));
                 i += 3;
 
-                PhysicsDebugDisplaySystem.Triangle(a, b, c, math.cross(a, b), color);
+                BasePhysicsDebugDisplaySystem.Triangle(a, b, c, math.cross(a, b), color);
             }
         }
 
@@ -370,9 +423,9 @@ namespace Unity.Physics.Authoring
                 var c = math.transform(wfc, center + shapeScale * math.rotate(orientation, cylinderVerticesArray[cylinderIndicesArray[i + 2]]));
                 i += 3;
 
-                PhysicsDebugDisplaySystem.Line(a, b, edgesColor);
-                PhysicsDebugDisplaySystem.Line(a, c, edgesColor);
-                PhysicsDebugDisplaySystem.Line(b, c, edgesColor);
+                BasePhysicsDebugDisplaySystem.Line(a, b, edgesColor);
+                BasePhysicsDebugDisplaySystem.Line(a, c, edgesColor);
+                BasePhysicsDebugDisplaySystem.Line(b, c, edgesColor);
             }
         }
 
@@ -391,7 +444,7 @@ namespace Unity.Physics.Authoring
                 var c = math.transform(wfc, center + shapeScale * math.rotate(orientation, uniformScale * cylinderVerticesArray[cylinderIndicesArray[i + 2]]));
                 i += 3;
 
-                PhysicsDebugDisplaySystem.Triangle(a, b, c, math.cross(a, b), color);
+                BasePhysicsDebugDisplaySystem.Triangle(a, b, c, math.cross(a, b), color);
             }
         }
 
@@ -440,7 +493,7 @@ namespace Unity.Physics.Authoring
         // Create a wireframe capsule with a default orientation along the y-axis. Use the general method of DrawWireArc
         // declared in GizmoUtil.cpp and with CapsuleBoundsHandle.DrawWireframe(). Output is an array that comprises
         // pairs of vertices to be used in the drawing of Capsule Collider Edges.
-        public static NativeArray<Vector3> CreateCapsuleWireFrame(Allocator allocator)
+        static NativeArray<Vector3> CreateCapsuleWireFrame(Allocator allocator)
         {
             const float radius = 0.5f;
             const float height = 2.0f;
@@ -486,7 +539,7 @@ namespace Unity.Physics.Authoring
 
         //wfc = worldFromCollider
         //Note: assuming that reading in vertices correctly and that vertex winding is correct
-        public static NativeArray<float3> TransformAndCalculateNormal(float3 v0, float3 v1, float3 v2, RigidTransform wfc)
+        static NativeArray<float3> TransformAndCalculateNormal(float3 v0, float3 v1, float3 v2, RigidTransform wfc)
         {
             var verts = new NativeArray<float3>(4, Allocator.Temp);
 
@@ -504,7 +557,7 @@ namespace Unity.Physics.Authoring
             DebugDisplay.ColorIndex colourIndex)
         {
             var v = TransformAndCalculateNormal(v0, v1, v2, worldFromCollider);
-            PhysicsDebugDisplaySystem.Triangle(v[0], v[1], v[2], v[3], colourIndex);
+            BasePhysicsDebugDisplaySystem.Triangle(v[0], v[1], v[2], v[3], colourIndex);
         }
     }
 }

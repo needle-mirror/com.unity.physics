@@ -2,61 +2,9 @@ using Unity.Mathematics;
 using Unity.Physics.Systems;
 using UnityEngine;
 using Unity.Entities;
-using Unity.Transforms;
 
 namespace Unity.Physics.Authoring
 {
-    /// <summary>
-    /// A component system group that contains the PhysicsDebugDisplay systems.
-    /// </summary>
-    [WorldSystemFilter(WorldSystemFilterFlags.Editor)]
-    [UpdateInGroup(typeof(SimulationSystemGroup))]
-    [UpdateAfter(typeof(TransformSystemGroup))]
-    public partial class PhysicsDisplayDebugGroup : ComponentSystemGroup
-    {
-    }
-
-    /// <summary>
-    /// A system which cleans physics debug display data from the previous frame during the simulation.
-    /// In case of using multiple worlds feature, in order for debug display to work properly
-    /// on multiple worlds, you need to disable the update of this system in either main physics group (<see cref="PhysicsSystemGroup"/>)
-    /// or in the custom physics group (<see cref="BeforePhysicsSystemGroup"/>), whichever updates later in the loop.
-    /// </summary>
-    [WorldSystemFilter(WorldSystemFilterFlags.Default)]
-    [UpdateInGroup(typeof(BeforePhysicsSystemGroup))]
-    public partial struct CleanPhysicsDebugDataSystem_Default : ISystem
-    {
-        void OnCreate(ref SystemState state)
-        {
-            state.RequireForUpdate<PhysicsDebugDisplayData>();
-        }
-
-        void OnUpdate(ref SystemState state)
-        {
-            DebugDisplay.DebugDisplay.Clear();
-        }
-    }
-
-    /// <summary>
-    /// A system which cleans physics debug display data from the previous frame while in edit mode.
-    /// In case of using multiple worlds feature, in order for debug display to work properly
-    /// on multiple worlds, you need to disable the update of this system in editor display physics group (<see cref="PhysicsDisplayDebugGroup"/>).
-    /// </summary>
-    [WorldSystemFilter(WorldSystemFilterFlags.Editor)]
-    [UpdateInGroup(typeof(PhysicsDisplayDebugGroup))]
-    public partial struct CleanPhysicsDebugDataSystem_Editor : ISystem
-    {
-        void OnCreate(ref SystemState state)
-        {
-            state.RequireForUpdate<PhysicsDebugDisplayData>();
-        }
-
-        void OnUpdate(ref SystemState state)
-        {
-            DebugDisplay.DebugDisplay.Clear();
-        }
-    }
-
     /// <summary>
     /// A system which is responsible for drawing physics debug display data.
     /// Create a singleton entity with <see cref="PhysicsDebugDisplayData"/> and select what you want to be drawn.<para/>
@@ -68,10 +16,10 @@ namespace Unity.Physics.Authoring
     /// 4) Data will be drawn when PhysicsDebugDisplaySystem's OnUpdate() is called.<para/>
     /// IMPORTANT: Drawing works only in Editor mode.
     /// </summary>
-    public abstract partial class PhysicsDebugDisplaySystem : SystemBase
+    public abstract partial class BasePhysicsDebugDisplaySystem : SystemBase
     {
 #if UNITY_EDITOR
-        DrawComponent m_DrawComponent;
+        GameObject m_DrawComponentGameObject;
 #endif
         class DrawComponent : MonoBehaviour
         {
@@ -80,7 +28,7 @@ namespace Unity.Physics.Authoring
 #if UNITY_EDITOR
                 if (World.DefaultGameObjectInjectionWorld == null)
                     return;
-                World.DefaultGameObjectInjectionWorld.GetExistingSystemManaged<PhysicsDebugDisplaySystem>().CompleteDependency();
+                World.DefaultGameObjectInjectionWorld.GetExistingSystemManaged<PhysicsDebugDisplaySystem>()?.CompleteDependency();
                 Unity.DebugDisplay.DebugDisplay.Render();
 #endif
             }
@@ -92,27 +40,51 @@ namespace Unity.Physics.Authoring
 #if UNITY_EDITOR
             Unity.DebugDisplay.DebugDisplay.Reinstantiate();
 
-            if (m_DrawComponent == null)
+            if (m_DrawComponentGameObject == null)
             {
-                m_DrawComponent = new GameObject("DebugDisplay.DrawComponent", typeof(DrawComponent))
+                m_DrawComponentGameObject = new GameObject("BasePhysicsDebugDisplaySystem")
+                {
+                    hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy
+                };
+
+                // Note: we are adding an additional child here so that we can hide the parent in the hierarchy
+                // without hiding the child, which would prevent the OnDrawGizmos method on the DrawComponent in the child
+                // from being called.
+                var childGameObject = new GameObject("DrawComponent")
                 {
                     hideFlags = HideFlags.DontSave
-                }.GetComponent<DrawComponent>();
+                };
+                childGameObject.transform.parent = m_DrawComponentGameObject.transform;
+
+                childGameObject.AddComponent<DrawComponent>();
             }
 #endif
         }
 
-        protected override void OnDestroy()
+        static void DestroyGameObject(GameObject gameObject)
+        {
+            if (Application.isPlaying)
+                Object.Destroy(gameObject);
+            else
+                Object.DestroyImmediate(gameObject);
+        }
+
+protected override void OnDestroy()
         {
 #if UNITY_EDITOR
-            if (m_DrawComponent != null)
+            if (m_DrawComponentGameObject != null)
             {
-                if (Application.isPlaying)
-                    Object.Destroy(m_DrawComponent.gameObject);
-                else
-                    Object.DestroyImmediate(m_DrawComponent.gameObject);
+                while (m_DrawComponentGameObject.transform.childCount > 0)
+                {
+                    var child = m_DrawComponentGameObject.transform.GetChild(0);
+                    child.parent = null;
+                    DestroyGameObject(child.gameObject);
+                }
+
+                DestroyGameObject(m_DrawComponentGameObject);
+
+                m_DrawComponentGameObject = null;
             }
-            m_DrawComponent = null;
 #endif
         }
 
@@ -236,18 +208,16 @@ namespace Unity.Physics.Authoring
     /// Draw physics debug display data during simulation
     /// </summary>
     [WorldSystemFilter(WorldSystemFilterFlags.Default)]
-    [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
-    [UpdateAfter(typeof(PhysicsSystemGroup))]
+    [UpdateInGroup(typeof(PhysicsDebugDisplayGroup), OrderLast = true)]
     [RequireMatchingQueriesForUpdate]
-    public partial class PhysicsDebugDisplaySystem_Default : PhysicsDebugDisplaySystem
+    public partial class PhysicsDebugDisplaySystem : BasePhysicsDebugDisplaySystem
     {}
 
     /// <summary>
     /// Draw physics debug display data when running in the  Editor
     /// </summary>
     [WorldSystemFilter(WorldSystemFilterFlags.Editor)]
-    [UpdateAfter(typeof(CleanPhysicsDebugDataSystem_Editor))]
-    [UpdateInGroup(typeof(PhysicsDisplayDebugGroup))]
+    [UpdateInGroup(typeof(PhysicsDebugDisplayGroup_Editor), OrderLast = true)]
     [RequireMatchingQueriesForUpdate]
     public partial class PhysicsDebugDisplaySystem_Editor : PhysicsDebugDisplaySystem
     {}

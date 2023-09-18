@@ -150,7 +150,7 @@ namespace Unity.Physics.Tests.Joints
 
         delegate Joint GenerateJoint(ref Random rnd);
 
-        unsafe static void SolveSingleJoint(Joint jointData, int numIterations, float timestep,
+        static void SolveSingleJoint(Joint jointData, int numIterations, float timestep,
             ref MotionVelocity velocityA, ref MotionVelocity velocityB, ref MotionData motionA,
             ref MotionData motionB, out NativeStream jacobiansOut, NativeStream impulseEventStream = default)
         {
@@ -200,7 +200,7 @@ namespace Unity.Physics.Tests.Joints
             integrate(ref velocityB, ref motionB, timestep);
         }
 
-        unsafe void RunJointTest(string testName, GenerateJoint generateJoint)
+        void RunJointTest(string testName, GenerateJoint generateJoint)
         {
             uint numTests = 1000;
             uint dbgTest = 2472156941;
@@ -326,7 +326,7 @@ namespace Unity.Physics.Tests.Joints
                 Min = 0.5f,
                 Max = 2.0f,
                 SpringFrequency = Constraint.DefaultSpringFrequency,
-                SpringDamping = Constraint.DefaultSpringDamping,
+                DampingRatio = Constraint.DefaultDampingRatio,
                 MaxImpulse = float3.zero,
             };
 
@@ -391,7 +391,7 @@ namespace Unity.Physics.Tests.Joints
         }
 
         [Test]
-        public unsafe void BallAndSocketTest()
+        public void BallAndSocketTest()
         {
             RunJointTest("BallAndSocketTest", (ref Random rnd) =>
             {
@@ -401,7 +401,7 @@ namespace Unity.Physics.Tests.Joints
         }
 
         [Test]
-        public unsafe void StiffSpringTest()
+        public void StiffSpringTest()
         {
             RunJointTest("StiffSpringTest", (ref Random rnd) =>
             {
@@ -412,7 +412,7 @@ namespace Unity.Physics.Tests.Joints
         }
 
         [Test]
-        public unsafe void PrismaticTest()
+        public void PrismaticTest()
         {
             RunJointTest("PrismaticTest", (ref Random rnd) =>
             {
@@ -429,7 +429,7 @@ namespace Unity.Physics.Tests.Joints
         }
 
         [Test]
-        public unsafe void HingeTest()
+        public void HingeTest()
         {
             RunJointTest("HingeTest", (ref Random rnd) =>
             {
@@ -444,7 +444,7 @@ namespace Unity.Physics.Tests.Joints
         }
 
         [Test]
-        public unsafe void LimitedHingeTest()
+        public void LimitedHingeTest()
         {
             RunJointTest("LimitedHingeTest", (ref Random rnd) =>
             {
@@ -463,7 +463,7 @@ namespace Unity.Physics.Tests.Joints
         // TODO - test CreateRagdoll(), if it stays.  Doesn't fit nicely because it produces two JointDatas.
 
         [Test]
-        public unsafe void FixedTest()
+        public  void FixedTest()
         {
             RunJointTest("FixedTest", (ref Random rnd) =>
             {
@@ -477,7 +477,7 @@ namespace Unity.Physics.Tests.Joints
         }
 
         [Test]
-        public unsafe void LimitedDOFTest()
+        public void LimitedDOFTest()
         {
             RunJointTest("LimitedDOFTest", (ref Random rnd) =>
             {
@@ -490,7 +490,7 @@ namespace Unity.Physics.Tests.Joints
         }
 
         [Test]
-        public unsafe void TwistTest()
+        public void TwistTest()
         {
             // Check that the twist constraint works in each axis.
             // Set up a constraint between a fixed and dynamic body, give the dynamic body
@@ -547,7 +547,7 @@ namespace Unity.Physics.Tests.Joints
         }
 
         [Test]
-        public unsafe void ZeroDimensionTest()
+        public void ZeroDimensionTest()
         {
             RunJointTest("LimitedDOFTestZeroDimension", (ref Random rnd) =>
             {
@@ -558,7 +558,7 @@ namespace Unity.Physics.Tests.Joints
         }
 
         [Test]
-        public unsafe void RaiseImpulseEventsFlagTest()
+        public void RaiseImpulseEventsFlagTest()
         {
             const int numCases = 9;
 

@@ -39,16 +39,18 @@ namespace Unity.Physics.Authoring
 
     [RequireMatchingQueriesForUpdate]
     [WorldSystemFilter(WorldSystemFilterFlags.Default)]
-    [UpdateInGroup(typeof(PhysicsSimulationGroup))]
-    [UpdateAfter(typeof(PhysicsCreateBodyPairsGroup))]
-    [UpdateBefore(typeof(PhysicsCreateContactsGroup))]
+    [UpdateInGroup(typeof(PhysicsDebugDisplayGroup))]
     [BurstCompile]
     internal partial struct DisplayColliderAabbsSystem_Default : ISystem
     {
         private EntityQuery ColliderQuery;
+
         void OnCreate(ref SystemState state)
         {
-            ColliderQuery = state.GetEntityQuery(ComponentType.ReadOnly<PhysicsCollider>(), ComponentType.ReadOnly<LocalToWorld>());
+            ColliderQuery = state.GetEntityQuery(ComponentType.ReadOnly<PhysicsCollider>(),
+                ComponentType.ReadOnly<LocalToWorld>(),
+                ComponentType.ReadOnly<LocalTransform>());
+
             state.RequireForUpdate(ColliderQuery);
             state.RequireForUpdate<PhysicsDebugDisplayData>();
         }
@@ -59,9 +61,28 @@ namespace Unity.Physics.Authoring
             if (!SystemAPI.TryGetSingleton(out PhysicsDebugDisplayData debugDisplay) || debugDisplay.DrawColliderAabbs == 0)
                 return;
 
-            if (SystemAPI.TryGetSingleton(out PhysicsWorldSingleton physicsWorldSingleton))
+            if (debugDisplay.DrawColliderAabbs == (int)PhysicsDebugDisplayAuthoring.DisplayMode.PreIntegration)
             {
-                state.Dependency = DisplayColliderAabbsJob.ScheduleJob(physicsWorldSingleton.PhysicsWorld.Bodies, state.Dependency);
+                if (SystemAPI.TryGetSingleton(out PhysicsWorldSingleton physicsWorldSingleton))
+                {
+                    state.Dependency = DisplayColliderAabbsJob.ScheduleJob(physicsWorldSingleton.PhysicsWorld.Bodies, state.Dependency);
+                }
+            }
+            else if (debugDisplay.DrawColliderAabbs == (int)PhysicsDebugDisplayAuthoring.DisplayMode.PostIntegration)
+            {
+                var rigidBodiesList = new NativeList<RigidBody>(Allocator.TempJob);
+                DrawColliderUtility.GetRigidBodiesFromQuery(ref state, ref ColliderQuery, ref rigidBodiesList);
+
+                if (rigidBodiesList.IsEmpty)
+                {
+                    rigidBodiesList.Dispose();
+                    return;
+                }
+
+                var displayHandle = DisplayColliderAabbsJob.ScheduleJob(rigidBodiesList.AsArray(), state.Dependency);
+                var disposeHandle = rigidBodiesList.Dispose(displayHandle);
+
+                state.Dependency = disposeHandle;
             }
         }
     }
@@ -69,17 +90,19 @@ namespace Unity.Physics.Authoring
     /// Create a DisplayColliderAabbsJob
     [RequireMatchingQueriesForUpdate]
     [WorldSystemFilter(WorldSystemFilterFlags.Editor)]
-    [UpdateInGroup(typeof(PhysicsDisplayDebugGroup))]
-    [UpdateAfter(typeof(CleanPhysicsDebugDataSystem_Editor))]
-    [UpdateBefore(typeof(PhysicsDebugDisplaySystem_Editor))]
+    [UpdateInGroup(typeof(PhysicsDebugDisplayGroup_Editor))]
     [BurstCompile]
     internal partial struct DisplayColliderAabbsSystem_Editor : ISystem
     {
+        private EntityQuery ColliderQuery;
+
         void OnCreate(ref SystemState state)
         {
-            var colliderQuery = state.GetEntityQuery(ComponentType.ReadOnly<PhysicsCollider>(),
-                ComponentType.ReadOnly<LocalToWorld>(), ComponentType.ReadOnly<LocalTransform>());
-            state.RequireForUpdate(colliderQuery);
+            ColliderQuery = state.GetEntityQuery(ComponentType.ReadOnly<PhysicsCollider>(),
+                ComponentType.ReadOnly<LocalToWorld>(),
+                ComponentType.ReadOnly<LocalTransform>());
+
+            state.RequireForUpdate(ColliderQuery);
             state.RequireForUpdate<PhysicsDebugDisplayData>();
         }
 
@@ -90,16 +113,12 @@ namespace Unity.Physics.Authoring
                 return;
 
             var rigidBodiesList = new NativeList<RigidBody>(Allocator.TempJob);
-            foreach (var(collider, localToWorld, localTransform) in
-                     SystemAPI.Query<RefRO<PhysicsCollider>, RefRO<LocalToWorld>, RefRO<LocalTransform>>())
+            DrawColliderUtility.GetRigidBodiesFromQuery(ref state, ref ColliderQuery, ref rigidBodiesList);
+
+            if (rigidBodiesList.IsEmpty)
             {
-                var rigidTransform = Math.DecomposeRigidBodyTransform(localToWorld.ValueRO.Value);
-                rigidBodiesList.Add(new RigidBody()
-                {
-                    Collider = collider.ValueRO.Value,
-                    WorldFromBody = rigidTransform,
-                    Scale = localTransform.ValueRO.Scale
-                });
+                rigidBodiesList.Dispose();
+                return;
             }
 
             var displayHandle = DisplayColliderAabbsJob.ScheduleJob(rigidBodiesList.AsArray(), state.Dependency);

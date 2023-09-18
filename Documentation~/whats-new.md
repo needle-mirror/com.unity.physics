@@ -2,7 +2,7 @@
 
 This is a summary of the changes in Unity Physics version 1.0.
 
-For a full list of changes, see the [Changelog](xref:changelog). For information on how to upgrade to version 1.0, see the [Upgrade guide](upgrade-guide.md).
+For a full list of changes, see the [Changelog](xref:unity-physics-changelog). For information on how to upgrade to version 1.0, see the [Upgrade guide](upgrade-guide.md).
 
 ## Added
 

@@ -339,13 +339,13 @@ namespace Unity.Physics
     static class JacobianUtilities
     {
         // This is the inverse function to CalculateConstraintTauAndDamping
-        // Given a final Tau and Damping you can get the original Spring Frequency and Damping for a given solver step
-        // See Unity.Physics.Constraint struct for discussion about default Spring Frequency and Damping values.
+        // Given a final Tau and Damping you can get the original Spring Frequency and Damping Ratio.
+        // See Unity.Physics.Constraint struct for discussion about default Spring Frequency and Damping Ratio.
         public static void CalculateSpringFrequencyAndDamping(float constraintTau, float constraintDamping,
-            float timestep, int iterations, out float springFrequency, out float springDamping)
+            float timeStep, int iterations, out float springFrequency, out float dampingRatio)
         {
             int n = iterations;
-            float h = timestep;
+            float h = timeStep;
             float hh = h * h;
             float a = 1.0f - constraintDamping;
             float aSum = 1.0f;
@@ -357,82 +357,147 @@ namespace Unity.Physics
             float w = math.sqrt(constraintTau * aSum / math.pow(a, n)) / h;
             float ww = w * w;
             springFrequency = w / (2.0f * math.PI);
-            springDamping = (math.pow(a, -n) - 1 - hh * ww) / (2.0f * h * w);
+            dampingRatio = (math.pow(a, -n) - 1 - hh * ww) / (2.0f * h * w);
         }
 
         // This is the inverse function to CalculateSpringFrequencyAndDamping
-        public static void CalculateConstraintTauAndDamping(float springFrequency, float springDamping, float timestep,
+        public static void CalculateConstraintTauAndDamping(float springFrequency, float dampingRatio, float timeStep,
             int iterations, out float constraintTau, out float constraintDamping)
         {
-            // TODO
-            // - it's a significant amount of work to calculate tau and damping.  They depend on step length, so they have to be calculated each step.
-            //   probably worth caching tau and damping for the default spring constants on the world and branching.
-            // - you always get a higher effective damping ratio than you ask for because of the error from to discrete integration. The error varies
-            //   with step length.  Can we estimate or bound that error and compensate for it?
-
             /*
+            In the following we derive the formulas for converting spring frequency and damping ratio to the solver constraint regularization parameters tau and damping,
+            representing a normalized stiffness factor and damping factor, respectively.
+            To this end, we compare the integration of spring-damper using implicit Euler integration with the time stepping formula for the constraint solver, and make both equivalent.
 
-            How to derive these formulas for tau and damping:
+            1.  Implicit Euler integration of a spring-damper
 
-            1) implicit euler integration of a damped spring
+                Constitutive equation of a spring-damper:
+                    F = -kx - cx'
+                with k = spring stiffness, c = damping coefficient, x = position, and x' = velocity.
 
-               damped spring equation: x'' = -kx - cx'
-               h = step length
+                Backwards euler of the equations of motion a = x'' and v = x' with a = F/m where h = step length:
 
-               x2 = x1 + hv2
-               v2 = v1 + h(-kx2 - cv2)/m
-                  = v1 + h(-kx1 - hkv2 - cv2)/m
-                  = v1 / (1 + h^2k/m + hc/m) - hkx1 / (m + h^2k + hc)
+                    x2 = x1 + hv2
+                    v2 = v1 + hx''
+                       = v1 + hF/m
+                       = v1 + h(-kx2 - cv2)/m
+                       = v1 + h(-kx1 - hkv2 - cv2)/m
+                       = 1 / (1 + h^2k/m + hc/m) * v1 - hk / (m + h^2k + hc) * x1
 
-            2) gauss-seidel iterations of a stiff constraint.  Example for four iterations:
+            2.  Gauss-Seidel iterations of a stiff constraint with Baumgarte stabilization parameters t and a, where
+                t = tau, d = damping, and a = 1 - d.
 
-               t = tau, d = damping, a = 1 - d
-               v2 = av1 - (t / h)x1
-               v3 = av2 - (t / h)x1
-               v4 = av3 - (t / h)x1
-               v5 = av4 - (t / h)x1
-                  = a^4v1 - (a^3 + a^2 + a + 1)(t / h)x1
+                Example for four iterations:
 
-            3) by matching coefficients of v1 and x1 in the formulas for v2 in step (1) and v5 in step (2), we see that if:
+                    v2 = av1 - (t / h)x1
+                    v3 = av2 - (t / h)x1
+                    v4 = av3 - (t / h)x1
+                    v5 = av4 - (t / h)x1
+                       = a^4v1 - (a^3 + a^2 + a + 1)(t / h)x1
 
-               (1 - damping)^4 = 1 / (1 + h^2k / m + hc / m)
-               ((1 - damping)^3 + (1 - damping)^2 + (1 - damping) + 1)(tau / h) = hk / (m + h^2k + hc)
+                Given the recursive nature of the relationship above we can derive a closed-form expression for the new velocity with n iterations:
+                    v_n = a * v_n-1 - (t / h) * x1
+                        = a^n * v1 - (a^(n-1) + a^(n-2) + ... + a + 1)(t / h) * x1
+                        = a^n * v1 - (\sum_{i=0}^{n-1} a^i)(t / h) * x1
+                        = a^n * v1 - ((1 - a^n) / (1 - a))(t / h) * x1                      (1)
 
-               then our constraint is equivalent to the implicit euler integration of a spring.
-               solve the first equation for damping, then solve the second equation for tau.
-               then substitute in k = mw^2, c = 2mzw.
+                Note that above we replaced the geometric series from 1 to n-1 with the closed form expression (1 - a^n) / (1 - a). This is valid for
+                a != 1.0. If a == 1.0, the following closed form expression needs to be used instead:
 
+                  \sum_{i=0}^{n-1} a^i) = n
+
+                In this case, the equation above simplifies to:
+
+                v_n = a^n * v1 - (\sum_{i=0}^{n-1} a^i)(t / h) * x1
+                    = a^n * v1 - n(t / h) * x1
+
+                For now we will ignore this special case. We will see if a can become 1 and under which conditions, once we have found an expression for a in the following step.
+
+            3.1 Via coefficient matching, we can map the stiffness and damping parameters in the spring-damper to the tau and damping parameters in the stiff constraint.
+                For n iterations, we have the following equations:
+
+                    a^n = 1 / (1 + h^2k / m + hc / m), and                                  (2)
+                    ((1 - a^n) / (1 - a))(t / h) = hk / (m + h^2k + hc)                     (3)
+
+                where k is the spring constant, c is the damping constant, m is the mass, h is the time step, and a and t are the
+                damping and tau parameters of the stiff constraint, respectively.
+
+                We can solve (2) and (3) for a and t in terms of k, c, m, and h as follows.
+
+                First, solve equation (2) for a:
+
+                    a = (1 / (1 + h^2k / m + hc / m))^(1/n)                                 (4)
+                <=> d = 1 - a
+                      = 1 - (1 / (1 + h^2k / m + hc / m))^(1/n)                             (5)
+
+                Then plug a into equation (3) to solve for t:
+
+                         ((1 - a^n) / (1 - a))(t / h) = hk / (m + h^2k + hc)
+                    <=>  ((1 - 1 / (1 + h^2k / m + hc / m)) / (1 - a))(t / h) = hk / (m + h^2k + hc)
+                    <=>  ((1 - 1 / (1 + h^2k / m + hc / m)) / (1 - (1 / (1 + h^2k / m + hc / m))^(1/n)))(t / h) = hk / (m + h^2k + hc)
+                    <=> t = h^2k / (m + h^2k + hc) * (1 - (1 / (1 + h^2k / m + hc / m))^(1/n)) / ((1 - 1 / (1 + h^2k / m + hc / m))
+
+               We can simplify this further as follows:
+
+                    t = h^2k / (m + h^2k + hc) * (1 - (1 / (1 + h^2k / m + hc / m))^(1/n)) * (1 + h^2k / m + hc / m) / ((1 + h^2k / m + hc / m) - 1)
+                    t = h^2k / (m + h^2k + hc) * (1 - (1 / (1 + h^2k / m + hc / m))^(1/n)) * (1 + h^2k / m + hc / m) / (h^2k / m + hc / m)
+                    t = h^2k / (m + h^2k + hc) * (1 - (1 / (1 + h^2k / m + hc / m))^(1/n)) * (m + h^2k + hc) / (h^2k + hc)
+                    t = h^2k / (h^2k + hc) * (1 - (1 / (1 + h^2k / m + hc / m))^(1/n)) * (m + h^2k + hc) / (m + h^2k + hc)
+                    t = h^2k / (h^2k + hc) * (1 - (1 / (1 + h^2k / m + hc / m))^(1/n))
+
+               This yields the final expression for t:
+
+                    t = h^2k / (h^2k + hc) * (1 - (1 / (1 + h^2k / m + hc / m))^(1/n))
+                      = h^2k / (h^2k + hc) * d                                              (6)
+
+            3.2 Coming back to our requirement from above that a != 1, let's examine in what situation a can become 1:
+
+                    a = (1 / (1 + h^2k / m + hc / m))^(1/n) = 1
+
+                We can see that a can only be 1 iff (if and only if) the term h^2k / m + hc / m equals 0.
+
+                Given that k and c are both positive values and both m and h are strictly positive, this can only be the case if both k and h are 0, in which case our spring-damper
+                will simply not apply any force, meaning, the constraint will not be active. We can deal with this case by simply setting the constraint regularization parameters
+                t and d (= 1 - a) to 0 in this case. This will result in the constraint being inactive, which is what we want.
+
+            3.4 Parametrization using Spring Frequency and Damping Ratio:
+
+                Given spring frequency f, damping ratio z and effective mass m, we have the following relationships:
+                    w = f * 2 * pi
+                    k = m * w^2 <=> k/m = w^2
+                    c = z * 2 * w * m <=> c/m = z * 2 * w
+                where w denotes the angular spring frequency, k denotes the spring stiffness coefficient and c denotes the damping coefficient.
+
+                We can use the relationships above to convert the expressions (5) and (6) for d and t to the following expressions in terms of spring frequency and damping ratio:
+                    d = 1 - (1 / (1 + h^2 * m * w^2 / m + h * z * 2 * w * m / m))^(1/n)
+                      = 1 - (1 / (1 + h^2 * w^2 + h * z * 2 * w))^(1/n)                     (7)
+
+                In (6), substitute k for m * w^2 and c for z * 2 * w * m to get:
+                    t = h^2k / (h^2k + hc) * d
+                      = h^2 * m * w^2 / (h^2 * m * w^2 + h * z * 2 * w * m) * d
+
+                Eliminate m to obtain the final expression:
+                    t = h^2 * w^2 / (h^2 * w^2 + h * z * 2 * w) * d                         (8)
+
+                This allows us to parametrize our constraint using the spring frequency and damping ratio of an equivalent spring-damper system.
             */
 
-            float h = timestep;
-            float w = springFrequency * 2.0f * (float)math.PI; // convert oscillations/sec to radians/sec
-            float z = springDamping;
+            // Compute damping factor d from spring frequency f, damping ratio z, time step h, and number of iterations n using equation (7) above.
+            // With d in hand, compute stiffness factor tau from spring frequency f, damping coefficient c, time step h, number of iterations n and damping factor d using equation (8) above.
+
+            // f: spring frequency, w: angular spring frequency, z: damping ratio
+            float f = springFrequency;
+            float z = dampingRatio;
+            float h = timeStep;
+            float w = f * 2 * math.PI; // convert frequency to angular frequency, i.e., oscillations/sec to radians/sec
             float hw = h * w;
-            float hhww = hw * hw;
+            float hhww = hw * hw; // = h^2 * w^2
+            float denom = hhww + hw * z * 2;
+            float exp1 = 1 / (1 + denom);
+            float exp2 = math.pow(exp1, 1f / iterations);
 
-            // a = 1-d, aExp = a^iterations, aSum = aExp / sum(i in [0, iterations), a^i)
-            float aExp = 1.0f / (1.0f + hhww + 2.0f * hw * z);
-            float a, aSum;
-            if (iterations == 4)
-            {
-                // special case expected iterations = 4
-                float invA2 = math.rsqrt(aExp);
-                float a2 = invA2 * aExp;
-                a = math.rsqrt(invA2);
-                aSum = (1.0f + a2 + a * (1.0f + a2));
-            }
-            else
-            {
-                a = math.pow(aExp, 1.0f / iterations);
-                aSum = 1.0f;
-                for (int i = 1; i < iterations; i++)
-                {
-                    aSum = a * aSum + 1.0f;
-                }
-            }
-
-            constraintDamping = 1 - a;
-            constraintTau = hhww * aExp / aSum;
+            constraintDamping = 1 - exp2;
+            constraintTau = hhww / denom * constraintDamping;
         }
 
         // Returns x - clamp(x, min, max)
@@ -444,12 +509,9 @@ namespace Unity.Physics
         }
 
         // Returns the amount of error for the solver to correct, where initialError is the pre-integration error and predictedError is the expected post-integration error
-        // If (predicted > initial) HAVE overshot target = (Predicted - initial)*damping + initial*tau
-        // If (predicted < initial) HAVE NOT met target = predicted * tau (ie: damping not used if target not met)
         public static float CalculateCorrection(float predictedError, float initialError, float tau, float damping)
         {
-            return math.max(predictedError - initialError, 0.0f) * damping +
-                math.min(predictedError, initialError) * tau;
+            return (predictedError - initialError) * damping + initialError * tau;
         }
 
         // Integrate the relative orientation of a pair of bodies, faster and less memory than storing both bodies' orientations and integrating them separately

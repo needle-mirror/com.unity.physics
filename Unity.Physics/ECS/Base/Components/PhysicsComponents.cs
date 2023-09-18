@@ -64,6 +64,14 @@ namespace Unity.Physics
         ///
         /// <value> The mass properties. </value>
         public MassProperties MassProperties => Value.IsCreated ? Value.Value.MassProperties : MassProperties.UnitSphere;
+
+        /// <summary>
+        /// Indicates whether this PhysicsCollider contains a unique Collider blob. That is, its Collider blob is
+        /// not shared with any other PhysicsCollider.
+        /// </summary>
+        ///
+        /// <value> True if this PhysicsCollider contains a unique Collider blob, false if not. </value>
+        public bool IsUnique => Value.IsCreated && Value.Value.IsUnique;
     }
 
     /// <summary>

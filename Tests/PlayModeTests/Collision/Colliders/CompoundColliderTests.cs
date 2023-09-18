@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using NUnit.Framework;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Physics.Tests.Utils;
 
@@ -13,6 +15,37 @@ namespace Unity.Physics.Tests.Collision.Colliders
     /// </summary>
     class CompoundColliderTests
     {
+        [BurstCompile(CompileSynchronously = true)]
+        struct CreateFromBurstJob : IJob
+        {
+            public BlobAssetReference<Collider> BoxCollider;
+
+            [GenerateTestsForBurstCompatibility]
+            public void Execute()
+            {
+                using var children = new NativeArray<CompoundCollider.ColliderBlobInstance>(3, Allocator.Temp)
+                    {
+                        [0] = new CompoundCollider.ColliderBlobInstance { Collider = BoxCollider, CompoundFromChild = new RigidTransform(quaternion.identity, new float3(0)) },
+                        [1] = new CompoundCollider.ColliderBlobInstance { Collider = BoxCollider, CompoundFromChild = new RigidTransform(quaternion.identity, new float3(1)) },
+                        [2] = new CompoundCollider.ColliderBlobInstance { Collider = BoxCollider, CompoundFromChild = new RigidTransform(quaternion.identity, new float3(2)) },
+                    };
+                CompoundCollider.Create(children).Dispose();
+            }
+        }
+
+        [Test]
+        public void CreateCompound_WhenCalledFromBurstJob_DoesNotThrow()
+        {
+            // Create a unit box as child collider in the compound
+            using var box = BoxCollider.Create(new BoxGeometry {Orientation = quaternion.identity});
+
+            // create a compound collider from a job
+            new CreateFromBurstJob
+            {
+                BoxCollider = box
+            }.Run();
+        }
+
         [Test]
         public void MassProperties_BuiltFromChildren_MatchesExpected()
         {
@@ -66,13 +99,29 @@ namespace Unity.Physics.Tests.Collision.Colliders
             TestCompoundBox(new RigidTransform(quaternion.EulerXYZ(0.5f, 1.0f, 1.5f), new float3(1.0f, 2.0f, 3.0f)));
         }
 
+        unsafe void ValidateCompoundCollider(BlobAssetReference<Collider> collider, int expectedChildCount)
+        {
+            // manually created colliders are unique by design
+            Assert.IsTrue(collider.Value.IsUnique);
+
+            Assert.AreEqual(ColliderType.Compound, collider.Value.Type);
+            Assert.AreEqual(CollisionType.Composite, collider.Value.CollisionType);
+
+            var compound = (CompoundCollider*)collider.GetUnsafePtr();
+            var uniqueChildren = new HashSet<long>();
+            for (var i = 0; i < compound->Children.Length; i++)
+                uniqueChildren.Add((long)compound->Children[i].Collider);
+            Assert.That(uniqueChildren.Count, Is.EqualTo(expectedChildCount));
+        }
+
         [Test]
-        public unsafe void CreateCompound_WithRepeatedInputs_ChildrenAreInstances()
+        public void CreateCompound_WithRepeatedInputs_ChildrenAreInstances()
         {
             BlobAssetReference<Collider> boxBlob = default;
             BlobAssetReference<Collider> capsuleBlob = default;
             BlobAssetReference<Collider> sphereBlob = default;
             BlobAssetReference<Collider> compoundBlob = default;
+            BlobAssetReference<Collider> cloneBlob = default;
             try
             {
                 // 3 unique instance inputs
@@ -91,13 +140,12 @@ namespace Unity.Physics.Tests.Collision.Colliders
                     [7] = new CompoundCollider.ColliderBlobInstance { Collider = sphereBlob, CompoundFromChild = new RigidTransform(quaternion.identity, new float3(7f)) }
                 };
 
+                const int kExpectedChildCount = 3;
                 compoundBlob = CompoundCollider.Create(children);
+                ValidateCompoundCollider(compoundBlob, kExpectedChildCount);
 
-                var compound = (CompoundCollider*)compoundBlob.GetUnsafePtr();
-                var uniqueChildren = new HashSet<long>();
-                for (var i = 0; i < compound->Children.Length; i++)
-                    uniqueChildren.Add((long)compound->Children[i].Collider);
-                Assert.That(uniqueChildren.Count, Is.EqualTo(3));
+                cloneBlob = compoundBlob.Value.Clone();
+                ValidateCompoundCollider(cloneBlob, kExpectedChildCount);
             }
             finally
             {
@@ -106,6 +154,9 @@ namespace Unity.Physics.Tests.Collision.Colliders
                 sphereBlob.Dispose();
                 if (compoundBlob.IsCreated)
                     compoundBlob.Dispose();
+
+                if (cloneBlob.IsCreated)
+                    cloneBlob.Dispose();
             }
         }
 

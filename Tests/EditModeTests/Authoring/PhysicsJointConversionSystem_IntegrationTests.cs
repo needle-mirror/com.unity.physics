@@ -142,7 +142,7 @@ namespace Unity.Physics.Tests.Authoring
             {
                 Assume.That(j.GetConstraints().Length, Is.GreaterThanOrEqualTo(2), "HingeJoint should always produce at least 2 constraints");
                 var linearConstraint = j[j.GetConstraints().Length - 1];
-                linearConstraint.SpringDamping = linearConstraint.SpringFrequency = 0f; // ignore spring settings
+                linearConstraint.DampingRatio = linearConstraint.SpringFrequency = 0f; // ignore spring settings
                 linearConstraint.MaxImpulse = 0f; // ignore impulse settings
                 Assert.That(
                     linearConstraint,
@@ -168,7 +168,7 @@ namespace Unity.Physics.Tests.Authoring
             {
                 Assume.That(j.GetConstraints().Length, Is.EqualTo(2), "Unlimited HingeJoint should always produce exactly 2 constraints");
                 var angularConstraint = j[0];
-                angularConstraint.SpringDamping = angularConstraint.SpringFrequency = 0f; // ignore spring settings
+                angularConstraint.DampingRatio = angularConstraint.SpringFrequency = 0f; // ignore spring settings
                 angularConstraint.MaxImpulse = 0f; // ignore impulse settings
                 Assert.That(
                     angularConstraint,
@@ -196,7 +196,7 @@ namespace Unity.Physics.Tests.Authoring
             {
                 Assume.That(j.GetConstraints().Length, Is.EqualTo(3), "Limited HingeJoint should always produce exactly 3 constraints");
                 var angularConstraint = j[0];
-                angularConstraint.SpringDamping = angularConstraint.SpringFrequency = 0f; // ignore spring settings
+                angularConstraint.DampingRatio = angularConstraint.SpringFrequency = 0f; // ignore spring settings
                 angularConstraint.MaxImpulse = 0f; // ignore impulse settings
                 var expectedLimits = math.radians(limits);
                 Assert.That(
@@ -223,7 +223,7 @@ namespace Unity.Physics.Tests.Authoring
                 Assume.That(joints[0].GetConstraints().Length, Is.EqualTo(1), "CharacterJoint should always produce exactly 1 linear constraint");
                 Assume.That(joints[1].GetConstraints().Length, Is.EqualTo(3), "CharacterJoint should always produce exactly 3 angular constraints");
                 var linearConstraint = joints[0][0];
-                linearConstraint.SpringDamping = linearConstraint.SpringFrequency = 0f; // ignore spring settings
+                linearConstraint.DampingRatio = linearConstraint.SpringFrequency = 0f; // ignore spring settings
                 linearConstraint.MaxImpulse = 0f; // ignore impulse settings
                 Assert.That(
                     linearConstraint,
@@ -256,7 +256,7 @@ namespace Unity.Physics.Tests.Authoring
                 Assume.That(joints[0].GetConstraints().Length, Is.EqualTo(1), "CharacterJoint should always produce exactly 1 linear constraint");
                 Assume.That(joints[1].GetConstraints().Length, Is.EqualTo(3), "CharacterJoint should always produce exactly 3 angular constraints");
                 var angularConstraint = joints[1][0];
-                angularConstraint.SpringDamping = angularConstraint.SpringFrequency = 0f; // ignore spring settings
+                angularConstraint.DampingRatio = angularConstraint.SpringFrequency = 0f; // ignore spring settings
                 angularConstraint.MaxImpulse = 0f; // ignore impulse settings
                 var expectedLimits = -math.radians(limits).yx;
                 Assert.That(
@@ -289,7 +289,7 @@ namespace Unity.Physics.Tests.Authoring
                 Assume.That(joints[0].GetConstraints().Length, Is.EqualTo(1), "CharacterJoint should always produce exactly 1 linear constraint");
                 Assume.That(joints[1].GetConstraints().Length, Is.EqualTo(3), "CharacterJoint should always produce exactly 3 angular constraints");
                 var angularConstraint = joints[1][1];
-                angularConstraint.SpringDamping = angularConstraint.SpringFrequency = 0f; // ignore spring settings
+                angularConstraint.DampingRatio = angularConstraint.SpringFrequency = 0f; // ignore spring settings
                 angularConstraint.MaxImpulse = 0f; // ignore impulse settings
                 var expectedLimits = new float2(-math.radians(limit), math.radians(limit));
                 Assert.That(
@@ -322,7 +322,7 @@ namespace Unity.Physics.Tests.Authoring
                 Assume.That(joints[0].GetConstraints().Length, Is.EqualTo(1), "CharacterJoint should always produce exactly 1 linear constraint");
                 Assume.That(joints[1].GetConstraints().Length, Is.EqualTo(3), "CharacterJoint should always produce exactly 3 angular constraints");
                 var angularConstraint = joints[1][2];
-                angularConstraint.SpringDamping = angularConstraint.SpringFrequency = 0f; // ignore spring settings
+                angularConstraint.DampingRatio = angularConstraint.SpringFrequency = 0f; // ignore spring settings
                 angularConstraint.MaxImpulse = 0f; // ignore impulse settings
                 var expectedLimits = new float2(-math.radians(limit), math.radians(limit));
                 Assert.That(
@@ -478,7 +478,7 @@ namespace Unity.Physics.Tests.Authoring
                 Assume.That(joints[0].GetConstraints().Length, Is.EqualTo(0), "ConfigurableJoint with no linear limits on any axis should produce exactly 0 constraints");
                 Assume.That(joints[1].GetConstraints().Length, Is.EqualTo(1), "ConfigurableJoint with limits on only x angular axis should produce exactly 1 constraint");
                 var angularConstraint = joints[1][0];
-                angularConstraint.SpringDamping = angularConstraint.SpringFrequency = 0f; // ignore spring settings
+                angularConstraint.DampingRatio = angularConstraint.SpringFrequency = 0f; // ignore spring settings
                 angularConstraint.MaxImpulse = 0f; // ignore impulse settings
                 var expectedLimits = -math.radians(limits).yx;
                 Assert.That(
@@ -516,7 +516,7 @@ namespace Unity.Physics.Tests.Authoring
                 Assume.That(joints[0].GetConstraints().Length, Is.EqualTo(0), "ConfigurableJoint with no linear limits on any axis should produce exactly 0 constraints");
                 Assume.That(joints[1].GetConstraints().Length, Is.EqualTo(1), "ConfigurableJoint with limits on only y angular axis should produce exactly 1 constraint");
                 var angularConstraint = joints[1][0];
-                angularConstraint.SpringDamping = angularConstraint.SpringFrequency = 0f; // ignore spring settings
+                angularConstraint.DampingRatio = angularConstraint.SpringFrequency = 0f; // ignore spring settings
                 angularConstraint.MaxImpulse = 0f; // ignore impulse settings
                 var expectedLimits = new float2(-math.radians(limit), math.radians(limit));
                 Assert.That(
@@ -554,7 +554,7 @@ namespace Unity.Physics.Tests.Authoring
                 Assume.That(joints[0].GetConstraints().Length, Is.EqualTo(0), "ConfigurableJoint with no linear limits on any axis should produce exactly 0 constraints");
                 Assume.That(joints[1].GetConstraints().Length, Is.EqualTo(1), "ConfigurableJoint with limits on only z angular axis should produce exactly 1 constraint");
                 var angularConstraint = joints[1][0];
-                angularConstraint.SpringDamping = angularConstraint.SpringFrequency = 0f; // ignore spring settings
+                angularConstraint.DampingRatio = angularConstraint.SpringFrequency = 0f; // ignore spring settings
                 angularConstraint.MaxImpulse = 0f; // ignore impulse settings
                 var expectedLimits = new float2(-math.radians(limit), math.radians(limit));
                 Assert.That(
@@ -576,6 +576,33 @@ namespace Unity.Physics.Tests.Authoring
             CreateHierarchy(new[] { jointType, jointType }, Array.Empty<Type>(), Array.Empty<Type>());
 
             TestConvertedData<PhysicsJoint>(joints => Assert.That(joints, Has.Length.EqualTo(assumeCount).And.All.Not.EqualTo(default(PhysicsJoint))), assumeCount);
+        }
+
+        // Tests that when game objects are scaled, the local anchor positions in joints are affected by the scale
+        [Test]
+        public void ConversionSystems_WhenGameObjectIsScaled_JointAnchorsAreScaled()
+        {
+            CreateHierarchy(Array.Empty<Type>(),
+                new[] { typeof(Rigidbody) },
+                new[] {typeof(Rigidbody), typeof(SpringJoint)});
+
+            float3 parentScale = new float3(2f, 3f, 4f);
+            Parent.transform.localScale = parentScale;
+
+            float3 localAnchorOffset = 1;
+            float3 expectedScaledAnchorOffset = localAnchorOffset * parentScale;
+
+            var springJoint = Child.GetComponent<SpringJoint>();
+            springJoint.anchor = localAnchorOffset;
+            springJoint.connectedAnchor = localAnchorOffset;
+            springJoint.connectedBody = Parent.GetComponent<Rigidbody>();
+
+            TestConvertedData<PhysicsJoint>(joints =>
+            {
+                var joint = joints[0];
+                Assume.That(joint.BodyAFromJoint.Position, Is.PrettyCloseTo(expectedScaledAnchorOffset));
+                Assume.That(joint.BodyBFromJoint.Position, Is.PrettyCloseTo(expectedScaledAnchorOffset));
+            }, 1);
         }
 
         /*

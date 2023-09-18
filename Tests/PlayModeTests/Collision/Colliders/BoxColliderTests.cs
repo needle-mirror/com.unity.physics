@@ -1,6 +1,7 @@
 using System;
 using NUnit.Framework;
 using Unity.Burst;
+using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -18,6 +19,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         [BurstCompile(CompileSynchronously = true)]
         struct CreateFromBurstJob : IJob
         {
+            [GenerateTestsForBurstCompatibility]
             public void Execute() =>
                 BoxCollider.Create(new BoxGeometry { Orientation = quaternion.identity, Size = new float3(1f) }).Dispose();
         }
@@ -25,23 +27,15 @@ namespace Unity.Physics.Tests.Collision.Colliders
         [Test]
         public void BoxCollider_Create_WhenCalledFromBurstJob_DoesNotThrow() => new CreateFromBurstJob().Run();
 
-        /// <summary>
-        /// Create a <see cref="BoxCollider"/> and check that all attributes are set as expected
-        /// </summary>
-        [Test]
-        public unsafe void TestBoxColliderCreate()
+        unsafe void ValidateBoxCollider(Entities.BlobAssetReference<Collider> collider, in BoxGeometry geometry)
         {
-            var geometry = new BoxGeometry
-            {
-                Center = new float3(-10.10f, 10.12f, 0.01f),
-                Orientation = quaternion.AxisAngle(math.normalize(new float3(1.4f, 0.2f, 1.1f)), 38.50f),
-                Size = new float3(0.01f, 120.40f, 5.4f),
-                BevelRadius = 0.0f
-            };
+            // Note: manually created colliders are unique by design
+            Assert.IsTrue(collider.Value.IsUnique);
 
-            var collider = BoxCollider.Create(geometry);
-            var boxCollider = UnsafeUtility.AsRef<BoxCollider>(collider.GetUnsafePtr());
+            Assert.AreEqual(ColliderType.Box, collider.Value.Type);
+            Assert.AreEqual(CollisionType.Convex, collider.Value.CollisionType);
 
+            ref var boxCollider = ref UnsafeUtility.AsRef<BoxCollider>(collider.GetUnsafePtr());
             Assert.AreEqual(geometry.Center, boxCollider.Center);
             Assert.AreEqual(geometry.Center, boxCollider.Geometry.Center);
             Assert.AreEqual(geometry.Orientation, boxCollider.Orientation);
@@ -52,6 +46,29 @@ namespace Unity.Physics.Tests.Collision.Colliders
             Assert.AreEqual(geometry.BevelRadius, boxCollider.Geometry.BevelRadius);
             Assert.AreEqual(CollisionType.Convex, boxCollider.CollisionType);
             Assert.AreEqual(ColliderType.Box, boxCollider.Type);
+        }
+
+        /// <summary>
+        /// Create a <see cref="BoxCollider"/> and check that all attributes are set as expected
+        /// </summary>
+        [Test]
+        public void TestBoxColliderCreate()
+        {
+            var geometry = new BoxGeometry
+            {
+                Center = new float3(-10.10f, 10.12f, 0.01f),
+                Orientation = quaternion.AxisAngle(math.normalize(new float3(1.4f, 0.2f, 1.1f)), 38.50f),
+                Size = new float3(0.01f, 120.40f, 5.4f),
+                BevelRadius = 0.0f
+            };
+
+            // create and validate
+            using var collider = BoxCollider.Create(geometry);
+            ValidateBoxCollider(collider, geometry);
+
+            // clone and validate again
+            using var colliderClone = collider.Value.Clone();
+            ValidateBoxCollider(colliderClone, geometry);
         }
 
 #if ENABLE_UNITY_COLLECTIONS_CHECKS

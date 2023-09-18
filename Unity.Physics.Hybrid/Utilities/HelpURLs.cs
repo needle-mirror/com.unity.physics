@@ -14,5 +14,6 @@ namespace Unity.Physics.Authoring
         public const string PhysicsStepAuthoring = k_BaseURL + "Unity.Physics.Authoring.PhysicsStepAuthoring" + k_Html;
         public const string CustomPhysicsProxyAuthoring = k_BaseURL + "Unity.Physics.Authoring.CustomPhysicsProxyAuthoring" + k_Html;
         public const string PhysicsWorldIndexAuthoring = k_BaseURL + "Unity.Physics.Authoring.PhysicsWorldIndexAuthoring" + k_Html;
+        public const string ForceUniqueColliderAuthoring = k_BaseURL + "Unity.Physics.Authoring.ForceUniqueColliderAuthoring" + k_Html;
     }
 }

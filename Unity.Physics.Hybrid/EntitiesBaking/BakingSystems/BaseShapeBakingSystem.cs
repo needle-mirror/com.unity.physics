@@ -10,13 +10,27 @@ using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Profiling;
+using UnityEngine;
 using UnityEngine.Profiling;
 using Hash128 = Unity.Entities.Hash128;
 
 namespace Unity.Physics.Authoring
 {
     /// <summary>
-    ///     Baking system for colliders.
+    /// Baking system for colliders: Stage 2
+    /// This system is responsible for adding new BlobAssetReference<Collider> to the BlobAssetStore. It chains several jobs/steps:
+    /// 1) Obtain a MeshDataArray that contains all meshes that have a PhysicsMeshAuthoringData component
+    /// 2a) MeshHashesJobHandleJob: Consumes output of Step 1 to calculate and update the hash data of the meshes
+    /// (only for convex and mesh colliders)
+    /// 2b) BasicHashesJobHandleJob: Performs the same type of work as MeshHashesJobHandleJob, but for all other collider types
+    /// 3) DeduplicateJobHandleJob: Checks if a blob hash has already been created in the BlobAssetStore and flags it if it is new
+    /// 4a) MeshBlobsJob: Creates a BlobAssetReference<Collider> for each mesh collider and convex collider that was
+    /// flagged by the DeduplicateJobHandleJob as requiring recalculation (to be added to the BlobAssetStore).
+    /// Job returns an array of ColliderBlobBakingData
+    /// 4b) BasicBlobsJobHandleJob: creates a BlobAssetReference<Collider> for each non-mesh collider that was flagged
+    /// by the DeduplicateJobHandleJob as requiring recalculation (to be added to the BlobAssetStore) and then updates
+    /// the array of ColliderBlobBakingData
+    /// 5) Update the BlobComputationContext with the new blobs. This consumes the array of ColliderBlobBakingData
     /// </summary>
     [RequireMatchingQueriesForUpdate]
     [UpdateAfter(typeof(BeginColliderBakingSystem))]
@@ -62,6 +76,10 @@ namespace Unity.Physics.Authoring
             });
         }
 
+        /// <summary>
+        /// This job calculates and updates the hash data for only meshes. The hash data needs updated in
+        /// ShapeComputationalData.Instance where Instance is a member of ColliderInstanceBaking
+        /// </summary>
         [WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)]
 #if !UNITY_ANDROID_ARM7V
         [BurstCompile]
@@ -86,6 +104,11 @@ namespace Unity.Physics.Authoring
             }
         }
 
+        /// <summary>
+        /// This job calculates and updates the hash data for every other collider type than meshes (everything not
+        /// covered by MeshHashesJobHandleJob). The hash data needs updated in
+        /// ShapeComputationalData.Instance where Instance is a member of ColliderInstanceBaking
+        /// </summary>
         [WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)]
 #if !UNITY_ANDROID_ARM7V
         [BurstCompile]
@@ -111,6 +134,10 @@ namespace Unity.Physics.Authoring
             }
         }
 
+        /// <summary>
+        /// This job checks if a blob hash has already been created in the BlobAssetStore. If it is new, then the blob
+        /// is flagged to be recalculated.
+        /// </summary>
         [WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)]
         partial struct DeduplicateJobHandleJob : IJobEntity
         {
@@ -136,6 +163,13 @@ namespace Unity.Physics.Authoring
             }
         }
 
+        /// <summary>
+        /// This job consumes the output of the DeduplicateJobHandleJob. For each blob that was flagged to be
+        /// recalculated, use the ShapeComputationalData to set the BlobAssetReferences<Collider> (note that this step
+        /// calls CreateInternal for each of the collider types and is what adds the blob to the BlobAssetStore.
+        /// This job returns a NativeArray of ColliderBlobBakingData which consists of the Hash and BlobAssetReference.
+        /// Note: job is not run for mesh colliders or convex colliders
+        /// </summary>
         [WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)]
         [WithNone(typeof(PhysicsMeshAuthoringData))]
         partial struct BasicBlobsJobHandleJob : IJobEntity
@@ -164,6 +198,7 @@ namespace Unity.Physics.Authoring
             if (shapeCount == 0)
                 return;
 
+            // -----------------------------------------------------------------
             // 1) Obtain all meshes in colliders
             Profiler.BeginSample("Get Meshes");
 
@@ -182,25 +217,25 @@ namespace Unity.Physics.Authoring
             var meshDataArray = UnityEditor.MeshUtility.AcquireReadOnlyMeshData(meshArray);
             Profiler.EndSample();
 
+            // -----------------------------------------------------------------
             // 2) Calculate the hashes for all the colliders
-            // -----------------------------------------
             Profiler.BeginSample("Generate Hashes for Inputs");
 
-            // Convex Hull and Meshes
+            // 2a) Convex Hull and Mesh Colliders
             JobHandle meshHashesJobHandle = new MeshHashesJobHandleJob
             {
                 meshDataArray = meshDataArray
             }.ScheduleParallel(default(JobHandle));
 
-            // Basic Colliders
-            JobHandle basicHashesJobHandle = new BasicHashesJobHandleJob().ScheduleParallel(meshHashesJobHandle);
+            // 2b) Basic (all other) Colliders
+            JobHandle basicHashesJobHandle = new BasicHashesJobHandleJob().ScheduleParallel(meshHashesJobHandle); //AMS: QUESTION: is the dependency really on meshHashesJobHandle??
 
-            Profiler.EndSample();
+            Profiler.EndSample(); //Generate Hashes for Inputs
 
             var hashesJobHandle = JobHandle.CombineDependencies(meshHashesJobHandle, basicHashesJobHandle);
 
-            // 3) Deduplicate blobs to calculate, so we do it calculate each only once
-            // -----------------------------------------
+            // -----------------------------------------------------------------
+            // 3) Deduplicate blobs to calculate, so we calculate it only once
             Profiler.BeginSample("Determine New Colliders to Create");
 
             var localBlobComputationContext = BlobComputationContext;
@@ -214,16 +249,16 @@ namespace Unity.Physics.Authoring
                 count = count
             }.Schedule(hashesJobHandle);
 
-            Profiler.EndSample();
+            Profiler.EndSample(); //Determine New Colliders to Create
 
+            // -----------------------------------------------------------------
             // 4) Calculate blobs
-            // -----------------------------------------
             Profiler.BeginSample("Create New Colliders");
-
             Profiler.BeginSample("Hull and Meshes");
 
             var colliderDataArray = m_MeshBlobQuery.ToComponentDataListAsync<PhysicsColliderAuthoringData>(Allocator.TempJob, deduplicateJobHandle, out JobHandle copyColliderData);
             var meshBakingDataArray = m_MeshBlobQuery.ToComponentDataListAsync<PhysicsMeshAuthoringData>(Allocator.TempJob, deduplicateJobHandle, out JobHandle copyMeshData);
+
             var job = new MeshBlobsJob
             {
                 ColliderDataArray = colliderDataArray.AsDeferredJobArray(),
@@ -237,7 +272,7 @@ namespace Unity.Physics.Authoring
             };
             var meshBlobsJobHandle = job.Schedule(meshDataArray.Length, 1, JobHandle.CombineDependencies(copyColliderData, copyMeshData));
 
-            Profiler.EndSample();
+            Profiler.EndSample(); //Hull and Meshes
 
             Profiler.BeginSample("Basic Colliders");
 
@@ -246,13 +281,13 @@ namespace Unity.Physics.Authoring
                 generatedDataArray = generatedDataArray
             }.ScheduleParallel(meshBlobsJobHandle);
 
-            Profiler.EndSample();
-
-            Profiler.EndSample();
+            Profiler.EndSample(); //Basic Colliders
+            Profiler.EndSample(); //Create New Colliders
 
             var blobJobHandle = JobHandle.CombineDependencies(meshBlobsJobHandle, basicBlobsJobHandle);
             blobJobHandle.Complete();
 
+            // -----------------------------------------------------------------
             // 5) Update BlobComputationContext with the new blobs
             Profiler.BeginSample("Store Blobs in Context");
 
@@ -273,7 +308,7 @@ namespace Unity.Physics.Authoring
         static Hash128 CalculateMeshHashes(ref ShapeComputationDataBaking res, PhysicsMeshAuthoringData physicsMeshData, UnityEngine.Mesh.MeshDataArray meshDataArray)
         {
             // Access the mesh vertices
-            AppendMeshPropertiesToNativeBuffers(meshDataArray[physicsMeshData.MeshArrayIndex], !physicsMeshData.Convex, out var pointCloud, out var triangles);
+            MeshUtility.AppendMeshPropertiesToNativeBuffers(meshDataArray[physicsMeshData.MeshArrayIndex], !physicsMeshData.Convex, out var pointCloud, out var triangles);
 
             // Hash Calculation
             return HashableShapeInputs.GetHash128(
@@ -290,6 +325,11 @@ namespace Unity.Physics.Authoring
         }
     }
 
+    /// <summary>
+    /// This job creates a BlobAssetReferences<Collider> for each mesh collider and convex collider that were flagged by
+    /// the DeduplicateJobHandleJob as requiring recalculation (to be added to the BlobAssetStore).
+    /// Job returns an array of BaseShapeBakingSystem.ColliderBlobBakingData
+    /// </summary>
     [BurstCompile]
     struct MeshBlobsJob : IJobParallelFor
     {
@@ -312,7 +352,7 @@ namespace Unity.Physics.Authoring
             if (colliderData.RecalculateBlob)
             {
                 BuffersAcquire.Begin();
-                BaseShapeBakingSystem.AppendMeshPropertiesToNativeBuffers(meshDataArray[meshBakingData.MeshArrayIndex], !meshBakingData.Convex, out var pointCloud, out var triangles);
+                MeshUtility.AppendMeshPropertiesToNativeBuffers(meshDataArray[meshBakingData.MeshArrayIndex], !meshBakingData.Convex, out var pointCloud, out var triangles);
                 var compoundMatrix = math.mul(meshBakingData.BakeFromShape, meshBakingData.ChildToShape);
                 for (int i = 0; i < pointCloud.Length; ++i)
                     pointCloud[i] = math.mul(compoundMatrix, new float4(pointCloud[i], 1f)).xyz;

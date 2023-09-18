@@ -144,7 +144,7 @@ namespace Unity.Physics
 
         #region Internal Construction
 
-        internal static BlobAssetReference<Collider> CreateQuadInternal(float3 vertex0, float3 vertex1, float3 vertex2, float3 vertex3, CollisionFilter filter, Material material, uint internalID = 0)
+        internal static BlobAssetReference<Collider> CreateQuadInternal(float3 vertex0, float3 vertex1, float3 vertex2, float3 vertex3, CollisionFilter filter, Material material, uint forceUniqueBlobID = ~ColliderConstants.k_SharedBlobID)
         {
             unsafe
             {
@@ -155,7 +155,7 @@ namespace Unity.Physics
                 SafetyChecks.CheckCoplanarAndThrow(vertex0, vertex1, vertex2, vertex3, nameof(vertex3));
 
                 PolygonCollider collider = default;
-                collider.InitAsQuad(vertex0, vertex1, vertex2, vertex3, filter, material, internalID);
+                collider.InitAsQuad(vertex0, vertex1, vertex2, vertex3, filter, material, forceUniqueBlobID);
                 return BlobAssetReference<Collider>.Create(&collider, UnsafeUtility.SizeOf<PolygonCollider>());
             }
         }
@@ -172,9 +172,9 @@ namespace Unity.Physics
             SetAsTriangle(vertex0, vertex1, vertex2);
         }
 
-        internal void InitAsQuad(float3 vertex0, float3 vertex1, float3 vertex2, float3 vertex3, CollisionFilter filter, Material material, uint internalID = 0)
+        internal void InitAsQuad(float3 vertex0, float3 vertex1, float3 vertex2, float3 vertex3, CollisionFilter filter, Material material, uint forceUniqueBlobID = ~ColliderConstants.k_SharedBlobID)
         {
-            Init(filter, material, internalID);
+            Init(filter, material, forceUniqueBlobID);
             SetAsQuad(vertex0, vertex1, vertex2, vertex3);
         }
 
@@ -233,7 +233,7 @@ namespace Unity.Physics
             SetPlanes();
         }
 
-        unsafe void Init(CollisionFilter filter, Material material, uint forceUniqueBlobID = 0)
+        unsafe void Init(CollisionFilter filter, Material material, uint forceUniqueBlobID = ~ColliderConstants.k_SharedBlobID)
         {
             m_Header.CollisionType = CollisionType.Convex;
             m_Header.Version = 0;

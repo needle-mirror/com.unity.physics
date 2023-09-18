@@ -3,7 +3,6 @@ using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
-using Unity.Physics;
 using Unity.Physics.Systems;
 
 namespace Unity.Physics.Authoring
@@ -57,7 +56,7 @@ namespace Unity.Physics.Authoring
 
     // Creates DisplayBroadphaseJobs
     [RequireMatchingQueriesForUpdate]
-    [UpdateInGroup(typeof(AfterPhysicsSystemGroup))]
+    [UpdateInGroup(typeof(PhysicsDebugDisplayGroup))]
     [BurstCompile]
     internal partial struct DisplayBroadphaseAabbsSystem : ISystem
     {

@@ -129,13 +129,13 @@ namespace Unity.Physics
         #region Internal Construction
 
         internal static BlobAssetReference<Collider> CreateInternal(
-            NativeArray<float3> points, ConvexHullGenerationParameters generationParameters, CollisionFilter filter, Material material, uint internalID = 0
+            NativeArray<float3> points, ConvexHullGenerationParameters generationParameters, CollisionFilter filter, Material material, uint forceUniqueBlobID = ColliderConstants.k_SharedBlobID
         ) =>
-            CreateInternal(points, generationParameters, filter, material, k_MaxVertices, k_MaxFaces, k_MaxFaceVertices, internalID);
+            CreateInternal(points, generationParameters, filter, material, k_MaxVertices, k_MaxFaces, k_MaxFaceVertices, forceUniqueBlobID);
 
         internal static BlobAssetReference<Collider> CreateInternal(
             NativeArray<float3> points, ConvexHullGenerationParameters generationParameters, CollisionFilter filter, Material material,
-            int maxVertices, int maxFaces, int maxFaceVertices, uint internalID = 0
+            int maxVertices, int maxFaces, int maxFaceVertices, uint forceUniqueBlobID = ~ColliderConstants.k_SharedBlobID
         )
         {
             SafetyChecks.CheckValidAndThrow(points, nameof(points), generationParameters, nameof(generationParameters));
@@ -150,10 +150,10 @@ namespace Unity.Physics
                 out var builderConvexRadius
             );
 
-            return CreateInternal(builder, builderConvexRadius, filter, material, internalID);
+            return CreateInternal(builder, builderConvexRadius, filter, material, forceUniqueBlobID);
         }
 
-        internal static unsafe BlobAssetReference<Collider> CreateInternal(ConvexHullBuilder builder, float convexRadius, CollisionFilter filter, Material material, uint forceUniqueBlobID = 0)
+        internal static unsafe BlobAssetReference<Collider> CreateInternal(ConvexHullBuilder builder, float convexRadius, CollisionFilter filter, Material material, uint forceUniqueBlobID = ~ColliderConstants.k_SharedBlobID)
         {
             // Convert hull to compact format
             var tempHull = new TempHull(ref builder);

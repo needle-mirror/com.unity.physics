@@ -11,7 +11,7 @@ using Hash128 = Unity.Entities.Hash128;
 namespace Unity.Physics.Authoring
 {
     /// <summary>
-    ///     Compound collider baking system.
+    /// Baking system for colliders: Stage 3 Compound collider baking system.
     /// </summary>
     [UpdateBefore(typeof(EndColliderBakingSystem))]
     [WorldSystemFilter(WorldSystemFilterFlags.BakingSystem)]
@@ -70,6 +70,11 @@ namespace Unity.Physics.Authoring
             public BlobAssetReference<Collider> Result;
         }
 
+        /// <summary>
+        /// A job that processes all PhysicsColliderBakedData components and adds a ChildInstance to a writer. This writer
+        /// keeps track of all the children on a root entity. Each ChildInstance contains the hash of the parent
+        /// blob and also adds a CompoundCollider.ColliderBlobInstance for the child.
+        /// </summary>
         [WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)]
         partial struct ChildrenGatheringJobHandleJob : IJobEntity
         {
@@ -97,6 +102,12 @@ namespace Unity.Physics.Authoring
             }
         }
 
+        /// <summary>
+        /// For each entity that has a PhysicsCompoundData component and a PhysicsCollider, this job gathers all
+        /// ChildInstance data (from ChildrenGatheringJobHandleJob) and processes the child colliders to either: add
+        /// hashes, create compound colliders and determine if the BlobAsset needs to be calculated, or it removes the
+        /// flags that indicate this work needs to be done.
+        /// </summary>
         [WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)]
         partial struct BlobCalculationJobHandleJob : IJobEntity
         {
@@ -175,7 +186,11 @@ namespace Unity.Physics.Authoring
                                 {
                                     colliderBlobs[index] = colliders[index].Child;
                                 }
-                                rootCollider.Value = CompoundCollider.Create(colliderBlobs);
+
+                                // Create compound collider
+                                // Note: by always using the same blob id here we ensure the collider blob can be shared among PhysicsCollider components
+                                // in all scenarios (e.g., the differ comparing the memory and deciding that the blob is the same)
+                                rootCollider.Value = CompoundCollider.CreateInternal(colliderBlobs, ColliderConstants.k_SharedBlobID);
                                 deferredCompoundResults[rootIndex] = new DeferredCompoundResult()
                                 {
                                     Hash = compoundHash,
@@ -198,6 +213,10 @@ namespace Unity.Physics.Authoring
             }
         }
 
+        /// <summary>
+        /// A job that goes through all the PhysicsCompoundData components and creates a buffer of
+        /// PhysicsColliderKeyEntityPair for all of the entities where AssociatedBlobToBody is true
+        /// </summary>
         [BurstCompile]
         struct AddColliderKeyEntityPairBufferJob : IJobChunk
         {
@@ -256,6 +275,10 @@ namespace Unity.Physics.Authoring
             }
         }
 
+        /// <summary>
+        /// For each entity with a PhysicsCompoundData component, if the blob is associated to a collider and if the
+        /// compound collider has been calculated, then register the blob asset with the BlobAssetStore.
+        /// </summary>
         [WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)]
         partial struct BlobContextUpdateJobHandleJob : IJobEntity
         {
@@ -279,7 +302,7 @@ namespace Unity.Physics.Authoring
 
             int maxRootCount = m_RootQuery.CalculateEntityCount();
 
-            // Collect the root entities that needs regeneration because they rebaked
+            // Collect the root entities that need regeneration because they were rebaked
             using var rootEntities = m_RebakedRootQuery.ToEntityArray(Allocator.TempJob);
             NativeParallelHashMap<Entity, int> rootEntitiesLookUp = new NativeParallelHashMap<Entity, int>(maxRootCount, Allocator.TempJob);
             int count = 0;
@@ -289,7 +312,8 @@ namespace Unity.Physics.Authoring
                 ++count;
             }
 
-            // Collect all the root entities that didn't rebake but any of their colliders did
+            // Collect all the entities that have PhysicsColliderBakedData components, and check if the root entity exists
+            // in the m_RootQuery. Add this entity to the rootEntitiesLookUp hashmap if it isn't there already
             if (m_ColliderSourceQuery.CalculateChunkCount() > 0)
             {
                 using var rebakedColliders = m_ColliderSourceQuery.ToComponentDataArray<PhysicsColliderBakedData>(Allocator.TempJob);
@@ -379,10 +403,8 @@ namespace Unity.Physics.Authoring
             ecb.Playback(EntityManager);
             ecb.Dispose();
 
-            deferredCompoundResults.Dispose(combinedJobHandle);
-            deduplicationHashMap.Dispose(combinedJobHandle);
-            childrenPerRoot.Dispose(combinedJobHandle);
-            rootEntitiesLookUp.Dispose(combinedJobHandle);
+            var handle = JobHandle.CombineDependencies(deduplicationHashMap.Dispose(combinedJobHandle), deferredCompoundResults.Dispose(combinedJobHandle), childrenPerRoot.Dispose(combinedJobHandle));
+            Dependency = JobHandle.CombineDependencies(handle, rootEntitiesLookUp.Dispose(combinedJobHandle));
         }
     }
 }

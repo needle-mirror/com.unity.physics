@@ -29,16 +29,22 @@ namespace Unity.Physics
     public struct Constraint : IEquatable<Constraint>
     {
         /// <summary>
-        /// (Immutable) Current values give tau = 0.6 damping = 0.99 at 60hz The values are huge and we
+        /// The default spring frequency.
+        ///
+        /// (Immutable) Current default values give tau = 0.6 damping = 0.99 at 60hz The values are huge and we
         /// can't get damping = 1 -- a stiff constraint is the limit of a damped spring as spring params
-        /// go to infinity. Rather then baking them these values could be calculated using
-        /// JacobianUtilities.CalculateSpringFrequencyAndDamping(0.6f, 0.99f, math.rcp(60.0f), 4, out DefaultSpringFrequency, out DefaultSpringDamping);
+        /// go to infinity. Rather than baking them these values could be calculated using
+        /// JacobianUtilities.CalculateSpringFrequencyAndDamping(0.6f, 0.99f, math.rcp(60.0f), 4, out DefaultSpringFrequency, out DefaultDampingRatio);
         /// </summary>
         public const float DefaultSpringFrequency = 74341.31f;
-        /// <summary>   The default spring damping. </summary>
-        public const float DefaultSpringDamping = 2530.126f;
+        /// <summary>   The default damping ratio. </summary>
+        public const float DefaultDampingRatio = 2530.126f;
         /// <summary>   The default maximum impulse. </summary>
         public const float DefaultMaxImpulse = float.PositiveInfinity;
+
+        /// <summary>   The default damping ratio. </summary>
+        [Obsolete("Use DefaultDampingRatio (RemovedAfter 2023-05-09)", false)]
+        public float DefaultSpringDamping => DefaultDampingRatio;
 
         /// <summary>   The constrained axes. </summary>
         public bool3 ConstrainedAxes;
@@ -51,8 +57,16 @@ namespace Unity.Physics
         public float Max;
         /// <summary>   The spring frequency. </summary>
         public float SpringFrequency;
-        /// <summary>   The spring damping. </summary>
-        public float SpringDamping;
+        /// <summary>   The damping ratio. </summary>
+        public float DampingRatio;
+
+        /// <summary>   The spring damping ratio. </summary>
+        [Obsolete("Use DampingRatio instead (RemovedAfter 2023-05-09)", false)]
+        public float SpringDamping
+        {
+            get => DampingRatio;
+            set => DampingRatio = value;
+        }
 
         /// <summary>   The impulse threshold after which <see cref="ImpulseEvent"/> will be raised from this constraint. In case of motorized constraints, represents the maximum impulse that can be applied to it during one step. </summary>
         public float3 MaxImpulse;
@@ -98,22 +112,22 @@ namespace Unity.Physics
 
         /// <summary>   Constrains linear motion about all three axes to zero. </summary>
         ///
-        /// <param name="springFrequency">  (Optional) </param>
-        /// <param name="springDamping">    (Optional) </param>
+        /// <param name="springFrequency">  The spring frequency used to relax this constraint. </param>
+        /// <param name="dampingRatio">     The damping ratio used to relax this constraint. </param>
         ///
         /// <returns>   A Constraint. </returns>
-        public static Constraint BallAndSocket(float springFrequency = DefaultSpringFrequency, float springDamping = DefaultSpringDamping)
-            => BallAndSocket(new float3(DefaultMaxImpulse), springFrequency, springDamping);
+        public static Constraint BallAndSocket(float springFrequency = DefaultSpringFrequency, float dampingRatio = DefaultDampingRatio)
+            => BallAndSocket(DefaultMaxImpulse, springFrequency, dampingRatio);
 
         /// <summary>   Constrains linear motion about all three axes to zero. </summary>
         ///
-        /// <param name="impulseEventThreshold">      The max impulse needed to receive an impulse event for this
+        /// <param name="impulseEventThreshold">    The minimum impulse needed to receive an impulse event for this
         /// constraint. </param>
-        /// <param name="springFrequency">  (Optional) </param>
-        /// <param name="springDamping">    (Optional) </param>
+        /// <param name="springFrequency">  The spring frequency used to relax this constraint. </param>
+        /// <param name="dampingRatio">     The damping ratio used to relax this constraint. </param>
         ///
         /// <returns>   A Constraint. </returns>
-        public static Constraint BallAndSocket(float3 impulseEventThreshold, float springFrequency = DefaultSpringFrequency, float springDamping = DefaultSpringDamping)
+        public static Constraint BallAndSocket(float3 impulseEventThreshold, float springFrequency = DefaultSpringFrequency, float dampingRatio = DefaultDampingRatio)
         {
             return new Constraint
             {
@@ -122,7 +136,7 @@ namespace Unity.Physics
                 Min = 0.0f,
                 Max = 0.0f,
                 SpringFrequency = springFrequency,
-                SpringDamping = springDamping,
+                DampingRatio = dampingRatio,
                 MaxImpulse = impulseEventThreshold,
                 Target = float3.zero
             };
@@ -130,26 +144,26 @@ namespace Unity.Physics
 
         /// <summary>   Constrains linear motion about all three axes within the specified range. </summary>
         ///
-        /// <param name="distanceRange">   The minimum required distance and maximum possible distance
+        /// <param name="distanceRange">    The minimum required distance and maximum possible distance
         /// between the constrained bodies. </param>
-        /// <param name="springFrequency">  (Optional) </param>
-        /// <param name="springDamping">    (Optional) </param>
+        /// <param name="springFrequency">  The spring frequency used to relax this constraint. </param>
+        /// <param name="dampingRatio">     The damping ratio used to relax this constraint. </param>
         ///
         /// <returns>   A Constraint. </returns>
-        public static Constraint LimitedDistance(FloatRange distanceRange, float springFrequency = DefaultSpringFrequency, float springDamping = DefaultSpringDamping)
-            => LimitedDistance(distanceRange, new float3(DefaultMaxImpulse), springFrequency, springDamping);
+        public static Constraint LimitedDistance(FloatRange distanceRange, float springFrequency = DefaultSpringFrequency, float dampingRatio = DefaultDampingRatio)
+            => LimitedDistance(distanceRange, DefaultMaxImpulse, springFrequency, dampingRatio);
 
         /// <summary>   Constrains linear motion about all three axes within the specified range. </summary>
         ///
-        /// <param name="distanceRange">   The minimum required distance and maximum possible distance
+        /// <param name="distanceRange">    The minimum required distance and maximum possible distance
         /// between the constrained bodies. </param>
-        /// <param name="impulseEventThreshold">      The max impulse needed to receive an impulse event for this
+        /// <param name="impulseEventThreshold"> The minimum impulse needed to receive an impulse event for this
         /// constraint. </param>
-        /// <param name="springFrequency">  (Optional) </param>
-        /// <param name="springDamping">    (Optional) </param>
+        /// <param name="springFrequency">  The spring frequency used to relax this constraint. </param>
+        /// <param name="dampingRatio">     The damping ratio used to relax this constraint. </param>
         ///
         /// <returns>   A Constraint. </returns>
-        public static Constraint LimitedDistance(FloatRange distanceRange, float3 impulseEventThreshold, float springFrequency = DefaultSpringFrequency, float springDamping = DefaultSpringDamping)
+        public static Constraint LimitedDistance(FloatRange distanceRange, float3 impulseEventThreshold, float springFrequency = DefaultSpringFrequency, float dampingRatio = DefaultDampingRatio)
         {
             distanceRange = distanceRange.Sorted();
             return new Constraint
@@ -159,7 +173,7 @@ namespace Unity.Physics
                 Min = distanceRange.Min,
                 Max = distanceRange.Max,
                 SpringFrequency = springFrequency,
-                SpringDamping = springDamping,
+                DampingRatio = dampingRatio,
                 MaxImpulse = impulseEventThreshold,
                 Target = float3.zero
             };
@@ -171,16 +185,16 @@ namespace Unity.Physics
         /// </summary>
         ///
         /// <param name="freeAxis">         The axis along which the bodies may freely translate. </param>
-        /// <param name="distanceRange">   The minimum required distance and maximum possible distance
+        /// <param name="distanceRange">    The minimum required distance and maximum possible distance
         /// between the constrained bodies about the two constrained axes. A minimum value of zero
         /// produces a cylindrical range of motion, while a minimum value greater than zero results in a
         /// tube-shaped range of motion. </param>
-        /// <param name="springFrequency">  (Optional) </param>
-        /// <param name="springDamping">    (Optional) </param>
+        /// <param name="springFrequency">  The spring frequency used to relax this constraint. </param>
+        /// <param name="dampingRatio">     The damping ratio used to relax this constraint. </param>
         ///
         /// <returns>   A Constraint. </returns>
-        public static Constraint Cylindrical(int freeAxis, FloatRange distanceRange, float springFrequency = DefaultSpringFrequency, float springDamping = DefaultSpringDamping)
-            => Cylindrical(freeAxis, distanceRange, new float3(DefaultMaxImpulse), springFrequency, springDamping);
+        public static Constraint Cylindrical(int freeAxis, FloatRange distanceRange, float springFrequency = DefaultSpringFrequency, float dampingRatio = DefaultDampingRatio)
+            => Cylindrical(freeAxis, distanceRange, DefaultMaxImpulse, springFrequency, dampingRatio);
 
         /// <summary>
         /// Constrains linear motion about two axes within the specified range. Movement about the third
@@ -188,17 +202,17 @@ namespace Unity.Physics
         /// </summary>
         ///
         /// <param name="freeAxis">         The axis along which the bodies may freely translate. </param>
-        /// <param name="distanceRange">   The minimum required distance and maximum possible distance
+        /// <param name="distanceRange">    The minimum required distance and maximum possible distance
         /// between the constrained bodies about the two constrained axes. A minimum value of zero
         /// produces a cylindrical range of motion, while a minimum value greater than zero results in a
         /// tube-shaped range of motion. </param>
-        /// <param name="impulseEventThreshold">      The max impulse needed to receive an impulse event for this
+        /// <param name="impulseEventThreshold">      The minimum impulse needed to receive an impulse event for this
         /// constraint. </param>
-        /// <param name="springFrequency">  (Optional) </param>
-        /// <param name="springDamping">    (Optional) </param>
+        /// <param name="springFrequency">  The spring frequency used to relax this constraint. </param>
+        /// <param name="dampingRatio">     The damping ratio used to relax this constraint. </param>
         ///
         /// <returns>   A Constraint. </returns>
-        public static Constraint Cylindrical(int freeAxis, FloatRange distanceRange, float3 impulseEventThreshold, float springFrequency = DefaultSpringFrequency, float springDamping = DefaultSpringDamping)
+        public static Constraint Cylindrical(int freeAxis, FloatRange distanceRange, float3 impulseEventThreshold, float springFrequency = DefaultSpringFrequency, float dampingRatio = DefaultDampingRatio)
         {
             Assert.IsTrue(freeAxis >= 0 && freeAxis <= 2);
             distanceRange = distanceRange.Sorted();
@@ -209,7 +223,7 @@ namespace Unity.Physics
                 Min = distanceRange.Min,
                 Max = distanceRange.Max,
                 SpringFrequency = springFrequency,
-                SpringDamping = springDamping,
+                DampingRatio = dampingRatio,
                 MaxImpulse = impulseEventThreshold,
                 Target = float3.zero
             };
@@ -220,35 +234,35 @@ namespace Unity.Physics
         /// two is unrestricted.
         /// </summary>
         ///
-        /// <param name="limitedAxis">     The axis along which the bodies' translation is restricted. </param>
-        /// <param name="distanceRange">   The minimum required distance and maximum possible distance
+        /// <param name="limitedAxis">      The axis along which the bodies' translation is restricted. </param>
+        /// <param name="distanceRange">    The minimum required distance and maximum possible distance
         /// between the constrained bodies about the constrained axis. Identical minimum and maximum
         /// values result in a plane, while different values constrain the bodies between two parallel
         /// planes. </param>
-        /// <param name="springFrequency">  (Optional) </param>
-        /// <param name="springDamping">    (Optional) </param>
+        /// <param name="springFrequency">  The spring frequency used to relax this constraint. </param>
+        /// <param name="dampingRatio">     The damping ratio used to relax this constraint. </param>
         ///
         /// <returns>   A Constraint. </returns>
-        public static Constraint Planar(int limitedAxis, FloatRange distanceRange, float springFrequency = DefaultSpringFrequency, float springDamping = DefaultSpringDamping)
-            => Planar(limitedAxis, distanceRange, new float3(DefaultMaxImpulse), springFrequency, springDamping);
+        public static Constraint Planar(int limitedAxis, FloatRange distanceRange, float springFrequency = DefaultSpringFrequency, float dampingRatio = DefaultDampingRatio)
+            => Planar(limitedAxis, distanceRange, DefaultMaxImpulse, springFrequency, dampingRatio);
 
         /// <summary>
         /// Constrains linear motion about one axis within the specified range. Movement about the other
         /// two is unrestricted.
         /// </summary>
         ///
-        /// <param name="limitedAxis">     The axis along which the bodies' translation is restricted. </param>
-        /// <param name="distanceRange">   The minimum required distance and maximum possible distance
+        /// <param name="limitedAxis">      The axis along which the bodies' translation is restricted. </param>
+        /// <param name="distanceRange">    The minimum required distance and maximum possible distance
         /// between the constrained bodies about the constrained axis. Identical minimum and maximum
         /// values result in a plane, while different values constrain the bodies between two parallel
         /// planes. </param>
-        /// <param name="impulseEventThreshold">      The max impulse needed to receive an impulse event for this
+        /// <param name="impulseEventThreshold">    The minimum impulse needed to receive an impulse event for this
         /// constraint. </param>
-        /// <param name="springFrequency">  (Optional) </param>
-        /// <param name="springDamping">    (Optional) </param>
+        /// <param name="springFrequency">  The spring frequency used to relax this constraint. </param>
+        /// <param name="dampingRatio">     The damping ratio used to relax this constraint. </param>
         ///
         /// <returns>   A Constraint. </returns>
-        public static Constraint Planar(int limitedAxis, FloatRange distanceRange, float3 impulseEventThreshold, float springFrequency = DefaultSpringFrequency, float springDamping = DefaultSpringDamping)
+        public static Constraint Planar(int limitedAxis, FloatRange distanceRange, float3 impulseEventThreshold, float springFrequency = DefaultSpringFrequency, float dampingRatio = DefaultDampingRatio)
         {
             Assert.IsTrue(limitedAxis >= 0 && limitedAxis <= 2);
             distanceRange = distanceRange.Sorted();
@@ -259,7 +273,7 @@ namespace Unity.Physics
                 Min = distanceRange.Min,
                 Max = distanceRange.Max,
                 SpringFrequency = springFrequency,
-                SpringDamping = springDamping,
+                DampingRatio = dampingRatio,
                 MaxImpulse = impulseEventThreshold,
                 Target = float3.zero
             };
@@ -272,10 +286,10 @@ namespace Unity.Physics
         /// <param name="maxImpulseOfMotor">The magnitude of the max impulse that a motor constraint can exert in a single
         /// step. Must be positive.
         /// This is a motor specific usage that does not represent the impulse threshold for event reporting.</param>
-        /// <param name="springFrequency">  (Optional) </param>
-        /// <param name="springDamping">    (Optional) </param>
+        /// <param name="springFrequency">  The spring frequency used to relax this constraint. </param>
+        /// <param name="dampingRatio">     The damping ratio used to relax this constraint. </param>
         /// <returns>A constraint</returns>
-        public static Constraint MotorPlanar(float target, float maxImpulseOfMotor = DefaultMaxImpulse, float springFrequency = DefaultSpringFrequency, float springDamping = DefaultSpringDamping)
+        public static Constraint MotorPlanar(float target, float maxImpulseOfMotor = DefaultMaxImpulse, float springFrequency = DefaultSpringFrequency, float dampingRatio = DefaultDampingRatio)
         {
             SafetyChecks.CheckInRangeAndThrow(maxImpulseOfMotor, new float2(0f, float.PositiveInfinity), "maxImpulseOfMotor");
             return new Constraint
@@ -285,7 +299,7 @@ namespace Unity.Physics
                 Min = 0.0f,
                 Max = 0.0f,
                 SpringFrequency = springFrequency,
-                SpringDamping = springDamping,
+                DampingRatio = dampingRatio,
                 MaxImpulse = new float3(maxImpulseOfMotor, 0f, 0f), //reusing this field for the motor max impulse since breaking is done on other constraints
                 Target = new float3(target, 0f, 0f)
             };
@@ -298,10 +312,10 @@ namespace Unity.Physics
         /// <param name="maxImpulseOfMotor">The magnitude of the max impulse that a motor constraint can exert in a single
         /// step. Must be positive.
         /// This is a motor specific usage that does not represent the impulse threshold for event reporting.</param>
-        /// <param name="springFrequency">  (Optional) </param>
-        /// <param name="springDamping">    (Optional) </param>
+        /// <param name="springFrequency">  The spring frequency used to relax this constraint. </param>
+        /// <param name="dampingRatio">     The damping ratio used to relax this constraint. </param>
         /// <returns>A constraint.</returns>
-        public static Constraint LinearVelocityMotor(float target, float maxImpulseOfMotor = DefaultMaxImpulse, float springFrequency = DefaultSpringFrequency, float springDamping = DefaultSpringDamping)
+        public static Constraint LinearVelocityMotor(float target, float maxImpulseOfMotor = DefaultMaxImpulse, float springFrequency = DefaultSpringFrequency, float dampingRatio = DefaultDampingRatio)
         {
             SafetyChecks.CheckInRangeAndThrow(maxImpulseOfMotor, new float2(0f, float.PositiveInfinity), "maxImpulseOfMotor");
             return new Constraint
@@ -311,7 +325,7 @@ namespace Unity.Physics
                 Min = 0.0f,
                 Max = 0.0f,
                 SpringFrequency = springFrequency,
-                SpringDamping = springDamping,
+                DampingRatio = dampingRatio,
                 MaxImpulse = new float3(maxImpulseOfMotor, 0f, 0f), //reusing this field for the motor max impulse since breaking is done on other constraints,
                 Target = new float3(target, 0f, 0f)
             };
@@ -323,22 +337,22 @@ namespace Unity.Physics
 
         /// <summary>   Constrains angular motion about all three axes to zero. </summary>
         ///
-        /// <param name="springFrequency">  (Optional) </param>
-        /// <param name="springDamping">    (Optional) </param>
+        /// <param name="springFrequency">  The spring frequency used to relax this constraint. </param>
+        /// <param name="dampingRatio">     The damping ratio used to relax this constraint. </param>
         ///
         /// <returns>   A Constraint. </returns>
-        public static Constraint FixedAngle(float springFrequency = DefaultSpringFrequency, float springDamping = DefaultSpringDamping)
-            => FixedAngle(new float3(DefaultMaxImpulse), springFrequency, springDamping);
+        public static Constraint FixedAngle(float springFrequency = DefaultSpringFrequency, float dampingRatio = DefaultDampingRatio)
+            => FixedAngle(DefaultMaxImpulse, springFrequency, dampingRatio);
 
         /// <summary>   Constrains angular motion about all three axes to zero. </summary>
         ///
-        /// <param name="impulseEventThreshold">      The max impulse needed to receive an impulse event for this
+        /// <param name="impulseEventThreshold">    The minimum impulse needed to receive an impulse event for this
         /// constraint. </param>
-        /// <param name="springFrequency">  (Optional) </param>
-        /// <param name="springDamping">    (Optional) </param>
+        /// <param name="springFrequency">  The spring frequency used to relax this constraint. </param>
+        /// <param name="dampingRatio">     The damping ratio used to relax this constraint. </param>
         ///
         /// <returns>   A Constraint. </returns>
-        public static Constraint FixedAngle(float3 impulseEventThreshold, float springFrequency = DefaultSpringFrequency, float springDamping = DefaultSpringDamping)
+        public static Constraint FixedAngle(float3 impulseEventThreshold, float springFrequency = DefaultSpringFrequency, float dampingRatio = DefaultDampingRatio)
         {
             return new Constraint
             {
@@ -347,7 +361,7 @@ namespace Unity.Physics
                 Min = 0.0f,
                 Max = 0.0f,
                 SpringFrequency = springFrequency,
-                SpringDamping = springDamping,
+                DampingRatio = dampingRatio,
                 MaxImpulse = impulseEventThreshold,
                 Target = float3.zero
             };
@@ -358,25 +372,25 @@ namespace Unity.Physics
         /// </summary>
         ///
         /// <param name="freeAxis">         The axis around which the bodies may freely rotate. </param>
-        /// <param name="springFrequency">  (Optional) </param>
-        /// <param name="springDamping">    (Optional) </param>
+        /// <param name="springFrequency">  The spring frequency used to relax this constraint. </param>
+        /// <param name="dampingRatio">     The damping ratio used to relax this constraint. </param>
         ///
         /// <returns>   A Constraint. </returns>
-        public static Constraint Hinge(int freeAxis, float springFrequency = DefaultSpringFrequency, float springDamping = DefaultSpringDamping)
-            => Hinge(freeAxis, new float3(DefaultMaxImpulse), springFrequency, springDamping);
+        public static Constraint Hinge(int freeAxis, float springFrequency = DefaultSpringFrequency, float dampingRatio = DefaultDampingRatio)
+            => Hinge(freeAxis, DefaultMaxImpulse, springFrequency, dampingRatio);
 
         /// <summary>
         /// Constrains angular motion about two axes to zero. Rotation around the third is unrestricted.
         /// </summary>
         ///
         /// <param name="freeAxis">         The axis around which the bodies may freely rotate. </param>
-        /// <param name="impulseEventThreshold">      The max impulse needed to receive an impulse event for this
+        /// <param name="impulseEventThreshold">      The minimum impulse needed to receive an impulse event for this
         /// constraint. </param>
-        /// <param name="springFrequency">  (Optional) </param>
-        /// <param name="springDamping">    (Optional) </param>
+        /// <param name="springFrequency">  The spring frequency used to relax this constraint. </param>
+        /// <param name="dampingRatio">     The damping ratio used to relax this constraint. </param>
         ///
         /// <returns>   A Constraint. </returns>
-        public static Constraint Hinge(int freeAxis, float3 impulseEventThreshold, float springFrequency = DefaultSpringFrequency, float springDamping = DefaultSpringDamping)
+        public static Constraint Hinge(int freeAxis, float3 impulseEventThreshold, float springFrequency = DefaultSpringFrequency, float dampingRatio = DefaultDampingRatio)
         {
             Assert.IsTrue(freeAxis >= 0 && freeAxis <= 2);
             return new Constraint
@@ -386,7 +400,7 @@ namespace Unity.Physics
                 Min = 0.0f,
                 Max = 0.0f,
                 SpringFrequency = springFrequency,
-                SpringDamping = springDamping,
+                DampingRatio = dampingRatio,
                 MaxImpulse = impulseEventThreshold,
                 Target = float3.zero
             };
@@ -397,37 +411,37 @@ namespace Unity.Physics
         /// third is unrestricted.
         /// </summary>
         ///
-        /// <param name="freeAxis">        The axis specifying the height of the cone within which the
+        /// <param name="freeAxis">         The axis specifying the height of the cone within which the
         /// bodies may rotate. </param>
-        /// <param name="angularRange">    The minimum required angle and maximum possible angle between
+        /// <param name="angularRange">     The minimum required angle and maximum possible angle between
         /// the free axis and its bind pose orientation. A minimum value of zero produces a conical range
         /// of motion, while a minimum value greater than zero results in motion restricted to the
         /// intersection of the inner and outer cones. </param>
-        /// <param name="springFrequency">  (Optional) </param>
-        /// <param name="springDamping">    (Optional) </param>
+        /// <param name="springFrequency">  The spring frequency used to relax this constraint. </param>
+        /// <param name="dampingRatio">     The damping ratio used to relax this constraint. </param>
         ///
         /// <returns>   A Constraint. </returns>
-        public static Constraint Cone(int freeAxis, FloatRange angularRange, float springFrequency = DefaultSpringFrequency, float springDamping = DefaultSpringDamping)
-            => Cone(freeAxis, angularRange, new float3(DefaultMaxImpulse), springFrequency, springDamping);
+        public static Constraint Cone(int freeAxis, FloatRange angularRange, float springFrequency = DefaultSpringFrequency, float dampingRatio = DefaultDampingRatio)
+            => Cone(freeAxis, angularRange, DefaultMaxImpulse, springFrequency, dampingRatio);
 
         /// <summary>
         /// Constrains angular motion about two axes within the specified range. Rotation around the
         /// third is unrestricted.
         /// </summary>
         ///
-        /// <param name="freeAxis">        The axis specifying the height of the cone within which the
+        /// <param name="freeAxis">         The axis specifying the height of the cone within which the
         /// bodies may rotate. </param>
-        /// <param name="angularRange">    The minimum required angle and maximum possible angle between
+        /// <param name="angularRange">     The minimum required angle and maximum possible angle between
         /// the free axis and its bind pose orientation. A minimum value of zero produces a conical range
         /// of motion, while a minimum value greater than zero results in motion restricted to the
         /// intersection of the inner and outer cones. </param>
-        /// <param name="impulseEventThreshold">      The max impulse needed to receive an impulse event for this
+        /// <param name="impulseEventThreshold">      The minimum impulse needed to receive an impulse event for this
         /// constraint. </param>
-        /// <param name="springFrequency">  (Optional) </param>
-        /// <param name="springDamping">    (Optional) </param>
+        /// <param name="springFrequency">  The spring frequency used to relax this constraint. </param>
+        /// <param name="dampingRatio">     The damping ratio used to relax this constraint. </param>
         ///
         /// <returns>   A Constraint. </returns>
-        public static Constraint Cone(int freeAxis, FloatRange angularRange, float3 impulseEventThreshold, float springFrequency = DefaultSpringFrequency, float springDamping = DefaultSpringDamping)
+        public static Constraint Cone(int freeAxis, FloatRange angularRange, float3 impulseEventThreshold, float springFrequency = DefaultSpringFrequency, float dampingRatio = DefaultDampingRatio)
         {
             Assert.IsTrue(freeAxis >= 0 && freeAxis <= 2);
             angularRange = angularRange.Sorted();
@@ -438,7 +452,7 @@ namespace Unity.Physics
                 Min = angularRange.Min,
                 Max = angularRange.Max,
                 SpringFrequency = springFrequency,
-                SpringDamping = springDamping,
+                DampingRatio = dampingRatio,
                 MaxImpulse = impulseEventThreshold,
                 Target = float3.zero
             };
@@ -446,28 +460,28 @@ namespace Unity.Physics
 
         /// <summary>   Constrains angular motion about about one axis within the specified range. </summary>
         ///
-        /// <param name="limitedAxis">     The axis around which the bodies' rotation is restricted. </param>
-        /// <param name="angularRange">    The minimum required angle and maximum possible angle of
+        /// <param name="limitedAxis">      The axis around which the bodies' rotation is restricted. </param>
+        /// <param name="angularRange">     The minimum required angle and maximum possible angle of
         /// rotation between the constrained bodies around the constrained axis. </param>
-        /// <param name="springFrequency">  (Optional) </param>
-        /// <param name="springDamping">    (Optional) </param>
+        /// <param name="springFrequency">  The spring frequency used to relax this constraint. </param>
+        /// <param name="dampingRatio">     The damping ratio used to relax this constraint. </param>
         ///
         /// <returns>   A Constraint. </returns>
-        public static Constraint Twist(int limitedAxis, FloatRange angularRange, float springFrequency = DefaultSpringFrequency, float springDamping = DefaultSpringDamping)
-            => Twist(limitedAxis, angularRange, new float3(DefaultMaxImpulse), springFrequency, springDamping);
+        public static Constraint Twist(int limitedAxis, FloatRange angularRange, float springFrequency = DefaultSpringFrequency, float dampingRatio = DefaultDampingRatio)
+            => Twist(limitedAxis, angularRange, DefaultMaxImpulse, springFrequency, dampingRatio);
 
         /// <summary>   Constrains angular motion about about one axis within the specified range. </summary>
         ///
-        /// <param name="limitedAxis">     The axis around which the bodies' rotation is restricted. </param>
-        /// <param name="angularRange">    The minimum required angle and maximum possible angle of
+        /// <param name="limitedAxis">      The axis around which the bodies' rotation is restricted. </param>
+        /// <param name="angularRange">     The minimum required angle and maximum possible angle of
         /// rotation between the constrained bodies around the constrained axis. </param>
-        /// <param name="impulseEventThreshold">      The max impulse needed to receive an impulse event for this
+        /// <param name="impulseEventThreshold">      The minimum impulse needed to receive an impulse event for this
         /// constraint. </param>
-        /// <param name="springFrequency">  (Optional) </param>
-        /// <param name="springDamping">    (Optional) </param>
+        /// <param name="springFrequency">  The spring frequency used to relax this constraint. </param>
+        /// <param name="dampingRatio">     The damping ratio used to relax this constraint. </param>
         ///
         /// <returns>   A Constraint. </returns>
-        public static Constraint Twist(int limitedAxis, FloatRange angularRange, float3 impulseEventThreshold, float springFrequency = DefaultSpringFrequency, float springDamping = DefaultSpringDamping)
+        public static Constraint Twist(int limitedAxis, FloatRange angularRange, float3 impulseEventThreshold, float springFrequency = DefaultSpringFrequency, float dampingRatio = DefaultDampingRatio)
         {
             Assert.IsTrue(limitedAxis >= 0 && limitedAxis <= 2);
             angularRange = angularRange.Sorted();
@@ -478,7 +492,7 @@ namespace Unity.Physics
                 Min = angularRange.Min,
                 Max = angularRange.Max,
                 SpringFrequency = springFrequency,
-                SpringDamping = springDamping,
+                DampingRatio = dampingRatio,
                 MaxImpulse = impulseEventThreshold,
                 Target = float3.zero
             };
@@ -491,10 +505,10 @@ namespace Unity.Physics
         /// <param name="maxImpulseOfMotor">The magnitude of the max impulse that a motor constraint can exert in a single
         /// step. Must be positive.
         /// This is a motor specific usage that does not represent the impulse threshold for event reporting.</param>
-        /// <param name="springFrequency">  (Optional) </param>
-        /// <param name="springDamping">    (Optional) </param>
+        /// <param name="springFrequency">  The spring frequency used to relax this constraint. </param>
+        /// <param name="dampingRatio">     The damping ratio used to relax this constraint. </param>
         /// <returns>A constraint.</returns>
-        public static Constraint MotorTwist(float target, float maxImpulseOfMotor = DefaultMaxImpulse, float springFrequency = DefaultSpringFrequency, float springDamping = DefaultSpringDamping)
+        public static Constraint MotorTwist(float target, float maxImpulseOfMotor = DefaultMaxImpulse, float springFrequency = DefaultSpringFrequency, float dampingRatio = DefaultDampingRatio)
         {
             SafetyChecks.CheckInRangeAndThrow(maxImpulseOfMotor, new float2(0f, float.PositiveInfinity), "maxImpulseOfMotor");
             return new Constraint
@@ -504,7 +518,7 @@ namespace Unity.Physics
                 Min = 0.0f,
                 Max = 0.0f,
                 SpringFrequency = springFrequency,
-                SpringDamping = springDamping,
+                DampingRatio = dampingRatio,
                 MaxImpulse = new float3(maxImpulseOfMotor, 0f, 0f), //reusing this field for the motor max impulse since breaking is done on other constraints
                 Target = new float3(target, 0f, 0f)
             };
@@ -517,11 +531,11 @@ namespace Unity.Physics
         /// <param name="maxImpulseOfMotor">The magnitude of the max impulse that a motor constraint can exert in a single
         /// step. Must be positive.
         /// This is a motor specific usage that does not represent the impulse threshold for event reporting.</param>
-        /// <param name="springFrequency">  (Optional) </param>
-        /// <param name="springDamping">    (Optional) </param>
+        /// <param name="springFrequency">  The spring frequency used to relax this constraint. </param>
+        /// <param name="dampingRatio">     The damping ratio used to relax this constraint. </param>
         /// <returns>   A Constraint. </returns>
         public static Constraint AngularVelocityMotor(float target, float maxImpulseOfMotor = DefaultMaxImpulse, float springFrequency = DefaultSpringFrequency,
-            float springDamping = DefaultSpringDamping)
+            float dampingRatio = DefaultDampingRatio)
         {
             SafetyChecks.CheckInRangeAndThrow(maxImpulseOfMotor, new float2(0f, float.PositiveInfinity), "maxImpulseOfMotor");
             return new Constraint
@@ -531,7 +545,7 @@ namespace Unity.Physics
                 Min = 0.0f,
                 Max = 0.0f,
                 SpringFrequency = springFrequency,
-                SpringDamping = springDamping,
+                DampingRatio = dampingRatio,
                 MaxImpulse = new float3(maxImpulseOfMotor, 0f, 0f), //reusing this field for the motor max impulse since breaking is done on other constraints
                 Target = new float3(target, 0f, 0f)
             };
@@ -551,7 +565,7 @@ namespace Unity.Physics
                 && Min.Equals(other.Min)
                 && Max.Equals(other.Max)
                 && SpringFrequency.Equals(other.SpringFrequency)
-                && SpringDamping.Equals(other.SpringDamping)
+                && DampingRatio.Equals(other.DampingRatio)
                 && MaxImpulse.Equals(other.MaxImpulse)
                 && Target.Equals(other.Target);
         }
@@ -572,7 +586,7 @@ namespace Unity.Physics
             {
                 return (int)math.hash(new uint4x2(
                     new uint4((uint)Type, (uint)Min.GetHashCode(), (uint)Max.GetHashCode(), math.hash(ConstrainedAxes)),
-                    new uint4((uint)SpringFrequency.GetHashCode(), (uint)SpringDamping.GetHashCode(), math.hash(MaxImpulse), (uint)Target.GetHashCode())
+                    new uint4((uint)SpringFrequency.GetHashCode(), (uint)DampingRatio.GetHashCode(), math.hash(MaxImpulse), (uint)Target.GetHashCode())
                 ));
             }
         }

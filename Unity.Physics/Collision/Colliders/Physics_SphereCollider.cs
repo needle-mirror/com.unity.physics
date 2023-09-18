@@ -129,17 +129,17 @@ namespace Unity.Physics
 
         #region Internal Construction
 
-        internal static BlobAssetReference<Collider> CreateInternal(SphereGeometry geometry, CollisionFilter filter, Material material, uint internalID = 0)
+        internal static BlobAssetReference<Collider> CreateInternal(SphereGeometry geometry, CollisionFilter filter, Material material, uint forceUniqueBlobID = ~ColliderConstants.k_SharedBlobID)
         {
             unsafe
             {
                 var collider = default(SphereCollider);
-                collider.InitializeInternal(geometry, filter, material, internalID);
+                collider.InitializeInternal(geometry, filter, material, forceUniqueBlobID);
                 return BlobAssetReference<Collider>.Create(&collider, sizeof(SphereCollider));
             }
         }
 
-        void InitializeInternal(SphereGeometry geometry, CollisionFilter filter, Material material, uint forceUniqueBlobID = 0)
+        void InitializeInternal(SphereGeometry geometry, CollisionFilter filter, Material material, uint forceUniqueBlobID = ~ColliderConstants.k_SharedBlobID)
         {
             m_Header.Type = ColliderType.Sphere;
             m_Header.CollisionType = CollisionType.Convex;

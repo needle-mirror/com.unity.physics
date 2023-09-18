@@ -1,6 +1,5 @@
 ---
 uid: tag-physics-body
-
 ---
 
 # Custom Physics Body Tag

@@ -39,7 +39,7 @@ namespace Unity.DebugDisplay
         }
     }
 
-    unsafe internal struct LineBuffer : IDisposable
+    internal struct LineBuffer : IDisposable
     {
         const int kMaxLines = 100000;
 

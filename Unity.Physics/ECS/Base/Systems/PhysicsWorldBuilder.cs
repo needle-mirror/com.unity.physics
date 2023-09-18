@@ -323,13 +323,7 @@ namespace Unity.Physics.Systems
                     {
                         LocalToWorldType = componentHandles.LocalToWorldType,
                         ParentType = componentHandles.ParentType,
-#if !ENABLE_TRANSFORM_V1
                         LocalTransformType = componentHandles.LocalTransformType,
-#else
-                        PositionType = componentHandles.PositionType,
-                        RotationType = componentHandles.RotationType,
-                        ScaleType = componentHandles.ScaleType,
-#endif
                         PhysicsColliderType = componentHandles.PhysicsColliderType,
                         m_LastSystemVersion = lastSystemVersion,
                         Result = haveStaticBodiesChanged

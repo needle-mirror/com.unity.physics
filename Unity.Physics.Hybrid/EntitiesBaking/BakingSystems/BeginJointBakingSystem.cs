@@ -7,8 +7,10 @@ namespace Unity.Physics.Authoring
     /// </summary>
     [UpdateAfter(typeof(RigidbodyBakingSystem))]
     [WorldSystemFilter(WorldSystemFilterFlags.BakingSystem)]
-    public partial class BeginJointBakingSystem : SystemBase
+    public partial struct BeginJointBakingSystem : ISystem
     {
-        protected override void OnUpdate() {}
+        public void OnUpdate(ref SystemState state)
+        {
+        }
     }
 }

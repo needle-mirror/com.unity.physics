@@ -11,6 +11,25 @@ namespace Unity.Physics.Authoring
     internal abstract class BaseJointBaker<T> : Baker<T> where T : UnityEngine.Component
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        protected static float3 GetScaledLocalAnchorPosition(in Transform bodyTransform, in float3 anchorPosition)
+        {
+            // account for scale in the body transform if any
+            var kScaleEpsilon = 0.0001f;
+            if (math.lengthsq((float3)bodyTransform.lossyScale - new float3(1f)) > kScaleEpsilon)
+            {
+                var localToWorld = bodyTransform.localToWorldMatrix;
+                var rigidBodyTransform = Math.DecomposeRigidBodyTransform(localToWorld);
+
+                // extract local skew matrix if non-identity world scale detected to re-position the local joint anchor position
+                var skewMatrix = math.mul(math.inverse(new float4x4(rigidBodyTransform)), localToWorld);
+                return math.mul(skewMatrix, new float4(anchorPosition, 1)).xyz;
+            }
+            // else:
+
+            return anchorPosition;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         protected static quaternion GetJointFrameOrientation(float3 axis, float3 secondaryAxis)
         {
             // classic Unity uses a different approach than BodyFrame.ValidateAxes() for ortho-normalizing degenerate inputs
@@ -26,11 +45,46 @@ namespace Unity.Physics.Authoring
             ConfigurableJointMotion x, ConfigurableJointMotion y, ConfigurableJointMotion z
         ) => new bool3(x == motionType, y == motionType, z == motionType);
 
+        protected void ConvertSpringDamperSettings(float inSpringConstant, float inDampingCoefficient, float inConstrainedMass,
+            out float outSpringFrequency, out float outDampingRatio)
+        {
+            // If stiffness and damping coefficient are both zero, then we treat the constraint as locked by
+            // using the default spring settings for a stiff spring and zero damping for a rapid response.
+
+            if (inSpringConstant > 0.0f || inDampingCoefficient > 0.0f)
+            {
+                // If the spring coefficient is zero, we can not calculate the damping ratio. So, we enforce a minimum spring stiffness in this case.
+                var springConstant = inSpringConstant == 0.0f ? 1e-3f : inSpringConstant;
+                outSpringFrequency = CalculateSpringFrequencyFromSpringConstant(springConstant, inConstrainedMass);
+                outDampingRatio = CalculateDampingRatio(springConstant, inDampingCoefficient, inConstrainedMass);
+            }
+            else
+            {
+                // default spring-damper (stiff)
+                outSpringFrequency = Constraint.DefaultSpringFrequency;
+                outDampingRatio = Constraint.DefaultDampingRatio;
+            }
+        }
+
         protected float CalculateSpringFrequencyFromSpringConstant(float springConstant, float mass = 1.0f)
         {
             if (springConstant < Math.Constants.Eps) return 0.0f;
 
             return math.sqrt(springConstant / mass) * Math.Constants.OneOverTau;
+        }
+
+        protected float CalculateDampingRatio(float springConstant, float dampingCoefficient, float mass = 1.0f)
+        {
+            if (dampingCoefficient < Math.Constants.Eps) return 0.0f;
+
+            var tmp = springConstant * mass;
+            if (tmp < Math.Constants.Eps)
+            {
+                // Can not compute damping ratio. Just use damping coefficient as an approximation.
+                return dampingCoefficient;
+            }
+
+            return dampingCoefficient / (2 * math.sqrt(tmp)); // damping coefficient / critical damping coefficient
         }
 
         protected PhysicsConstrainedBodyPair GetConstrainedBodyPair(in UnityEngine.Joint joint) =>
@@ -72,9 +126,10 @@ namespace Unity.Physics.Authoring
                 ? RigidTransform.identity
                 : Math.DecomposeRigidBodyTransform(joint.connectedBody.transform.localToWorldMatrix);
 
+            var anchorPos = GetScaledLocalAnchorPosition(joint.transform, joint.anchor);
             var worldFromJointA = math.mul(
                 new RigidTransform(joint.transform.rotation, joint.transform.position),
-                new RigidTransform(jointFrameOrientation, joint.anchor)
+                new RigidTransform(jointFrameOrientation, anchorPos)
             );
             bodyAFromJoint = new BodyFrame(math.mul(math.inverse(worldFromBodyA), worldFromJointA));
 
@@ -86,11 +141,14 @@ namespace Unity.Physics.Authoring
             RigidTransform bFromBSource =
                 isConnectedBodyConverted ? RigidTransform.identity : worldFromBodyB;
 
+            float3 connectedAnchorPos = joint.connectedBody
+                ? GetScaledLocalAnchorPosition(joint.connectedBody.transform, joint.connectedAnchor)
+                : joint.connectedAnchor;
             bodyBFromJoint = new BodyFrame
             {
                 Axis = math.mul(bFromA.rot, bodyAFromJoint.Axis),
                 PerpendicularAxis = math.mul(bFromA.rot, bodyAFromJoint.PerpendicularAxis),
-                Position = math.mul(bFromBSource, new float4(joint.connectedAnchor, 1f)).xyz
+                Position = math.mul(bFromBSource, new float4(connectedAnchorPos, 1f)).xyz
             };
         }
 
@@ -107,59 +165,57 @@ namespace Unity.Physics.Authoring
 
             if (angularLimited[0])
             {
+                ConvertSpringDamperSettings(angularXLimitSpring.spring, angularXLimitSpring.damper, constrainedMass, out var springFrequency, out var dampingRatio);
+
                 Constraint constraint = Constraint.Twist(
                     0,
                     math.radians(new FloatRange(-highAngularXLimit.limit, -lowAngularXLimit.limit).Sorted()),
                     joint.breakTorque * Time.fixedDeltaTime,
-                    CalculateSpringFrequencyFromSpringConstant(angularXLimitSpring.spring, constrainedMass),
-                    angularXLimitSpring.damper);
+                    springFrequency,
+                    dampingRatio);
                 angularConstraints.Add(constraint);
             }
 
             if (angularLimited[1])
             {
+                ConvertSpringDamperSettings(angularYZLimitSpring.spring, angularYZLimitSpring.damper, constrainedMass, out var springFrequency, out var dampingRatio);
+
                 Constraint constraint = Constraint.Twist(
                     1,
                     math.radians(new FloatRange(-angularYLimit.limit, angularYLimit.limit).Sorted()),
                     joint.breakTorque * Time.fixedDeltaTime,
-                    CalculateSpringFrequencyFromSpringConstant(angularYZLimitSpring.spring, constrainedMass),
-                    angularYZLimitSpring.damper);
+                    springFrequency,
+                    dampingRatio);
 
                 angularConstraints.Add(constraint);
             }
 
             if (angularLimited[2])
             {
+                ConvertSpringDamperSettings(angularYZLimitSpring.spring, angularYZLimitSpring.damper, constrainedMass, out var springFrequency, out var dampingRatio);
+
                 Constraint constraint = Constraint.Twist(
                     2,
                     math.radians(new FloatRange(-angularZLimit.limit, angularZLimit.limit).Sorted()),
                     joint.breakTorque * Time.fixedDeltaTime,
-                    CalculateSpringFrequencyFromSpringConstant(angularYZLimitSpring.spring, constrainedMass),
-                    angularYZLimitSpring.damper);
+                    springFrequency,
+                    dampingRatio);
 
                 angularConstraints.Add(constraint);
             }
 
             if (math.any(linearLimited))
             {
-                // 'Linear Limit Spring' & 'Linear Limit' section:
-                //If spring=0, then need to treat it and damper as locked. Okay for damper=0 if spring>0
-                var spring = Constraint.DefaultSpringFrequency; //stiff spring
-                var damping = 1.0f; //critically damped
-                if (linearSpring.spring > 0.0f)
-                {
-                    spring = linearSpring.spring;
-                    damping = linearSpring.damper;
-                }
+                ConvertSpringDamperSettings(linearSpring.spring, linearSpring.damper, constrainedMass, out var springFrequency, out var dampingRatio);
 
                 linearConstraints.Add(new Constraint
                 {
                     ConstrainedAxes = linearLimited,
                     Type = ConstraintType.Linear,
                     Min = 0f,
-                    Max = linearLimit.limit,  //allow movement up to limit from anchor
-                    SpringFrequency = CalculateSpringFrequencyFromSpringConstant(spring, constrainedMass),
-                    SpringDamping = damping,
+                    Max = linearLimit.limit,  // allow movement up to limit from anchor
+                    SpringFrequency = springFrequency,
+                    DampingRatio = dampingRatio,
                     MaxImpulse = joint.breakForce * Time.fixedDeltaTime,
                 });
             }
@@ -170,10 +226,10 @@ namespace Unity.Physics.Authoring
                 {
                     ConstrainedAxes = linearLocks,
                     Type = ConstraintType.Linear,
-                    Min = linearLimit.limit,    //lock at distance from anchor
+                    Min = linearLimit.limit,    // lock at distance from anchor
                     Max = linearLimit.limit,
-                    SpringFrequency =  Constraint.DefaultSpringFrequency, //stiff spring
-                    SpringDamping = 1.0f, //critically damped
+                    SpringFrequency = Constraint.DefaultSpringFrequency, // default spring-damper (stiff)
+                    DampingRatio = Constraint.DefaultDampingRatio, // default spring-damper (stiff)
                     MaxImpulse = joint.breakForce * Time.fixedDeltaTime,
                 });
             }
@@ -186,8 +242,8 @@ namespace Unity.Physics.Authoring
                     Type = ConstraintType.Angular,
                     Min = 0,
                     Max = 0,
-                    SpringFrequency = Constraint.DefaultSpringFrequency, //stiff spring
-                    SpringDamping = 1.0f, //critically damped
+                    SpringFrequency = Constraint.DefaultSpringFrequency, // default spring-damper (stiff)
+                    DampingRatio = Constraint.DefaultDampingRatio, // default spring-damper (stiff)
                     MaxImpulse = joint.breakTorque * Time.fixedDeltaTime,
                 });
             }
@@ -538,11 +594,14 @@ namespace Unity.Physics.Authoring
                 : Math.DecomposeRigidBodyTransform(joint.connectedBody.transform.localToWorldMatrix);
 
             Math.CalculatePerpendicularNormalized(joint.axis, out float3 perpendicularA, out _);
+
+            // calculate local joint anchor position in body A space
+            var anchorPos = GetScaledLocalAnchorPosition(joint.transform, joint.anchor);
             var bodyAFromJoint = new BodyFrame
             {
                 Axis = joint.axis,
                 PerpendicularAxis = perpendicularA,
-                Position = joint.anchor
+                Position = anchorPos
             };
 
             var connectedEntity = GetEntity(joint.connectedBody, TransformUsageFlags.Dynamic);
@@ -553,17 +612,19 @@ namespace Unity.Physics.Authoring
             RigidTransform bFromBSource =
                 isConnectedBodyConverted ? RigidTransform.identity : worldFromBodyB;
 
+            // calculate local joint anchor position in body B space
+            float3 connectedAnchorPos = joint.connectedBody ? GetScaledLocalAnchorPosition(joint.connectedBody.transform, joint.connectedAnchor) : joint.connectedAnchor;
             var bodyBFromJoint = new BodyFrame
             {
                 Axis = math.mul(bFromA.rot, joint.axis),
                 PerpendicularAxis = math.mul(bFromA.rot, perpendicularA),
-                Position = math.mul(bFromBSource, new float4(joint.connectedAnchor, 1f)).xyz
+                Position = math.mul(bFromBSource, new float4(connectedAnchorPos, 1)).xyz
             };
 
             var limits = math.radians(new FloatRange(joint.limits.min, joint.limits.max).Sorted());
 
             // Create different types of joints based on: are there limits, is there a motor?
-            var jointData = new PhysicsJoint();
+            PhysicsJoint jointData;
             if (joint.useSpring && !joint.useMotor) //a rotational motor if Use Spring = T, Spring: Spring, Damper, Target Position are set
             {
                 var maxImpulseOfMotor = joint.breakTorque * Time.fixedDeltaTime;
@@ -599,20 +660,10 @@ namespace Unity.Physics.Authoring
     {
         void ConvertSpringJoint(SpringJoint joint)
         {
-            var distanceRange = new FloatRange(joint.minDistance, joint.maxDistance).Sorted();
-            var constraint = new Constraint
-            {
-                ConstrainedAxes = new bool3(true),
-                Type = ConstraintType.Linear,
-                Min = distanceRange.Min,
-                Max = distanceRange.Max,
-                SpringFrequency = CalculateSpringFrequencyFromSpringConstant(joint.spring, GetConstrainedBodyMass(joint)),
-                SpringDamping = joint.damper,
-                MaxImpulse = joint.breakForce * Time.fixedDeltaTime,
-            };
+            // calculate local joint anchor positions in body A and body B space:
 
-            var jointFrameA = BodyFrame.Identity;
-            jointFrameA.Position = joint.anchor;
+            var jointAnchorA = GetScaledLocalAnchorPosition(joint.transform, joint.anchor);
+            float3 jointAnchorB = joint.connectedBody ? GetScaledLocalAnchorPosition(joint.connectedBody.transform, joint.connectedAnchor) : joint.connectedAnchor;
 
             var connectedEntity = GetEntity(joint.connectedBody, TransformUsageFlags.Dynamic);
 
@@ -622,19 +673,17 @@ namespace Unity.Physics.Authoring
             RigidTransform bFromBSource =
                 isConnectedBodyConverted ? RigidTransform.identity : Math.DecomposeRigidBodyTransform(joint.connectedBody.transform.localToWorldMatrix);
 
-            var jointFrameB = BodyFrame.Identity;
-            jointFrameB.Position = math.mul(bFromBSource, new float4(joint.connectedAnchor, 1f)).xyz;
+            jointAnchorB = math.mul(bFromBSource, new float4(jointAnchorB, 1)).xyz;
 
-            var jointData = new PhysicsJoint
-            {
-                BodyAFromJoint = jointFrameA,
-                BodyBFromJoint = jointFrameB
-            };
-            jointData.SetConstraints(new FixedList512Bytes<Constraint>
-            {
-                Length = 1,
-                [0] = constraint
-            });
+            // create the joint:
+
+            var distanceRange = new FloatRange(joint.minDistance, joint.maxDistance).Sorted();
+            var mass = GetConstrainedBodyMass(joint);
+            var impulseEventThreshold = joint.breakForce * Time.fixedDeltaTime;
+            var springFrequency = CalculateSpringFrequencyFromSpringConstant(joint.spring, GetConstrainedBodyMass(joint));
+            var dampingRatio = CalculateDampingRatio(joint.spring, joint.damper, mass);
+
+            var jointData = PhysicsJoint.CreateLimitedDistance(jointAnchorA, jointAnchorB, distanceRange, impulseEventThreshold, springFrequency, dampingRatio);
 
             var worldIndex = GetWorldIndex(joint);
             Entity entity = CreateJointEntity(worldIndex, GetConstrainedBodyPair(joint), jointData);

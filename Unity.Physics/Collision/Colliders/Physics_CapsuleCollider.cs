@@ -147,7 +147,7 @@ namespace Unity.Physics
         public void Initialize(CapsuleGeometry geometry, CollisionFilter filter, Material material) =>
             InitializeInternal(geometry, filter, material);
 
-        void InitializeInternal(CapsuleGeometry geometry, CollisionFilter filter, Material material, uint forceUniqueBlobID = 0)
+        void InitializeInternal(CapsuleGeometry geometry, CollisionFilter filter, Material material, uint forceUniqueBlobID = ~ColliderConstants.k_SharedBlobID)
         {
             m_Header.Type = ColliderType.Capsule;
             m_Header.CollisionType = CollisionType.Convex;
@@ -164,12 +164,12 @@ namespace Unity.Physics
             SetGeometry(geometry);
         }
 
-        internal static BlobAssetReference<Collider> CreateInternal(CapsuleGeometry geometry, CollisionFilter filter, Material material, uint internalID = 0)
+        internal static BlobAssetReference<Collider> CreateInternal(CapsuleGeometry geometry, CollisionFilter filter, Material material, uint forceUniqueBlobID = ~ColliderConstants.k_SharedBlobID)
         {
             unsafe
             {
                 var collider = default(CapsuleCollider);
-                collider.InitializeInternal(geometry, filter, material, internalID);
+                collider.InitializeInternal(geometry, filter, material, forceUniqueBlobID);
                 return BlobAssetReference<Collider>.Create(&collider, sizeof(CapsuleCollider));
             }
         }

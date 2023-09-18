@@ -105,6 +105,7 @@ namespace Unity.Physics
                 collider->m_Header.CollisionType = (collisionMethod == CollisionMethod.Triangles) ? CollisionType.Composite : CollisionType.Terrain;
                 collider->m_Header.Version = 1;
                 collider->m_Header.Magic = 0xff;
+                collider->m_Header.ForceUniqueBlobID = ~ColliderConstants.k_SharedBlobID;
                 collider->m_Header.Filter = filter;
                 collider->Material = material;
                 collider->MemorySize = totalSize;

@@ -4,7 +4,9 @@ using Unity.Entities;
 namespace Unity.Physics.Authoring
 {
     /// <summary>
-    ///     Baking system for colliders, called before all other collider baking systems.
+    /// Baking system for colliders: Stage 1
+    /// This system is called before all other collider baking systems.
+    /// The purpose of this system is to initialize the hash delegate and the declare a new BlobAssetComputationContext.
     /// </summary>
     [WorldSystemFilter(WorldSystemFilterFlags.BakingSystem)]
     public partial class BeginColliderBakingSystem : SystemBase

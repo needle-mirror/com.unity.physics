@@ -19,6 +19,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         [BurstCompile(CompileSynchronously = true)]
         struct CreateFromBurstJob : IJob
         {
+            [GenerateTestsForBurstCompatibility]
             public void Execute()
             {
                 var points = new NativeArray<float3>(1024, Allocator.Temp);
@@ -42,6 +43,15 @@ namespace Unity.Physics.Tests.Collision.Colliders
             new float3(7.66f, 3.44f, 0.0f)
         };
 
+        void ValidateConvexCollider(Entities.BlobAssetReference<Collider> collider)
+        {
+            // manually created colliders are unique by design
+            Assert.IsTrue(collider.Value.IsUnique);
+
+            Assert.AreEqual(ColliderType.Convex, collider.Value.Type);
+            Assert.AreEqual(CollisionType.Convex, collider.Value.CollisionType);
+        }
+
         /// <summary>
         /// Test that a <see cref="ConvexCollider"/> created with a point cloud has its attributes filled correctly
         /// </summary>
@@ -49,12 +59,12 @@ namespace Unity.Physics.Tests.Collision.Colliders
         public void TestConvexColliderCreate()
         {
             var points = new NativeArray<float3>(k_TestPoints, Allocator.Temp);
-            var collider = ConvexCollider.Create(
+            using var collider = ConvexCollider.Create(
                 points, new ConvexHullGenerationParameters { BevelRadius = 0.15f }, CollisionFilter.Default
             );
 
-            Assert.AreEqual(ColliderType.Convex, collider.Value.Type);
-            Assert.AreEqual(CollisionType.Convex, collider.Value.CollisionType);
+            ValidateConvexCollider(collider);
+            ValidateConvexCollider(collider.Value.Clone());
         }
 
 #if ENABLE_UNITY_COLLECTIONS_CHECKS

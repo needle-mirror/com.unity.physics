@@ -10,8 +10,10 @@ namespace Unity.Physics.Authoring
     /// </summary>
     [UpdateAfter(typeof(BeginJointBakingSystem))]
     [WorldSystemFilter(WorldSystemFilterFlags.BakingSystem)]
-    public partial class EndJointBakingSystem : SystemBase
+    public partial struct EndJointBakingSystem : ISystem
     {
-        protected override void OnUpdate() {}
+        public void OnUpdate(ref SystemState state)
+        {
+        }
     }
 }

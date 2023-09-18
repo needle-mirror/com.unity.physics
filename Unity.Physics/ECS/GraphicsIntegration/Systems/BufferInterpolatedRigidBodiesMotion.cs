@@ -30,52 +30,52 @@ namespace Unity.Physics.GraphicsIntegration
     [RequireMatchingQueriesForUpdate]
     [UpdateInGroup(typeof(PhysicsSystemGroup))]
     [UpdateAfter(typeof(PhysicsInitializeGroup)), UpdateBefore(typeof(ExportPhysicsWorld))]
-    public partial class BufferInterpolatedRigidBodiesMotion : SystemBase
+    [BurstCompile]
+    public partial struct BufferInterpolatedRigidBodiesMotion : ISystem
     {
+        ComponentTypeHandle<LocalTransform> m_LocalTransformType;
+        ComponentTypeHandle<PhysicsVelocity> m_PhysicsVelocityType;
+        ComponentTypeHandle<PhysicsGraphicalInterpolationBuffer> m_InterpolationBufferType;
+
         /// <summary>
         /// An entity query matching dynamic rigid bodies whose graphical motion should be interpolated.
         /// </summary>
         public EntityQuery InterpolatedDynamicBodiesQuery { get; private set; }
 
-        protected override void OnCreate()
+        public void OnCreate(ref SystemState state)
         {
-            InterpolatedDynamicBodiesQuery = GetEntityQuery(new EntityQueryDesc
-            {
-                All = new ComponentType[]
-                {
-                    typeof(PhysicsVelocity),
+            InterpolatedDynamicBodiesQuery = new EntityQueryBuilder(Allocator.Temp)
+                .WithAll<PhysicsVelocity, LocalTransform,PhysicsWorldIndex>()
+                .WithAllRW<PhysicsGraphicalInterpolationBuffer>()
+                .WithOptions(EntityQueryOptions.FilterWriteGroup)
+                .Build(ref state);
+            state.RequireForUpdate(InterpolatedDynamicBodiesQuery);
 
-                    typeof(LocalTransform),
+            m_LocalTransformType = state.GetComponentTypeHandle<LocalTransform>(true);
+            m_PhysicsVelocityType = state.GetComponentTypeHandle<PhysicsVelocity>(true);
+            m_InterpolationBufferType = state.GetComponentTypeHandle<PhysicsGraphicalInterpolationBuffer>();
 
-                    typeof(PhysicsGraphicalInterpolationBuffer),
-                    typeof(PhysicsWorldIndex)
-                },
-                Options = EntityQueryOptions.FilterWriteGroup
-            });
-            RequireForUpdate(InterpolatedDynamicBodiesQuery);
-
-#if !UNITY_DOTSRUNTIME
             // UpdateInterpolationBuffersJob copies from specific byte offsets of the transform components, so
             // let's make sure the offsets haven't changed!
             Assert.AreEqual(0, UnsafeUtility.GetFieldOffset(typeof(LocalTransform).GetField("Position")));
             Assert.AreEqual(UnsafeUtility.SizeOf<float3>() + UnsafeUtility.SizeOf<float>(),
                 UnsafeUtility.GetFieldOffset(typeof(LocalTransform).GetField("Rotation")));
-#endif
-
         }
 
-        protected override void OnUpdate()
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
         {
-            var bpwd = EntityManager.GetComponentData<BuildPhysicsWorldData>(World.GetExistingSystem<BuildPhysicsWorld>());
+            var bpwd = state.EntityManager.GetComponentData<BuildPhysicsWorldData>(state.WorldUnmanaged.GetExistingUnmanagedSystem<BuildPhysicsWorld>());
             InterpolatedDynamicBodiesQuery.SetSharedComponentFilter(bpwd.WorldFilter);
-            Dependency = new UpdateInterpolationBuffersJob
+            m_LocalTransformType.Update(ref state);
+            m_PhysicsVelocityType.Update(ref state);
+            m_InterpolationBufferType.Update(ref state);
+            state.Dependency = new UpdateInterpolationBuffersJob
             {
-
-                LocalTransformType = GetComponentTypeHandle<LocalTransform>(true),
-
-                PhysicsVelocityType = GetComponentTypeHandle<PhysicsVelocity>(true),
-                InterpolationBufferType = GetComponentTypeHandle<PhysicsGraphicalInterpolationBuffer>()
-            }.ScheduleParallel(InterpolatedDynamicBodiesQuery, Dependency);
+                LocalTransformType = m_LocalTransformType,
+                PhysicsVelocityType = m_PhysicsVelocityType,
+                InterpolationBufferType = m_InterpolationBufferType
+            }.ScheduleParallel(InterpolatedDynamicBodiesQuery, state.Dependency);
         }
 
         /// <summary>

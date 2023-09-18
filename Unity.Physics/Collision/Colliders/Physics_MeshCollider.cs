@@ -54,11 +54,61 @@ namespace Unity.Physics
         public static BlobAssetReference<Collider> Create(NativeArray<float3> vertices, NativeArray<int3> triangles, CollisionFilter filter, Material material) =>
             CreateInternal(vertices, triangles, filter, material);
 
+        /// <summary>   Creates a new BlobAssetReference&lt;Collider&gt; </summary>
+        ///
+        /// <param name="mesh">         The UnityEngine.Mesh. </param>
+        /// <param name="filter">       Specifies the filter. </param>
+        /// <param name="material">     The material. </param>
+        ///
+        /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
+        [GenerateTestsForBurstCompatibility]
+        public static BlobAssetReference<Collider> Create(UnityEngine.Mesh mesh, CollisionFilter filter, Material material)
+        {
+            // Get fast zero-copy access to raw mesh data
+            using var meshDataArray = UnityEngine.Mesh.AcquireReadOnlyMeshData(mesh);
+
+            //meshDataArray[0] always since we aren't doing an entity query. [MeshArrayIndex = 0]
+            // bool trianglesNeeded = true because we are always getting a mesh. [!physicsMeshData.Convex]
+            MeshUtility.AppendMeshPropertiesToNativeBuffers(meshDataArray[0], true, out var vertices, out var triangles);
+
+            return CreateInternal(vertices, triangles, filter, material);
+        }
+
+        /// <summary>   Creates a new BlobAssetReference&lt;Collider&gt; </summary>
+        ///
+        /// <param name="meshData">     The UnityEngine.Mesh.MeshData. </param>
+        /// <param name="filter">       Specifies the filter. </param>
+        /// <param name="material">     The material. </param>
+        ///
+        /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
+        [GenerateTestsForBurstCompatibility]
+        public static BlobAssetReference<Collider> Create(UnityEngine.Mesh.MeshData meshData, CollisionFilter filter,
+            Material material)
+        {
+            MeshUtility.AppendMeshPropertiesToNativeBuffers(meshData, true, out var vertices, out var triangles);
+            return CreateInternal(vertices, triangles, filter, material);
+        }
+
+        /// <summary>   Creates a new BlobAssetReference&lt;Collider&gt; </summary>
+        ///
+        /// <param name="meshDataArray">     The UnityEngine.Mesh.MeshDataArray. </param>
+        /// <param name="filter">       Specifies the filter. </param>
+        /// <param name="material">     The material. </param>
+        ///
+        /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
+        [GenerateTestsForBurstCompatibility]
+        public static BlobAssetReference<Collider> Create(UnityEngine.Mesh.MeshDataArray meshDataArray, CollisionFilter filter,
+            Material material)
+        {
+            MeshUtility.AppendMeshPropertiesToNativeBuffers(meshDataArray[0], true, out var vertices, out var triangles);
+            return CreateInternal(vertices, triangles, filter, material);
+        }
+
         #endregion
 
         #region Internal Construction
 
-        internal static BlobAssetReference<Collider> CreateInternal(NativeArray<float3> vertices, NativeArray<int3> triangles, CollisionFilter filter, Material material, uint forceUniqueBlobID = 0)
+        internal static BlobAssetReference<Collider> CreateInternal(NativeArray<float3> vertices, NativeArray<int3> triangles, CollisionFilter filter, Material material, uint forceUniqueBlobID = ~ColliderConstants.k_SharedBlobID)
         {
             unsafe
             {

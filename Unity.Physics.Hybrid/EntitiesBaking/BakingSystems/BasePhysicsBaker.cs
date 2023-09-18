@@ -25,7 +25,9 @@ namespace Unity.Physics.Authoring
     public struct PhysicsRootBaked : IComponentData {}
 
     /// <summary>
-    /// Component that specifies data relating to compound colliders and blobs
+    /// Component that specifies data relating to compound colliders and blobs. Note that all colliders will have this
+    /// component. The presence of this component indicates that this collider is a root of a collider, which may or may
+    /// not be a compound.
     /// </summary>
     [BakingType]
     public struct PhysicsCompoundData : IComponentData

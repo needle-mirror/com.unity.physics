@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using UnityEditor;
+using UnityEditor.Build;
 
 namespace Unity.Physics.Editor
 {
@@ -44,7 +45,8 @@ namespace Unity.Physics.Editor
             for (int i = 0; i < _buildTargetGroups.Count; i++)
             {
                 var buildTargetGroup = _buildTargetGroups[i];
-                var defines = PlayerSettings.GetScriptingDefineSymbolsForGroup(buildTargetGroup);
+                var fromBuildTargetGroup = NamedBuildTarget.FromBuildTargetGroup(buildTargetGroup);
+                var defines = PlayerSettings.GetScriptingDefineSymbols(fromBuildTargetGroup);
 
                 // We add the separator at the end so we can add a new one if needed
                 // Unity will automatically remove any unneeded separators at the end
@@ -65,13 +67,14 @@ namespace Unity.Physics.Editor
                     definesSb.Replace(replaceToken, "");
                 }
 
-                PlayerSettings.SetScriptingDefineSymbolsForGroup(buildTargetGroup, definesSb.ToString());
+                PlayerSettings.SetScriptingDefineSymbols(fromBuildTargetGroup, definesSb.ToString());
             }
         }
 
         public static bool DefineExists(string _define, BuildTargetGroup _buildTargetGroup)
         {
-            var defines = PlayerSettings.GetScriptingDefineSymbolsForGroup(_buildTargetGroup);
+            var fromBuildTargetGroup = NamedBuildTarget.FromBuildTargetGroup(_buildTargetGroup);
+            var defines = PlayerSettings.GetScriptingDefineSymbols(fromBuildTargetGroup);
             return defines != null && defines.Length > 0 && defines.IndexOf(_define, 0) >= 0;
         }
     }

@@ -17,10 +17,9 @@ namespace Unity.Physics.GraphicsIntegration
     /// <see cref="Unity.Transforms.LocalTransform"/> component is left alone.
     /// </summary>
     [UpdateInGroup(typeof(TransformSystemGroup))]
-
     [UpdateBefore(typeof(LocalToWorldSystem))]
-
-    public partial class SmoothRigidBodiesGraphicalMotion : SystemBase
+    [BurstCompile]
+    public partial struct SmoothRigidBodiesGraphicalMotion : ISystem
     {
         /// <summary>
         /// An entity query matching dynamic rigid bodies whose motion should be smoothed.
@@ -28,6 +27,12 @@ namespace Unity.Physics.GraphicsIntegration
         public EntityQuery SmoothedDynamicBodiesQuery { get; private set; }
 
         private Entity m_MostRecentTimeEntity;
+        ComponentTypeHandle<LocalTransform> m_ComponentTypeHandle;
+        ComponentTypeHandle<PostTransformMatrix> m_PostTransformMatrixType;
+        ComponentTypeHandle<PhysicsMass> m_PhysicsMassType;
+        ComponentTypeHandle<PhysicsGraphicalInterpolationBuffer> m_InterpolationBufferType;
+        ComponentTypeHandle<PhysicsGraphicalSmoothing> m_PhysicsGraphicalSmoothingType;
+        ComponentTypeHandle<LocalToWorld> m_LocalToWorldType;
 
         //Declaring big capacity since buffers with RigidBodySmoothingWorldIndex and MostRecentFixedTime will be stored together in a singleton Entity
         //and that Entity will get a whole Chunk allocated anyway. This capacity is just a limit for keeping the buffer inside the Chunk,
@@ -56,12 +61,14 @@ namespace Unity.Physics.GraphicsIntegration
         /// <summary>
         /// Registers the physics world for smooth rigid body motion described by physicsWorldIndex.
         /// </summary>
-        ///
+        /// <param name="state"><see cref="SystemState"/> reference from an <see cref="ISystem"/></param>
+        /// <param name="mostRecentTimeEntity">Entity for looking up <see cref="MostRecentFixedTime"/> and <see cref="RigidBodySmoothingWorldIndex"/> buffers.</param>
         /// <param name="physicsWorldIndex">    Zero-based index of the physics world. </param>
-        public void RegisterPhysicsWorldForSmoothRigidBodyMotion(PhysicsWorldIndex physicsWorldIndex)
+        public static void RegisterPhysicsWorldForSmoothRigidBodyMotion(ref SystemState state,
+            Entity mostRecentTimeEntity, PhysicsWorldIndex physicsWorldIndex)
         {
-            var mostRecentFixedTimes = SystemAPI.GetBuffer<MostRecentFixedTime>(m_MostRecentTimeEntity);
-            var worldIndexToUpdate = SystemAPI.GetBuffer<RigidBodySmoothingWorldIndex>(m_MostRecentTimeEntity);
+            var mostRecentFixedTimes = state.EntityManager.GetBuffer<MostRecentFixedTime>(mostRecentTimeEntity);
+            var worldIndexToUpdate = state.EntityManager.GetBuffer<RigidBodySmoothingWorldIndex>(mostRecentTimeEntity);
             var rbSmoothIndex = new RigidBodySmoothingWorldIndex(physicsWorldIndex);
             if (mostRecentFixedTimes.Length <= rbSmoothIndex.Value)
                 mostRecentFixedTimes.ResizeUninitialized(rbSmoothIndex.Value + 1);
@@ -76,10 +83,13 @@ namespace Unity.Physics.GraphicsIntegration
         /// Unregisters the physics world for smooth rigid body motion described by physicsWorldIndex.
         /// </summary>
         ///
+        /// <param name="state"><see cref="SystemState"/> reference from an <see cref="ISystem"/></param>
+        /// <param name="mostRecentTimeEntity">Entity for looking up <see cref="MostRecentFixedTime"/> and <see cref="RigidBodySmoothingWorldIndex"/> buffers.</param>
         /// <param name="physicsWorldIndex">    Zero-based index of the physics world. </param>
-        public void UnregisterPhysicsWorldForSmoothRigidBodyMotion(PhysicsWorldIndex physicsWorldIndex)
+        public static void UnregisterPhysicsWorldForSmoothRigidBodyMotion(ref SystemState state,
+            Entity mostRecentTimeEntity, PhysicsWorldIndex physicsWorldIndex)
         {
-            var worldIndexToUpdate = SystemAPI.GetBuffer<RigidBodySmoothingWorldIndex>(m_MostRecentTimeEntity);
+            var worldIndexToUpdate = state.EntityManager.GetBuffer<RigidBodySmoothingWorldIndex>(mostRecentTimeEntity);
             for (int i = 0; i < worldIndexToUpdate.Length; ++i)
             {
                 //Don't use swap back to keep sorting
@@ -91,54 +101,61 @@ namespace Unity.Physics.GraphicsIntegration
             }
         }
 
-        protected override void OnCreate()
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
         {
-            base.OnCreate();
-            SmoothedDynamicBodiesQuery = GetEntityQuery(new EntityQueryDesc
-            {
-                All = new ComponentType[]
-                {
-
-                    typeof(LocalTransform),
-
-                    typeof(PhysicsGraphicalSmoothing),
-                    typeof(LocalToWorld),
-                    typeof(PhysicsWorldIndex)
-                }
-            });
+            SmoothedDynamicBodiesQuery = new EntityQueryBuilder(Allocator.Temp)
+                .WithAll<LocalTransform, LocalToWorld, PhysicsWorldIndex, PhysicsGraphicalSmoothing>()
+                .WithOptions(EntityQueryOptions.FilterWriteGroup)
+                .Build(ref state);
             // Store a buffer of MostRecentFixedTime element, one for each physics world.
-            m_MostRecentTimeEntity = EntityManager.CreateEntity(typeof(MostRecentFixedTime), typeof(RigidBodySmoothingWorldIndex));
-            EntityManager.SetName(m_MostRecentTimeEntity, "MostRecentFixedTime");
+            m_MostRecentTimeEntity = state.EntityManager.CreateEntity();
+            state.EntityManager.AddComponent<MostRecentFixedTime>(m_MostRecentTimeEntity);
+            state.EntityManager.AddComponent<RigidBodySmoothingWorldIndex>(m_MostRecentTimeEntity);
+            state.EntityManager.SetName(m_MostRecentTimeEntity, "MostRecentFixedTime");
+            state.RequireForUpdate(SmoothedDynamicBodiesQuery);
+            state.RequireForUpdate<MostRecentFixedTime>();
 
-            RequireForUpdate(SmoothedDynamicBodiesQuery);
-            RequireForUpdate<MostRecentFixedTime>();
+            m_ComponentTypeHandle = state.GetComponentTypeHandle<LocalTransform>(true);
+            m_PostTransformMatrixType = state.GetComponentTypeHandle<PostTransformMatrix>(true);
+            m_PhysicsMassType = state.GetComponentTypeHandle<PhysicsMass>(true);
+            m_InterpolationBufferType = state.GetComponentTypeHandle<PhysicsGraphicalInterpolationBuffer>(true);
+            m_PhysicsGraphicalSmoothingType = state.GetComponentTypeHandle<PhysicsGraphicalSmoothing>();
+            m_LocalToWorldType = state.GetComponentTypeHandle<LocalToWorld>();
         }
 
-        protected override void OnUpdate()
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
         {
             var mostRecentTimes = SystemAPI.GetBuffer<MostRecentFixedTime>(m_MostRecentTimeEntity);
             var mostRecentTimeToUpdate = SystemAPI.GetBuffer<RigidBodySmoothingWorldIndex>(m_MostRecentTimeEntity);
-            for (int i = 0; i < mostRecentTimeToUpdate.Length; ++i)
+            foreach (var worldIndex in mostRecentTimeToUpdate)
             {
-                var worldIndex = mostRecentTimeToUpdate[i];
                 var timeAhead = (float)(SystemAPI.Time.ElapsedTime - mostRecentTimes[worldIndex.Value].ElapsedTime);
                 var timeStep = (float)mostRecentTimes[worldIndex.Value].DeltaTime;
                 if (timeAhead < 0f || timeStep == 0f)
                     continue;
 
                 var normalizedTimeAhead = math.clamp(timeAhead / timeStep, 0f, 1f);
+
                 SmoothedDynamicBodiesQuery.SetSharedComponentFilter(new PhysicsWorldIndex((uint)worldIndex.Value));
-                Dependency = new SmoothMotionJob
+                m_ComponentTypeHandle.Update(ref state);
+                m_PostTransformMatrixType.Update(ref state);
+                m_PhysicsMassType.Update(ref state);
+                m_InterpolationBufferType.Update(ref state);
+                m_PhysicsGraphicalSmoothingType.Update(ref state);
+                m_LocalToWorldType.Update(ref state);
+                state.Dependency = new SmoothMotionJob
                 {
-                    LocalTransformType = GetComponentTypeHandle<LocalTransform>(true),
-                    PostTransformMatrixType = GetComponentTypeHandle<PostTransformMatrix>(true),
-                    PhysicsMassType = GetComponentTypeHandle<PhysicsMass>(true),
-                    InterpolationBufferType = GetComponentTypeHandle<PhysicsGraphicalInterpolationBuffer>(true),
-                    PhysicsGraphicalSmoothingType = GetComponentTypeHandle<PhysicsGraphicalSmoothing>(),
-                    LocalToWorldType = GetComponentTypeHandle<LocalToWorld>(),
+                    LocalTransformType = m_ComponentTypeHandle,
+                    PostTransformMatrixType = m_PostTransformMatrixType,
+                    PhysicsMassType = m_PhysicsMassType,
+                    InterpolationBufferType = m_InterpolationBufferType,
+                    PhysicsGraphicalSmoothingType = m_PhysicsGraphicalSmoothingType,
+                    LocalToWorldType = m_LocalToWorldType,
                     TimeAhead = timeAhead,
                     NormalizedTimeAhead = normalizedTimeAhead
-                }.ScheduleParallel(SmoothedDynamicBodiesQuery, Dependency);
+                }.ScheduleParallel(SmoothedDynamicBodiesQuery, state.Dependency);
             }
         }
 

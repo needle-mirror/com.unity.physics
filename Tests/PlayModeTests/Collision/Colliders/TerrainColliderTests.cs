@@ -2,6 +2,8 @@ using System;
 using NUnit.Framework;
 using Unity.Burst;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
+using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 
@@ -16,9 +18,10 @@ namespace Unity.Physics.Tests.Collision.Colliders
         {
             public TerrainCollider.CollisionMethod CollisionMethod;
 
+            [GenerateTestsForBurstCompatibility]
             public void Execute()
             {
-                var heights = new NativeArray<float>(16, Allocator.Temp);
+                using var heights = new NativeArray<float>(16, Allocator.Temp);
                 TerrainCollider.Create(heights, new int2(4, 4), new float3(1f), CollisionMethod).Dispose();
             }
         }
@@ -29,6 +32,48 @@ namespace Unity.Physics.Tests.Collision.Colliders
         ) =>
             new CreateFromBurstJob { CollisionMethod = collisionMethod }
             .Run();
+
+        unsafe void ValidateTerrainCollider(BlobAssetReference<Collider> collider, NativeArray<float> heights, int2 size, TerrainCollider.CollisionMethod collisionMethod)
+        {
+            // manually created colliders are unique by design
+            Assert.IsTrue(collider.Value.IsUnique);
+
+            // validate terrain collider
+            Assert.AreEqual(ColliderType.Terrain, collider.Value.Type);
+            var exepectedCollisionType = collisionMethod == TerrainCollider.CollisionMethod.Triangles
+                ? CollisionType.Composite
+                : CollisionType.Terrain;
+            Assert.AreEqual(exepectedCollisionType, collider.Value.CollisionType);
+
+            ref var terrainCollider = ref UnsafeUtility.AsRef<TerrainCollider>(collider.GetUnsafePtr());
+
+            Assert.AreEqual(heights.Length, terrainCollider.Terrain.Heights.Length);
+            Assert.AreEqual(size, terrainCollider.Terrain.Size);
+        }
+
+        [Test]
+        public void TerrainCollider_Create_ResultHasExpectedValues([Values] TerrainCollider.CollisionMethod collisionMethod)
+        {
+            var heights = new NativeArray<float>(16, Allocator.Temp);
+            var size = new int2(4, 4);
+            try
+            {
+                for (int i = 0; i < heights.Length; ++i)
+                {
+                    heights[i] = i;
+                }
+
+                using var collider = TerrainCollider.Create(heights, size, 1, collisionMethod);
+                ValidateTerrainCollider(collider, heights, size, collisionMethod);
+
+                using var colliderClone = collider.Value.Clone();
+                ValidateTerrainCollider(colliderClone, heights, size, collisionMethod);
+            }
+            finally
+            {
+                heights.Dispose();
+            }
+        }
 
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
         [Test]

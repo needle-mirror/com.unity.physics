@@ -128,6 +128,14 @@ namespace Unity.Physics
         }
 
         [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
+        public static unsafe void CheckMemorySizeAndThrow(byte* begin, byte* end, ulong expectedByteSize)
+        {
+            ulong actualByteSize = (ulong)end - (ulong)begin;
+            if (actualByteSize != expectedByteSize)
+                throw new InvalidOperationException($"Memory size mismatch. Expected {expectedByteSize} bytes, but was {actualByteSize} bytes.");
+        }
+
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void CheckAreEqualAndThrow(SimulationType expected, SimulationType actual)
         {
             if (actual != expected)

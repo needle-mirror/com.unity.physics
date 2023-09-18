@@ -55,25 +55,21 @@ namespace Unity.Physics
         /// <summary>   Gets the collider type. </summary>
         ///
         /// <value> Collider type. </value>
-
         ColliderType Type { get; }
 
         /// <summary>   Gets the collision type. </summary>
         ///
         /// <value> Collision Type. </value>
-
         CollisionType CollisionType { get; }
 
         /// <summary>   Gets the mass properties. </summary>
         ///
         /// <value> The mass properties. </value>
-
         MassProperties MassProperties { get; }
 
         /// <summary>   The total size of the collider in memory. </summary>
         ///
         /// <value> The size of the memory. </value>
-
         int MemorySize { get; }
 
         /// <summary>   Gets the collision filter. </summary>
@@ -141,6 +137,11 @@ namespace Unity.Physics
     public struct Collider : ICompositeCollider
     {
         private ColliderHeader m_Header;
+
+        /// <summary>   Indicates whether this collider is unique, i.e., not shared between rigid bodies. </summary>
+        ///
+        /// <value> True if this collider is unique, false if not. </value>
+        public bool IsUnique => m_Header.ForceUniqueBlobID != ColliderConstants.k_SharedBlobID;
 
         #region ICollider
 
@@ -1309,6 +1310,7 @@ namespace Unity.Physics
         /// <summary>
         /// This function clones the Collider and wraps it in a BlobAssetReference. The caller is
         /// responsible for appropriately calling `Dispose` on the result.
+        /// Returned collider is guaranteed to be <see cref="Collider.IsUnique">unique</see>.
         /// </summary>
         ///
         /// <returns>   A clone of the Collider wrapped in a BlobAssetReference. </returns>
@@ -1317,12 +1319,23 @@ namespace Unity.Physics
             unsafe
             {
                 var clone = BlobAssetReference<Collider>.Create(UnsafeUtility.AddressOf(ref this), MemorySize);
-                //reset the version
+                // reset the version
                 ((Collider*)clone.GetUnsafePtr())->m_Header.Version = 1;
+                // flag the blob as unique
+                ((Collider*)clone.GetUnsafePtr())->m_Header.ForceUniqueBlobID = ~ColliderConstants.k_SharedBlobID;
 
                 return clone;
             }
         }
+
+        internal void SetForceUniqueID(uint id) => m_Header.ForceUniqueBlobID = id;
+    }
+
+    internal struct ColliderConstants
+    {
+        /// Indicates that a collider blob can be shared across multiple PhysicsCollider components.
+        /// Used during collider baking.
+        public const uint k_SharedBlobID = 0u;
     }
 
     /// <summary>   Header common to all colliders. </summary>
@@ -1335,9 +1348,12 @@ namespace Unity.Physics
         public byte Magic;      // always = 0xff (for validation)
 
         public uint ForceUniqueBlobID;  // ID used to force a unique collider blob in entities.
-                                        // While 0 by default for all colliders by design, the ID can be set to
-                                        // a unique value for a given collider to ensure the collider blob is not
-                                        // shared with other entities when their colliders have identical properties.
+                                        // When a collider is manually created or cloned, the ID is set to ~ColliderConstants.k_SharedBlobID
+                                        // marking the collider as unique.
+                                        // When a collider is created during baking through the blob asset store, the ID is set to
+                                        // ColliderConstants.k_SharedBlobID in order to enable sharing of identical collider blobs among entities.
+                                        // The sharing is disabled by the baking systems through setting of this value to a unique value when the user
+                                        // requests unique collider blobs via the force unique authoring option.
 
         public CollisionFilter Filter;
     }
@@ -1352,9 +1368,12 @@ namespace Unity.Physics
         public byte Magic;
 
         public uint ForceUniqueBlobID;  // ID used to force a unique collider blob in entities.
-                                        // While 0 by default for all colliders by design, the ID can be set to
-                                        // a unique value for a given collider to ensure the collider blob is not
-                                        // shared with other entities when their colliders have identical properties.
+                                        // When a collider is manually created or cloned, the ID is set to ~ColliderConstants.k_SharedBlobID
+                                        // marking the collider as unique.
+                                        // When a collider is created during baking through the blob asset store, the ID is set to
+                                        // ColliderConstants.k_SharedBlobID in order to enable sharing of identical collider blobs among entities.
+                                        // The sharing is disabled by the baking systems through setting of this value to a unique value when the user
+                                        // requests unique collider blobs via the force unique authoring option.
 
         public CollisionFilter Filter;
         public Material Material;

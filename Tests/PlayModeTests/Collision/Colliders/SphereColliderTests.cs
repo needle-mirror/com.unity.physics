@@ -1,7 +1,9 @@
 using System;
 using NUnit.Framework;
 using Unity.Burst;
+using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using TestUtils = Unity.Physics.Tests.Utils.TestUtils;
@@ -18,17 +20,35 @@ namespace Unity.Physics.Tests.Collision.Colliders
         [BurstCompile(CompileSynchronously = true)]
         struct CreateFromBurstJob : IJob
         {
+            [GenerateTestsForBurstCompatibility]
             public void Execute() => SphereCollider.Create(new SphereGeometry { Radius = 1f }).Dispose();
         }
 
         [Test]
         public void SphereCollider_Create_WhenCalledFromBurstJob_DoesNotThrow() => new CreateFromBurstJob().Run();
 
+
+        unsafe void ValidateSphereCollider(BlobAssetReference<Collider> collider, in SphereGeometry sphere)
+        {
+            // manually created colliders are unique by design
+            Assert.IsTrue(collider.Value.IsUnique);
+
+            Assert.AreEqual(ColliderType.Sphere, collider.Value.Type);
+            Assert.AreEqual(CollisionType.Convex, collider.Value.CollisionType);
+
+            ref var sphereCollider = ref UnsafeUtility.AsRef<SphereCollider>(collider.GetUnsafePtr());
+
+            TestUtils.AreEqual(sphere.Center, sphereCollider.Center, 1e-3f);
+            TestUtils.AreEqual(sphere.Center, sphereCollider.Geometry.Center, 1e-3f);
+            TestUtils.AreEqual(sphere.Radius, sphereCollider.Radius, 1e-3f);
+            TestUtils.AreEqual(sphere.Radius, sphereCollider.Geometry.Radius, 1e-3f);
+        }
+
         /// <summary>
         /// Tests if a created <see cref="SphereCollider"/> has its attributes set correctly
         /// </summary>
         [Test]
-        unsafe public void TestSphereColliderCreate()
+        public void TestSphereColliderCreate()
         {
             var sphere = new SphereGeometry
             {
@@ -36,15 +56,11 @@ namespace Unity.Physics.Tests.Collision.Colliders
                 Radius = 0.98f
             };
 
-            var collider = SphereCollider.Create(sphere);
-            var sphereCollider = UnsafeUtility.AsRef<SphereCollider>(collider.GetUnsafePtr());
+            using var collider = SphereCollider.Create(sphere);
+            ValidateSphereCollider(collider, sphere);
 
-            TestUtils.AreEqual(sphere.Center, sphereCollider.Center, 1e-3f);
-            TestUtils.AreEqual(sphere.Center, sphereCollider.Geometry.Center, 1e-3f);
-            TestUtils.AreEqual(sphere.Radius, sphereCollider.Radius, 1e-3f);
-            TestUtils.AreEqual(sphere.Radius, sphereCollider.Geometry.Radius, 1e-3f);
-            Assert.AreEqual(ColliderType.Sphere, sphereCollider.Type);
-            Assert.AreEqual(CollisionType.Convex, sphereCollider.CollisionType);
+            using var colliderClone = collider.Value.Clone();
+            ValidateSphereCollider(colliderClone, sphere);
         }
 
 #if ENABLE_UNITY_COLLECTIONS_CHECKS

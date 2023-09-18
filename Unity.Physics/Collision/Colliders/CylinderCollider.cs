@@ -219,12 +219,12 @@ namespace Unity.Physics
 
         #region Internal Construction
 
-        internal static BlobAssetReference<Collider> CreateInternal(CylinderGeometry geometry, CollisionFilter filter, Material material, uint internalID = 0)
+        internal static BlobAssetReference<Collider> CreateInternal(CylinderGeometry geometry, CollisionFilter filter, Material material, uint forceUniqueBlobID = ~ColliderConstants.k_SharedBlobID)
         {
             unsafe
             {
                 var collider = default(CylinderCollider);
-                collider.InitializeInternal(geometry, filter, material, internalID);
+                collider.InitializeInternal(geometry, filter, material, forceUniqueBlobID);
                 var blob = BlobAssetReference<Collider>.Create(&collider, sizeof(CylinderCollider));
                 var cylCollider = (CylinderCollider*)(blob.GetUnsafePtr());
                 SafetyChecks.Check16ByteAlignmentAndThrow(cylCollider->m_ConvexHullData.FacePlanes, nameof(ConvexHullData.FacePlanes));
@@ -232,7 +232,7 @@ namespace Unity.Physics
             }
         }
 
-        void InitializeInternal(CylinderGeometry geometry, CollisionFilter filter, Material material, uint forceUniqueBlobID = 0)
+        void InitializeInternal(CylinderGeometry geometry, CollisionFilter filter, Material material, uint forceUniqueBlobID = ~ColliderConstants.k_SharedBlobID)
         {
             unsafe
             {

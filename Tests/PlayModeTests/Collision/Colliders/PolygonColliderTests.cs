@@ -1,7 +1,9 @@
 using System;
 using NUnit.Framework;
 using Unity.Burst;
+using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using TestUtils = Unity.Physics.Tests.Utils.TestUtils;
@@ -18,6 +20,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         [BurstCompile(CompileSynchronously = true)]
         struct CreateQuadFromBurstJob : IJob
         {
+            [GenerateTestsForBurstCompatibility]
             public void Execute() =>
                 PolygonCollider.CreateQuad(new float3(-1f, 1f, 0f), new float3(1f, 1f, 0f), new float3(1f, -1f, 0f), new float3(-1f, -1f, 0f)).Dispose();
         }
@@ -28,6 +31,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         [BurstCompile(CompileSynchronously = true)]
         struct CreateTriangleFromBurstJob : IJob
         {
+            [GenerateTestsForBurstCompatibility]
             public void Execute() =>
                 PolygonCollider.CreateTriangle(new float3(-1f, 1f, 0f), new float3(1f, 1f, 0f), new float3(1f, -1f, 0f)).Dispose();
         }
@@ -35,21 +39,12 @@ namespace Unity.Physics.Tests.Collision.Colliders
         [Test]
         public void PolygonCollider_CreateTriangle_WhenCalledFromBurstJob_DoesNotThrow() => new CreateTriangleFromBurstJob().Run();
 
-        /// <summary>
-        /// Test whether a triangle collider's attributes are set to the expected values after creation.
-        /// </summary>
-        [Test]
-        unsafe public void TestCreateTriangle()
-        {
-            float3[] vertices =
-            {
-                new float3(-1.4f, 1.4f, 5.6f),
-                new float3(1.4f, 1.4f, 3.6f),
-                new float3(0.2f, 1.2f, 5.6f)
-            };
-            float3 normal = math.normalize(math.cross(vertices[1] - vertices[0], vertices[2] - vertices[0]));
 
-            var collider = PolygonCollider.CreateTriangle(vertices[0], vertices[1], vertices[2]);
+        unsafe void ValidateTriangleCollider(BlobAssetReference<Collider> collider, float3[] vertices, float3 normal)
+        {
+            // manually created colliders are unique by design
+            Assert.IsTrue(collider.Value.IsUnique);
+
             var triangleCollider = UnsafeUtility.AsRef<PolygonCollider>(collider.GetUnsafePtr());
             Assert.IsTrue(triangleCollider.IsTriangle);
             Assert.IsFalse(triangleCollider.IsQuad);
@@ -65,10 +60,51 @@ namespace Unity.Physics.Tests.Collision.Colliders
         }
 
         /// <summary>
+        /// Test whether a triangle collider's attributes are set to the expected values after creation.
+        /// </summary>
+        [Test]
+        public void TestCreateTriangle()
+        {
+            float3[] vertices =
+            {
+                new float3(-1.4f, 1.4f, 5.6f),
+                new float3(1.4f, 1.4f, 3.6f),
+                new float3(0.2f, 1.2f, 5.6f)
+            };
+            float3 normal = math.normalize(math.cross(vertices[1] - vertices[0], vertices[2] - vertices[0]));
+
+            using var collider = PolygonCollider.CreateTriangle(vertices[0], vertices[1], vertices[2]);
+            ValidateTriangleCollider(collider, vertices, normal);
+
+            using var colliderClone = collider.Value.Clone();
+            ValidateTriangleCollider(colliderClone, vertices, normal);
+        }
+
+        unsafe void ValidateQuadCollider(BlobAssetReference<Collider> collider, float3[] expectedVertices, float3 expectedNormal)
+        {
+            // manually created colliders are unique by design
+            Assert.IsTrue(collider.Value.IsUnique);
+
+            ref var quadCollider = ref UnsafeUtility.AsRef<PolygonCollider>(collider.GetUnsafePtr());
+            Assert.IsFalse(quadCollider.IsTriangle);
+            Assert.IsTrue(quadCollider.IsQuad);
+
+            TestUtils.AreEqual(quadCollider.Vertices[0], expectedVertices[0], 1e-3f);
+            TestUtils.AreEqual(quadCollider.Vertices[1], expectedVertices[1], 1e-3f);
+            TestUtils.AreEqual(quadCollider.Vertices[2], expectedVertices[2], 1e-3f);
+            TestUtils.AreEqual(quadCollider.Vertices[3], expectedVertices[3], 1e-3f);
+            Assert.AreEqual(2, quadCollider.Planes.Length);
+            TestUtils.AreEqual(expectedNormal, quadCollider.Planes[0].Normal, 1e-3f);
+            TestUtils.AreEqual(-expectedNormal, quadCollider.Planes[1].Normal, 1e-3f);
+            Assert.AreEqual(ColliderType.Quad, quadCollider.Type);
+            Assert.AreEqual(CollisionType.Convex, quadCollider.CollisionType);
+        }
+
+        /// <summary>
         /// Test whether a quad collider's attributes are set correctly after creation.
         /// </summary>
         [Test]
-        unsafe public void TestCreateQuad()
+        public void TestCreateQuad()
         {
             float3[] vertices =
             {
@@ -79,20 +115,11 @@ namespace Unity.Physics.Tests.Collision.Colliders
             };
             float3 normal = math.normalize(math.cross(vertices[2] - vertices[1], vertices[0] - vertices[1]));
 
-            var collider = PolygonCollider.CreateQuad(vertices[0], vertices[1], vertices[2], vertices[3]);
-            var quadCollider = UnsafeUtility.AsRef<PolygonCollider>(collider.GetUnsafePtr());
-            Assert.IsFalse(quadCollider.IsTriangle);
-            Assert.IsTrue(quadCollider.IsQuad);
+            using var collider = PolygonCollider.CreateQuad(vertices[0], vertices[1], vertices[2], vertices[3]);
+            ValidateQuadCollider(collider, vertices, normal);
 
-            TestUtils.AreEqual(quadCollider.Vertices[0], vertices[0], 1e-3f);
-            TestUtils.AreEqual(quadCollider.Vertices[1], vertices[1], 1e-3f);
-            TestUtils.AreEqual(quadCollider.Vertices[2], vertices[2], 1e-3f);
-            TestUtils.AreEqual(quadCollider.Vertices[3], vertices[3], 1e-3f);
-            Assert.AreEqual(2, quadCollider.Planes.Length);
-            TestUtils.AreEqual(normal, quadCollider.Planes[0].Normal, 1e-3f);
-            TestUtils.AreEqual(-normal, quadCollider.Planes[1].Normal, 1e-3f);
-            Assert.AreEqual(ColliderType.Quad, quadCollider.Type);
-            Assert.AreEqual(CollisionType.Convex, quadCollider.CollisionType);
+            using var colliderClone = collider.Value.Clone();
+            ValidateQuadCollider(colliderClone, vertices, normal);
         }
 
         /// <summary>

@@ -471,11 +471,22 @@ namespace Unity.Physics
         ///
         /// <param name="anchorA">          Specifies the anchor point in the space of body A. </param>
         /// <param name="anchorB">          Specifies the target point in the space of body B. </param>
-        /// <param name="distanceRange"> The minimum required distance and maximum possible distance
-        /// between the two anchor points. </param>
+        /// <param name="distanceRange">    The minimum required distance and maximum possible distance between the two anchor points. </param>
         ///
         /// <returns>   The new limited distance joint. </returns>
-        public static PhysicsJoint CreateLimitedDistance(float3 anchorA, float3 anchorB, FloatRange distanceRange)
+        public static PhysicsJoint CreateLimitedDistance(float3 anchorA, float3 anchorB, FloatRange distanceRange)  => CreateLimitedDistance(anchorA, anchorB, distanceRange, Constraint.DefaultMaxImpulse);
+
+        /// <summary>   Create a <see cref="JointType.LimitedDistance"/> joint. </summary>
+        ///
+        /// <param name="anchorA">          Specifies the anchor point in the space of body A. </param>
+        /// <param name="anchorB">          Specifies the target point in the space of body B. </param>
+        /// <param name="distanceRange">    The minimum required distance and maximum possible distance between the two anchor points. </param>
+        /// <param name="impulseEventThreshold"> The minimum impulse needed to receive an impulse event for this joint. </param>
+        /// <param name="springFrequency">  The spring frequency used to relax this joint. </param>
+        /// <param name="dampingRatio">     The damping ratio used to relax this joint. </param>
+        ///
+        /// <returns>   The new limited distance joint. </returns>
+        public static PhysicsJoint CreateLimitedDistance(float3 anchorA, float3 anchorB, FloatRange distanceRange, float3 impulseEventThreshold, float springFrequency = Constraint.DefaultSpringFrequency, float dampingRatio = Constraint.DefaultDampingRatio)
         {
             var bodyAFromJoint = BodyFrame.Identity;
             bodyAFromJoint.Position = anchorA;
@@ -489,7 +500,7 @@ namespace Unity.Physics
                 m_Constraints = new ConstraintBlock3
                 {
                     Length = 1,
-                    A = Constraint.LimitedDistance(distanceRange.Sorted())
+                    A = Constraint.LimitedDistance(distanceRange.Sorted(), impulseEventThreshold, springFrequency, dampingRatio),
                 }
             };
         }
@@ -814,7 +825,7 @@ namespace Unity.Physics
                         Max = 0,
                         MaxImpulse = Constraint.DefaultMaxImpulse,
                         SpringFrequency = Constraint.DefaultSpringFrequency,
-                        SpringDamping = Constraint.DefaultSpringDamping,
+                        DampingRatio = Constraint.DefaultDampingRatio,
                     },
                     B = new Constraint
                     {
@@ -824,7 +835,7 @@ namespace Unity.Physics
                         Max = 0,
                         MaxImpulse = Constraint.DefaultMaxImpulse,
                         SpringFrequency = Constraint.DefaultSpringFrequency,
-                        SpringDamping = Constraint.DefaultSpringDamping
+                        DampingRatio = Constraint.DefaultDampingRatio
                     }
                 }
             };

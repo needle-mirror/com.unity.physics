@@ -251,7 +251,7 @@ namespace Unity.Physics.Authoring
     // Creates DisplayJointsJobs
     [RequireMatchingQueriesForUpdate]
     [WorldSystemFilter(WorldSystemFilterFlags.Default)]
-    [UpdateInGroup(typeof(AfterPhysicsSystemGroup))]
+    [UpdateInGroup(typeof(PhysicsDebugDisplayGroup))]
     [BurstCompile]
     internal partial struct DisplayJointsSystem_Default : ISystem
     {
@@ -278,9 +278,7 @@ namespace Unity.Physics.Authoring
 
     [RequireMatchingQueriesForUpdate]
     [WorldSystemFilter(WorldSystemFilterFlags.Editor)]
-    [UpdateInGroup(typeof(PhysicsDisplayDebugGroup))]
-    [UpdateAfter(typeof(CleanPhysicsDebugDataSystem_Editor))]
-    [UpdateBefore(typeof(PhysicsDebugDisplaySystem_Editor))]
+    [UpdateInGroup(typeof(PhysicsDebugDisplayGroup_Editor))]
     [BurstCompile]
     internal partial struct DisplayJointsSystem_Editor : ISystem
     {

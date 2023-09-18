@@ -20,7 +20,7 @@ namespace Unity.Physics.Tests.Motors
             string failureMessage;
 
             int numIterations = 4;
-            int numSteps = 15; // duration = 0.5s
+            int numSteps = 30; // duration = 0.5s
             int numStabilizingSteps = 0; //takes some iterations to reach the target velocity
 
             var position0 = motionA.WorldFromMotion.pos;

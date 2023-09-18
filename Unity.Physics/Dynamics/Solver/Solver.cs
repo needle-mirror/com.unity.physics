@@ -1153,7 +1153,7 @@ namespace Unity.Physics
                     header.Type = jacType;
                     header.Flags = jacFlags;
 
-                    JacobianUtilities.CalculateConstraintTauAndDamping(constraint.SpringFrequency, constraint.SpringDamping, timestep, numIterations, out float tau, out float damping);
+                    JacobianUtilities.CalculateConstraintTauAndDamping(constraint.SpringFrequency, constraint.DampingRatio, timestep, numIterations, out float tau, out float damping);
 
                     // Build the Jacobian
                     switch (constraint.Type)

@@ -56,8 +56,8 @@ namespace Unity.Physics.Authoring
             Quaternion colliderOrientation;
             float3 colliderPosition;
             float radius;
-            ColorIndex color = DrawColliderUtility.GetColorIndex(bodyMotionType);
 
+            ColorIndex color = DrawColliderUtility.GetColorIndex(bodyMotionType);
             switch (collider->Type)
             {
                 case ColliderType.Cylinder:
@@ -242,44 +242,70 @@ namespace Unity.Physics.Authoring
     }
 
     [WorldSystemFilter(WorldSystemFilterFlags.Default)]
-    [UpdateInGroup(typeof(AfterPhysicsSystemGroup))]
-    internal partial struct DisplayBodyCollidersSystem_Default : ISystem
+    [UpdateInGroup(typeof(PhysicsDebugDisplayGroup))]
+    [BurstCompile]
+    internal partial struct DisplayBodyCollidersSystem : ISystem
     {
         private PrimitiveColliderGeometries DefaultGeometries;
+        private EntityQuery StaticBodyQuery;
+        private EntityQuery DynamicBodyQuery;
+
         void OnCreate(ref SystemState state)
         {
-            var colliderQuery = state.GetEntityQuery(ComponentType.ReadOnly<PhysicsCollider>(), ComponentType.ReadOnly<LocalToWorld>());
+            var colliderQuery = state.GetEntityQuery(ComponentType.ReadOnly<PhysicsCollider>(),
+                ComponentType.ReadOnly<LocalToWorld>(),
+                ComponentType.ReadOnly<LocalTransform>());
+
+            DynamicBodyQuery = state.GetEntityQuery(ComponentType.ReadOnly<PhysicsCollider>(),
+                ComponentType.ReadOnly<LocalToWorld>(),
+                ComponentType.ReadOnly<LocalTransform>(),
+                ComponentType.ReadOnly<PhysicsMass>());
+
+            StaticBodyQuery = state.GetEntityQuery(ComponentType.ReadOnly<PhysicsCollider>(),
+                ComponentType.ReadOnly<LocalToWorld>(),
+                ComponentType.ReadOnly<LocalTransform>(),
+                ComponentType.Exclude<PhysicsMass>());
+
             state.RequireForUpdate(colliderQuery);
             state.RequireForUpdate<PhysicsDebugDisplayData>();
 
             DrawColliderUtility.CreateGeometries(out DefaultGeometries);
         }
 
+        [BurstCompile]
         void OnUpdate(ref SystemState state)
         {
-            if (!SystemAPI.TryGetSingleton(out PhysicsDebugDisplayData debugDisplay) || debugDisplay.DrawColliders == 0)
+            if (!SystemAPI.TryGetSingleton(out PhysicsDebugDisplayData debugDisplay))
                 return;
 
-            state.EntityManager.CompleteDependencyBeforeRO<PhysicsWorldSingleton>();
-            if (SystemAPI.TryGetSingleton(out PhysicsWorldSingleton physicsWorldSingleton))
+            if (debugDisplay.DrawColliders == (int)PhysicsDebugDisplayAuthoring.DisplayMode.PreIntegration)
             {
-                ref var physicsWorld = ref physicsWorldSingleton.PhysicsWorld;
-                var bodyMotionTypes = new NativeArray<BodyMotionType>(physicsWorld.NumBodies, Allocator.TempJob);
-                for (int index = 0; index < physicsWorld.NumBodies; ++index)
+                state.EntityManager.CompleteDependencyBeforeRO<PhysicsWorldSingleton>();
+                if (SystemAPI.TryGetSingleton(out PhysicsWorldSingleton physicsWorldSingleton))
                 {
-                    if (index < physicsWorld.NumDynamicBodies)
-                    {
-                        bodyMotionTypes[index] = physicsWorld.MotionVelocities[index].IsKinematic ? BodyMotionType.Kinematic : BodyMotionType.Dynamic;
-                    }
-                    else
-                    {
-                        bodyMotionTypes[index] = BodyMotionType.Static;
-                    }
+                    ref var physicsWorld = ref physicsWorldSingleton.PhysicsWorld;
+                    var bodyMotionTypes = new NativeArray<BodyMotionType>(physicsWorld.NumBodies, Allocator.TempJob);
+
+                    DrawColliderUtility.GetBodiesMotionTypesFromWorld(ref physicsWorld, ref bodyMotionTypes);
+
+                    var displayHandle = DisplayColliderFacesJob.ScheduleJob(physicsWorldSingleton.PhysicsWorld.Bodies,
+                        bodyMotionTypes, 1.0f, DefaultGeometries, state.Dependency);
+                    var disposeHandle = bodyMotionTypes.Dispose(displayHandle);
+                    state.Dependency = disposeHandle;
                 }
+            }
+            else if (debugDisplay.DrawColliders == (int)PhysicsDebugDisplayAuthoring.DisplayMode.PostIntegration)
+            {
+                var rigidBodies = new NativeList<RigidBody>(Allocator.TempJob);
+                var bodyMotionTypes = new NativeList<BodyMotionType>(Allocator.TempJob);
 
-                var displayHandle = DisplayColliderFacesJob.ScheduleJob(physicsWorldSingleton.PhysicsWorld.Bodies, bodyMotionTypes, 1.0f, DefaultGeometries, state.Dependency);
-                var disposeHandle = bodyMotionTypes.Dispose(displayHandle);
+                DrawColliderUtility.GetBodiesByMotionsFromQuery(ref state, ref DynamicBodyQuery, ref rigidBodies, ref bodyMotionTypes);
+                DrawColliderUtility.GetBodiesByMotionsFromQuery(ref state, ref StaticBodyQuery, ref rigidBodies, ref bodyMotionTypes);
 
+                var displayHandle = DisplayColliderFacesJob.ScheduleJob(rigidBodies.AsArray(),
+                    bodyMotionTypes.AsArray(), 1.0f, DefaultGeometries, state.Dependency);
+                var disposeHandle = JobHandle.CombineDependencies(rigidBodies.Dispose(displayHandle),
+                    bodyMotionTypes.Dispose(displayHandle));
                 state.Dependency = disposeHandle;
             }
         }
@@ -291,63 +317,42 @@ namespace Unity.Physics.Authoring
     }
 
     [WorldSystemFilter(WorldSystemFilterFlags.Editor)]
-    [UpdateInGroup(typeof(PhysicsDisplayDebugGroup))]
-    [UpdateAfter(typeof(CleanPhysicsDebugDataSystem_Editor))]
-    [UpdateBefore(typeof(PhysicsDebugDisplaySystem_Editor))]
+    [UpdateInGroup(typeof(PhysicsDebugDisplayGroup_Editor))]
+    [BurstCompile]
     internal partial struct DisplayBodyCollidersSystem_Editor : ISystem
     {
         private PrimitiveColliderGeometries DefaultGeometries;
+        private EntityQuery ColliderQuery;
 
         void OnCreate(ref SystemState state)
         {
-            var colliderQuery = state.GetEntityQuery(ComponentType.ReadOnly<PhysicsCollider>(), ComponentType.ReadOnly<LocalToWorld>());
-            state.RequireForUpdate(colliderQuery);
+            ColliderQuery = state.GetEntityQuery(ComponentType.ReadOnly<PhysicsCollider>(),
+                ComponentType.ReadOnly<LocalToWorld>(), ComponentType.ReadOnly<LocalTransform>());
+            state.RequireForUpdate(ColliderQuery);
             state.RequireForUpdate<PhysicsDebugDisplayData>();
 
             DrawColliderUtility.CreateGeometries(out DefaultGeometries);
         }
 
-        private void CreateRigidBody(in float4x4 localToWorld, float scale, BlobAssetReference<Collider> collider, out RigidBody rigidBody)
-        {
-            var rigidTransform = DecomposeRigidBodyTransform(localToWorld);
-            rigidBody = new RigidBody
-            {
-                Collider = collider,
-                WorldFromBody = rigidTransform,
-                Scale = scale
-            };
-        }
-
+        [BurstCompile]
         void OnUpdate(ref SystemState state)
         {
-            if (!SystemAPI.TryGetSingleton(out PhysicsDebugDisplayData debugDisplay) || debugDisplay.DrawColliders == 0)
+            if (!SystemAPI.TryGetSingleton(out PhysicsDebugDisplayData debugDisplay))
                 return;
 
-            // First add the dynamic bodies
-            var rigidBodies = new NativeList<RigidBody>(Allocator.TempJob);
-            var bodyMotionTypes = new NativeList<BodyMotionType>(Allocator.TempJob);
-
-            foreach (var(collider, localToWorld, localTransform, physicsMass) in
-                     SystemAPI.Query<RefRO<PhysicsCollider>, RefRO<LocalToWorld>, RefRO<LocalTransform>, RefRO<PhysicsMass>>())
+            if (debugDisplay.DrawColliders > 0)
             {
-                CreateRigidBody(localToWorld.ValueRO.Value, localTransform.ValueRO.Scale, collider.ValueRO.Value, out var rigidBody);
-                rigidBodies.Add(rigidBody);
-                bodyMotionTypes.Add(physicsMass.ValueRO.IsKinematic ? BodyMotionType.Kinematic : BodyMotionType.Dynamic);
+                var rigidBodies = new NativeList<RigidBody>(Allocator.TempJob);
+                var bodyMotionTypes = new NativeList<BodyMotionType>(Allocator.TempJob);
+
+                DrawColliderUtility.GetBodiesByMotionsFromQuery(ref state, ref ColliderQuery, ref rigidBodies, ref bodyMotionTypes);
+
+                var displayHandle = DisplayColliderFacesJob.ScheduleJob(rigidBodies.AsArray(),
+                    bodyMotionTypes.AsArray(), 1.0f, DefaultGeometries, state.Dependency);
+                var disposeHandle = JobHandle.CombineDependencies(rigidBodies.Dispose(displayHandle),
+                    bodyMotionTypes.Dispose(displayHandle));
+                state.Dependency = disposeHandle;
             }
-
-            // Then add the rest
-            foreach (var(collider, localToWorld, localTransform) in
-                     SystemAPI.Query<RefRO<PhysicsCollider>, RefRO<LocalToWorld>, RefRO<LocalTransform>>().WithNone<PhysicsMass>())
-            {
-                CreateRigidBody(localToWorld.ValueRO.Value, localTransform.ValueRO.Scale, collider.ValueRO.Value, out var rigidBody);
-                rigidBodies.Add(rigidBody);
-                bodyMotionTypes.Add(BodyMotionType.Static);
-            }
-
-            var displayHandle = DisplayColliderFacesJob.ScheduleJob(rigidBodies.AsArray(), bodyMotionTypes.AsArray(), 1.0f, DefaultGeometries, state.Dependency);
-            var disposeHandle = JobHandle.CombineDependencies(rigidBodies.Dispose(displayHandle), bodyMotionTypes.Dispose(displayHandle));
-
-            state.Dependency = disposeHandle;
         }
 
         void OnDestroy(ref SystemState state)
@@ -355,5 +360,6 @@ namespace Unity.Physics.Authoring
             DefaultGeometries.Dispose();
         }
     }
+
 #endif
 }

@@ -1,49 +1,25 @@
 using UnityEngine;
-using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using System.IO;
 using System;
 using Unity.Burst;
 using Unity.Mathematics;
-using Unity.Physics.Authoring; //for meshes
 using UnityEditor;
 
 namespace Unity.DebugDisplay
 {
-    internal sealed class Context
-    {
-        internal Context()
-        {
-        }
-    }
-
-    internal struct EightK
-    {
-        internal FixedString4096Bytes a, b;
-    }
-
     internal struct Unmanaged
     {
         internal void Clear()
         {
-            m_TextBuffer.ClearCells();
-            m_TextBufferAllocations = m_TextBuffer.AllocateAll();      // clear out all the tex boxes
-            m_GraphBufferAllocations = m_GraphBuffer.AllocateAll();  // clear out all the graphs
             m_LineBufferAllocations = m_LineBuffer.AllocateAll(); // clear out all the lines
             m_TriangleBufferAllocations = m_TriangleBuffer.AllocateAll();
         }
 
-        internal Unit       m_TextBufferAllocations;
         internal Unit       m_LineBufferAllocations;
-        internal Unit       m_GraphBufferAllocations;
-        internal Unit       m_GraphDataBufferAllocations;
         internal Unit       m_TriangleBufferAllocations;
 
-        internal TextBuffer  m_TextBuffer;
-        internal GraphBuffer m_GraphBuffer;
         internal LineBuffer  m_LineBuffer;
-        internal LogBuffer   m_LogBuffer;
-        internal EightK      m_EightK;
         internal TriangleBuffer m_TriangleBuffer;
 
         private bool initialized;
@@ -127,17 +103,9 @@ namespace Unity.DebugDisplay
                 for (var i = 0; i < ColorIndex.dynamicColorCount; ++i)
                     m_ColorData[ColorIndex.staticColorCount + i] = float4.zero;
 
-                m_TextBuffer.Initialize();
-                m_GraphBuffer.Initialize();
                 m_LineBuffer.Initialize();
                 m_TriangleBuffer.Initialize();
 
-                m_LogBuffer = new LogBuffer(new int2(128, 4096));
-                m_LogBuffer.m_Fg = ColorIndex.Yellow;
-                m_LogBuffer.m_Bg = ColorIndex.Blue;
-                m_TextBufferAllocations = m_TextBuffer.AllocateAll();
-                m_GraphBufferAllocations = m_GraphBuffer.AllocateAll();
-                m_GraphDataBufferAllocations = m_GraphBuffer.ReserveAllData();
                 m_LineBufferAllocations = m_LineBuffer.AllocateAll();
                 m_TriangleBufferAllocations = m_TriangleBuffer.AllocateAll();
 
@@ -147,12 +115,9 @@ namespace Unity.DebugDisplay
 
         internal void Dispose()
         {
-            if (initialized == true)
+            if (initialized)
             {
-                m_LogBuffer.Dispose();
                 m_LineBuffer.Dispose();
-                m_GraphBuffer.Dispose();
-                m_TextBuffer.Dispose();
                 m_TriangleBuffer.Dispose();
 
                 m_ColorData.Dispose();
@@ -160,7 +125,9 @@ namespace Unity.DebugDisplay
             }
         }
 
-        internal static readonly SharedStatic<Unmanaged> Instance = SharedStatic<Unmanaged>.GetOrCreate<Context, Unmanaged>();
+        sealed class DummyContext {}
+
+        internal static readonly SharedStatic<Unmanaged> Instance = SharedStatic<Unmanaged>.GetOrCreate<DummyContext, Unmanaged>();
     }
 
 
@@ -168,69 +135,34 @@ namespace Unity.DebugDisplay
     {
         internal struct Objects
         {
-            internal Material textMaterial;
-            internal Material graphMaterial;
             internal Material lineMaterial;
             internal Material meshMaterial;
-            internal TextAsset wide;
         }
         internal Objects resources;
 
         internal static int PixelsWide => Screen.width;
         internal static int PixelsTall => Screen.height;
 
-        internal static float FractionalCellsWide => (float)PixelsWide / Cell.kPixelsWide;
-        internal static float FractionalCellsTall => (float)PixelsTall / Cell.kPixelsTall;
-        internal static int IntegralCellsWide => (PixelsWide + Cell.kPixelsWide - 1) / Cell.kPixelsWide;
-        internal static int IntegralCellsTall => (PixelsTall + Cell.kPixelsTall - 1) / Cell.kPixelsTall;
+        internal const int kPixelsWide = 8;
+        internal const int kPixelsTall = 16;
+
+        internal static float FractionalCellsWide => (float)PixelsWide / kPixelsWide;
+        internal static float FractionalCellsTall => (float)PixelsTall / kPixelsTall;
 
 #if UNITY_EDITOR
         internal static string debugDirName =
             "Packages/com.unity.physics/Unity.Physics.Hybrid/Assets/DebugDisplay/DebugDisplayResources/";
-        private static Material debugTextMaterial;
-        private static Material graphMaterial;
-        private static Material lineMaterial;
-        private static Material meshMaterial;
-        private static TextAsset wideTestAsset;
-        private bool resourcesLoaded = false;
 #endif
 
-        private void LoadDebugResources()
-        {
-#if UNITY_EDITOR
-            debugTextMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(debugDirName, "DebugTextMaterial.mat"));
-            graphMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(debugDirName, "GraphMaterial.mat"));
-            lineMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(debugDirName, "LineMaterial.mat"));
-            meshMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(debugDirName, "MeshMaterial.mat"));
-            wideTestAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(Path.Combine(debugDirName, "wide.bytes"));
-            resourcesLoaded = true;
-#endif
-        }
 
         internal unsafe Managed()
         {
             Unmanaged.Instance.Data.Initialize();
 #if UNITY_EDITOR
-            if (!resourcesLoaded) LoadDebugResources();
-            resources.textMaterial = debugTextMaterial;
-            resources.graphMaterial = graphMaterial;
-            resources.lineMaterial = lineMaterial;
-            resources.meshMaterial = meshMaterial;
-            resources.wide = wideTestAsset;
-
-            Stream s = new MemoryStream(resources.wide.bytes);
-            BinaryReader br = new BinaryReader(s);
-            var wide = new byte[s.Length];
-            br.Read(wide, 0, (int)s.Length);
-            fixed(byte* w = wide)
-            fixed(EightK * e = &Unmanaged.Instance.Data.m_EightK)
-            {
-                UnsafeUtility.MemCpy(e, w, 8192);
-            }
+            resources.lineMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(debugDirName, "LineMaterial.mat"));;
+            resources.meshMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(debugDirName, "MeshMaterial.mat"));;
 #endif
-#if !UNITY_DOTSRUNTIME
             AppDomain.CurrentDomain.DomainUnload += OnDomainUnload;
-#endif
         }
 
         static void OnDomainUnload(object sender, EventArgs e)
@@ -266,128 +198,73 @@ namespace Unity.DebugDisplay
 
         internal void CopyFromCpuToGpu()
         {
+            const string colorBufferString = "colorBuffer";
+            const string positionBufferString = "positionBuffer";
+            const string meshBufferString = "meshBuffer";
+            const string scalesString = "scales";
+
             // Recreate compute buffer if needed.
-            if (m_ColorBuffer == null || m_ColorBuffer.count != Unmanaged.Instance.Data.m_ColorData.Length)
+
+            // Color Buffer
             {
-                if (m_ColorBuffer != null)
-                {
-                    m_ColorBuffer.Release();
-                    m_ColorBuffer = null;
-                }
+                var updateColorBuffer = RecreateBuffer<float4>(ref m_ColorBuffer, Unmanaged.Instance.Data.m_ColorData.Length);
 
-                m_ColorBuffer = new ComputeBuffer(Unmanaged.Instance.Data.m_ColorData.Length, UnsafeUtility.SizeOf<float4>());
-                resources.textMaterial.SetBuffer("colorBuffer", m_ColorBuffer);
-                resources.graphMaterial.SetBuffer("colorBuffer", m_ColorBuffer);
-                resources.lineMaterial.SetBuffer("colorBuffer", m_ColorBuffer);
-                resources.meshMaterial.SetBuffer("colorBuffer", m_ColorBuffer);
+                if (updateColorBuffer || resources.meshMaterial.GetBuffer(colorBufferString).value == 0)
+                    resources.meshMaterial.SetBuffer(colorBufferString, m_ColorBuffer);
+                if (updateColorBuffer || resources.lineMaterial.GetBuffer(colorBufferString).value == 0)
+                    resources.lineMaterial.SetBuffer(colorBufferString, m_ColorBuffer);
             }
-
             UpdateDynamicColorsData();
-
-            if (m_TextCellBuffer == null || m_TextCellBuffer.count != Unmanaged.Instance.Data.m_TextBuffer.m_Screen.m_Cell.Length)
+            // Line Buffer
             {
-                if (m_TextCellBuffer != null)
-                {
-                    m_TextCellBuffer.Release();
-                    m_TextCellBuffer = null;
-                }
+                var updateLineBuffer = RecreateBuffer<LineBuffer.Instance>(ref m_LineVertexBuffer, Unmanaged.Instance.Data.m_LineBuffer.m_Instance.Length);
 
-                m_TextCellBuffer = new ComputeBuffer(Unmanaged.Instance.Data.m_TextBuffer.m_Screen.m_Cell.Length,
-                    UnsafeUtility.SizeOf<Cell>());
-                resources.textMaterial.SetBuffer("textBuffer", m_TextCellBuffer);
+                if (updateLineBuffer || resources.lineMaterial.GetBuffer(positionBufferString).value == 0)
+                    resources.lineMaterial.SetBuffer(positionBufferString, m_LineVertexBuffer);
             }
 
-            if (m_TextInstanceBuffer == null || m_TextInstanceBuffer.count != Unmanaged.Instance.Data.m_TextBuffer.m_Instance.Length)
+            // Triangle Buffer
             {
-                if (m_TextInstanceBuffer != null)
-                {
-                    m_TextInstanceBuffer.Release();
-                    m_TextInstanceBuffer = null;
-                }
+                var updateTriangleBuffer = RecreateBuffer<TriangleBuffer.Instance>(ref m_TriangleInstanceBuffer, Unmanaged.Instance.Data.m_TriangleBuffer.m_Instance.Length);
 
-                m_TextInstanceBuffer = new ComputeBuffer(Unmanaged.Instance.Data.m_TextBuffer.m_Instance.Length,
-                    UnsafeUtility.SizeOf<TextBuffer.Instance>());
-                resources.textMaterial.SetBuffer("positionBuffer", m_TextInstanceBuffer);
-            }
-
-            if (m_LineVertexBuffer == null || m_LineVertexBuffer.count != Unmanaged.Instance.Data.m_LineBuffer.m_Instance.Length)
-            {
-                if (m_LineVertexBuffer != null)
-                {
-                    m_LineVertexBuffer.Release();
-                    m_LineVertexBuffer = null;
-                }
-
-                m_LineVertexBuffer = new ComputeBuffer(Unmanaged.Instance.Data.m_LineBuffer.m_Instance.Length, UnsafeUtility.SizeOf<LineBuffer.Instance>());
-                resources.lineMaterial.SetBuffer("positionBuffer", m_LineVertexBuffer);
-            }
-
-            if (m_TriangleInstanceBuffer == null ||
-                m_TriangleInstanceBuffer.count != Unmanaged.Instance.Data.m_TriangleBuffer.m_Instance.Length)
-            {
-                if (m_TriangleInstanceBuffer != null)
-                {
-                    m_TriangleInstanceBuffer.Release();
-                    m_TriangleInstanceBuffer = null;
-                }
-
-                m_TriangleInstanceBuffer = new ComputeBuffer(Unmanaged.Instance.Data.m_TriangleBuffer.m_Instance.Length,
-                    UnsafeUtility.SizeOf<TriangleBuffer.Instance>());
-                resources.meshMaterial.SetBuffer("meshBuffer", m_TriangleInstanceBuffer);
-            }
-
-            if (m_GraphSampleBuffer == null || m_GraphSampleBuffer.count != Unmanaged.Instance.Data.m_GraphBuffer.m_Data.Length)
-            {
-                if (m_GraphSampleBuffer != null)
-                {
-                    m_GraphSampleBuffer.Release();
-                    m_GraphSampleBuffer = null;
-                }
-
-                m_GraphSampleBuffer =
-                    new ComputeBuffer(Unmanaged.Instance.Data.m_GraphBuffer.m_Data.Length, UnsafeUtility.SizeOf<float>());
-                resources.graphMaterial.SetBuffer("sampleBuffer", m_GraphSampleBuffer);
-            }
-
-            if (m_GraphInstanceBuffer == null ||
-                m_GraphInstanceBuffer.count != Unmanaged.Instance.Data.m_GraphBuffer.m_Instance.Length)
-            {
-                if (m_GraphInstanceBuffer != null)
-                {
-                    m_GraphInstanceBuffer.Release();
-                    m_GraphInstanceBuffer = null;
-                }
-
-                m_GraphInstanceBuffer = new ComputeBuffer(Unmanaged.Instance.Data.m_GraphBuffer.m_Instance.Length,
-                    UnsafeUtility.SizeOf<GraphBuffer.Instance>());
-                resources.graphMaterial.SetBuffer("instanceBuffer", m_GraphInstanceBuffer);
+                if (updateTriangleBuffer || resources.meshMaterial.GetBuffer(meshBufferString).value == 0)
+                    resources.meshMaterial.SetBuffer(meshBufferString, m_TriangleInstanceBuffer);
             }
 
             m_ColorBuffer.SetData(Unmanaged.Instance.Data.m_ColorData.ToNativeArray());
-            m_TextCellBuffer.SetData(Unmanaged.Instance.Data.m_TextBuffer.m_Screen.m_Cell.ToNativeArray());
-            m_GraphSampleBuffer.SetData(Unmanaged.Instance.Data.m_GraphBuffer.m_Data.ToNativeArray());
-
-            m_NumGraphsToDraw = Unmanaged.Instance.Data.m_GraphBufferAllocations.Filled;
-            m_NumTextBoxesToDraw = Unmanaged.Instance.Data.m_TextBufferAllocations.Filled;
             m_NumLinesToDraw = Unmanaged.Instance.Data.m_LineBufferAllocations.Filled;
             m_NumTrianglesToDraw = Unmanaged.Instance.Data.m_TriangleBufferAllocations.Filled;
 
-            m_GraphInstanceBuffer.SetData(Unmanaged.Instance.Data.m_GraphBuffer.m_Instance.ToNativeArray(), 0, 0, m_NumGraphsToDraw);
-            m_TextInstanceBuffer.SetData(Unmanaged.Instance.Data.m_TextBuffer.m_Instance.ToNativeArray(), 0, 0, m_NumTextBoxesToDraw);
             m_LineVertexBuffer.SetData(Unmanaged.Instance.Data.m_LineBuffer.m_Instance.ToNativeArray(), 0, 0, m_NumLinesToDraw);
             m_TriangleInstanceBuffer.SetData(Unmanaged.Instance.Data.m_TriangleBuffer.m_Instance.ToNativeArray(), 0, 0, m_NumTrianglesToDraw);
 
             var scales = new float4(1.0f / FractionalCellsWide, 1.0f / FractionalCellsTall, 1.0f / PixelsWide, 1.0f / PixelsTall);
-            resources.textMaterial.SetVector("scales", scales);
-            resources.graphMaterial.SetVector("scales", scales);
-            resources.lineMaterial.SetVector("scales", scales);
-            resources.meshMaterial.SetVector("scales", scales);
+            resources.lineMaterial.SetVector(scalesString, scales);
+            resources.meshMaterial.SetVector(scalesString, scales);
+        }
+
+        private bool RecreateBuffer<T>(ref ComputeBuffer computeBuffer, int expectedLength) where T : struct
+        {
+            bool updateBuffer = computeBuffer == null ||
+                computeBuffer.count != expectedLength;
+            if (updateBuffer)
+            {
+                if (computeBuffer != null)
+                {
+                    computeBuffer.Release();
+                    computeBuffer = null;
+                }
+
+                computeBuffer = new ComputeBuffer(expectedLength,
+                    UnsafeUtility.SizeOf<T>());
+            }
+
+            return updateBuffer;
         }
 
         internal void Clear()
         {
             Unmanaged.Instance.Data.Clear();
-            TextBox.Draw(new int2(0, 0), new int2(IntegralCellsWide, IntegralCellsTall));  // steal one text box for the full-screen thing
         }
 
         internal void Render()
@@ -396,21 +273,11 @@ namespace Unity.DebugDisplay
             Graphics.DrawProceduralNow(MeshTopology.Triangles, m_NumTrianglesToDraw * 3, 1);
             resources.lineMaterial.SetPass(0);
             Graphics.DrawProceduralNow(MeshTopology.Lines, m_NumLinesToDraw * 2, 1);
-            resources.textMaterial.SetPass(0);
-            Graphics.DrawProceduralNow(MeshTopology.Triangles, m_NumTextBoxesToDraw * 6, 1);
-            resources.graphMaterial.SetPass(0);
-            Graphics.DrawProceduralNow(MeshTopology.Triangles, m_NumGraphsToDraw * 6, 1);
         }
 
-        int m_NumTextBoxesToDraw = 0;
-        int m_NumGraphsToDraw = 0;
         int m_NumLinesToDraw = 0;
         int m_NumTrianglesToDraw = 0;
 
-        ComputeBuffer m_GraphSampleBuffer; // one big 1D array of floats
-        ComputeBuffer m_GraphInstanceBuffer; // one thing for each graph to display
-        ComputeBuffer m_TextCellBuffer; // one big 2D array of character cells
-        ComputeBuffer m_TextInstanceBuffer; // one thing for each text box to display
         ComputeBuffer m_LineVertexBuffer; // one big 1D array of line vertex positions.
         ComputeBuffer m_TriangleInstanceBuffer;
 
@@ -433,35 +300,12 @@ namespace Unity.DebugDisplay
             }
         }
 
-/*
-        internal void Render(HDCamera hdCamera, CommandBuffer cmd)
-        {
-            if (hdCamera.camera.cameraType != CameraType.Game)
-                return;
-            cmd.DrawProcedural(Matrix4x4.identity, resources.textMaterial, 0, MeshTopology.Triangles, m_NumTextBoxesToDraw * 6, 1);
-            cmd.DrawProcedural(Matrix4x4.identity, resources.graphMaterial, 0, MeshTopology.Triangles, m_NumGraphsToDraw * 6, 1);
-        }
-
-        internal void Render3D(HDCamera hdCamera, CommandBuffer cmd)
-        {
-            cmd.DrawProcedural(Matrix4x4.identity, resources.lineMaterial, 0, MeshTopology.Lines, m_NumLinesToDraw, 1);
-        }
-*/
-
         public void Dispose()
         {
-            m_GraphSampleBuffer?.Dispose();
-            m_GraphInstanceBuffer?.Dispose();
-            m_TextCellBuffer?.Dispose();
-            m_TextInstanceBuffer?.Dispose();
             m_LineVertexBuffer?.Dispose();
             m_ColorBuffer?.Dispose();
             m_TriangleInstanceBuffer?.Dispose();
 
-            m_GraphSampleBuffer = null;
-            m_GraphInstanceBuffer = null;
-            m_TextCellBuffer = null;
-            m_TextInstanceBuffer = null;
             m_LineVertexBuffer = null;
             m_ColorBuffer = null;
             m_TriangleInstanceBuffer = null;

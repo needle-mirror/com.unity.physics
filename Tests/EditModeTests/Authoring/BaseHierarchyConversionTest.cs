@@ -63,6 +63,19 @@ namespace Unity.Physics.Tests.Authoring
             Root.isStatic = rootStatic;
         }
 
+        protected void TransformHierarchyNodes()
+        {
+            Root.transform.localPosition = new Vector3(1f, 2f, 3f);
+            Root.transform.localRotation = Quaternion.Euler(30f, 60f, 90f);
+            Root.transform.localScale = new Vector3(3f, 5f, 7f);
+            Parent.transform.localPosition = new Vector3(2f, 4f, 8f);
+            Parent.transform.localRotation = Quaternion.Euler(10f, 20f, 30f);
+            Parent.transform.localScale = new Vector3(2f, 4f, 8f);
+            Child.transform.localPosition = new Vector3(3f, 6f, 9f);
+            Child.transform.localRotation = Quaternion.Euler(15f, 30f, 45f);
+            Child.transform.localScale = new Vector3(-1f, 2f, -4f);
+        }
+
         protected GameObject Root { get; private set; }
         protected GameObject Parent { get; private set; }
         protected GameObject Child { get; private set; }
@@ -80,8 +93,13 @@ namespace Unity.Physics.Tests.Authoring
             }
         }
 
+        [SetUp]
+        public virtual void SetUp()
+        {
+        }
+
         [TearDown]
-        public void TearDown()
+        public virtual void TearDown()
         {
             if (Child != null)
                 GameObject.DestroyImmediate(Child);
@@ -113,8 +131,8 @@ namespace Unity.Physics.Tests.Authoring
             world.EntityManager.MoveEntitiesFrom(intermediateWorld.EntityManager);
             // Search for the entity in the final world by comparing the EntityGuid from entity in the intermediate world
             var query = world.EntityManager.CreateEntityQuery(new ComponentType[] {typeof(EntityGuid)});
-            using var entityArray = query.ToEntityArray(Allocator.TempJob);
-            using var entityGUIDs = query.ToComponentDataArray<EntityGuid>(Allocator.TempJob);
+            using var entityArray = query.ToEntityArray(Allocator.Temp);
+            using var entityGUIDs = query.ToComponentDataArray<EntityGuid>(Allocator.Temp);
             for (int index = 0; index < entityGUIDs.Length; ++index)
             {
                 if (entityGUIDs[index] == intermediateEntityGuid)

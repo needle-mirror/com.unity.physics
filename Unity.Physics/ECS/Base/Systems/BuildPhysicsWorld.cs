@@ -13,7 +13,7 @@ namespace Unity.Physics.Systems
     // Make sure that:
     // 1. BuildPhysicsWorldDependencyResolver is always updated just before BuildPhysicsWorld
     // 2. BuildPhysicsWorld is the last system to be updated in [PhysicsInitializeGroup]
-    // This is done to prevent race conditions if users put someting to UpdateIn[PhysicsInitializeGroup].
+    // This is done to prevent race conditions if users put something to UpdateIn[PhysicsInitializeGroup].
     // They shouldn't be doing so, but it is nice to prevent unresolvable race conditions.
     [UpdateInGroup(typeof(PhysicsInitializeGroup), OrderLast = true)]
     internal partial class PhysicsInitializeGroupInternal : ComponentSystemGroup

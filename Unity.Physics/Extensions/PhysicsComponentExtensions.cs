@@ -1,6 +1,6 @@
-using System;
+using Unity.Assertions;
+using Unity.Entities;
 using Unity.Mathematics;
-using Unity.Transforms;
 
 namespace Unity.Physics.Extensions
 {
@@ -20,6 +20,72 @@ namespace Unity.Physics.Extensions
     /// <summary>   Utility functions acting on physics components. </summary>
     public static class PhysicsComponentExtensions
     {
+        /// <summary>
+        /// Makes this collider <see cref="PhysicsCollider.IsUnique">unique</see> if this is not already the case.
+        /// </summary>
+        /// <param name="collider">The PhysicsCollider component representing the collider.</param>
+        /// <param name="entity">The entity which contains the PhysicsCollider component.</param>
+        /// <param name="entityManager">An entity manager, required for this operation.</param>
+        public static void MakeUnique(ref this PhysicsCollider collider, in Entity entity, EntityManager entityManager)
+        {
+            if (CloneAndCreateCleanupDataIfRequired(ref collider, out var data))
+            {
+                entityManager.AddComponentData(entity, data);
+            }
+        }
+
+        /// <summary>
+        /// Makes this collider <see cref="PhysicsCollider.IsUnique">unique</see> if this is not already the case.
+        /// </summary>
+        /// <param name="collider">The PhysicsCollider component representing the collider.</param>
+        /// <param name="entity">The entity which contains the PhysicsCollider component.</param>
+        /// <param name="ecb">An entity command buffer, required for this operation.</param>
+        public static void MakeUnique(ref this PhysicsCollider collider, in Entity entity, EntityCommandBuffer ecb)
+        {
+            if (CloneAndCreateCleanupDataIfRequired(ref collider, out var data))
+            {
+                ecb.AddComponent(entity, data);
+            }
+        }
+
+        /// <summary>
+        /// Makes this collider <see cref="PhysicsCollider.IsUnique">unique</see> if this is not already the case.
+        /// This function can be used in a job.
+        /// </summary>
+        /// <param name="collider">The PhysicsCollider component representing the collider.</param>
+        /// <param name="entity">The entity which contains the PhysicsCollider component.</param>
+        /// <param name="ecbParallelWriter">An entity command buffer's parallel writer, required for this operation.</param>
+        /// <param name="sortKey">  A unique index required for adding a component through the provided <paramref name="ecbParallelWriter"/>.
+        ///                         See <see cref="EntityCommandBuffer.ParallelWriter.AddComponent{T}(int, Entity, T)"/> for details. </param>
+        public static void MakeUnique(ref this PhysicsCollider collider, in Entity entity, EntityCommandBuffer.ParallelWriter ecbParallelWriter, int sortKey)
+        {
+            if (CloneAndCreateCleanupDataIfRequired(ref collider, out var data))
+            {
+                ecbParallelWriter.AddComponent(sortKey, entity, data);
+            }
+        }
+
+        static bool CloneAndCreateCleanupDataIfRequired(ref PhysicsCollider collider, out ColliderBlobCleanupData data)
+        {
+            Assert.IsTrue(collider.IsValid);
+            if (collider.IsUnique)
+            {
+                // nothing to do
+                data = default;
+                return false;
+            }
+            // else:
+
+            var blobClone = collider.Value.Value.Clone();
+            collider.Value = blobClone;
+            data = new ColliderBlobCleanupData
+            {
+                Value = blobClone
+            };
+
+            return true;
+        }
+
         /// <summary>
         /// Scale the mass of the body using provided scale.
         /// </summary>
@@ -99,7 +165,7 @@ namespace Unity.Physics.Extensions
         /// <summary>
         /// Get the center of mass in world space. Assumes that there is no scale.
         /// </summary>
-        /// <seealso cref="GetCenterOfMassWorldSpace(in Unity.Physics.PhysicsMass,float,in Unity.Mathematics.float3,in Unity.Mathematics.quaternion)"/>
+        /// <seealso cref="quaternion"/>
         ///
         /// <param name="bodyMass">         The body mass. </param>
         /// <param name="bodyPosition">     The body position. </param>

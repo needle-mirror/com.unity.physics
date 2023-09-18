@@ -301,6 +301,9 @@ namespace Unity.Physics
         ///
         /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
         public static BlobAssetReference<Collider> Create(NativeArray<ColliderBlobInstance> children)
+            => CreateInternal(children);
+
+        internal static BlobAssetReference<Collider> CreateInternal(NativeArray<ColliderBlobInstance> children, uint forceUniqueBlobID = ~ColliderConstants.k_SharedBlobID)
         {
             unsafe
             {
@@ -331,6 +334,7 @@ namespace Unity.Physics
                 compoundCollider->m_Header.CollisionType = CollisionType.Composite;
                 compoundCollider->m_Header.Version = 1;
                 compoundCollider->m_Header.Magic = 0xff;
+                compoundCollider->m_Header.ForceUniqueBlobID = forceUniqueBlobID;
                 compoundCollider->m_Header.Filter = filter;
 
                 // Initialize children array

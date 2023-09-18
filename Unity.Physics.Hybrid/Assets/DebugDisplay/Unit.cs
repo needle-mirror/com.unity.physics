@@ -24,42 +24,10 @@ namespace Unity.DebugDisplay
             }
         }
 
-        internal int AllocateAtomic()
-        {
-            return AllocateAtomic(1).m_Begin;
-        }
-
-/*
-        internal Unit Allocate(int count)
-        {
-            var end = math.min(m_next + count, m_end);
-            var unit = new Unit { m_begin = m_next, m_next = m_next, m_end = end };
-            m_next = end;
-            return unit;
-        }
-
-        internal int Allocate()
-        {
-            return Allocate(1).m_begin;
-        }
-*/
-
         internal Unit(int count)
         {
             m_Begin = m_Next = 0;
             m_End = count;
-        }
-
-        internal Unit(int me, int writers, int writableBegin, int writableEnd)
-        {
-            var writables = writableEnd - writableBegin;
-            m_Begin = writableBegin + (me * writables) / writers;
-            m_End = writableBegin + ((me + 1) * writables) / writers;
-            if (m_Begin > writableEnd)
-                m_Begin = writableEnd;
-            if (m_End > writableEnd)
-                m_End = writableEnd;
-            m_Next = m_Begin;
         }
 
         internal void Fill()

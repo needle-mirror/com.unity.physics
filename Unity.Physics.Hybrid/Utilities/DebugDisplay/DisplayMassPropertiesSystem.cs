@@ -10,7 +10,7 @@ namespace Unity.Physics.Authoring
 #if UNITY_EDITOR
 
     /// Create and dispatch a DisplayMassPropertiesJob
-    [UpdateInGroup(typeof(AfterPhysicsSystemGroup))]
+    [UpdateInGroup(typeof(PhysicsDebugDisplayGroup))]
     [BurstCompile]
     internal partial struct DisplayMassPropertiesSystem : ISystem
     {

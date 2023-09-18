@@ -124,18 +124,20 @@ namespace Unity.Physics.Authoring
     [RequireMatchingQueriesForUpdate]
     [UpdateAfter(typeof(EndColliderBakingSystem))]
     [WorldSystemFilter(WorldSystemFilterFlags.BakingSystem)]
-    public partial class RigidbodyBakingSystem : SystemBase
+    public partial struct RigidbodyBakingSystem : ISystem
     {
         static SimulationMode k_InvalidSimulationMode = (SimulationMode) ~0;
-        SimulationMode m_SavedSmulationMode = k_InvalidSimulationMode;
+        SimulationMode m_SavedSmulationMode;
         bool m_ProcessSimulationModeChange;
 
-        protected override void OnCreate()
+        public void OnCreate(ref SystemState state)
         {
+            m_SavedSmulationMode = k_InvalidSimulationMode;
+
             m_ProcessSimulationModeChange = Application.isPlaying;
         }
 
-        protected override void OnDestroy()
+        public void OnDestroy(ref SystemState state)
         {
             // Unless no legacy physics step data is available, restore previously stored legacy physics simulation mode
             // when leaving play-mode.
@@ -146,7 +148,7 @@ namespace Unity.Physics.Authoring
             }
         }
 
-        protected override void OnUpdate()
+        public void OnUpdate(ref SystemState state)
         {
             if (m_ProcessSimulationModeChange)
             {
@@ -160,7 +162,7 @@ namespace Unity.Physics.Authoring
             }
 
             // Set world index for bodies with world index baking data
-            var ecb = new EntityCommandBuffer(WorldUpdateAllocator);
+            var ecb = new EntityCommandBuffer(state.WorldUpdateAllocator);
             foreach (var(rigidBodyData, worldIndexData, entity) in
                      SystemAPI.Query<RefRO<RigidbodyBakingData>, RefRO<PhysicsWorldIndexBakingData>>()
                          .WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities).WithEntityAccess())
@@ -182,7 +184,7 @@ namespace Unity.Physics.Authoring
                 physicsMass.ValueRW = CreatePhysicsMass(bodyData.ValueRO, collider.ValueRO.MassProperties);
             }
 
-            ecb.Playback(EntityManager);
+            ecb.Playback(state.EntityManager);
             ecb.Dispose();
         }
 

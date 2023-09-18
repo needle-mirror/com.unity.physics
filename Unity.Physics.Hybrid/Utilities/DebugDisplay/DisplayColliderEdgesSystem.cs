@@ -244,28 +244,55 @@ namespace Unity.Physics.Authoring
     }
 
     [WorldSystemFilter(WorldSystemFilterFlags.Default)]
-    [UpdateInGroup(typeof(AfterPhysicsSystemGroup))]
+    [UpdateInGroup(typeof(PhysicsDebugDisplayGroup))]
+    [BurstCompile]
     internal partial struct DisplayBodyColliderEdges_Default : ISystem
     {
         private PrimitiveColliderGeometries DefaultGeometries;
+        private EntityQuery ColliderQuery;
 
         void OnCreate(ref SystemState state)
         {
+            ColliderQuery = state.GetEntityQuery(ComponentType.ReadOnly<PhysicsCollider>(),
+                ComponentType.ReadOnly<LocalToWorld>(),
+                ComponentType.ReadOnly<LocalTransform>());
+
+            state.RequireForUpdate(ColliderQuery);
             state.RequireForUpdate<PhysicsWorldSingleton>();
-            state.RequireForUpdate<PhysicsCollider>();
             state.RequireForUpdate<PhysicsDebugDisplayData>();
 
             DrawColliderUtility.CreateGeometries(out DefaultGeometries);
         }
 
+        [BurstCompile]
         void OnUpdate(ref SystemState state)
         {
-            if (!SystemAPI.TryGetSingleton(out PhysicsDebugDisplayData debugDisplay) || debugDisplay.DrawColliderEdges == 0)
+            if (!SystemAPI.TryGetSingleton(out PhysicsDebugDisplayData debugDisplay))
                 return;
 
-            if (SystemAPI.TryGetSingleton(out PhysicsWorldSingleton physicsWorldSingleton))
+            if (debugDisplay.DrawColliderEdges == (int)PhysicsDebugDisplayAuthoring.DisplayMode.PreIntegration)
             {
-                state.Dependency = DisplayColliderEdgesJob.ScheduleJob(physicsWorldSingleton.PhysicsWorld.Bodies, 1.0f, DefaultGeometries, state.Dependency);
+                if (SystemAPI.TryGetSingleton(out PhysicsWorldSingleton physicsWorldSingleton))
+                {
+                    state.Dependency = DisplayColliderEdgesJob.ScheduleJob(physicsWorldSingleton.PhysicsWorld.Bodies, 1.0f, DefaultGeometries, state.Dependency);
+                }
+            }
+            else if (debugDisplay.DrawColliderEdges ==
+                     (int)PhysicsDebugDisplayAuthoring.DisplayMode.PostIntegration)
+            {
+                var rigidBodiesList = new NativeList<RigidBody>(Allocator.TempJob);
+                DrawColliderUtility.GetRigidBodiesFromQuery(ref state, ref ColliderQuery, ref rigidBodiesList);
+
+                if (rigidBodiesList.IsEmpty)
+                {
+                    rigidBodiesList.Dispose();
+                    return;
+                }
+
+                var displayHandle = DisplayColliderEdgesJob.ScheduleJob(rigidBodiesList.AsArray(), 1.0f, DefaultGeometries, state.Dependency);
+                var disposeHandle = rigidBodiesList.Dispose(displayHandle);
+
+                state.Dependency = disposeHandle;
             }
         }
 
@@ -276,39 +303,31 @@ namespace Unity.Physics.Authoring
     }
 
     [WorldSystemFilter(WorldSystemFilterFlags.Editor)]
-    [UpdateInGroup(typeof(PhysicsDisplayDebugGroup))]
-    [UpdateAfter(typeof(CleanPhysicsDebugDataSystem_Editor))]
-    [UpdateBefore(typeof(PhysicsDebugDisplaySystem_Editor))]
+    [UpdateInGroup(typeof(PhysicsDebugDisplayGroup_Editor))]
     internal partial struct DisplayBodyColliderEdges_Editor : ISystem
     {
         private PrimitiveColliderGeometries DefaultGeometries;
+        private EntityQuery ColliderQuery;
 
         void OnCreate(ref SystemState state)
         {
-            var colliderQuery = state.GetEntityQuery(ComponentType.ReadOnly<PhysicsCollider>(), ComponentType.ReadOnly<LocalToWorld>());
-            state.RequireForUpdate(colliderQuery);
+            ColliderQuery = state.GetEntityQuery(ComponentType.ReadOnly<PhysicsCollider>(),
+                ComponentType.ReadOnly<LocalToWorld>(),
+                ComponentType.ReadOnly<LocalTransform>());
             state.RequireForUpdate<PhysicsDebugDisplayData>();
+            state.RequireForUpdate(ColliderQuery);
 
             DrawColliderUtility.CreateGeometries(out DefaultGeometries);
         }
 
+        [BurstCompile]
         void OnUpdate(ref SystemState state)
         {
             if (!SystemAPI.TryGetSingleton(out PhysicsDebugDisplayData debugDisplay) || debugDisplay.DrawColliderEdges == 0)
                 return;
 
             var rigidBodiesList = new NativeList<RigidBody>(Allocator.TempJob);
-            foreach (var(collider, localToWorld, localTransform) in
-                     SystemAPI.Query<RefRO<PhysicsCollider>, RefRO<LocalToWorld>, RefRO<LocalTransform>>())
-            {
-                var rigidTransform = DecomposeRigidBodyTransform(localToWorld.ValueRO.Value);
-                rigidBodiesList.Add(new RigidBody()
-                {
-                    Collider = collider.ValueRO.Value,
-                    WorldFromBody = rigidTransform,
-                    Scale = localTransform.ValueRO.Scale
-                });
-            }
+            DrawColliderUtility.GetRigidBodiesFromQuery(ref state, ref ColliderQuery, ref rigidBodiesList);
 
             if (rigidBodiesList.IsEmpty)
             {

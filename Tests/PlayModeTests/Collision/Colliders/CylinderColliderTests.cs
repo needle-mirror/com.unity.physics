@@ -1,7 +1,9 @@
 using System;
 using NUnit.Framework;
 using Unity.Burst;
+using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 
@@ -14,6 +16,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         [BurstCompile(CompileSynchronously = true)]
         struct CreateFromBurstJob : IJob
         {
+            [GenerateTestsForBurstCompatibility]
             public void Execute() => CylinderCollider.Create(new CylinderGeometry
             {
                 Orientation = quaternion.identity,
@@ -26,21 +29,15 @@ namespace Unity.Physics.Tests.Collision.Colliders
         [Test]
         public void CylinderCollider_Create_WhenCalledFromBurstJob_DoesNotThrow() => new CreateFromBurstJob().Run();
 
-        [Test]
-        public unsafe void CylinderCollider_Create_ResultHasExpectedValues()
+        unsafe void ValidateCylinderCollider(BlobAssetReference<Collider> collider, in CylinderGeometry geometry)
         {
-            var geometry = new CylinderGeometry
-            {
-                Center = new float3(-10.10f, 10.12f, 0.01f),
-                Orientation = quaternion.AxisAngle(math.normalize(new float3(1.4f, 0.2f, 1.1f)), 38.50f),
-                Height = 2f,
-                Radius = 0.25f,
-                BevelRadius = 0.05f,
-                SideCount = 10
-            };
+            // manually created colliders are unique by design
+            Assert.IsTrue(collider.Value.IsUnique);
 
-            var collider = CylinderCollider.Create(geometry);
-            var cylinderCollider = UnsafeUtility.AsRef<CylinderCollider>(collider.GetUnsafePtr());
+            Assert.AreEqual(ColliderType.Cylinder, collider.Value.Type);
+            Assert.AreEqual(CollisionType.Convex, collider.Value.CollisionType);
+
+            ref var cylinderCollider = ref UnsafeUtility.AsRef<CylinderCollider>(collider.GetUnsafePtr());
 
             Assert.AreEqual(geometry.Center, cylinderCollider.Center);
             Assert.AreEqual(geometry.Center, cylinderCollider.Geometry.Center);
@@ -54,6 +51,23 @@ namespace Unity.Physics.Tests.Collision.Colliders
             Assert.AreEqual(geometry.BevelRadius, cylinderCollider.Geometry.BevelRadius);
             Assert.AreEqual(CollisionType.Convex, cylinderCollider.CollisionType);
             Assert.AreEqual(ColliderType.Cylinder, cylinderCollider.Type);
+        }
+
+        [Test]
+        public void CylinderCollider_Create_ResultHasExpectedValues()
+        {
+            var geometry = new CylinderGeometry
+            {
+                Center = new float3(-10.10f, 10.12f, 0.01f),
+                Orientation = quaternion.AxisAngle(math.normalize(new float3(1.4f, 0.2f, 1.1f)), 38.50f),
+                Height = 2f,
+                Radius = 0.25f,
+                BevelRadius = 0.05f,
+                SideCount = 10
+            };
+
+            using var collider = CylinderCollider.Create(geometry);
+            ValidateCylinderCollider(collider, geometry);
         }
 
 #if ENABLE_UNITY_COLLECTIONS_CHECKS

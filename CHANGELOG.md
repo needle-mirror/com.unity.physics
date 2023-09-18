@@ -1,5 +1,46 @@
 # Changelog
 
+## [1.1.0-exp.1] - 2023-09-18
+
+### Added
+
+* Tests for ensuring proper joint anchor and mass property baking
+* new demo scene (5m. Collider Modifications) demonstrating how to create colliders during runtime
+* Utility functions were added for the creation of MeshCollider blob assets from UnityEngine.Mesh, UnityEngine.MeshData and UnityEngine.MeshDataArray. These functions are located in the MeshCollider class as `MeshCollider.Create' variants with different function signatures.
+* Users can now verify if a collider blob is unique, and make it unique easily if required. The newly introduced `PhysicsCollider.IsUnique` property lets users check if a `PhysicsCollider` is unique and turn it into a unique collider if desired via the function `PhysicsCollider.MakeUnique()`. Making a collider unique with this function also takes care of the collider blob lifetime management and will automatically dispose it if it is no longer needed.
+* Added a custom entity inspector for the collider blob asset stored in the `PhysicsCollider` component. This inspector allows for two-way interaction with the collider. The displayed values update in accordance with the collider's latest runtime state, and the UI can be used in order to interact with the collider manually when it is unique (see `PhysicsCollider.IsUnique`). Among others, this lets users try out different material properties at runtime, such as friction and restitution, or modify the collider's size, local position or orientation.
+
+### Changed
+
+* Changed the `bool` flags in the `Physics Debug Display` authoring component for drawing colliders, collider edges and axis-aligned bounding boxes of colliders to an enum called `DisplayMode`. With the display mode you can now choose whether to draw these elements at the beginning of the simulation step or at the end of the simulation step after the rigid bodies have been integrated, meaning, they have been moved forward in time.
+* Convert SystemBase to ISystems.
+* Joint baking for built-in 3D physics joints has been improved, leading to the expected simulation results. Now, when the `Spring` and `Damping` properties in Configurable and Character Joints are both set to 0 for limits, a hard limit is modeled. This is equivalent to the behavior in built-in 3D physics. Also, the `Damping` parameter is now correctly converted from damping coefficient to the Unity Physics damping ratio for joints, yielding the correct damping force. Furthermore, joint baking now considers the scale of game objects. Anchor points are now affected by the scale accordingly.
+* The formula which converts the user-specified joint relaxation parameters (spring frequency and damping ratio) to the internal constraint regularization parameters (tau and damping) was rewritten as an optimized closed-form expression with constant time complexity. The regularization parameters can now be efficiently computed regardless of the chosen solver iteration count.
+* `PhysicsGraphicalSmoothing` has been added to `.WithAll<>()` from `.WithAllRW<>()` in the `SmoothedDynamicBodiesQuery` variable within `SmoothRigidBodiesGraphicalMotion.cs` system file.
+* Updating APIs to `GetScriptingDefineSymbols()` and `SetScriptingDefineSymbols()`.
+* Included ragdoll authoring in documentation
+* Prefab instances will now contain unique colliders if the "force unique" collider authoring option is used. This allows collider runtime modifications without manual collider blob cloning now also on prefab instances. Note that prefab instances that contain "force unique" colliders will be made unique only after the next physics system group update following the prefab instantiation. Until then, the `PhysicsCollider.IsUnique` property will be false. If users require a unique collider immediately after prefab instantiation for runtime collider modifications, they can safely use the new `PhysicsCollider.MakeUnique()` function immediately after instantiation.
+* Updated Burst dependency to version 1.8.8
+* The internal component `DrawComponent`, required by the `Physics Debug Display`, is now hidden in the hierarchy.
+
+### Deprecated
+
+* The `Constraint.DefaultSpringDamping` variable was deprecated. Use `Constraint.DefaultDampingRatio` instead. The same applies to the `Constraint.SpringDamping` property which was deprecated. Instead the new `Constraint.DampingRatio` property should be used.
+
+### Removed
+
+* Remove unused internal debug draw functionalities which were causing slowdowns during world initialization
+
+### Fixed
+
+* BuildCompoundCollidersBakingSystem no longer leaks memory when the world is disposed.
+* Convert SystemBase to ISystems
+* When using the built-in `Rigidbody` and `Collider` authoring components, the inertia tensor of the resultant rigid body in Unity Physics is now set correctly in all situations. Previously, in certain cases, the default inertia tensor was used.
+* A problem which prevented the solver to respect the user-specified joint spring frequency and damping ratios in certain cases has been fixed, enabling physically-plausible modeling of joints under all operating conditions.
+* Link to changelog in documentation now fixed
+* Physics Shape components with type Mesh now correctly only use the Custom Mesh for MeshCollider creation if specified rather than also incorrectly including the game object's render mesh and any render mesh found in the game object's children. The previous erroneous behavior could lead to significant performance problems in the narrow phase (contact creation) of the physics simulation group for affected meshes.
+* Updated documentation to reflect that the Built-In TerrainCollider is not yet supported by Unity Physics
+
 
 ## [1.0.16] - 2023-09-11
 
@@ -10,8 +51,6 @@
 ### Fixed
 
 * Bugfix: The `AngularDamping` component of `RigidbodyAspect` is now writing to the correct value instead of to `LinearDamping`
-
-### Security
 
 
 ## [1.0.14] - 2023-07-27
@@ -274,49 +313,22 @@
 * Simplified math to improve performance in `CalculateTwistAngle()`
 * Fixed a bug in `ConvexHullBuilder.Compact()` where triangle indices in links were not properly updated after remapping.
 
-### Changed
-* Package Dependencies
-    * `com.unity.entities` to version `0.51.1`
-    * `com.unity.physics` to version `0.51.1`
-    * `com.unity.collections` to version `1.4.0`
+### Security
 
-## [0.51.0] - 2022-05-04
 
-### Changed
-* Package Dependencies
-    * `com.unity.burst` to version `1.6.6`
-    * `com.unity.entities` to version `0.51.0`
-    * `com.unity.mathematics` to version `1.2.6`
-    * `com.unity.physics` to version `0.51.0`
-    * `com.unity.collections` to version `1.3.1`
-
-## [0.50.0] - 2021-09-17
-
-### Changed
-
-* Upgraded com.unity.burst to 1.5.5
-* Adjusted code to remove obsolete APIs across all jobs inheriting IJobEntityBatch
-* Resources/ (used by Debug Draw) has been renamed DebugDisplayResources/ and now loads assets differently
-
-### Removed
-
-* All usages of PhysicsExclude from Demo and Runtime code.
-
-### Fixed
-
-* An issue with the rendering pipeline used for the package samples, which caused none of the samples to render post conversion
-* An issue with the materials present in the samples as their colors were no longer correct
 
 
 ## [0.10.0] - 2021-09-17
 
 ### Changed
 
+* Upgraded com.unity.burst to 1.5.5
 * Adjusted code to remove obsolete APIs across all jobs inheriting IJobEntityBatch
 
 ### Removed
 
 * All usages of PhysicsExclude from Demo and Runtime code.
+
 
 
 ## [0.10.0-preview.1] - 2021-06-25

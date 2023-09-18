@@ -37,18 +37,23 @@ namespace Unity.Physics.Tests
             return sb.ToString();
         }
 
-        static MatrixPrettyCloseConstraint PrettyCloseTo(this ConstraintExpression expression, float4x4 expected)
+        internal static MatrixPrettyCloseConstraint PrettyCloseTo(this ConstraintExpression expression, float4x4 expected)
         {
             var constraint = new MatrixPrettyCloseConstraint(expected);
             expression.Append(constraint);
             return constraint;
         }
 
-        static QuaternionOrientationEquivalentConstraint OrientedEquivalentTo(
-            this ConstraintExpression expression, quaternion expected
-        )
+        internal static QuaternionOrientationEquivalentConstraint PrettyCloseTo(this ConstraintExpression expression, quaternion expected)
         {
             var constraint = new QuaternionOrientationEquivalentConstraint(expected);
+            expression.Append(constraint);
+            return constraint;
+        }
+
+        internal static Float3PrettyCloseConstraint PrettyCloseTo(this ConstraintExpression expression, float3 expected)
+        {
+            var constraint = new Float3PrettyCloseConstraint(expected);
             expression.Append(constraint);
             return constraint;
         }

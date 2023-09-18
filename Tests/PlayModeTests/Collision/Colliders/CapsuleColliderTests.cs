@@ -1,6 +1,7 @@
 using System;
 using NUnit.Framework;
 using Unity.Burst;
+using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -18,6 +19,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         [BurstCompile(CompileSynchronously = true)]
         struct CreateFromBurstJob : IJob
         {
+            [GenerateTestsForBurstCompatibility]
             public void Execute() =>
                 CapsuleCollider.Create(new CapsuleGeometry { Vertex0 = math.up(), Vertex1 = -math.up(), Radius = 0.5f }).Dispose();
         }
@@ -25,20 +27,15 @@ namespace Unity.Physics.Tests.Collision.Colliders
         [Test]
         public void Capsule_Create_WhenCalledFromBurstJob_DoesNotThrow() => new CreateFromBurstJob().Run();
 
-        /// <summary>
-        /// Test if all attributes are set as expected when creating a new <see cref="CapsuleCollider"/>.
-        /// </summary>
-        [Test]
-        unsafe public void TestCapsuleColliderCreate()
+        unsafe void ValidateCapsuleCollider(Entities.BlobAssetReference<Collider> collider, in CapsuleGeometry geometry)
         {
-            var geometry = new CapsuleGeometry
-            {
-                Vertex0 = new float3(1.45f, 0.34f, -8.65f),
-                Vertex1 = new float3(100.45f, -80.34f, -8.65f),
-                Radius = 1.45f
-            };
-            var collider = CapsuleCollider.Create(geometry);
-            var capsuleCollider = UnsafeUtility.AsRef<CapsuleCollider>(collider.GetUnsafePtr());
+            // manually created colliders are unique by design
+            Assert.IsTrue(collider.Value.IsUnique);
+
+            Assert.AreEqual(ColliderType.Capsule, collider.Value.Type);
+            Assert.AreEqual(CollisionType.Convex, collider.Value.CollisionType);
+
+            ref var capsuleCollider = ref UnsafeUtility.AsRef<CapsuleCollider>(collider.GetUnsafePtr());
             Assert.AreEqual(ColliderType.Capsule, capsuleCollider.Type);
             Assert.AreEqual(CollisionType.Convex, capsuleCollider.CollisionType);
             TestUtils.AreEqual(geometry.Vertex0, capsuleCollider.Vertex0);
@@ -47,6 +44,25 @@ namespace Unity.Physics.Tests.Collision.Colliders
             TestUtils.AreEqual(geometry.Vertex1, capsuleCollider.Geometry.Vertex1);
             TestUtils.AreEqual(geometry.Radius, capsuleCollider.Radius);
             TestUtils.AreEqual(geometry.Radius, capsuleCollider.Geometry.Radius);
+        }
+
+        /// <summary>
+        /// Test if all attributes are set as expected when creating a new <see cref="CapsuleCollider"/>.
+        /// </summary>
+        [Test]
+        public void TestCapsuleColliderCreate()
+        {
+            var geometry = new CapsuleGeometry
+            {
+                Vertex0 = new float3(1.45f, 0.34f, -8.65f),
+                Vertex1 = new float3(100.45f, -80.34f, -8.65f),
+                Radius = 1.45f
+            };
+            var collider = CapsuleCollider.Create(geometry);
+            ValidateCapsuleCollider(collider, geometry);
+
+            var colliderClone = collider.Value.Clone();
+            ValidateCapsuleCollider(colliderClone, geometry);
         }
 
 #if ENABLE_UNITY_COLLECTIONS_CHECKS

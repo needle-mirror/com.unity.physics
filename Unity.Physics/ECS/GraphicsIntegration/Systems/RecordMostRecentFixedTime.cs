@@ -1,3 +1,4 @@
+using Unity.Burst;
 using Unity.Entities;
 using Unity.Physics.Systems;
 using Unity.Collections;
@@ -29,32 +30,33 @@ namespace Unity.Physics.GraphicsIntegration
     /// </summary>
     [UpdateInGroup(typeof(PhysicsSystemGroup))]
     [UpdateAfter(typeof(PhysicsInitializeGroup)), UpdateBefore(typeof(ExportPhysicsWorld))]
-    public partial class RecordMostRecentFixedTime : SystemBase
+    [BurstCompile]
+    public partial struct RecordMostRecentFixedTime : ISystem
     {
-        private SmoothRigidBodiesGraphicalMotion m_smoothGraphicalMotionSystem;
         private NativeHashSet<PhysicsWorldIndex> m_initializedWorlds;
 
-        protected override void OnCreate()
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
         {
-            base.OnCreate();
-            m_smoothGraphicalMotionSystem = World.GetExistingSystemManaged<SmoothRigidBodiesGraphicalMotion>();
-            RequireForUpdate<MostRecentFixedTime>();
+            state.RequireForUpdate<MostRecentFixedTime>();
             m_initializedWorlds = new NativeHashSet<PhysicsWorldIndex>(8, Allocator.Persistent);
         }
 
-        protected override void OnDestroy()
+        [BurstCompile]
+        public void OnDestroy(ref SystemState state)
         {
             m_initializedWorlds.Dispose();
-            base.OnDestroy();
         }
 
-        protected override void OnUpdate()
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
         {
             var worldIndex = SystemAPI.GetSingleton<PhysicsWorldSingleton>().PhysicsWorldIndex;
             if (!m_initializedWorlds.Contains(worldIndex))
             {
+                var mostRecentTimeEntity = SystemAPI.GetSingletonEntity<MostRecentFixedTime>();
                 //Let the graphics system smooth the rigid body motion for the physics world using recent smooth time.
-                m_smoothGraphicalMotionSystem.RegisterPhysicsWorldForSmoothRigidBodyMotion(worldIndex);
+                SmoothRigidBodiesGraphicalMotion.RegisterPhysicsWorldForSmoothRigidBodyMotion(ref state, mostRecentTimeEntity, worldIndex);
                 m_initializedWorlds.Add(worldIndex);
             }
             var mostRecentTimeBuffer = SystemAPI.GetBuffer<MostRecentFixedTime>(SystemAPI.GetSingletonEntity<MostRecentFixedTime>());

@@ -1,7 +1,7 @@
 using Unity.Entities;
 using System;
 using System.Collections.Generic;
-using Unity.Jobs;
+using Unity.Transforms;
 
 namespace Unity.Physics.Systems
 {
@@ -100,9 +100,9 @@ namespace Unity.Physics.Systems
                 AddSystemToUpdateList(World.Unmanaged.GetExistingUnmanagedSystem<ExportPhysicsWorld>());
                 AddSystemToUpdateList(World.GetExistingSystemManaged<BeforePhysicsSystemGroup>());
                 AddSystemToUpdateList(World.GetExistingSystemManaged<AfterPhysicsSystemGroup>());
-                AddSystemToUpdateList(World.GetExistingSystemManaged<Unity.Physics.GraphicsIntegration.BufferInterpolatedRigidBodiesMotion>());
-                AddSystemToUpdateList(World.GetExistingSystemManaged<Unity.Physics.GraphicsIntegration.CopyPhysicsVelocityToSmoothing>());
-                AddSystemToUpdateList(World.GetExistingSystemManaged<Unity.Physics.GraphicsIntegration.RecordMostRecentFixedTime>());
+                AddSystemToUpdateList(World.GetExistingSystem<Unity.Physics.GraphicsIntegration.BufferInterpolatedRigidBodiesMotion>());
+                AddSystemToUpdateList(World.GetExistingSystem<Unity.Physics.GraphicsIntegration.CopyPhysicsVelocityToSmoothing>());
+                AddSystemToUpdateList(World.GetExistingSystem<Unity.Physics.GraphicsIntegration.RecordMostRecentFixedTime>());
                 AddSystemToUpdateList(World.Unmanaged.GetExistingUnmanagedSystem<SyncCustomPhysicsProxySystem>());
 
                 var userSystems = new List<Type>();
@@ -242,6 +242,18 @@ namespace Unity.Physics.Systems
     [UpdateInGroup(typeof(PhysicsSystemGroup))]
     [UpdateAfter(typeof(ExportPhysicsWorld))]
     public partial class AfterPhysicsSystemGroup : ComponentSystemGroup
+    {
+    }
+
+    [WorldSystemFilter(WorldSystemFilterFlags.Default)]
+    [UpdateInGroup(typeof(LateSimulationSystemGroup))]
+    public partial class PhysicsDebugDisplayGroup : ComponentSystemGroup
+    {
+    }
+
+    [WorldSystemFilter(WorldSystemFilterFlags.Editor)]
+    [UpdateAfter(typeof(TransformSystemGroup))]
+    public partial class PhysicsDebugDisplayGroup_Editor : ComponentSystemGroup
     {
     }
 }
