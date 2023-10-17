@@ -5,8 +5,7 @@ using Unity.Physics.Extensions;
 namespace Unity.Physics.Systems
 {
     [RequireMatchingQueriesForUpdate]
-    [UpdateInGroup(typeof(PhysicsSystemGroup))]
-    [UpdateAfter(typeof(AfterPhysicsSystemGroup))]
+    [UpdateInGroup(typeof(BeforePhysicsSystemGroup), OrderFirst = true)]
     public partial struct EnsureUniqueColliderSystem : ISystem
     {
         [BurstCompile]

@@ -1,12 +1,44 @@
+---
+uid: unity-physics-changelog
+---
+
 # Changelog
+
+## [1.1.0-pre.3] - 2023-10-17
+
+### Added
+
+* The `Physics Debug Display` component can now display colliders of type `TerrainCollider`.
+* The `Layer Overrides` properties specified in `Collider` and `Rigidbody` authoring components are now baked into the `CollisionFilter` of the resultant Unity Physics colliders. For each individual `Collider` authoring component, the layer overrides on its `Rigidbody` and the collider itself are combined and together form the `CollidesWith` mask in the `CollisionFilter` of the baked collider. The collider collides with layers which are included, and does not collide with layers which are excluded. Furthermore, exclusions have precedence over inclusions.
+* `MassProperties.Scale` function allows uniformly scaling mass properties in a physically correct manner, assuming unit mass.
+* `MassProperties.CreateSphere` function for creation of the mass properties of a sphere with the provided radius, assuming unit mass.
+
+### Changed
+
+* Significantly improved performance of `Physics Debug Display` through a reduced need for thread synchronization via batching of debug display data.
+* The `Physics Debug Display` now automatically resizes its debug draw data buffers dynamically to ensure all entities are drawn.
+* Game objects with built-in or custom collider authoring components that have a purely uniform scale at edit-time, will now have the scale carried over into their `LocalTransform` component's `Scale` property during entity baking. Thus far, any scale, including a purely uniform scale, was baked into the Unity Physics collider geometry instead and the corresponding entity's `LocalTransform.Scale` property was set to 1 rather than to the desired uniform scale value. This is no longer the case, and users can now expect to find the uniform edit-time scale they assign to their game objects also in the resultant, baked entities during run-time, making run-time modifications of already uniformly scaled objects much more intuitive and less cumbersome.
+* Rigid bodies baked from game objects which have any world-space scale or shear at edit-time can now be scaled at runtime using their `LocalTransform` component's `Scale` property. Previously, this was not possible. Runtime scaling using the `LocalTransform.Scale` property was only possible when the edit-time scale of the baked game object was identity, and no shear was present.
+* `Entity` references in `CompoundCollider` children are no longer automatically set during baking since these references are not guaranteed to be valid in the `World` after baking. Only those entity references that appear in components and buffers, such as the `PhysicsColliderKeyEntityPair` buffer, are always guaranteed to be valid. Note that the `PhysicsColliderKeyEntityPair` buffer is still present on entities which contain a baked compound collider. Via collider keys, this buffer provides a mapping between the child colliders and the original entities that they were in at bake time.
+
+### Fixed
+
+* Prevent race condition between the systems that produce the debug draw data and the display system that renders the data. This allows the debug data to be fully produced before the display system attempts to render it.
+* Fix draw of collider entities without `LocalToWorld` component when selecting `PostIntegration` in the Physics Debug Display.
+* Avoid leftover debug draw when switching scenes and new scene has no `Physics Debug Display`.
+* Mass properties debug display now correctly considers the rigid body scale, and correctly handles cases with unphysical inertia tensors.
+* Custom mass properties specified using the `Override Default Mass Distribution` option in the custom `Physics Body Authoring` component now work correctly even if no collider is present.
+* A rigid body's uniform scale value (`LocalTransform.Scale`) is now always considered correctly in the simulation. Previously, when the rigid body entity also contained a `PostTransformMatrix` component, its uniform scale was not applied to its collider and mass properties, leading to erroneous mass properties and missed collisions (if uniform scale > 1) or ghost collisions (if uniform scale < 1).
+* Collider debug display now correctly displays colliders with uniform scale other than 1 in accordance with their `LocalTransform` component's `Scale` value.
+* Collider debug display now correctly displays rigid body entities with `Parent` component.
+
 
 ## [1.1.0-exp.1] - 2023-09-18
 
 ### Added
 
 * Tests for ensuring proper joint anchor and mass property baking
-* new demo scene (5m. Collider Modifications) demonstrating how to create colliders during runtime
-* Utility functions were added for the creation of MeshCollider blob assets from UnityEngine.Mesh, UnityEngine.MeshData and UnityEngine.MeshDataArray. These functions are located in the MeshCollider class as `MeshCollider.Create' variants with different function signatures.
+* Utility functions were added for the creation of MeshCollider blob assets from UnityEngine.Mesh, UnityEngine.MeshData and UnityEngine.MeshDataArray. These functions are located in the `MeshCollider` class as `MeshCollider.Create` variants with different function signatures.
 * Users can now verify if a collider blob is unique, and make it unique easily if required. The newly introduced `PhysicsCollider.IsUnique` property lets users check if a `PhysicsCollider` is unique and turn it into a unique collider if desired via the function `PhysicsCollider.MakeUnique()`. Making a collider unique with this function also takes care of the collider blob lifetime management and will automatically dispose it if it is no longer needed.
 * Added a custom entity inspector for the collider blob asset stored in the `PhysicsCollider` component. This inspector allows for two-way interaction with the collider. The displayed values update in accordance with the collider's latest runtime state, and the UI can be used in order to interact with the collider manually when it is unique (see `PhysicsCollider.IsUnique`). Among others, this lets users try out different material properties at runtime, such as friction and restitution, or modify the collider's size, local position or orientation.
 

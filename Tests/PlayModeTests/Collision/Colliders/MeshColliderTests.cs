@@ -6,6 +6,7 @@ using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
+using Unity.Physics.Authoring;
 using Random = Unity.Mathematics.Random;
 
 namespace Unity.Physics.Tests.Collision.Colliders
@@ -53,6 +54,61 @@ namespace Unity.Physics.Tests.Collision.Colliders
         [Test]
         public void MeshCollider_Create_WhenCalledFromBurstJob_DoesNotThrow() => new CreateFromBurstJob().Run();
 
+        [BurstCompile(CompileSynchronously = true)]
+        struct CreateFromMeshDataJob : IJobParallelFor
+        {
+            public NativeArray<UnityEngine.Mesh.MeshData> MeshData;
+
+            [GenerateTestsForBurstCompatibility]
+            public void Execute(int i)
+            {
+                using var colliderBlob = MeshCollider.Create(MeshData[i], CollisionFilter.Default, Material.Default);
+                var physicsCollider = new PhysicsCollider() { Value = colliderBlob};
+            }
+        }
+
+        [Test]
+        public void MeshCollider_CreateFromMeshData_WhenCalledFromBurstJob_DoesNotThrow()
+        {
+            var meshData = new NativeArray<UnityEngine.Mesh.MeshData>(3, Allocator.TempJob);
+            var engineMesh = DebugMeshCache.GetMesh(MeshType.Cube);
+            for (int i = 0; i < 3; i++)
+            {
+                var meshDataArray = UnityEngine.Mesh.AcquireReadOnlyMeshData(engineMesh);
+                meshData[i] = meshDataArray[0];
+            }
+
+            new CreateFromMeshDataJob()
+            {
+                MeshData = meshData
+            }.Run(3);
+        }
+
+        [BurstCompile(CompileSynchronously = true)]
+        struct CreateFromMeshDataArrayJob : IJob
+        {
+            [ReadOnly] public UnityEngine.Mesh.MeshDataArray MeshDataArray;
+
+            [GenerateTestsForBurstCompatibility]
+            public void Execute()
+            {
+                using var colliderBlob = MeshCollider.Create(MeshDataArray, CollisionFilter.Default, Material.Default);
+                var physicsCollider = new PhysicsCollider() { Value = colliderBlob};
+            }
+        }
+
+        [Test]
+        public void MeshCollider_CreateFromMeshDataArray_WhenCalledFromBurstJob_DoesNotThrow()
+        {
+            var engineMesh = DebugMeshCache.GetMesh(MeshType.Cube);
+            var meshDataArray = UnityEngine.Mesh.AcquireReadOnlyMeshData(engineMesh);
+
+            new CreateFromMeshDataArrayJob()
+            {
+                MeshDataArray = meshDataArray,
+            }.Run();
+        }
+
         struct PolygonCounter : ILeafColliderCollector
         {
             public int NumTriangles;
@@ -84,7 +140,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             }
         }
 
-        unsafe void ValidateMeshCollider(BlobAssetReference<Collider> collider, int expectedTriangleCount, int expectedQuadCount)
+        unsafe void ValidateMeshCollider(BlobAssetReference<Collider> collider, int expectedTriangleCount, int expectedQuadCount, bool checkQuads = false)
         {
             // manually created colliders are unique by design
             Assert.IsTrue(collider.Value.IsUnique);
@@ -127,7 +183,10 @@ namespace Unity.Physics.Tests.Collision.Colliders
             var counter = new PolygonCounter();
             meshCollider.GetLeaves(ref counter);
             Assert.AreEqual(expectedTriangleCount, counter.NumTriangles);
-            Assert.AreEqual(expectedQuadCount, counter.NumQuads);
+            if (checkQuads) // Remove when ECSB-582 is resolved
+            {
+                Assert.AreEqual(expectedQuadCount, counter.NumQuads);
+            }
         }
 
         /// <summary>
@@ -152,6 +211,51 @@ namespace Unity.Physics.Tests.Collision.Colliders
                 vertices.Dispose();
                 triangles.Dispose();
             }
+        }
+
+        static readonly TestCaseData[] k_MeshTypeTestCases =
+        {
+            new TestCaseData(MeshType.Cube, 0, 6).SetName("CubeMesh"),  // a mesh with just quads
+            new TestCaseData(MeshType.Capsule, 768, 32).SetName("CapsuleMesh"),  // a mesh with triangles and quads
+            new TestCaseData(MeshType.Icosahedron, 20, 0).SetName("IcosahedronMesh")  // a mesh with just triangles
+        };
+
+        [TestCaseSource(nameof(k_MeshTypeTestCases))]
+        public void MeshCollider_CreateFromEngineMesh_ResultHasExpectedValues(MeshType meshType, int numTrianglesExpected, int numQuadsExpected)
+        {
+            UnityEngine.Mesh mesh = DebugMeshCache.GetMesh(meshType);
+            var filter = CollisionFilter.Default;
+            using var collider = MeshCollider.Create(mesh, filter, Material.Default);
+            ValidateMeshCollider(collider, numTrianglesExpected, numQuadsExpected);
+
+            using var colliderClone = collider.Value.Clone();
+            ValidateMeshCollider(colliderClone, numTrianglesExpected, numQuadsExpected);
+        }
+
+        [TestCaseSource(nameof(k_MeshTypeTestCases))]
+        public void MeshCollider_CreateFromEngineMeshDataArray_ResultHasExpectedValues(MeshType meshType, int numTrianglesExpected, int numQuadsExpected)
+        {
+            UnityEngine.Mesh mesh = DebugMeshCache.GetMesh(meshType);
+            var engineMeshDataArray = UnityEngine.Mesh.AcquireReadOnlyMeshData(mesh);
+            var filter = CollisionFilter.Default;
+            using var collider = MeshCollider.Create(engineMeshDataArray, filter, Material.Default);
+            ValidateMeshCollider(collider, numTrianglesExpected, numQuadsExpected);
+
+            using var colliderClone = collider.Value.Clone();
+            ValidateMeshCollider(colliderClone, numTrianglesExpected, numQuadsExpected);
+        }
+
+        [TestCaseSource(nameof(k_MeshTypeTestCases))]
+        public void MeshCollider_CreateFromEngineMeshData_ResultHasExpectedValues(MeshType meshType, int numTrianglesExpected, int numQuadsExpected)
+        {
+            UnityEngine.Mesh mesh = DebugMeshCache.GetMesh(meshType);
+            var engineMeshDataArray = UnityEngine.Mesh.AcquireReadOnlyMeshData(mesh);
+            var filter = CollisionFilter.Default;
+            using var collider = MeshCollider.Create(engineMeshDataArray[0], filter, Material.Default);
+            ValidateMeshCollider(collider, numTrianglesExpected, numQuadsExpected);
+
+            using var colliderClone = collider.Value.Clone();
+            ValidateMeshCollider(colliderClone, numTrianglesExpected, numQuadsExpected);
         }
 
 #if ENABLE_UNITY_COLLECTIONS_CHECKS

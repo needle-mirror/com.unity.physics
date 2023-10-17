@@ -1,3 +1,4 @@
+using System;
 using Unity.Physics.Systems;
 using Unity.Collections;
 using Unity.Entities;
@@ -29,7 +30,7 @@ namespace Unity.Physics.Authoring
                 BodiesMotionTypes = bodiesMotionTypes,
                 Geometries = geometries,
                 CollidersFacesScale = collidersFacesScale
-            }.Schedule(rigidBodies.Length, 16, inputDeps);
+            }.Schedule(rigidBodies.Length, 1, inputDeps);
         }
 
         public void Execute(int i)
@@ -111,79 +112,108 @@ namespace Unity.Physics.Authoring
                     break;
 
                 case ColliderType.Compound:
-                    DrawCompoundColliderFaces((CompoundCollider*)collider, worldFromCollider, bodyMotionType, uniformScale);
+                    DrawCompoundColliderFaces((CompoundCollider*)collider, worldFromCollider, bodyMotionType,
+                        uniformScale);
                     break;
 
                 case ColliderType.Terrain:
-                    //TODO [#3792]: Terrain should use DebugDraw rather than Gizmos and add uniform scale support.
-                    //AppendMeshColliders.GetMeshes.AppendTerrain((TerrainCollider*)collider, worldFromCollider, ref results);
+                    DrawTerrainColliderFaces((TerrainCollider*)collider, worldFromCollider, color, uniformScale);
                     break;
             }
         }
 
-        // Covers: collider->Type = Box, Triangle, Quad, Convex, Cylinder(before started using primitives)
         private static void DrawConvexFaces(ref ConvexHull hull, RigidTransform worldFromCollider,
             ColorIndex ci, float uniformScale = 1.0f)
         {
-            for (var f = 0; f < hull.NumFaces; f++)
+            var triangleVertices = new NativeList<float3>(Allocator.Temp);
+            try
             {
-                var countVert = hull.Faces[f].NumVertices;
+                // set some best guess capacity, assuming we have on average of 3 triangles per face,
+                // and given the fact that we need 3 vertices to define a triangle.
+                const int kAvgTrianglesPerFace = 3;
+                const int kNumVerticesPerTriangle = 3;
+                triangleVertices.Capacity = hull.NumFaces * kAvgTrianglesPerFace * kNumVerticesPerTriangle;
 
-                if (countVert == 3) // A triangle
+                unsafe
                 {
-                    var vertices = new NativeArray<float3>(3, Allocator.Temp);
-                    for (var fv = 0; fv < countVert; fv++)
+                    var vertexBuffer = stackalloc float3[ConvexCollider.k_MaxFaceVertices];
+                    for (var f = 0; f < hull.NumFaces; f++)
                     {
-                        var origVertexIndex = hull.FaceVertexIndices[hull.Faces[f].FirstIndex + fv];
-                        vertices[fv] = uniformScale * hull.Vertices[origVertexIndex];
-                    }
-                    DrawColliderUtility.DrawTriangle(vertices[0], vertices[1], vertices[2], worldFromCollider, ci);
-                    vertices.Dispose();
-                }
-                else if (countVert == 4) // A quad: break into two triangles
-                {
-                    var vertices = new NativeArray<float3>(4, Allocator.Temp);
-                    for (var fv = 0; fv < countVert; fv++)
-                    {
-                        var origVertexIndex = hull.FaceVertexIndices[hull.Faces[f].FirstIndex + fv];
-                        vertices[fv] = uniformScale * hull.Vertices[origVertexIndex];
-                    }
-                    DrawColliderUtility.DrawTriangle(vertices[0], vertices[1], vertices[2], worldFromCollider, ci);
-                    DrawColliderUtility.DrawTriangle(vertices[2], vertices[3], vertices[0], worldFromCollider, ci);
-                    vertices.Dispose();
-                }
-                else // find the average vertex and then use to break into triangles
-                {
-                    var faceCentroid = float3.zero;
-                    var scaledVertices = new NativeArray<float3>(countVert, Allocator.Temp);
-                    for (var i = 0; i < countVert; i++)
-                    {
-                        var origVertexIndex = hull.FaceVertexIndices[hull.Faces[f].FirstIndex + i];
-                        scaledVertices[i] = uniformScale * hull.Vertices[origVertexIndex];
+                        var countVert = hull.Faces[f].NumVertices;
 
-                        faceCentroid += scaledVertices[i];
-                    }
-                    faceCentroid /= countVert;
-
-                    for (var j = 0; j < countVert; j++)
-                    {
-                        var vertices = new NativeArray<float3>(3, Allocator.Temp);
-                        if (j < countVert - 1)
+                        if (countVert == 3) // A triangle
                         {
-                            vertices[0] = scaledVertices[j];
-                            vertices[1] = scaledVertices[j + 1];
+                            for (var fv = 0; fv < countVert; fv++)
+                            {
+                                var origVertexIndex = hull.FaceVertexIndices[hull.Faces[f].FirstIndex + fv];
+                                triangleVertices.Add(math.transform(worldFromCollider,
+                                    uniformScale * hull.Vertices[origVertexIndex]));
+                            }
                         }
-                        else //close the circle of triangles
+                        else if (countVert == 4) // A quad: break into two triangles
                         {
-                            vertices[0] = scaledVertices[j];
-                            vertices[1] = scaledVertices[0];
+                            for (var fv = 0; fv < countVert; fv++)
+                            {
+                                var origVertexIndex = hull.FaceVertexIndices[hull.Faces[f].FirstIndex + fv];
+                                vertexBuffer[fv] = math.transform(worldFromCollider,
+                                    uniformScale * hull.Vertices[origVertexIndex]);
+                            }
+
+                            // triangle 0, 1, 2
+                            triangleVertices.Add(vertexBuffer[0]);
+                            triangleVertices.Add(vertexBuffer[1]);
+                            triangleVertices.Add(vertexBuffer[2]);
+                            // triangle 2, 3, 0
+                            triangleVertices.Add(vertexBuffer[2]);
+                            triangleVertices.Add(vertexBuffer[3]);
+                            triangleVertices.Add(vertexBuffer[0]);
                         }
-                        vertices[2] = faceCentroid;
-                        DrawColliderUtility.DrawTriangle(vertices[0], vertices[1], vertices[2], worldFromCollider, ci);
-                        vertices.Dispose();
+                        else // find the average vertex and then use to break into triangles
+                        {
+                            // Todo: we can avoid using the centroid as an extra vertex by simply walking around the face
+                            // and producing triangles with the first vertex and every next pair of vertices.
+
+                            var faceCentroid = float3.zero;
+                            for (var i = 0; i < countVert; i++)
+                            {
+                                var origVertexIndex = hull.FaceVertexIndices[hull.Faces[f].FirstIndex + i];
+                                var scaledVertex = math.transform(worldFromCollider, uniformScale * hull.Vertices[origVertexIndex]);
+                                faceCentroid += scaledVertex;
+
+                                vertexBuffer[i] = scaledVertex;
+                            }
+
+                            faceCentroid /= countVert;
+
+                            for (var j = 0; j < countVert; j++)
+                            {
+                                var vertices = new float3x3();
+                                if (j < countVert - 1)
+                                {
+                                    vertices[0] = vertexBuffer[j];
+                                    vertices[1] = vertexBuffer[j + 1];
+                                }
+                                else //close the circle of triangles
+                                {
+                                    vertices[0] = vertexBuffer[j];
+                                    vertices[1] = vertexBuffer[0];
+                                }
+
+                                vertices[2] = faceCentroid;
+
+                                triangleVertices.Add(vertices[0]);
+                                triangleVertices.Add(vertices[1]);
+                                triangleVertices.Add(vertices[2]);
+                            }
+                        }
                     }
-                    scaledVertices.Dispose();
                 }
+
+                PhysicsDebugDisplaySystem.Triangles(triangleVertices, ci);
+            }
+            finally
+            {
+                triangleVertices.Dispose();
             }
         }
 
@@ -194,7 +224,7 @@ namespace Unity.Physics.Authoring
             {
                 ref CompoundCollider.Child child = ref compoundCollider->Children[i];
 
-                ScaledMTransform mWorldFromCompound = new ScaledMTransform(worldFromCollider, 1.0f);
+                ScaledMTransform mWorldFromCompound = new ScaledMTransform(worldFromCollider, uniformScale);
                 ScaledMTransform mWorldFromChild = ScaledMTransform.Mul(mWorldFromCompound, new MTransform(child.CompoundFromChild));
                 RigidTransform worldFromChild = new RigidTransform(mWorldFromChild.Rotation, mWorldFromChild.Translation);
 
@@ -212,31 +242,116 @@ namespace Unity.Physics.Authoring
             worldMatrix.c1 *= uniformScale;
             worldMatrix.c2 *= uniformScale;
 
-            var nothing = new RigidTransform();
-            for (int sectionIndex = 0; sectionIndex < mesh.Sections.Length; sectionIndex++)
+            var triangleVertices = new NativeList<float3>(Allocator.Temp);
+            try
             {
-                ref Mesh.Section section = ref mesh.Sections[sectionIndex];
-                for (int primitiveIndex = 0; primitiveIndex < section.PrimitiveVertexIndices.Length; primitiveIndex++)
+                // calculate upper bound triangle count with max 2 triangles per primitive
+                int maxTriangleCount = 0;
+                const int kMaxTrianglesPerPrimitive = 2;
+                for (int sectionIndex = 0; sectionIndex < mesh.Sections.Length; sectionIndex++)
                 {
-                    Mesh.PrimitiveVertexIndices vertexIndices = section.PrimitiveVertexIndices[primitiveIndex];
-                    Mesh.PrimitiveFlags flags = section.PrimitiveFlags[primitiveIndex];
-                    var numTriangles = 1;
-                    if ((flags & Mesh.PrimitiveFlags.IsTrianglePair) != 0)
-                    {
-                        numTriangles = 2;
-                    }
+                    ref Mesh.Section section = ref mesh.Sections[sectionIndex];
+                    maxTriangleCount += section.PrimitiveVertexIndices.Length * kMaxTrianglesPerPrimitive;
+                }
 
-                    float3x4 v = new float3x4(
-                        math.transform(worldMatrix, section.Vertices[vertexIndices.A]),
-                        math.transform(worldMatrix, section.Vertices[vertexIndices.B]),
-                        math.transform(worldMatrix, section.Vertices[vertexIndices.C]),
-                        math.transform(worldMatrix, section.Vertices[vertexIndices.D]));
+                // set max capacity for vertex list, given that we need three vertices per triangle
+                const int kNumVerticesPerTriangle = 3;
+                triangleVertices.Capacity = maxTriangleCount * kNumVerticesPerTriangle;
 
-                    for (int triangleIndex = 0; triangleIndex < numTriangles; triangleIndex++)
+                for (int sectionIndex = 0; sectionIndex < mesh.Sections.Length; sectionIndex++)
+                {
+                    ref Mesh.Section section = ref mesh.Sections[sectionIndex];
+                    for (int primitiveIndex = 0; primitiveIndex < section.PrimitiveVertexIndices.Length; primitiveIndex++)
                     {
-                        DrawColliderUtility.DrawTriangle(v[0], v[1 + triangleIndex], v[2 + triangleIndex], nothing, ci);
+                        Mesh.PrimitiveVertexIndices vertexIndices = section.PrimitiveVertexIndices[primitiveIndex];
+                        Mesh.PrimitiveFlags flags = section.PrimitiveFlags[primitiveIndex];
+                        var numTriangles = 1;
+                        if ((flags & Mesh.PrimitiveFlags.IsTrianglePair) != 0)
+                        {
+                            numTriangles = 2;
+                        }
+
+                        float3x4 v = new float3x4(
+                            math.transform(worldMatrix, section.Vertices[vertexIndices.A]),
+                            math.transform(worldMatrix, section.Vertices[vertexIndices.B]),
+                            math.transform(worldMatrix, section.Vertices[vertexIndices.C]),
+                            math.transform(worldMatrix, section.Vertices[vertexIndices.D]));
+
+                        for (int triangleIndex = 0; triangleIndex < numTriangles; triangleIndex++)
+                        {
+                            triangleVertices.Add(v[0]);
+                            triangleVertices.Add(v[1 + triangleIndex]);
+                            triangleVertices.Add(v[2 + triangleIndex]);
+                        }
                     }
                 }
+
+                PhysicsDebugDisplaySystem.Triangles(triangleVertices, ci);
+            }
+            finally
+            {
+                triangleVertices.Dispose();
+            }
+        }
+
+        private static unsafe void DrawTerrainColliderFaces(TerrainCollider* terrainCollider, RigidTransform worldFromCollider,
+            DebugDisplay.ColorIndex ci, float uniformScale = 1.0f)
+        {
+            ref Terrain terrain = ref terrainCollider->Terrain;
+
+            float4x4 worldMatrix = new float4x4(worldFromCollider);
+            worldMatrix.c0 *= uniformScale;
+            worldMatrix.c1 *= uniformScale;
+            worldMatrix.c2 *= uniformScale;
+
+            // calculate the number of triangles in the terrain
+            int numCellsX = terrain.Size.x - 1;
+            int numCellsY = terrain.Size.y - 1;
+            int numTriangles = numCellsX * numCellsY * 2;
+
+            // allocate triangle vertex array for the required number of triangles
+            const int kNumVerticesPerTriangle = 3;
+            var triangleVertices = new NativeArray<float3>(numTriangles * kNumVerticesPerTriangle, Allocator.Temp);
+            int vertexIndex = 0;
+
+            try
+            {
+                for (int j = 0; j < numCellsY; ++j)
+                {
+                    for (int i = 0; i < numCellsX; ++i)
+                    {
+                        int i0 = i;
+                        int i1 = i + 1;
+                        int j0 = j;
+                        int j1 = j + 1;
+                        float3 v0 = math.transform(worldMatrix,
+                            new float3(i0, terrain.Heights[i0 + terrain.Size.x * j0], j0) * terrain.Scale);
+                        float3 v1 = math.transform(worldMatrix,
+                            new float3(i1, terrain.Heights[i1 + terrain.Size.x * j0], j0) * terrain.Scale);
+                        float3 v2 = math.transform(worldMatrix,
+                            new float3(i0, terrain.Heights[i0 + terrain.Size.x * j1], j1) * terrain.Scale);
+                        float3 v3 = math.transform(worldMatrix,
+                            new float3(i1, terrain.Heights[i1 + terrain.Size.x * j1], j1) * terrain.Scale);
+
+                        // add two triangles for each cell
+
+                        // triangle 1
+                        triangleVertices[vertexIndex++] = v2;
+                        triangleVertices[vertexIndex++] = v1;
+                        triangleVertices[vertexIndex++] = v0;
+
+                        // triangle 2
+                        triangleVertices[vertexIndex++] = v2;
+                        triangleVertices[vertexIndex++] = v3;
+                        triangleVertices[vertexIndex++] = v1;
+                    }
+                }
+
+                PhysicsDebugDisplaySystem.Triangles(triangleVertices, ci);
+            }
+            finally
+            {
+                triangleVertices.Dispose();
             }
         }
     }
@@ -250,20 +365,17 @@ namespace Unity.Physics.Authoring
         private EntityQuery StaticBodyQuery;
         private EntityQuery DynamicBodyQuery;
 
-        void OnCreate(ref SystemState state)
+        public void OnCreate(ref SystemState state)
         {
             var colliderQuery = state.GetEntityQuery(ComponentType.ReadOnly<PhysicsCollider>(),
-                ComponentType.ReadOnly<LocalToWorld>(),
-                ComponentType.ReadOnly<LocalTransform>());
+                ComponentType.ReadOnly<LocalToWorld>());
 
             DynamicBodyQuery = state.GetEntityQuery(ComponentType.ReadOnly<PhysicsCollider>(),
                 ComponentType.ReadOnly<LocalToWorld>(),
-                ComponentType.ReadOnly<LocalTransform>(),
                 ComponentType.ReadOnly<PhysicsMass>());
 
             StaticBodyQuery = state.GetEntityQuery(ComponentType.ReadOnly<PhysicsCollider>(),
                 ComponentType.ReadOnly<LocalToWorld>(),
-                ComponentType.ReadOnly<LocalTransform>(),
                 ComponentType.Exclude<PhysicsMass>());
 
             state.RequireForUpdate(colliderQuery);
@@ -273,44 +385,52 @@ namespace Unity.Physics.Authoring
         }
 
         [BurstCompile]
-        void OnUpdate(ref SystemState state)
+        public void OnUpdate(ref SystemState state)
         {
-            if (!SystemAPI.TryGetSingleton(out PhysicsDebugDisplayData debugDisplay))
+            if (!SystemAPI.TryGetSingleton(out PhysicsDebugDisplayData debugDisplay) || debugDisplay.DrawColliders == 0)
                 return;
 
-            if (debugDisplay.DrawColliders == (int)PhysicsDebugDisplayAuthoring.DisplayMode.PreIntegration)
+            switch (debugDisplay.ColliderDisplayMode)
             {
-                state.EntityManager.CompleteDependencyBeforeRO<PhysicsWorldSingleton>();
-                if (SystemAPI.TryGetSingleton(out PhysicsWorldSingleton physicsWorldSingleton))
+                case PhysicsDebugDisplayMode.PreIntegration:
                 {
-                    ref var physicsWorld = ref physicsWorldSingleton.PhysicsWorld;
-                    var bodyMotionTypes = new NativeArray<BodyMotionType>(physicsWorld.NumBodies, Allocator.TempJob);
+                    state.EntityManager.CompleteDependencyBeforeRO<PhysicsWorldSingleton>();
+                    if (SystemAPI.TryGetSingleton(out PhysicsWorldSingleton physicsWorldSingleton))
+                    {
+                        ref var physicsWorld = ref physicsWorldSingleton.PhysicsWorld;
+                        var bodyMotionTypes =
+                            new NativeArray<BodyMotionType>(physicsWorld.NumBodies, Allocator.TempJob);
 
-                    DrawColliderUtility.GetBodiesMotionTypesFromWorld(ref physicsWorld, ref bodyMotionTypes);
+                        DrawColliderUtility.GetBodiesMotionTypesFromWorld(ref physicsWorld, ref bodyMotionTypes);
 
-                    var displayHandle = DisplayColliderFacesJob.ScheduleJob(physicsWorldSingleton.PhysicsWorld.Bodies,
-                        bodyMotionTypes, 1.0f, DefaultGeometries, state.Dependency);
-                    var disposeHandle = bodyMotionTypes.Dispose(displayHandle);
-                    state.Dependency = disposeHandle;
+                        var displayHandle = DisplayColliderFacesJob.ScheduleJob(
+                            physicsWorldSingleton.PhysicsWorld.Bodies,
+                            bodyMotionTypes, 1.0f, DefaultGeometries, state.Dependency);
+                        var disposeHandle = bodyMotionTypes.Dispose(displayHandle);
+                        state.Dependency = disposeHandle;
+                    }
+                    break;
                 }
-            }
-            else if (debugDisplay.DrawColliders == (int)PhysicsDebugDisplayAuthoring.DisplayMode.PostIntegration)
-            {
-                var rigidBodies = new NativeList<RigidBody>(Allocator.TempJob);
-                var bodyMotionTypes = new NativeList<BodyMotionType>(Allocator.TempJob);
+                case PhysicsDebugDisplayMode.PostIntegration:
+                {
+                    var rigidBodies = new NativeList<RigidBody>(Allocator.TempJob);
+                    var bodyMotionTypes = new NativeList<BodyMotionType>(Allocator.TempJob);
 
-                DrawColliderUtility.GetBodiesByMotionsFromQuery(ref state, ref DynamicBodyQuery, ref rigidBodies, ref bodyMotionTypes);
-                DrawColliderUtility.GetBodiesByMotionsFromQuery(ref state, ref StaticBodyQuery, ref rigidBodies, ref bodyMotionTypes);
+                    DrawColliderUtility.GetBodiesByMotionsFromQuery(ref state, ref DynamicBodyQuery, ref rigidBodies, ref bodyMotionTypes);
+                    DrawColliderUtility.GetBodiesByMotionsFromQuery(ref state, ref StaticBodyQuery, ref rigidBodies, ref bodyMotionTypes);
 
-                var displayHandle = DisplayColliderFacesJob.ScheduleJob(rigidBodies.AsArray(),
-                    bodyMotionTypes.AsArray(), 1.0f, DefaultGeometries, state.Dependency);
-                var disposeHandle = JobHandle.CombineDependencies(rigidBodies.Dispose(displayHandle),
-                    bodyMotionTypes.Dispose(displayHandle));
-                state.Dependency = disposeHandle;
+                    var displayHandle = DisplayColliderFacesJob.ScheduleJob(rigidBodies.AsArray(),
+                        bodyMotionTypes.AsArray(), 1.0f, DefaultGeometries, state.Dependency);
+                    var disposeHandle = JobHandle.CombineDependencies(rigidBodies.Dispose(displayHandle),
+                        bodyMotionTypes.Dispose(displayHandle));
+                    state.Dependency = disposeHandle;
+
+                    break;
+                }
             }
         }
 
-        void OnDestroy(ref SystemState state)
+        public void OnDestroy(ref SystemState state)
         {
             DefaultGeometries.Dispose();
         }
@@ -324,10 +444,10 @@ namespace Unity.Physics.Authoring
         private PrimitiveColliderGeometries DefaultGeometries;
         private EntityQuery ColliderQuery;
 
-        void OnCreate(ref SystemState state)
+        public void OnCreate(ref SystemState state)
         {
             ColliderQuery = state.GetEntityQuery(ComponentType.ReadOnly<PhysicsCollider>(),
-                ComponentType.ReadOnly<LocalToWorld>(), ComponentType.ReadOnly<LocalTransform>());
+                ComponentType.ReadOnly<LocalToWorld>());
             state.RequireForUpdate(ColliderQuery);
             state.RequireForUpdate<PhysicsDebugDisplayData>();
 
@@ -335,7 +455,7 @@ namespace Unity.Physics.Authoring
         }
 
         [BurstCompile]
-        void OnUpdate(ref SystemState state)
+        public void OnUpdate(ref SystemState state)
         {
             if (!SystemAPI.TryGetSingleton(out PhysicsDebugDisplayData debugDisplay))
                 return;
@@ -355,7 +475,7 @@ namespace Unity.Physics.Authoring
             }
         }
 
-        void OnDestroy(ref SystemState state)
+        public void OnDestroy(ref SystemState state)
         {
             DefaultGeometries.Dispose();
         }

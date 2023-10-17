@@ -1,6 +1,5 @@
 using System;
 using Unity.Burst;
-using Unity.Collections;
 using Unity.Mathematics;
 
 namespace Unity.DebugDisplay
@@ -240,20 +239,19 @@ namespace Unity.DebugDisplay
         internal void Draw(float3 begin, float3 end, ColorIndex color)
         {
             if (m_Unit.m_Next < m_Unit.m_End)
+            {
                 Unmanaged.Instance.Data.m_LineBuffer.SetLine(begin, end, color, m_Unit.m_Next++);
+            }
+            else
+            {
+                Unmanaged.Instance.Data.m_LineBuffer.RequestResize();
+            }
         }
 
         public void Dispose()
         {
             while (m_Unit.m_Next < m_Unit.m_End)
                 Unmanaged.Instance.Data.m_LineBuffer.ClearLine(m_Unit.m_Next++);
-        }
-    }
-    internal struct Line
-    {
-        internal static void Draw(float3 begin, float3 end, ColorIndex color)
-        {
-            new Lines(1).Draw(begin, end, color);
         }
     }
 
@@ -270,7 +268,14 @@ namespace Unity.DebugDisplay
         internal void Draw(float3 vertex0, float3 vertex1, float3 vertex2, float3 normal, Unity.DebugDisplay.ColorIndex color)
         {
             if (m_Unit.m_Next < m_Unit.m_End)
-                Unmanaged.Instance.Data.m_TriangleBuffer.SetTriangle(vertex0, vertex1, vertex2, normal, color, m_Unit.m_Next++);
+            {
+                Unmanaged.Instance.Data.m_TriangleBuffer.SetTriangle(vertex0, vertex1, vertex2, normal, color,
+                    m_Unit.m_Next++);
+            }
+            else
+            {
+                Unmanaged.Instance.Data.m_TriangleBuffer.RequestResize();
+            }
         }
 
         public void Dispose()
@@ -279,14 +284,6 @@ namespace Unity.DebugDisplay
                 Unmanaged.Instance.Data.m_TriangleBuffer.ClearTriangle(m_Unit.m_Next++);
         }
     }
-    internal struct Triangle
-    {
-        internal static void Draw(float3 vertex0, float3 vertex1, float3 vertex2, float3 normal, Unity.DebugDisplay.ColorIndex color)
-        {
-            new Triangles(1).Draw(vertex0, vertex1, vertex2, normal, color);
-        }
-    }
-    //----
 
     internal class DebugDisplay
     {

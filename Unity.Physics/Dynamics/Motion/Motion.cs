@@ -53,9 +53,30 @@ namespace Unity.Physics
                 Transform = RigidTransform.identity,
                 InertiaTensor = new float3(2.0f / 5.0f)
             },
-            Volume = (4.0f / 3.0f) * (float)math.PI,
+            Volume = (4.0f / 3.0f) * math.PI,
             AngularExpansionFactor = 0.0f
         };
+
+        /// <summary>
+        /// Scales the mass properties by the given uniform scale factor assuming unit mass.
+        /// </summary>
+        /// <param name="uniformScale">The uniform scale.</param>
+        public void Scale(float uniformScale)
+        {
+            if (!Math.IsApproximatelyEqual(uniformScale, 1.0f))
+            {
+                MassDistribution.Transform.pos *= uniformScale;
+
+                var absScale = math.abs(uniformScale);
+                var absScale2 = absScale * absScale;
+
+                // Assuming unit mass, the inertia tensor needs to be scaled by the squared scale
+                MassDistribution.InertiaTensor *= absScale2;
+
+                Volume *= absScale2 * absScale;
+                AngularExpansionFactor *= absScale;
+            }
+        }
 
         /// <summary>
         /// Creates mass properties of a box with the provided side lengths, centered on the origin.
@@ -72,6 +93,26 @@ namespace Unity.Physics
                     InertiaTensor = new float3(size.y * size.y + size.z * size.z, size.x * size.x + size.z * size.z, size.x * size.x + size.y * size.y) / 12.0f
                 },
                 Volume = size.x * size.y * size.z,
+                AngularExpansionFactor = 0.0f
+            };
+        }
+
+        /// <summary>
+        /// Creates mass properties of a sphere with the provided radius, centered on the origin.
+        /// </summary>
+        /// <param name="radius">Sphere radius.</param>
+        /// <returns>Mass properties of the sphere.</returns>
+        public static MassProperties CreateSphere(in float radius)
+        {
+            var radius2 = radius * radius;
+            return new MassProperties
+            {
+                MassDistribution = new MassDistribution
+                {
+                    Transform = RigidTransform.identity,
+                    InertiaTensor = new float3(2.0f / 5.0f * radius2)
+                },
+                Volume = (4.0f / 3.0f) * math.PI * radius * radius2,
                 AngularExpansionFactor = 0.0f
             };
         }

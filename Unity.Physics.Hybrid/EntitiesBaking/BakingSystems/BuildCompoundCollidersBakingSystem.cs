@@ -50,8 +50,7 @@ namespace Unity.Physics.Authoring
             m_StaticCleanUpTypes = new ComponentTypeSet(
                 typeof(PhysicsWorldIndex),
                 typeof(PhysicsCollider),
-                typeof(PhysicsColliderKeyEntityPair),
-                typeof(PhysicsPostProcessData)
+                typeof(PhysicsColliderKeyEntityPair)
             );
         }
 
@@ -264,11 +263,18 @@ namespace Unity.Physics.Authoring
                         var compoundCollider = (CompoundCollider*)rootCollider.ColliderPtr;
                         for (int i = 0; i < compoundCollider->NumChildren; i++)
                         {
+                            ref var child = ref compoundCollider->Children[i];
                             colliderKeyEntityBuffer.Add(new PhysicsColliderKeyEntityPair()
                             {
-                                Entity = compoundCollider->Children[i].Entity,
+                                Entity = child.Entity,
                                 Key = compoundCollider->ConvertChildIndexToColliderKey(i)
                             });
+
+                            // Note: Once we populated the PhysicsColliderKeyEntityPair buffer,
+                            // we reset the Entity members in the collider blob to Entity.Null since they will not be guaranteed to
+                            // be valid after baking. Only Entities which are directly within components will be automatically
+                            // updated by the Entities framework when their internal IDs change.
+                            child.Entity = Entity.Null;
                         }
                     }
                 }

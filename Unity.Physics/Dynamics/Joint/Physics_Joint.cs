@@ -25,7 +25,7 @@ namespace Unity.Physics
     }
 
     /// <summary>   A linear or angular constraint in 1, 2, or 3 dimensions. </summary>
-    [StructLayout(LayoutKind.Sequential)]
+    [StructLayout(LayoutKind.Explicit)]
     public struct Constraint : IEquatable<Constraint>
     {
         /// <summary>
@@ -42,35 +42,46 @@ namespace Unity.Physics
         /// <summary>   The default maximum impulse. </summary>
         public const float DefaultMaxImpulse = float.PositiveInfinity;
 
-        /// <summary>   The default damping ratio. </summary>
-        [Obsolete("Use DefaultDampingRatio (RemovedAfter 2023-05-09)", false)]
-        public float DefaultSpringDamping => DefaultDampingRatio;
+        /// <summary>
+        /// <para> Deprecated. Use DefaultDampingRatio instead. </para>
+        /// The default damping ratio.
+        /// </summary>
+        [Obsolete("DefaultSpringDamping has been deprecated (RemovedAfter 2023-05-09). Use DefaultDampingRatio instead. (UnityUpgradable) -> DefaultDampingRatio", false)]
+        public const float DefaultSpringDamping = 2530.126f;
 
         /// <summary>   The constrained axes. </summary>
+        [FieldOffset(0)]
         public bool3 ConstrainedAxes;
         /// <summary>   The constraint type. </summary>
+        [FieldOffset(3)]
         public ConstraintType Type;
 
         /// <summary>   The minimum. </summary>
+        [FieldOffset(4)]
         public float Min;
         /// <summary>   The maximum. </summary>
+        [FieldOffset(8)]
         public float Max;
         /// <summary>   The spring frequency. </summary>
+        [FieldOffset(12)]
         public float SpringFrequency;
         /// <summary>   The damping ratio. </summary>
+        [FieldOffset(16)]
         public float DampingRatio;
 
-        /// <summary>   The spring damping ratio. </summary>
-        [Obsolete("Use DampingRatio instead (RemovedAfter 2023-05-09)", false)]
-        public float SpringDamping
-        {
-            get => DampingRatio;
-            set => DampingRatio = value;
-        }
+        /// <summary>
+        /// <para> Deprecated. Use DampingRatio instead. </para>
+        /// The spring damping ratio.
+        /// </summary>
+        [Obsolete("SpringDamping has been deprecated (RemovedAfter 2023-05-09). Use DampingRatio instead. (UnityUpgradable) -> DampingRatio", false)]
+        [FieldOffset(16)]
+        public float SpringDamping;
 
         /// <summary>   The impulse threshold after which <see cref="ImpulseEvent"/> will be raised from this constraint. In case of motorized constraints, represents the maximum impulse that can be applied to it during one step. </summary>
+        [FieldOffset(20)]
         public float3 MaxImpulse;
         /// <summary>   The target a motor will drive towards. Can be set to zero for non-motor type constraints </summary>
+        [FieldOffset(32)]
         public float3 Target;
 
         /// <summary>   Number of affected degrees of freedom.  1, 2, or 3. </summary>

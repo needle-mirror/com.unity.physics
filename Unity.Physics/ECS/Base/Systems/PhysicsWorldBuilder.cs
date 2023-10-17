@@ -141,7 +141,6 @@ namespace Unity.Physics.Systems
                         ParentType = componentHandles.ParentType,
 
                         LocalTransformType = componentHandles.LocalTransformType,
-                        PostTransformMatrixType = componentHandles.PostTransformMatrixType,
                         PhysicsColliderType = componentHandles.PhysicsColliderType,
                         PhysicsCustomTagsType = componentHandles.PhysicsCustomTagsType,
 
@@ -155,7 +154,6 @@ namespace Unity.Physics.Systems
                     var createMotionsJob = new Jobs.CreateMotions
                     {
                         LocalTransformType = componentHandles.LocalTransformType,
-                        PostTransformMatrixType = componentHandles.PostTransformMatrixType,
                         PhysicsVelocityType = componentHandles.PhysicsVelocityType,
                         PhysicsMassType = componentHandles.PhysicsMassType,
                         PhysicsMassOverrideType = componentHandles.PhysicsMassOverrideType,
@@ -184,7 +182,6 @@ namespace Unity.Physics.Systems
                         ParentType = componentHandles.ParentType,
 
                         LocalTransformType = componentHandles.LocalTransformType,
-                        PostTransformMatrixType = componentHandles.PostTransformMatrixType,
                         PhysicsColliderType = componentHandles.PhysicsColliderType,
                         PhysicsCustomTagsType = componentHandles.PhysicsCustomTagsType,
 
@@ -210,7 +207,6 @@ namespace Unity.Physics.Systems
                         ConstrainedBodyPairComponentType = componentHandles.PhysicsConstrainedBodyPairType,
                         JointComponentType = componentHandles.PhysicsJointType,
                         EntityType = componentHandles.EntityType,
-                        RigidBodies = world.Bodies,
                         Joints = world.Joints,
                         DefaultStaticBodyIndex = world.Bodies.Length - 1,
                         NumDynamicBodies = numDynamicBodies,
@@ -352,7 +348,6 @@ namespace Unity.Physics.Systems
                     LocalToWorldType = componentHandles.LocalToWorldType,
                     ParentType = componentHandles.ParentType,
                     LocalTransformType = componentHandles.LocalTransformType,
-                    PostTransformMatrixType = componentHandles.PostTransformMatrixType,
                     PhysicsColliderType = componentHandles.PhysicsColliderType,
                     PhysicsCustomTagsType = componentHandles.PhysicsCustomTagsType,
 
@@ -365,7 +360,6 @@ namespace Unity.Physics.Systems
                 new Jobs.CreateMotions
                 {
                     LocalTransformType = componentHandles.LocalTransformType,
-                    PostTransformMatrixType = componentHandles.PostTransformMatrixType,
                     PhysicsVelocityType = componentHandles.PhysicsVelocityType,
                     PhysicsMassType = componentHandles.PhysicsMassType,
                     PhysicsMassOverrideType = componentHandles.PhysicsMassOverrideType,
@@ -390,7 +384,6 @@ namespace Unity.Physics.Systems
                     LocalToWorldType = componentHandles.LocalToWorldType,
                     ParentType = componentHandles.ParentType,
                     LocalTransformType = componentHandles.LocalTransformType,
-                    PostTransformMatrixType = componentHandles.PostTransformMatrixType,
                     PhysicsColliderType = componentHandles.PhysicsColliderType,
                     PhysicsCustomTagsType = componentHandles.PhysicsCustomTagsType,
                     FirstBodyIndex = numDynamicBodies,
@@ -409,7 +402,6 @@ namespace Unity.Physics.Systems
                     ConstrainedBodyPairComponentType = componentHandles.PhysicsConstrainedBodyPairType,
                     JointComponentType = componentHandles.PhysicsJointType,
                     EntityType = componentHandles.EntityType,
-                    RigidBodies = world.Bodies,
                     Joints = world.Joints,
                     DefaultStaticBodyIndex = world.Bodies.Length - 1,
                     NumDynamicBodies = numDynamicBodies,
@@ -504,7 +496,6 @@ namespace Unity.Physics.Systems
                 [ReadOnly] public ComponentTypeHandle<LocalToWorld> LocalToWorldType;
                 [ReadOnly] public ComponentTypeHandle<Parent> ParentType;
                 [ReadOnly] public ComponentTypeHandle<LocalTransform> LocalTransformType;
-                [ReadOnly] public ComponentTypeHandle<PostTransformMatrix> PostTransformMatrixType;
                 [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
                 [ReadOnly] public ComponentTypeHandle<PhysicsCustomTags> PhysicsCustomTagsType;
                 [ReadOnly] public int FirstBodyIndex;
@@ -527,7 +518,6 @@ namespace Unity.Physics.Systems
                     bool hasChunkParentType = chunk.Has(ref ParentType);
                     bool hasChunkLocalToWorldType = chunkLocalToWorlds.IsCreated;
                     bool hasChunkLocalTransformType = chunkLocalTransforms.IsCreated;
-                    bool hasPostTransformMatrixType = chunk.Has(ref PostTransformMatrixType);
 
                     RigidTransform worldFromBody = RigidTransform.identity;
                     var entityEnumerator =
@@ -535,9 +525,16 @@ namespace Unity.Physics.Systems
                     while (entityEnumerator.NextEntityIndex(out int i))
                     {
                         int rbIndex = FirstBodyIndex + firstEntityIndexInQuery + i;
-                        // if entities are in a transform hierarchy then LocalTransform is in the space of their parents
-                        // in that case, LocalToWorld is the only common denominator for world space
-                        if (hasChunkParentType)
+
+                        // We support rigid body entities with various different transformation data components.
+                        // Here, we are extracting their world space transformation and feed it into the underlying
+                        // physics engine for processing in the pipeline (e.g., collision detection, solver, integration).
+                        // If the rigid body has a Parent, we obtain their world space transformation from their up-to date
+                        // LocalToWorld matrix. Any shear or scale in this matrix is ignored and only the rigid body transformation,
+                        // i.e., the position and orientation, is extracted.
+                        // If the rigid body has no Parent, we use the position and orientation of its LocalTransform component as world transform
+                        // if present. Otherwise, we again extract the transformation from the LocalToWorld matrix.
+                        if (hasChunkParentType || !hasChunkLocalTransformType)
                         {
                             if (hasChunkLocalToWorldType)
                             {
@@ -547,28 +544,12 @@ namespace Unity.Physics.Systems
                         }
                         else
                         {
-                            if (hasChunkLocalTransformType)
-                            {
-                                worldFromBody.pos = chunkLocalTransforms[i].Position;
-                                worldFromBody.rot = chunkLocalTransforms[i].Rotation;
-                            }
-                            else if (hasChunkLocalToWorldType)
-                            {
-                                worldFromBody.pos = chunkLocalToWorlds[i].Position;
-                                worldFromBody.rot = Math.DecomposeRigidBodyOrientation(chunkLocalToWorlds[i].Value);
-                            }
+                            worldFromBody.pos = chunkLocalTransforms[i].Position;
+                            worldFromBody.rot = chunkLocalTransforms[i].Rotation;
                         }
 
-                        // GameObjects with non-identity scale have their scale baked into their collision shape and mass, so
-                        // the entity's transform scale (if any) should not be applied again here. Entities that did not go
-                        // through baking should apply their uniform scale value to the rigid body.
-                        // Baking also adds a PostTransformMatrix component to apply the GameObject's authored scale in the
-                        // rendering code, so we test for that component to determine whether the entity's current scale
-                        // should be applied or ignored.
-                        // TODO(DOTS-7098): More robust check here?
                         float scale = 1.0f;
-
-                        if (!hasPostTransformMatrixType && hasChunkLocalTransformType)
+                        if (hasChunkLocalTransformType)
                         {
                             scale = chunkLocalTransforms[i].Scale;
                         }
@@ -591,7 +572,6 @@ namespace Unity.Physics.Systems
             internal struct CreateMotions : IJobChunk
             {
                 [ReadOnly] public ComponentTypeHandle<LocalTransform> LocalTransformType;
-                [ReadOnly] public ComponentTypeHandle<PostTransformMatrix> PostTransformMatrixType;
                 [ReadOnly] public ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
                 [ReadOnly] public ComponentTypeHandle<PhysicsMass> PhysicsMassType;
                 [ReadOnly] public ComponentTypeHandle<PhysicsMassOverride> PhysicsMassOverrideType;
@@ -614,13 +594,11 @@ namespace Unity.Physics.Systems
                     NativeArray<PhysicsGravityFactor> chunkGravityFactors = chunk.GetNativeArray(ref PhysicsGravityFactorType);
 
                     int motionStart = firstEntityIndexInQuery;
-                    int instanceCount = chunk.Count;
 
                     bool hasChunkPhysicsGravityFactorType = chunkGravityFactors.IsCreated;
                     bool hasChunkPhysicsDampingType = chunkDampings.IsCreated;
                     bool hasChunkPhysicsMassType = chunkMasses.IsCreated;
                     bool hasChunkPhysicsMassOverrideType = chunkMassOverrides.IsCreated;
-                    bool hasPostTransformMatrix = chunk.Has(ref PostTransformMatrixType);
                     bool hasChunkLocalTransformType = chunkLocalTransforms.IsCreated;
                     // Note: Transform and AngularExpansionFactor could be calculated from PhysicsCollider.MassProperties
                     // However, to avoid the cost of accessing the collider we assume an infinite mass at the origin of a ~1m^3 box.
@@ -657,14 +635,7 @@ namespace Unity.Physics.Systems
                         var hasInfiniteMass = isKinematic || mass.HasInfiniteMass;
                         float gravityFactor = hasInfiniteMass ? 0 : hasChunkPhysicsGravityFactorType ? chunkGravityFactors[i].Value : defaultGravityFactor;
 
-                        // GameObjects with non-identity scale have their scale baked into their collision shape and mass, so
-                        // the entity's transform scale (if any) should not be applied again here. Entities that did not go
-                        // through baking should apply their uniform scale value to the physics mass here.
-                        // Baking also adds a PostTransformMatrix component to apply the GameObject's authored scale in the
-                        // rendering code, so we test for that component to determine whether the entity's current scale
-                        // should be applied or ignored.
-                        // TODO(DOTS-7098): More robust check here?
-                        if (!hasPostTransformMatrix && hasChunkLocalTransformType)
+                        if (hasChunkLocalTransformType)
                         {
                             mass = mass.ApplyScale(chunkLocalTransforms[i].Scale);
                         }
@@ -709,18 +680,7 @@ namespace Unity.Physics.Systems
                             bodyRotationInWorld = chunkLocalTransforms[i].Rotation;
                             bodyPosInWorld = chunkLocalTransforms[i].Position;
 
-                            // GameObjects with non-identity scale have their scale baked into their collision shape and mass, so
-                            // the entity's transform scale (if any) should not be applied again here. Entities that did not go
-                            // through baking should apply their uniform scale value to the physics mass here.
-                            // Baking also adds a PostTransformMatrix component to apply the GameObject's authored scale in the
-                            // rendering code, so we test for that component to determine whether the entity's current scale
-                            // should be applied or ignored.
-                            // TODO(DOTS-7098): More robust check here?
-
-                            if (!hasPostTransformMatrix)
-                            {
-                                mass = mass.ApplyScale(chunkLocalTransforms[i].Scale);
-                            }
+                            mass = mass.ApplyScale(chunkLocalTransforms[i].Scale);
                         }
 
                         MotionDatas[motionIndex] = new MotionData
@@ -742,7 +702,6 @@ namespace Unity.Physics.Systems
                 [ReadOnly] public ComponentTypeHandle<PhysicsConstrainedBodyPair> ConstrainedBodyPairComponentType;
                 [ReadOnly] public ComponentTypeHandle<PhysicsJoint> JointComponentType;
                 [ReadOnly] public EntityTypeHandle EntityType;
-                [ReadOnly] public NativeArray<RigidBody> RigidBodies;
                 [ReadOnly] public int NumDynamicBodies;
                 [ReadOnly] public NativeParallelHashMap<Entity, int> EntityBodyIndexMap;
 

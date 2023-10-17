@@ -244,16 +244,4 @@ namespace Unity.Physics.Systems
     public partial class AfterPhysicsSystemGroup : ComponentSystemGroup
     {
     }
-
-    [WorldSystemFilter(WorldSystemFilterFlags.Default)]
-    [UpdateInGroup(typeof(LateSimulationSystemGroup))]
-    public partial class PhysicsDebugDisplayGroup : ComponentSystemGroup
-    {
-    }
-
-    [WorldSystemFilter(WorldSystemFilterFlags.Editor)]
-    [UpdateAfter(typeof(TransformSystemGroup))]
-    public partial class PhysicsDebugDisplayGroup_Editor : ComponentSystemGroup
-    {
-    }
 }

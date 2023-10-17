@@ -14,12 +14,12 @@ For a full list of changes, see the [Changelog](xref:unity-physics-changelog). F
 * New struct - `Unity.Physics.Math.ScaledMTransform`: Provides the same utility as `Unity.Physics.Math.MTransform` but supports uniform scale.
 * Operator which converts a `float4` into a `Unity.Physics.Plane`.
 * `PhysicsComponentExtensions.ApplyScale(in this PhysicsMass pm, in Scale scale)` - an extension method which scales up the `PhysicsMass` component.
-* Multiple extension methods have received a version which takes a `Scale` argument, you can see the full list at the [Changelog](xref:changelog).
+* Multiple extension methods have received a version which takes a `Scale` argument, you can see the full list at the [Changelog](xref:unity-physics-changelog).
 * `bool OverlapAabb(OverlapAabbInput input, ref NativeList<int> allHits)` has been added to PhysicsWorld.
 * `SimulationSingleton` IComponentData is added.
 * `PhysicsWorldSingleton` IComponentData is added. It implements `ICollidable` and has access to the stored `PhysicsWorld` and its utility methods.
 * `NativeReference<int> HaveStaticBodiesChanged` get property is added to `BuildPhysicsWorld`.
-* Multiple new system groups are introduced: like the `PhysicsSystemGroup` , see the full list at the [Changelog](xref:changelog).
+* Multiple new system groups are introduced: like the `PhysicsSystemGroup` , see the full list at the [Changelog](xref:unity-physics-changelog).
 * Impulse events to allow users to break joints.
 * Supports the following types of motors: rotational, linear velocity, rotational, angular velocity.
 * `CustomPhysicsSystemGroup` and `CustomPhysicsSystemGroupBase` for providing multiple worlds support.
@@ -41,14 +41,14 @@ For a full list of changes, see the [Changelog](xref:unity-physics-changelog). F
 * Removed use of the obsolete AlwaysUpdateSystem attribute. The new RequireMatchingQueriesForUpdate attribute has been added where appropriate.
 * `ColliderCastInput` now has a property `QueryColliderScale`. It defaults to `1.0f`, and represents the scale of the passed-in input collider.
 * `ColliderCastInput` constructor has changed to take in uniform scale of the query collider as the last parameter. It defaults to `1.0f`.
-* The following methods have a uniform scale argument added as the last argument (defaults to `1.0f`), and their arguments are reordered. The old versions are deprecated, see the full list at [Changelog](xref:changelog).
+* The following methods have a uniform scale argument added as the last argument (defaults to `1.0f`), and their arguments are reordered. The old versions are deprecated, see the full list at [Changelog](xref:unity-physics-changelog).
 * `BuildPhysicsWorld` is now a `struct` instead of a `class`, and implements `ISystem` instead of `SystemBase`.
 * `ExportPhysicsWorld` is now a `struct` instead of a `class`, and implements `ISystem` instead of `SystemBase`.
-* Multiple `PhysicsWorldBuilder.` signatures have changed, see [Changelog](xref:changelog).
+* Multiple `PhysicsWorldBuilder.` signatures have changed, see [Changelog](xref:unity-physics-changelog).
 * `PhysicsWorldData.HaveStaticBodiesChanged` is now a `NativeReference<int>` instead of `NativeArray<int>`.
 * `PhysicsWorldData.PhysicsWorldComponentHandles` struct is added. It contains component handles to data types needed to create a `PhysicsWorld`.
 * `PhysicsWorldData` also has an  `Update(ref SystemState)` method which just calls `Update(ref SystemState)` on `PhysicsWorldComponentHandles`.
-* Multiple `PhysicsWorldExporter.` signatures have changed, see [Changelog](xref:changelog).
+* Multiple `PhysicsWorldExporter.` signatures have changed, see [Changelog](xref:unity-physics-changelog).
 * The Joint Constraints container changed from FixedList128 to a custom internal container. Users will get a FixedList512 returned when retrieving constraints.
 * Replaced obsolete EntityQueryBuilder APIs with current ones.
 * `ISystem` implementations with public data converted to using components for data access.
@@ -59,7 +59,7 @@ For a full list of changes, see the [Changelog](xref:unity-physics-changelog). F
 * Dependency on `com.unity.test-framework.performance` package has been removed.
 * Removed `ICollider.CalculateAabb(RigidTransform transform)`. All `ICollider` implementations will still be able to call `CalculateAabb(RigidTransform transform, float uniformScale = 1)`, except `RigidBody`, `PhysicsWorld` and `CollisionWorld`, where these methods are deprecated.
 * Removed `CollisionWorldProxy`. Use `PhysicsWorldSingleton` to achieve the same functionality.
-* Simulation callback mechanism has been removed. Find removed APIs at [Changelog](xref:changelog).
+* Simulation callback mechanism has been removed. Find removed APIs at [Changelog](xref:unity-physics-changelog).
 * Removed `PhysicsWorld` getter from `BuildPhysicsWorld`. It is still possible to get a `PhysicsWorld` reference through `BuildPhysicsWorld.PhysicsData.PhysicsWorld` but it isn't recommended since it can cause race conditions.
 * Removed `StepPhysicsWorld` system.
 * Removed `EndFramePhysicsSystem` system.
@@ -68,7 +68,7 @@ For a full list of changes, see the [Changelog](xref:unity-physics-changelog). F
 * Removed `BuildPhysicsWorld.GetOutputDependency()` method.
 * Removed `ExportPhysicsWorld.AddInputDependency()` method.
 * Removed `ExportPhysicsWorld.GetOutputDependency()` method.
-* Removed `static class PhysicsRuntimeExtensions`, as a consequence, some extension methods are removed as well, see [Changelog](xref:changelog).
+* Removed `static class PhysicsRuntimeExtensions`, as a consequence, some extension methods are removed as well, see [Changelog](xref:unity-physics-changelog).
 * Removed `PhysicsWorldExporter.SharedData` struct.
 * Removed `PhysicsWorldExporter.ScheduleCollisionWorldProxy()` method.
 * Removed `PhysicsWorldExporter.ScheduleCollisionWorldCopy()` method.
@@ -79,4 +79,4 @@ For a full list of changes, see the [Changelog](xref:unity-physics-changelog). F
 ## Further information
 
 * [Upgrade guide](upgrade-guide.md)
-* [Changelog](xref:changelog)
+* [Changelog](xref:unity-physics-changelog)

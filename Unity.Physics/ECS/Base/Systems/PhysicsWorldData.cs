@@ -48,7 +48,6 @@ namespace Unity.Physics.Systems
                 ParentType = systemState.GetComponentTypeHandle<Parent>(true);
 
                 LocalTransformType = systemState.GetComponentTypeHandle<LocalTransform>(true);
-                PostTransformMatrixType = systemState.GetComponentTypeHandle<PostTransformMatrix>(true);
                 PhysicsColliderType = systemState.GetComponentTypeHandle<PhysicsCollider>(true);
                 PhysicsVelocityType = systemState.GetComponentTypeHandle<PhysicsVelocity>(true);
                 PhysicsMassType = systemState.GetComponentTypeHandle<PhysicsMass>(true);
@@ -74,7 +73,6 @@ namespace Unity.Physics.Systems
                 ParentType.Update(ref systemState);
 
                 LocalTransformType.Update(ref systemState);
-                PostTransformMatrixType.Update(ref systemState);
 
                 PhysicsColliderType.Update(ref systemState);
                 PhysicsVelocityType.Update(ref systemState);
@@ -93,7 +91,6 @@ namespace Unity.Physics.Systems
             internal ComponentTypeHandle<Parent> ParentType;
 
             internal ComponentTypeHandle<LocalTransform> LocalTransformType;
-            internal ComponentTypeHandle<PostTransformMatrix> PostTransformMatrixType;
 
             internal ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
             internal ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;

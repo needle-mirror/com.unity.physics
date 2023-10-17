@@ -1,8 +1,12 @@
 using System;
 using System.Linq;
 using NUnit.Framework;
+using Unity.Collections;
+using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Physics.Authoring;
+using Unity.Physics.Extensions;
+using Unity.Physics.Systems;
 using UnityEngine;
 using UnityEngine.TestTools.Utils;
 
@@ -215,6 +219,78 @@ namespace Unity.Physics.Tests.Authoring
             Root.GetComponent<Rigidbody>().mass = 50f;
 
             TestConvertedData<PhysicsMass>(mass => Assert.That(mass.InverseMass, Is.EqualTo(0.02f)));
+        }
+
+        static Vector3[] GetDifferentScales()
+        {
+            return new[]
+            {
+                new Vector3(1.0f, 1.0f, 1.0f),
+                new Vector3(0.542f, 0.542f, 0.542f),
+                new Vector3(0.42f, 1.1f, 2.1f),
+            };
+        }
+
+        // Make sure we obtain the user-specified mass properties after baking and in simulation for a rigid body
+        // when uniformly scaling the game object at edit-time.
+        [Test]
+        public void RigidbodyConversion_WithDifferentScales_EditTimeMassIsPreserved([Values] bool massOverride, [Values] bool withCollider, [ValueSource(nameof(GetDifferentScales))] Vector3 scale)
+        {
+            CreateHierarchy(new[] { typeof(Rigidbody) }, Array.Empty<Type>(), Array.Empty<Type>());
+            var rb = Root.GetComponent<Rigidbody>();
+
+            rb.isKinematic = false;
+
+            const float expectedMass = 42f;
+            var expectedCOM = new Vector3(1f, 2f, 3f);
+            var expectedInertia = new Vector3(2f, 3f, 4f);
+            var expectedInertiaRot = Quaternion.Euler(10f, 20f, 30f);
+
+            rb.mass = expectedMass;
+            MassProperties automaticMassProperties;
+
+            if (withCollider)
+            {
+                var boxCollider = Root.AddComponent<UnityEngine.BoxCollider>();
+                var boxColliderSize = new float3(3, 4, 5);
+                boxCollider.size = boxColliderSize;
+
+                // We expect the mass properties to correspond to a scaled version of the box based on the provided scale.
+                automaticMassProperties = MassProperties.CreateBox(boxColliderSize * scale);
+            }
+            else
+            {
+                // We expect the mass properties to correspond to a scaled version of the default unit sphere mass properties.
+
+                // Special case: Without a collider, we use default mass properties. In this case, when a non-uniform scale is
+                // present, we don't bake it into the collider and consequently don't scale the mass properties either.
+                var radius = 1f;
+                if (!float4x4.Scale(scale).HasNonUniformScale())
+                {
+                    radius *= scale[0];
+                }
+                automaticMassProperties = MassProperties.CreateSphere(radius);
+            }
+
+            if (massOverride)
+            {
+                rb.automaticCenterOfMass = false;
+                rb.automaticInertiaTensor = false;
+                rb.centerOfMass = expectedCOM;
+                rb.inertiaTensor = expectedInertia;
+                rb.inertiaTensorRotation = expectedInertiaRot;
+            }
+            else
+            {
+                expectedCOM = automaticMassProperties.MassDistribution.Transform.pos;
+                expectedInertia = automaticMassProperties.MassDistribution.InertiaTensor;
+                expectedInertiaRot = automaticMassProperties.MassDistribution.Transform.rot;
+            }
+
+            // scale the object
+            Root.transform.localScale = scale;
+
+            TestExpectedMass(expectedMass, expectedCOM, expectedInertia, expectedInertiaRot);
         }
 
         // Make sure we get the correct mass with non-kinematic bodies

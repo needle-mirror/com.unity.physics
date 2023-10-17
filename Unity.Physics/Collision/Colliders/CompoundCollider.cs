@@ -23,9 +23,13 @@ namespace Unity.Physics
             internal int m_ColliderOffset;
 
             /// <summary>
-            /// The original Entity from a hierarchy that Child is associated with, which is properly
-            /// populated in Baking time. If creating a <see cref="CompoundCollider"/> in the code, you can
-            /// set this field to any value you want and interpret it the way you want to.
+            /// <para>
+            ///     The <see cref="Unity.Entities.Entity"/> that this Child is associated with. Default value is <see cref="Entity.Null"/>.
+            /// </para>
+            /// <para>
+            ///     If creating a <see cref="CompoundCollider"/> manually using <see cref="CompoundCollider.Create"/>,
+            ///     you can set this field to any value you want and interpret it the way you want to.
+            /// </para>
             /// </summary>
             public Entity Entity;
 
@@ -276,8 +280,12 @@ namespace Unity.Physics
 
         #region Construction
 
-        /// <summary>   Input to CompoundCollider.Create(). Represents one child of the compound collider, with its' transform.</summary>
-        public struct ColliderBlobInstance  // TODO: better name?
+        /// <summary>
+        ///     Input to the compound collider creation function <see cref="CompoundCollider.Create"/>.
+        ///     Represents one child of the compound collider and its local transformation
+        ///     relative to the compound collider.
+        /// </summary>
+        public struct ColliderBlobInstance
         {
             /// <summary>   The child transform relative to the compound collider. </summary>
             public RigidTransform CompoundFromChild;
@@ -285,9 +293,13 @@ namespace Unity.Physics
             public BlobAssetReference<Collider> Collider;
 
             /// <summary>
-            /// The original Entity from a hierarchy that Child is associated with, which is properly
-            /// populated in Baking time. If creating a <see cref="CompoundCollider"/> in the code, you can
-            /// set this field to any value you want and interpret it the way you want to.
+            /// <para>
+            ///     The <see cref="Unity.Entities.Entity"/> that this Child is associated with. Default value is <see cref="Entity.Null"/>.
+            /// </para>
+            /// <para>
+            ///     If creating a <see cref="CompoundCollider"/> manually using <see cref="CompoundCollider.Create"/>,
+            ///     you can set this field to any value you want and interpret it the way you want to.
+            /// </para>
             /// </summary>
             public Entity Entity;
         }

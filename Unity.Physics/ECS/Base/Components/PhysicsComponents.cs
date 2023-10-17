@@ -66,17 +66,25 @@ namespace Unity.Physics
         public MassProperties MassProperties => Value.IsCreated ? Value.Value.MassProperties : MassProperties.UnitSphere;
 
         /// <summary>
-        /// Indicates whether this PhysicsCollider contains a unique Collider blob. That is, its Collider blob is
-        /// not shared with any other PhysicsCollider.
+        /// Indicates whether this <see cref="PhysicsCollider"/> contains a unique <see cref="Collider"/> blob.
+        /// That is, its Collider blob is not shared with any other <see cref="PhysicsCollider"/>.
         /// </summary>
         ///
-        /// <value> True if this PhysicsCollider contains a unique Collider blob, false if not. </value>
+        /// <value> True if this <see cref="PhysicsCollider"/> contains a unique <see cref="Collider"/> blob, false if not. </value>
         public bool IsUnique => Value.IsCreated && Value.Value.IsUnique;
     }
 
     /// <summary>
-    /// A buffer element used to associate an original Entity with a collider key in a <see cref="CompoundCollider"/>
-    /// .
+    /// <para>
+    ///     A buffer element which associates an original <see cref="Unity.Entities.Entity"/> with a child collider in
+    ///     a <see cref="CompoundCollider"/> through the child's <see cref="ColliderKey"/>.
+    /// </para>
+    /// <para>
+    ///     This buffer is automatically added during baking to rigid body entities whose colliders are regrouped and baked
+    ///     into a compound collider.
+    ///     It contains one entry per child in the resultant compound collider, associating the original <see cref="Unity.Entities.Entity"/>
+    ///     which contained the collider before creation of the compound with the compound's child collider through the child's collider key.
+    /// </para>.
     /// </summary>
     [InternalBufferCapacity(0)]
     public struct PhysicsColliderKeyEntityPair : IBufferElementData

@@ -41,7 +41,9 @@ The default values for collision filter ensure that every object collides with e
 
 ## Modifying PhysicsCollider
 
-It is possible to modify PhysicsCollider's `BlobAssetReference<Collider>` value. While it is completely safe to do so in jobs that declare write access to `PhysicsCollider` component, you need to be extra careful while modifying it otherwise. For example, you could access the collider using `EntityManager.GetComponentData<PhysicsCollider>(entity)` and change the collision filter of the blob. In order for this change to be picked up by the engine, you also need to write back to original `PhysicsCollider` of that entity. Below is a code snippet demonstrating how to properly change physics collider using both approaches.
+It is possible to modify a PhysicsCollider's `BlobAssetReference<Collider>` value. It is completely safe to do so in jobs that declare write access to the `PhysicsCollider` component, but you need to be extra careful while modifying it in jobs that do not. The physics system shares the collider blob across all identical colliders, and a change to the non-unique collider affects all colliders that re-use that blob.  A collider is said to be not unique if it uses the exact same geometry shape and size parameters, and has the same collision filter and material settings as another collider.
+
+To make this change, you could access the collider using `EntityManager.GetComponentData<PhysicsCollider>(entity)` and change the collision filter of the blob. In order for the engine to detect this change, you also need to write back to the original `PhysicsCollider` of that entity. The following code snippet demonstrates how to properly change the `PhysicsCollider` using both approaches.
 
 ```csharp
 // Change the filter to CollisionFilter.Zero using Burst-compiled job
@@ -92,6 +94,55 @@ for (int i = 0; i < entities.Length; i++)
     EntityManager.SetComponentData(entity, collider);
 }
 ```
+## Runtime PhysicsCollider Creation
+Creating a `PhysicsCollider` during runtime is a more involved process because you have to make significant structural changes. Spawning a new collider also likely involves graphics changes. These changes impact performance, so you should try to make them as infrequently as possible.
+
+>[!NOTE]
+> When a new `BlobAssetReference<Collider>` is manually created, it is up to you to keep track of the reference and dispose of it when the asset is no longer needed. To do this, you can add the `BlobAssetReference` to a NativeList.
+
+The following code snippet demonstrates an example of how to create a `MeshCollider` from a `UnityEngine.Mesh` in a job. Note that you cannot directly use `UnityEngine.Mesh` in a job, because it is a managed component; instead, you must pass either the `MeshData` or `MeshDataArray` into the job. 
+
+```csharp
+struct CreateFromMeshDataJob : IJobParallelFor         
+{
+    [ReadOnly] public NativeArray<UnityEngine.Mesh.MeshData> MeshData;
+    [WriteOnly] public NativeArray<BlobAssetReference<Collider>> ColliderBlobReference;
+
+    public void Execute(int i)
+    {
+        ColliderBlobReference[i] = MeshCollider.Create(MeshData[i], CollisionFilter.Default, Material.Default);
+    }
+}
+  
+public void MeshCollider_CreateFromJob(UnityEngine.Mesh engineMesh)
+{
+    int num = 3; // We are Creating colliders for 3 of same mesh for example purposes only.
+    var colliderBlobReferenceTracking = new NativeArray<BlobAssetReference<Collider>>(num, Allocator.Persistent);
+    var meshData = new NativeArray<UnityEngine.Mesh.MeshData>(num, Allocator.TempJob);
+
+    for (int i = 0; i < num; i++)
+    {
+        var meshDataArray = UnityEngine.Mesh.AcquireReadOnlyMeshData(engineMesh);
+        meshData[i] = meshDataArray[0];
+    }
+
+    new CreateFromMeshDataJob()
+    {
+        MeshData = meshData,
+        ColliderBlobReference = colliderBlobReferenceTracking
+    }.Run(num);
+
+    for (int i = 0; i < num; i++)
+    {
+        var physicsCollider = new PhysicsCollider() { Value = colliderBlobReferenceTracking[i] };
+        // do stuff
+    }
+
+    // IMPORTANT: dispose of the BlobAssetReferences
+    colliderBlobReferenceTracking.Dispose();
+```
+
+For a more complex demonstration of runtime collider creation, refer to the [Unity Physics Samples Project](https://github.com/Unity-Technologies/EntityComponentSystemSamples/tree/master/PhysicsSamples); specifically the Modify/Runtime Collider Modification section in a demo called "Runtime Collider Creation". This demo focuses on using `UnityEngine.Mesh` to create several `MeshCollider`s at runtime as a reaction to a trigger event.
 
 # Dynamic bodies
 

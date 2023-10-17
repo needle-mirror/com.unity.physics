@@ -141,7 +141,6 @@ namespace Unity.Physics.GraphicsIntegration
         )
         {
             var tr = new float4x4(transform);
-            // TODO(DOTS-7098): More robust check here?
             if (hasPostTransformMatrix)
             {
                 var m = postTransformMatrices[i].Value;

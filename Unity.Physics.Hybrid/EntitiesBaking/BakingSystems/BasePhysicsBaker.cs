@@ -6,19 +6,6 @@ using UnityEngine;
 namespace Unity.Physics.Authoring
 {
     /// <summary>
-    /// Component that specifies the local to world matrix and scale of an entity
-    /// </summary>
-    [TemporaryBakingType]
-    public struct PhysicsPostProcessData : IComponentData
-    {
-        /// <summary> A matrix that transforms a point from local space into world space </summary>
-        public float4x4 LocalToWorldMatrix;
-
-        /// <summary> Represents the global scale of a body </summary>
-        public float3 LossyScale;
-    }
-
-    /// <summary>
     /// An empty component that is used to indicate if the root of a compound collider has been baked
     /// </summary>
     [TemporaryBakingType]
@@ -50,29 +37,9 @@ namespace Unity.Physics.Authoring
 
     internal abstract class BasePhysicsBaker<T> : Baker<T> where T : Component
     {
-        bool NeedsPostProcessTransform(Transform worldTransform, bool gameObjectStatic, BodyMotionType motionType, out PhysicsPostProcessData data)
-        {
-            Transform transformParent = worldTransform.parent;
-            bool haveParentEntity    = transformParent != null;
-            bool haveBakedTransform  = gameObjectStatic;
-            bool hasNonIdentityScale = HasNonIdentityScale(worldTransform);
-            bool unparent            = motionType != BodyMotionType.Static || hasNonIdentityScale || !haveParentEntity || haveBakedTransform;
-
-            data = default;
-            if (unparent)
-            {
-                data = new PhysicsPostProcessData()
-                {
-                    LocalToWorldMatrix = worldTransform.localToWorldMatrix,
-                    LossyScale = worldTransform.lossyScale
-                };
-            }
-            return unparent;
-        }
-
         bool HasNonIdentityScale(Transform bodyTransform)
         {
-            return math.lengthsq((float3)bodyTransform.lossyScale - new float3(1f)) > 0f;
+            return ((float4x4)(bodyTransform.transform.localToWorldMatrix)).HasNonIdentityScale();
         }
 
         /// <summary>
@@ -82,31 +49,42 @@ namespace Unity.Physics.Authoring
         /// <param name="motionType">Motion type of this entity. Default is BodyMotionType.Static.</param>
         protected void PostProcessTransform(Transform bodyTransform, BodyMotionType motionType = BodyMotionType.Static)
         {
-            if (NeedsPostProcessTransform(bodyTransform, IsStatic(), motionType, out PhysicsPostProcessData data))
+            Transform transformParent = bodyTransform.parent;
+            bool haveParentEntity    = transformParent != null;
+            bool haveBakedTransform  = IsStatic();
+            float4x4 localToWorld = bodyTransform.localToWorldMatrix;
+            bool hasShear = localToWorld.HasShear();
+            bool hasNonIdentityScale = HasNonIdentityScale(bodyTransform);
+            bool unparent = motionType != BodyMotionType.Static || hasShear || hasNonIdentityScale || !haveParentEntity || haveBakedTransform;
+
+            if (unparent)
             {
-                // We need to set manual override so we can add CompositeScale and prevent NonUniformScale from been added
+                // Use ManualOverride to unparent the entity.
+                // In this mode we can manually produce the transform components and prevent
+                // any child/parent entity relationships from being automatically created.
                 var entity = GetEntity(TransformUsageFlags.ManualOverride);
 
-                // Need to add all the necessary transform elements
-                AddComponent(entity, new LocalToWorld { Value = bodyTransform.localToWorldMatrix });
+                var rigidBodyTransform = Math.DecomposeRigidBodyTransform(localToWorld);
+                var compositeScale = math.mul(
+                    math.inverse(new float4x4(rigidBodyTransform)),
+                    localToWorld
+                );
 
+                AddComponent(entity, new LocalToWorld { Value = localToWorld });
 
-                if (HasNonIdentityScale(bodyTransform))
+                var uniformScale = 1.0f;
+                if (hasShear || localToWorld.HasNonUniformScale())
                 {
-                    // Any non-identity scale at authoring time is baked into the physics collision shape/mass data.
-                    // In this case, the LocalTransform scale field should be set to 1.0 to avoid double-scaling
-                    // within the physics simulation. We bake the scale into the PostTransformMatrix to make sure the object
-                    // is rendered correctly.
-                    // TODO(DOTS-7098): should potentially add a tag component here to indicate that scale is baked in?
-                    var compositeScale = float4x4.Scale(bodyTransform.localScale);
                     AddComponent(entity, new PostTransformMatrix { Value = compositeScale });
                 }
-                var uniformScale = 1.0f;
-                LocalTransform transform = LocalTransform.FromPositionRotationScale(bodyTransform.localPosition,
-                    bodyTransform.localRotation, uniformScale);
-                AddComponent(entity, transform);
+                else
+                {
+                    uniformScale = bodyTransform.lossyScale[0];
+                }
 
-                AddComponent(entity, data);
+                LocalTransform transform = LocalTransform.FromPositionRotationScale(rigidBodyTransform.pos,
+                    rigidBodyTransform.rot, uniformScale);
+                AddComponent(entity, transform);
             }
         }
     }

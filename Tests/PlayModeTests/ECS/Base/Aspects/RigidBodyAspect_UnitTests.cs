@@ -704,8 +704,8 @@ namespace Unity.Physics.Tests.Aspects
                     Assert.AreNotEqual(AspectTestUtils.DefaultVelocity.Angular, pv.Angular, "angular impulse was not applied");
 
                     // Now, check the outputs of 2 ways of applying explosion force
-                    Assert.AreEqual(aspect.LinearVelocity, pv.Linear, "linear impulse does not match linear velocity");
-                    Assert.AreEqual(aspect.m_Velocity.ValueRO.Angular, pv.Angular, "angular impulse does not match angular velocity");
+                    Assert.AreEqual(aspect.LinearVelocity, pv.Linear, "linear velocities do not match");
+                    Assert.AreEqual(aspect.m_Velocity.ValueRO.Angular, pv.Angular, "angular velocities do not match");
 
                     // Revert
                     aspect.LinearVelocity = AspectTestUtils.DefaultVelocity.Linear;

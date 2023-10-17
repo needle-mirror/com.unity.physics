@@ -1,7 +1,9 @@
 using System.Collections.Generic;
 using Unity.Entities;
 using Unity.Mathematics;
+using Unity.Physics.Extensions;
 using Unity.Physics.GraphicsIntegration;
+using Unity.Transforms;
 using UnityEngine;
 
 namespace Unity.Physics.Authoring
@@ -170,27 +172,47 @@ namespace Unity.Physics.Authoring
                 ecb.SetSharedComponent(entity, new PhysicsWorldIndex(worldIndexData.ValueRO.WorldIndex));
             }
 
+            var entityManager = state.EntityManager;
+
             // Set mass properties for rigid bodies without collider
-            foreach (var(physicsMass, bodyData) in
-                     SystemAPI.Query<RefRW<PhysicsMass>, RefRO<RigidbodyBakingData>>().WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities))
+            foreach (var(physicsMass, bodyData, entity) in
+                     SystemAPI.Query<RefRW<PhysicsMass>, RefRO<RigidbodyBakingData>>()
+                         .WithEntityAccess()
+                         .WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities))
             {
-                physicsMass.ValueRW = CreatePhysicsMass(bodyData.ValueRO, MassProperties.UnitSphere);
+                physicsMass.ValueRW = CreatePhysicsMass(entityManager, entity, bodyData.ValueRO, MassProperties.UnitSphere);
             }
 
             // Set mass properties for rigid bodies with collider
-            foreach (var(physicsMass, bodyData, collider) in
-                     SystemAPI.Query<RefRW<PhysicsMass>, RefRO<RigidbodyBakingData>, RefRO<PhysicsCollider>>().WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities))
+            foreach (var(physicsMass, bodyData, collider, entity) in
+                     SystemAPI.Query<RefRW<PhysicsMass>, RefRO<RigidbodyBakingData>, RefRO<PhysicsCollider>>()
+                         .WithEntityAccess()
+                         .WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities))
             {
-                physicsMass.ValueRW = CreatePhysicsMass(bodyData.ValueRO, collider.ValueRO.MassProperties);
+                physicsMass.ValueRW = CreatePhysicsMass(entityManager, entity, bodyData.ValueRO, collider.ValueRO.MassProperties);
             }
 
             ecb.Playback(state.EntityManager);
             ecb.Dispose();
         }
 
-        private PhysicsMass CreatePhysicsMass(in RigidbodyBakingData inBodyData, in MassProperties inMassProperties)
+        private PhysicsMass CreatePhysicsMass(EntityManager entityManager, in Entity entity,
+            in RigidbodyBakingData inBodyData, in MassProperties inMassProperties)
         {
             var massProperties = inMassProperties;
+            var scale = 1f;
+
+            // Scale the provided mass properties by the LocalTransform.Scale value to create the correct
+            // initial mass distribution for the rigid body.
+            if (entityManager.HasComponent<LocalTransform>(entity))
+            {
+                var localTransform = entityManager.GetComponentData<LocalTransform>(entity);
+                scale = localTransform.Scale;
+
+                massProperties.Scale(scale);
+            }
+
+            // Override the mass properties with user-provided values if specified
             if (!inBodyData.automaticCenterOfMass)
             {
                 massProperties.MassDistribution.Transform.pos = inBodyData.centerOfMass;
@@ -202,9 +224,17 @@ namespace Unity.Physics.Authoring
                 massProperties.MassDistribution.Transform.rot = inBodyData.inertiaTensorRotation;
             }
 
-            return !inBodyData.isKinematic ?
+            // Create the physics mass properties. Among others, this scales the unit mass inertia tensor
+            // by the scalar mass of the rigid body.
+            var physicsMass = !inBodyData.isKinematic ?
                 PhysicsMass.CreateDynamic(massProperties, inBodyData.mass) :
                 PhysicsMass.CreateKinematic(massProperties);
+
+            // Now, apply inverse scale to the final, baked physics mass properties in order to prevent invalid simulated mass properties
+            // caused by runtime scaling of the mass properties later on while building the physics world.
+            physicsMass = physicsMass.ApplyScale(math.rcp(scale));
+
+            return physicsMass;
         }
     }
 }

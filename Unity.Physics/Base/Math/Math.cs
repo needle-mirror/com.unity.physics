@@ -497,7 +497,29 @@ namespace Unity.Physics
             return toEuler(q, order);
         }
 
-        internal static bool HasShear(this float4x4 m)
+        /// <summary>   Checks if the matrix has non-uniform scale. </summary>
+        /// <param name="m">    The matrix. </param>
+        /// <param name="eps">  Epsilon value used in the non-uniform scale determination. </param>
+        /// <returns>   True if the matrix has non-uniform scale. </returns>
+        public static bool HasNonUniformScale(this float4x4 m, float eps = 1e-5f)
+        {
+            var s = new float3(math.lengthsq(m.c0.xyz), math.lengthsq(m.c1.xyz), math.lengthsq(m.c2.xyz));
+            return math.abs(math.cmin(s) - math.cmax(s)) > eps;
+        }
+
+        /// <summary> Checks if the matrix has non-identity scale. </summary>
+        /// <param name="m">    The matrix. </param>
+        /// <param name="eps">  Epsilon value used in the non-identity scale determination. </param>
+        /// <returns>  True if the matrix has non-identity scale. </returns>
+        public static bool HasNonIdentityScale(this float4x4 m, float eps = 1e-5f)
+        {
+            return math.lengthsq(m.DecomposeScale() - new float3(1f)) > eps;
+        }
+
+        /// <summary>   Checks if the matrix has shear. </summary>
+        /// <param name="m">    The matrix. </param>
+        /// <returns>   True if the matrix has shear. </returns>
+        public static bool HasShear(this float4x4 m)
         {
             // scale each axis by abs of its max component in order to work with very large/small scales
             var rs0 = m.c0.xyz / math.max(math.cmax(math.abs(m.c0.xyz)), float.Epsilon);

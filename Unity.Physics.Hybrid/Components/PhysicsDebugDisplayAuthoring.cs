@@ -4,6 +4,17 @@ using UnityEngine;
 namespace Unity.Physics.Authoring
 {
     /// <summary>
+    /// Display modes for the physics debug displays.
+    /// <para>PreIntegration displays the state of the body before the simulation.</para>
+    /// <para>PostIntegration displays the state of the body when the simulation results have been integrated.</para>
+    /// </summary>
+    public enum PhysicsDebugDisplayMode : byte
+    {
+        PreIntegration,
+        PostIntegration
+    }
+
+    /// <summary>
     /// Physics Debug Display Data.<para/>
     ///
     /// Component data containing physics debug display settings.
@@ -54,6 +65,21 @@ namespace Unity.Physics.Authoring
         /// Enable or disable the joints debug display.
         /// </summary>
         public int DrawJoints;
+
+        /// <summary>
+        /// Display mode for colliders.
+        /// </summary>
+        public PhysicsDebugDisplayMode ColliderDisplayMode;
+
+        /// <summary>
+        /// Display mode for collider edges.
+        /// </summary>
+        public PhysicsDebugDisplayMode ColliderEdgesDisplayMode;
+
+        /// <summary>
+        /// Display mode for the colliders' axis-aligned bounding boxes.
+        /// </summary>
+        public PhysicsDebugDisplayMode ColliderAabbDisplayMode;
     }
 
     /// <summary>
@@ -66,43 +92,25 @@ namespace Unity.Physics.Authoring
     [HelpURL(HelpURLs.PhysicsDebugDisplayAuthoring)]
     public sealed class PhysicsDebugDisplayAuthoring : MonoBehaviour
     {
-        /// <summary>
-        /// Display modes for the physics debug displays.
-        /// PreIntegration displays the state of the body before the simulation.
-        /// PostIntegration displays the state of the body when the simulation results have been integrated.
-        /// </summary>
-        public enum DisplayMode
-        {
-            None,
-            PreIntegration,
-            PostIntegration
-        }
-
         PhysicsDebugDisplayAuthoring() {}
 
         /// <summary>
-        /// The debug display mode for colliders.
+        /// Enables the debug display of the colliders.
         /// </summary>
-        [Tooltip("The debug display mode for colliders.\n\n" +
-            "Pre Integration displays the state of the data at the beginning of the simulation step, before rigid bodies have been integrated.\n" +
-            "Post Integration displays the state of the data at the end of the simulation step, after rigid bodies have been integrated.")]
-        public DisplayMode DrawColliders = DisplayMode.None;
+        [Tooltip("Enables the debug display of the colliders.")]
+        public bool DrawColliders = false;
 
         /// <summary>
-        /// The debug display mode for collider edges.
+        /// Enables the debug display of the colliders' edges.
         /// </summary>
-        [Tooltip("The debug display mode for collider edges.\n\n" +
-            "- Pre Integration displays the state of the data at the beginning of the simulation step, before rigid bodies have been integrated.\n" +
-            "- Post Integration displays the state of the data at the end of the simulation step, after rigid bodies have been integrated.")]
-        public DisplayMode DrawColliderEdges = DisplayMode.None;
+        [Tooltip("Enables the debug display of the colliders' edges.")]
+        public bool DrawColliderEdges = false;
 
         /// <summary>
-        /// The debug display mode of the colliders' axis-aligned bounding boxes.
+        /// Enables the debug display of the colliders' axis-aligned bounding boxes.
         /// </summary>
-        [Tooltip("The debug display mode for the colliders' axis-aligned bounding boxes.\n\n" +
-            "- Pre Integration displays the state of the data at the beginning of the simulation step, before rigid bodies have been integrated.\n" +
-            "- Post Integration displays the state of the data at the end of the simulation step, after rigid bodies have been integrated.")]
-        public DisplayMode DrawColliderAabbs = DisplayMode.None;
+        [Tooltip("Enables the debug display of the colliders' axis-aligned bounding boxes.")]
+        public bool DrawColliderAabbs = false;
 
         /// <summary>
         /// Enables the debug display of the rigid body mass properties.
@@ -111,9 +119,9 @@ namespace Unity.Physics.Authoring
         public bool DrawMassProperties = false;
 
         /// <summary>
-        /// Enables the debug display of the colliders' bounding volume used during the Broadphase.
+        /// Enables the debug display of the colliders' bounding volumes used during the Broadphase.
         /// </summary>
-        [Tooltip("Enables the debug display of the colliders' bounding volume used during the Broadphase.")]
+        [Tooltip("Enables the debug display of the colliders' bounding volumes used during the Broadphase.")]
         public bool DrawBroadphase = false;
 
         /// <summary>
@@ -123,34 +131,61 @@ namespace Unity.Physics.Authoring
         public bool DrawContacts = false;
 
         /// <summary>
-        /// Enables the collision events debug display.
+        /// Enables the debug display of the collision events.
         /// </summary>
-        [Tooltip("Enables the collision events debug display.")]
+        [Tooltip("Enables the debug display of the collision events.")]
         public bool DrawCollisionEvents = false;
 
         /// <summary>
-        /// Enables the trigger events debug display.
+        /// Enables the debug display of the trigger events.
         /// </summary>
-        [Tooltip("Enables the trigger events debug display.")]
+        [Tooltip("Enables the debug display of the trigger events.")]
         public bool DrawTriggerEvents = false;
 
         /// <summary>
-        /// Enables the joints debug display.
+        /// Enables the debug display of the joints.
         /// </summary>
-        [Tooltip("Enables the joints debug display.")]
+        [Tooltip("Enables the debug display of the joints.")]
         public bool DrawJoints = false;
+
+        /// <summary>
+        /// The debug display mode for colliders.
+        /// </summary>
+        [Tooltip("The debug display mode for colliders.\n\n" +
+            "Pre Integration displays the state of the data at the beginning of the simulation step, before rigid bodies have been integrated.\n" +
+            "Post Integration displays the state of the data at the end of the simulation step, after rigid bodies have been integrated.")]
+        public PhysicsDebugDisplayMode ColliderDisplayMode = PhysicsDebugDisplayMode.PreIntegration;
+
+        /// <summary>
+        /// The debug display mode for collider edges.
+        /// </summary>
+        [Tooltip("The debug display mode for collider edges.\n\n" +
+            "- Pre Integration displays the state of the data at the beginning of the simulation step, before rigid bodies have been integrated.\n" +
+            "- Post Integration displays the state of the data at the end of the simulation step, after rigid bodies have been integrated.")]
+        public PhysicsDebugDisplayMode ColliderEdgesDisplayMode = PhysicsDebugDisplayMode.PreIntegration;
+
+        /// <summary>
+        /// The debug display mode of the colliders' axis-aligned bounding boxes.
+        /// </summary>
+        [Tooltip("The debug display mode for the colliders' axis-aligned bounding boxes.\n\n" +
+            "- Pre Integration displays the state of the data at the beginning of the simulation step, before rigid bodies have been integrated.\n" +
+            "- Post Integration displays the state of the data at the end of the simulation step, after rigid bodies have been integrated.")]
+        public PhysicsDebugDisplayMode ColliderAabbDisplayMode = PhysicsDebugDisplayMode.PreIntegration;
 
         internal PhysicsDebugDisplayData AsComponent => new PhysicsDebugDisplayData
         {
-            DrawColliders = (int)DrawColliders,
-            DrawColliderEdges = (int)DrawColliderEdges,
-            DrawColliderAabbs = (int)DrawColliderAabbs,
+            DrawColliders = DrawColliders ? 1 : 0,
+            DrawColliderEdges = DrawColliderEdges ? 1 : 0,
+            DrawColliderAabbs = DrawColliderAabbs ? 1 : 0,
             DrawBroadphase = DrawBroadphase ? 1 : 0,
             DrawMassProperties = DrawMassProperties ? 1 : 0,
             DrawContacts = DrawContacts ? 1 : 0,
             DrawCollisionEvents = DrawCollisionEvents ? 1 : 0,
             DrawTriggerEvents = DrawTriggerEvents ? 1 : 0,
             DrawJoints = DrawJoints ? 1 : 0,
+            ColliderDisplayMode = ColliderDisplayMode,
+            ColliderEdgesDisplayMode = ColliderEdgesDisplayMode,
+            ColliderAabbDisplayMode = ColliderAabbDisplayMode
         };
     }
 

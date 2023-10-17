@@ -17,6 +17,7 @@ namespace Unity.Physics.Authoring
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<PhysicsDebugDisplayData>();
+            state.RequireForUpdate<PhysicsWorldSingleton>();
         }
 
         [BurstCompile]
@@ -25,12 +26,13 @@ namespace Unity.Physics.Authoring
             if (!SystemAPI.TryGetSingleton(out PhysicsDebugDisplayData debugDisplay) || debugDisplay.DrawMassProperties == 0)
                 return;
 
-            var world = SystemAPI.GetSingleton<PhysicsWorldSingleton>().DynamicsWorld;
+            var physicsWorld = SystemAPI.GetSingleton<PhysicsWorldSingleton>();
+            var dynamicsWorld = physicsWorld.DynamicsWorld;
             state.Dependency = new DisplayMassPropertiesJob
             {
-                MotionDatas = world.MotionDatas,
-                MotionVelocities = world.MotionVelocities
-            }.Schedule(world.MotionDatas.Length, 16, state.Dependency);
+                MotionDatas = dynamicsWorld.MotionDatas,
+                MotionVelocities = dynamicsWorld.MotionVelocities
+            }.Schedule(dynamicsWorld.MotionDatas.Length, 16, state.Dependency);
         }
 
         // Job to write mass properties info to a rendering buffer for any moving bodies
@@ -47,29 +49,36 @@ namespace Unity.Physics.Authoring
                 quaternion o = MotionDatas[m].WorldFromMotion.rot;
 
                 float3 invInertiaLocal = MotionVelocities[m].InverseInertia;
-                float3 il = new float3(1.0f / invInertiaLocal.x, 1.0f / invInertiaLocal.y, 1.0f / invInertiaLocal.z);
                 float invMass = MotionVelocities[m].InverseMass;
 
-                // Reverse the inertia tensor computation to build a box which has the inerta tensor 'il'
+                var I = math.rcp(invInertiaLocal);
+
+                // Reverse the inertia tensor computation to build a box which has the inertia tensor I.
                 // The diagonal inertia of a box with dimensions h,w,d and mass m is:
-                // Ix = 1/12 m (ww + dd)
-                // Iy = 1/12 m (dd + hh)
-                // Iz = 1/12 m (ww + hh)
+                // I_x = 1/12 m (w^2 + d^2)
+                // I_y = 1/12 m (d^2 + h^2)
+                // I_z = 1/12 m (w^2 + h^2)
                 //
-                // For simplicity, set K = I * 12 / m
-                // Then K = (ww + dd, dd + hh, ww + hh)
-                // => ww = Kx - dd, dd = Ky - hh, hh = Kz - ww
+                // Define k := I * 12 / m
+                // Then k = (w^2 + d^2, d^2 + h^2, w^2 + h^2)
+                // => w^2 = k_x - d^2, d^2 = k_y - h^2, h^2 = k_z - w^2
                 // By manipulation:
-                // 2ww = Kx - Ky + Kz
-                // => w = ((0.5)(Kx - Ky + Kz))^-1
+                // 2w^2 = k_x - k_y + k_z
+                // => w = ((0.5)(k_x - k_y + k_z))^-1
                 // Then, substitution gives h and d.
 
-                float3 k = new float3(il.x * 12 * invMass, il.y * 12 * invMass, il.z * 12 * invMass);
+                var k = 12f * invMass * I;
+
+                // Mapping the inertia tensor to a box will lead to box dimensions in complex space for unphysical tensors.
+                // In this case, some box dimensions will not be drawn (dimension set to 0 if their value is NaN).
                 float w = math.sqrt((k.x - k.y + k.z) * 0.5f);
                 float h = math.sqrt(k.z - w * w);
                 float d = math.sqrt(k.y - h * h);
 
-                float3 boxSize = new float3(h, w, d);
+                var boxSize = new float3(
+                    math.select(0, h, math.isfinite(h)),
+                    math.select(0, w, math.isfinite(w)),
+                    math.select(0, d, math.isfinite(d)));
                 PhysicsDebugDisplaySystem.Box(boxSize, com, o, DebugDisplay.ColorIndex.Magenta);
             }
         }

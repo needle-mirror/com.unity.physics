@@ -3,28 +3,69 @@ using Unity.Collections.LowLevel.Unsafe;
 using System.IO;
 using System;
 using Unity.Burst;
+using Unity.Collections;
 using Unity.Mathematics;
 using UnityEditor;
 
 namespace Unity.DebugDisplay
 {
+    static class UnsafeListExtensions
+    {
+        /// <summary>
+        /// Returns a native array that aliases the content of this list.
+        /// </summary>
+        /// <returns>A native array that aliases the content of this list.</returns>
+        internal static NativeArray<T> AsNativeArray<T>(this UnsafeList<T> list)
+            where T : unmanaged
+        {
+            unsafe
+            {
+                var array = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<T>(list.Ptr, list.Length, Allocator.None);
+#if ENABLE_UNITY_COLLECTIONS_CHECKS
+                NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref array, AtomicSafetyHandle.GetTempUnsafePtrSliceHandle());
+#endif
+                return array;
+            }
+        }
+    }
+
     internal struct Unmanaged
     {
+        private const int kInitialBufferSize = 100000;
+        const int kMaxBufferSize = 10000000;
+        const float kBufferGrowthFactor = 1.618f;
+
         internal void Clear()
         {
-            m_LineBufferAllocations = m_LineBuffer.AllocateAll(); // clear out all the lines
+            // resize buffers if needed:
+            if (m_LineBuffer.ResizeRequested)
+            {
+                var lastSize = m_LineBuffer.Size;
+                m_LineBuffer.Dispose();
+                m_LineBuffer.Initialize(math.min(kMaxBufferSize, (int)(lastSize * kBufferGrowthFactor)));
+            }
+
+            if (m_TriangleBuffer.ResizeRequested)
+            {
+                var lastSize = m_TriangleBuffer.Size;
+                m_TriangleBuffer.Dispose();
+                m_TriangleBuffer.Initialize(math.min(kMaxBufferSize, (int)(lastSize * kBufferGrowthFactor)));
+            }
+
+            // clear out all the lines and triangles:
+            m_LineBufferAllocations = m_LineBuffer.AllocateAll();
             m_TriangleBufferAllocations = m_TriangleBuffer.AllocateAll();
         }
 
-        internal Unit       m_LineBufferAllocations;
-        internal Unit       m_TriangleBufferAllocations;
+        internal Unit m_LineBufferAllocations;
+        internal Unit m_TriangleBufferAllocations;
 
         internal LineBuffer  m_LineBuffer;
         internal TriangleBuffer m_TriangleBuffer;
 
         private bool initialized;
 
-        internal UnsafeArray<float4> m_ColorData;
+        internal NativeArray<float4> m_ColorData;
 
         unsafe internal void Initialize()
         {
@@ -97,14 +138,14 @@ namespace Unity.DebugDisplay
                 };
 
                 // Initialize and fill color data with static colors, and placeholders dynamic colors
-                m_ColorData = new UnsafeArray<float4>(ColorIndex.kMaxColors);
+                m_ColorData = new NativeArray<float4>(ColorIndex.kMaxColors, Allocator.Persistent);
                 for (var i = 0; i < ColorIndex.staticColorCount; ++i)
                     m_ColorData[i] = new float4(pal[i * 3 + 2],  pal[i * 3 + 1], pal[i * 3 + 0], 255) / 255.0f;
                 for (var i = 0; i < ColorIndex.dynamicColorCount; ++i)
                     m_ColorData[ColorIndex.staticColorCount + i] = float4.zero;
 
-                m_LineBuffer.Initialize();
-                m_TriangleBuffer.Initialize();
+                m_LineBuffer.Initialize(kInitialBufferSize);
+                m_TriangleBuffer.Initialize(kInitialBufferSize);
 
                 m_LineBufferAllocations = m_LineBuffer.AllocateAll();
                 m_TriangleBufferAllocations = m_TriangleBuffer.AllocateAll();
@@ -125,9 +166,9 @@ namespace Unity.DebugDisplay
             }
         }
 
-        sealed class DummyContext {}
+        private class InstanceFieldKey {}
 
-        internal static readonly SharedStatic<Unmanaged> Instance = SharedStatic<Unmanaged>.GetOrCreate<DummyContext, Unmanaged>();
+        internal static readonly SharedStatic<Unmanaged> Instance = SharedStatic<Unmanaged>.GetOrCreate<Unmanaged, InstanceFieldKey>();
     }
 
 
@@ -231,12 +272,12 @@ namespace Unity.DebugDisplay
                     resources.meshMaterial.SetBuffer(meshBufferString, m_TriangleInstanceBuffer);
             }
 
-            m_ColorBuffer.SetData(Unmanaged.Instance.Data.m_ColorData.ToNativeArray());
+            m_ColorBuffer.SetData(Unmanaged.Instance.Data.m_ColorData);
             m_NumLinesToDraw = Unmanaged.Instance.Data.m_LineBufferAllocations.Filled;
             m_NumTrianglesToDraw = Unmanaged.Instance.Data.m_TriangleBufferAllocations.Filled;
 
-            m_LineVertexBuffer.SetData(Unmanaged.Instance.Data.m_LineBuffer.m_Instance.ToNativeArray(), 0, 0, m_NumLinesToDraw);
-            m_TriangleInstanceBuffer.SetData(Unmanaged.Instance.Data.m_TriangleBuffer.m_Instance.ToNativeArray(), 0, 0, m_NumTrianglesToDraw);
+            m_LineVertexBuffer.SetData(Unmanaged.Instance.Data.m_LineBuffer.m_Instance.AsNativeArray(), 0, 0, m_NumLinesToDraw);
+            m_TriangleInstanceBuffer.SetData(Unmanaged.Instance.Data.m_TriangleBuffer.m_Instance.AsNativeArray(), 0, 0, m_NumTrianglesToDraw);
 
             var scales = new float4(1.0f / FractionalCellsWide, 1.0f / FractionalCellsTall, 1.0f / PixelsWide, 1.0f / PixelsTall);
             resources.lineMaterial.SetVector(scalesString, scales);

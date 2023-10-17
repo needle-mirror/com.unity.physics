@@ -162,7 +162,6 @@ namespace Unity.Physics.GraphicsIntegration
         [BurstCompile]
         struct SmoothMotionJob : IJobChunk
         {
-
             [ReadOnly] public ComponentTypeHandle<LocalTransform> LocalTransformType;
             [ReadOnly] public ComponentTypeHandle<PostTransformMatrix> PostTransformMatrixType;
             [ReadOnly] public ComponentTypeHandle<PhysicsMass> PhysicsMassType;
@@ -183,14 +182,6 @@ namespace Unity.Physics.GraphicsIntegration
                 NativeArray<PhysicsGraphicalInterpolationBuffer> interpolationBuffers = chunk.GetNativeArray(ref InterpolationBufferType);
                 NativeArray<LocalToWorld> localToWorlds = chunk.GetNativeArray(ref LocalToWorldType);
 
-
-                // GameObjects with non-identity scale have their scale baked into their collision shape and mass, so
-                // the entity's transform scale (if any) should not be applied again here. Entities that did not go
-                // through baking should apply their uniform scale value to the rigid body.
-                // Baking also adds a PostTransformMatrix component to apply the GameObject's authored scale in the
-                // rendering code, so we test for that component to determine whether the entity's current scale
-                // should be applied or ignored.
-                // TODO(DOTS-7098): More robust check here?
                 var hasPostTransformMatrix = postTransformMatrices.IsCreated;
                 var hasLocalTransform = localTransforms.IsCreated;
 

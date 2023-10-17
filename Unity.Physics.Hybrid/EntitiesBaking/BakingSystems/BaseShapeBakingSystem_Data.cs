@@ -44,9 +44,31 @@ namespace Unity.Physics.Authoring
 
         public static RigidTransform GetCompoundFromChild(Transform shape, Transform body)
         {
-            var worldFromBody = Math.DecomposeRigidBodyTransform(body.transform.localToWorldMatrix);
-            var worldFromShape = Math.DecomposeRigidBodyTransform(shape.transform.localToWorldMatrix);
-            return math.mul(math.inverse(worldFromBody), worldFromShape);
+            if (shape == body)
+            {
+                return RigidTransform.identity;
+            }
+            // else:
+
+            // if body has pure uniform scale, it doesn't get baked into the colliders and we need to consider it when computing the
+            // shape's relative transform.
+            var bodyLocalToWorld = (float4x4)body.transform.localToWorldMatrix;
+            var shapeLocalToWorld = (float4x4)shape.transform.localToWorldMatrix;
+
+            if (bodyLocalToWorld.HasShear() || bodyLocalToWorld.HasNonUniformScale())
+            {
+                var worldFromBody = Math.DecomposeRigidBodyTransform(bodyLocalToWorld);
+                var worldFromShape = Math.DecomposeRigidBodyTransform(shapeLocalToWorld);
+                var relTransform = math.mul(math.inverse(worldFromBody), worldFromShape);
+                return relTransform;
+            }
+            else
+            {
+                var worldFromBody = bodyLocalToWorld;
+                var worldFromShape = Math.DecomposeRigidBodyTransform(shapeLocalToWorld);
+                var relTransform = math.mul(math.inverse(new float4x4(worldFromBody)), new float4x4(worldFromShape));
+                return Math.DecomposeRigidBodyTransform(relTransform);
+            }
         }
 
         public bool Equals(ColliderInstanceBaking other)

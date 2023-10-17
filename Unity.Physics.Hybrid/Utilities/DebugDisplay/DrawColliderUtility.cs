@@ -1,150 +1,16 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using Unity.Mathematics;
-using UnityEngine;
 using Unity.Collections;
 using Unity.DebugDisplay;
 using Unity.Entities;
 using Unity.Transforms;
-using UnityEditor;
-using Matrix4x4 = UnityEngine.Matrix4x4;
+using UnityEngine.SocialPlatforms;
 using Quaternion = UnityEngine.Quaternion;
 using Vector3 = UnityEngine.Vector3;
 
 namespace Unity.Physics.Authoring
 {
-    internal static class DrawMeshUtility
-    {
-        static List<Matrix4x4> dynamicSpheres;
-        static List<Matrix4x4> dynamicCapsules;
-        static List<Matrix4x4> dynamicCylinders;
-        static List<Matrix4x4> dynamicCubes;
-
-        static List<Matrix4x4> staticSpheres;
-        static List<Matrix4x4> staticCapsules;
-        static List<Matrix4x4> staticCylinders;
-        static List<Matrix4x4> staticCubes;
-
-#if UNITY_EDITOR
-        private static readonly UnityEngine.Material meshDynamicFacesMaterial =
-            AssetDatabase.LoadAssetAtPath<UnityEngine.Material>(Path.Combine(Managed.debugDirName, "PhysicsDynamicDebugMaterial.mat"));
-
-        private static readonly UnityEngine.Material meshStaticFacesMaterial =
-            AssetDatabase.LoadAssetAtPath<UnityEngine.Material>(Path.Combine(Managed.debugDirName, "PhysicsStaticDebugMaterial.mat"));
-#endif
-        internal static void ClearTRS()
-        {
-            if (dynamicSpheres != null)
-            {
-                dynamicSpheres.Clear();
-            }
-            else
-            {
-                dynamicSpheres = new List<Matrix4x4>();
-            }
-
-            if (staticSpheres != null)
-            {
-                staticSpheres.Clear();
-            }
-            else
-            {
-                staticSpheres = new List<Matrix4x4>();
-            }
-
-            if (dynamicCubes != null)
-            {
-                dynamicCubes.Clear();
-            }
-            else
-            {
-                dynamicCubes = new List<Matrix4x4>();
-            }
-
-            if (staticCubes != null)
-            {
-                staticCubes.Clear();
-            }
-            else
-            {
-                staticCubes = new List<Matrix4x4>();
-            }
-
-            if (dynamicCylinders != null)
-            {
-                dynamicCylinders.Clear();
-            }
-            else
-            {
-                dynamicCylinders = new List<Matrix4x4>();
-            }
-
-            if (staticCylinders != null)
-            {
-                staticCylinders.Clear();
-            }
-            else
-            {
-                staticCylinders = new List<Matrix4x4>();
-            }
-
-            if (dynamicCapsules != null)
-            {
-                dynamicCapsules.Clear();
-            }
-            else
-            {
-                dynamicCapsules = new List<Matrix4x4>();
-            }
-
-            if (staticCapsules != null)
-            {
-                staticCapsules.Clear();
-            }
-            else
-            {
-                staticCapsules = new List<Matrix4x4>();
-            }
-        }
-
-        internal static void DrawPrimitiveMeshes()
-        {
-            if (dynamicSpheres != null && dynamicSpheres.Count > 0) DrawBatches(PrimitiveType.Sphere, dynamicSpheres, true);
-            if (dynamicCapsules != null && dynamicCapsules.Count > 0) DrawBatches(PrimitiveType.Capsule, dynamicCapsules, true);
-            if (dynamicCylinders != null &&  dynamicCylinders.Count > 0) DrawBatches(PrimitiveType.Cylinder, dynamicCylinders, true);
-            if (dynamicCubes != null && dynamicCubes.Count > 0) DrawBatches(PrimitiveType.Cube, dynamicCubes, true);
-
-            if (staticSpheres != null && staticSpheres.Count > 0) DrawBatches(PrimitiveType.Sphere, staticSpheres, false);
-            if (staticCapsules != null && staticCapsules.Count > 0) DrawBatches(PrimitiveType.Capsule, staticCapsules, false);
-            if (staticCylinders != null &&  staticCylinders.Count > 0) DrawBatches(PrimitiveType.Cylinder, staticCylinders, false);
-            if (staticCubes != null && staticCubes.Count > 0) DrawBatches(PrimitiveType.Cube, staticCubes, false);
-        }
-
-        // Use detailed meshes for the faces rendering
-        private static void DrawBatches(PrimitiveType type, List<Matrix4x4> trsList, bool isDynamic)
-        {
-#if UNITY_EDITOR
-            UnityEngine.Mesh primitiveMesh = DebugMeshCache.GetMesh(type);
-
-            var debugMaterial = meshDynamicFacesMaterial;
-            if (!isDynamic) debugMaterial = meshStaticFacesMaterial;
-
-            const int maxBatchSize = 1023; //Batch size limit of DrawMeshInstanced
-            var index = 0;
-            var remaining = trsList.Count;
-
-            while (remaining > 0)
-            {
-                var drawCount = math.min(remaining, maxBatchSize);
-                Graphics.DrawMeshInstanced(primitiveMesh, 0, debugMaterial, trsList.GetRange(index, drawCount));
-                index += maxBatchSize;
-                remaining -= maxBatchSize;
-            }
-#endif
-        }
-    }
-
     internal readonly struct ColliderGeometry : IDisposable
     {
         internal readonly NativeArray<Vector3> VerticesArray;
@@ -215,27 +81,24 @@ namespace Unity.Physics.Authoring
 
         public static void GetRigidBodiesFromQuery(ref SystemState state, ref EntityQuery query, ref NativeList<RigidBody> rigidBodiesList)
         {
-            var entities = query.ToEntityArray(Allocator.Temp);
+            using var entities = query.ToEntityArray(Allocator.Temp);
+            var manager = state.EntityManager;
             foreach (var entity in entities)
             {
-                var localToWorld = state.EntityManager.GetComponentData<LocalToWorld>(entity);
                 var collider = state.EntityManager.GetComponentData<PhysicsCollider>(entity);
-                var localTransform = state.EntityManager.GetComponentData<LocalTransform>(entity);
-                CreateRigidBody(localToWorld.Value, localTransform.Scale,
-                    collider.Value, out var rigidBody);
-                rigidBodiesList.Add(rigidBody);
+                GetRigidBodyTransform(ref manager, entity, out var transform, out var scale);
+                rigidBodiesList.Add(CreateRigidBody(transform, scale, collider.Value));
             }
         }
 
         public static void GetBodiesByMotionsFromQuery(ref SystemState state, ref EntityQuery rigidBodiesQuery, ref NativeList<RigidBody> rigidBodies,
             ref NativeList<BodyMotionType> bodyMotionTypes)
         {
-            var dynamicEntities = rigidBodiesQuery.ToEntityArray(Allocator.Temp);
+            using var dynamicEntities = rigidBodiesQuery.ToEntityArray(Allocator.Temp);
+            var manager = state.EntityManager;
             foreach (var entity in dynamicEntities)
             {
-                var localToWorld = state.EntityManager.GetComponentData<LocalToWorld>(entity);
                 var collider = state.EntityManager.GetComponentData<PhysicsCollider>(entity);
-                var localTransform = state.EntityManager.GetComponentData<LocalTransform>(entity);
 
                 BodyMotionType motionType = BodyMotionType.Static;
                 if (state.EntityManager.HasComponent<PhysicsMass>(entity))
@@ -244,9 +107,8 @@ namespace Unity.Physics.Authoring
                     motionType = physicsMass.IsKinematic ? BodyMotionType.Kinematic : BodyMotionType.Dynamic;
                 }
 
-                CreateRigidBody(localToWorld.Value, localTransform.Scale,
-                    collider.Value, out var rigidBody);
-                rigidBodies.Add(rigidBody);
+                GetRigidBodyTransform(ref manager, entity, out var transform, out var scale);
+                rigidBodies.Add(CreateRigidBody(transform, scale, collider.Value));
                 bodyMotionTypes.Add(motionType);
             }
         }
@@ -268,13 +130,31 @@ namespace Unity.Physics.Authoring
             }
         }
 
-        public static void CreateRigidBody(in float4x4 localToWorld, float scale, BlobAssetReference<Collider> collider, out RigidBody rigidBody)
+        static void GetRigidBodyTransform(ref EntityManager inManager, in Entity inEntity, out RigidTransform outTransform, out float outScale)
         {
-            var rigidTransform = Math.DecomposeRigidBodyTransform(localToWorld);
-            rigidBody = new RigidBody
+            bool hasParent = inManager.HasComponent<Parent>(inEntity);
+            bool hasLocalTransform = inManager.HasComponent<LocalTransform>(inEntity);
+
+            if (hasParent || !hasLocalTransform)
+            {
+                var localToWorld = inManager.GetComponentData<LocalToWorld>(inEntity);
+                outTransform = Math.DecomposeRigidBodyTransform(localToWorld.Value);
+                outScale = 1;
+            }
+            else
+            {
+                var localTransform = inManager.GetComponentData<LocalTransform>(inEntity);
+                outTransform = new RigidTransform(localTransform.Rotation, localTransform.Position);
+                outScale = localTransform.Scale;
+            }
+        }
+
+        static RigidBody CreateRigidBody(in RigidTransform worldTransform, in float scale, BlobAssetReference<Collider> collider)
+        {
+            return new RigidBody
             {
                 Collider = collider,
-                WorldFromBody = rigidTransform,
+                WorldFromBody = worldTransform,
                 Scale = scale
             };
         }
@@ -317,134 +197,159 @@ namespace Unity.Physics.Authoring
             var edgesColor = DebugDisplay.ColorIndex.Green;
             var shapeScale = new float3(radius * 2.0f); // Radius to scale : Multiple by 2
 
-            var sphereVerticesList = sphereGeometry.VerticesArray;
-            var sphereIndicesList = sphereGeometry.IndicesArray;
+            var sphereTransform = float4x4.TRS(center * uniformScale, Quaternion.identity, shapeScale * uniformScale);
+            var worldTransform = math.mul(new float4x4(wfc), sphereTransform);
 
-            var i = 0;
-            while (i < sphereIndicesList.Length)
+            var sphereVerticesWorld = new NativeArray<float3>(sphereGeometry.VerticesArray.Length, Allocator.Temp);
+            try
             {
-                var a = math.transform(wfc, center + uniformScale * shapeScale * sphereVerticesList[sphereIndicesList[i + 0]]);
-                var b = math.transform(wfc, center + uniformScale * shapeScale * sphereVerticesList[sphereIndicesList[i + 1]]);
-                var c = math.transform(wfc, center + uniformScale * shapeScale * sphereVerticesList[sphereIndicesList[i + 2]]);
-                i += 3;
+                for (int i = 0; i < sphereVerticesWorld.Length; ++i)
+                {
+                    sphereVerticesWorld[i] = math.transform(worldTransform, sphereGeometry.VerticesArray[i]);
+                }
 
-                BasePhysicsDebugDisplaySystem.Line(a, b, edgesColor);
-                BasePhysicsDebugDisplaySystem.Line(b, c, edgesColor);
-                BasePhysicsDebugDisplaySystem.Line(c, a, edgesColor);
+                PhysicsDebugDisplaySystem.TriangleEdges(sphereVerticesWorld, sphereGeometry.IndicesArray,
+                    edgesColor);
+            }
+            finally
+            {
+                sphereVerticesWorld.Dispose();
             }
         }
 
         public static void DrawPrimitiveSphereFaces(float radius, float3 center, RigidTransform wfc, ref ColliderGeometry sphereGeometry, ColorIndex color, float uniformScale)
         {
             var shapeScale = new float3(radius * 2.0f) * uniformScale;
+            var sphereTransform = float4x4.TRS(center, Quaternion.identity, shapeScale);
+            var worldTransform = math.mul(new float4x4(wfc), sphereTransform);
 
-            var sphereVerticesList = sphereGeometry.VerticesArray;
-            var sphereIndicesList = sphereGeometry.IndicesArray;
-
-            var i = 0;
-            while (i < sphereIndicesList.Length)
+            var sphereVerticesWorld = new NativeArray<float3>(sphereGeometry.VerticesArray.Length, Allocator.Temp);
+            try
             {
-                var a = math.transform(wfc, center + shapeScale * sphereVerticesList[sphereIndicesList[i + 0]]);
-                var b = math.transform(wfc, center + shapeScale * sphereVerticesList[sphereIndicesList[i + 1]]);
-                var c = math.transform(wfc, center + shapeScale * sphereVerticesList[sphereIndicesList[i + 2]]);
-                i += 3;
+                for (int i = 0; i < sphereVerticesWorld.Length; ++i)
+                {
+                    sphereVerticesWorld[i] = math.transform(worldTransform, sphereGeometry.VerticesArray[i]);
+                }
 
-                BasePhysicsDebugDisplaySystem.Triangle(a, b, c, math.cross(a, b), color);
+                PhysicsDebugDisplaySystem.Triangles(sphereVerticesWorld, sphereGeometry.IndicesArray, color);
+            }
+            finally
+            {
+                sphereVerticesWorld.Dispose();
             }
         }
 
         public static void DrawPrimitiveCapsuleEdges(float radius, float height, float3 center, Quaternion orientation, RigidTransform wfc, ref ColliderGeometry capsuleGeometry, float uniformScale)
         {
-            var edgesColor = DebugDisplay.ColorIndex.Green;
-            var shapeScale = new float3(2.0f * radius, height, 2.0f * radius) * uniformScale;
+            var edgesColor = ColorIndex.Green;
+            var shapeScale = new float3(2.0f * radius, height, 2.0f * radius);
+            var capsuleTransform = float4x4.TRS(center * uniformScale, orientation, shapeScale * uniformScale);
+            var worldTransform = math.mul(new float4x4(wfc), capsuleTransform);
 
             var capsuleEdges = capsuleGeometry.EdgesArray;
-
-            var i = 0;
-            while (i < capsuleEdges.Length)
+            var lineVertices = new NativeArray<float3>(capsuleEdges.Length, Allocator.Temp);
+            try
             {
-                var a = math.transform(wfc, center + math.rotate(orientation, shapeScale * capsuleEdges[i + 0]));
-                var b = math.transform(wfc, center + math.rotate(orientation, shapeScale * capsuleEdges[i + 1]));
-                i += 2;
+                for (int i = 0; i < capsuleEdges.Length; i += 2)
+                {
+                    lineVertices[i] = math.transform(worldTransform, capsuleEdges[i]);
+                    lineVertices[i + 1] = math.transform(worldTransform, capsuleEdges[i + 1]);
+                }
 
-                BasePhysicsDebugDisplaySystem.Line(a, b, edgesColor);
+                PhysicsDebugDisplaySystem.Lines(lineVertices, edgesColor);
+            }
+            finally
+            {
+                lineVertices.Dispose();
             }
         }
 
         public static void DrawPrimitiveCapsuleFaces(float radius, float height, float3 center, Quaternion orientation, RigidTransform wfc, ref ColliderGeometry capsuleGeometry, ColorIndex color, float uniformScale)
         {
             var shapeScale = new float3(2.0f * radius, height, 2.0f * radius);
+            var capsuleTransform = float4x4.TRS(center, orientation, uniformScale * shapeScale);
+            var worldTransform = math.mul(new float4x4(wfc), capsuleTransform);
 
-            var capsuleVerticesArray = capsuleGeometry.VerticesArray;
-            var capsuleIndicesArray = capsuleGeometry.IndicesArray;
-
-            var i = 0;
-            while (i < capsuleIndicesArray.Length)
+            var capsuleVerticesWorld = new NativeArray<float3>(capsuleGeometry.VerticesArray.Length, Allocator.Temp);
+            try
             {
-                var a = math.transform(wfc, center + math.rotate(orientation, uniformScale * shapeScale * capsuleVerticesArray[capsuleIndicesArray[i]]));
-                var b = math.transform(wfc, center + math.rotate(orientation, uniformScale * shapeScale * capsuleVerticesArray[capsuleIndicesArray[i + 1]]));
-                var c = math.transform(wfc, center + math.rotate(orientation, uniformScale * shapeScale * capsuleVerticesArray[capsuleIndicesArray[i + 2]]));
-                i += 3;
+                for (int i = 0; i < capsuleVerticesWorld.Length; ++i)
+                {
+                    capsuleVerticesWorld[i] = math.transform(worldTransform, capsuleGeometry.VerticesArray[i]);
+                }
 
-                BasePhysicsDebugDisplaySystem.Triangle(a, b, c, math.cross(a, b), color);
+                PhysicsDebugDisplaySystem.Triangles(capsuleVerticesWorld, capsuleGeometry.IndicesArray, color);
+            }
+            finally
+            {
+                capsuleVerticesWorld.Dispose();
             }
         }
 
         public static void DrawPrimitiveBoxFaces(float3 size, float3 center, Quaternion orientation, RigidTransform wfc, ref ColliderGeometry boxGeometry, ColorIndex color, float uniformScale)
         {
-            var boxVerticesArray = boxGeometry.VerticesArray;
-            var boxIndicesArray = boxGeometry.IndicesArray;
+            var boxVerticesWorld = new NativeArray<float3>(boxGeometry.VerticesArray.Length, Allocator.Temp);
+            var boxTransform = float4x4.TRS(center, orientation, uniformScale * size);
+            var worldTransform = math.mul(new float4x4(wfc), boxTransform);
 
-            var i = 0;
-            while (i < boxIndicesArray.Length)
+            try
             {
-                var a = math.transform(wfc, center + math.rotate(orientation, uniformScale * size * boxVerticesArray[boxIndicesArray[i]]));
-                var b = math.transform(wfc, center + math.rotate(orientation, uniformScale * size * boxVerticesArray[boxIndicesArray[i + 1]]));
-                var c = math.transform(wfc, center + math.rotate(orientation, uniformScale * size * boxVerticesArray[boxIndicesArray[i + 2]]));
-                i += 3;
+                for (int i = 0; i < boxVerticesWorld.Length; ++i)
+                {
+                    boxVerticesWorld[i] = math.transform(worldTransform,  boxGeometry.VerticesArray[i]);
+                }
 
-                BasePhysicsDebugDisplaySystem.Triangle(a, b, c, math.cross(a, b), color);
+                PhysicsDebugDisplaySystem.Triangles(boxVerticesWorld, boxGeometry.IndicesArray, color);
+            }
+            finally
+            {
+                boxVerticesWorld.Dispose();
             }
         }
 
         public static void DrawPrimitiveCylinderEdges(float radius, float height, float3 center, Quaternion orientation, RigidTransform wfc, ref ColliderGeometry cylinderGeometry, float uniformScale)
         {
-            var edgesColor = DebugDisplay.ColorIndex.Green;
+            var edgesColor = ColorIndex.Green;
             var shapeScale = new float3(2.0f * radius, height * 0.5f, 2.0f * radius) * uniformScale;
+            var cylinderTransform = float4x4.TRS(center, orientation, shapeScale);
+            var worldTransform = math.mul(new float4x4(wfc), cylinderTransform);
+            var cylinderVerticesWorld = new NativeArray<float3>(cylinderGeometry.VerticesArray.Length, Allocator.Temp);
 
-            var cylinderVerticesArray = cylinderGeometry.VerticesArray;
-            var cylinderIndicesArray = cylinderGeometry.IndicesArray;
-
-            var i = 0;
-            while (i < cylinderIndicesArray.Length)
+            try
             {
-                var a = math.transform(wfc, center + math.rotate(orientation, shapeScale * cylinderVerticesArray[cylinderIndicesArray[i]]));
-                var b = math.transform(wfc, center + math.rotate(orientation, shapeScale * cylinderVerticesArray[cylinderIndicesArray[i + 1]]));
-                var c = math.transform(wfc, center + shapeScale * math.rotate(orientation, cylinderVerticesArray[cylinderIndicesArray[i + 2]]));
-                i += 3;
+                for (int i = 0; i < cylinderVerticesWorld.Length; ++i)
+                {
+                    cylinderVerticesWorld[i] = math.transform(worldTransform, cylinderGeometry.VerticesArray[i]);
+                }
 
-                BasePhysicsDebugDisplaySystem.Line(a, b, edgesColor);
-                BasePhysicsDebugDisplaySystem.Line(a, c, edgesColor);
-                BasePhysicsDebugDisplaySystem.Line(b, c, edgesColor);
+                PhysicsDebugDisplaySystem.TriangleEdges(cylinderVerticesWorld, cylinderGeometry.IndicesArray, edgesColor);
+            }
+            finally
+            {
+                cylinderVerticesWorld.Dispose();
             }
         }
 
         public static void DrawPrimitiveCylinderFaces(float radius, float height, float3 center, Quaternion orientation, RigidTransform wfc, ref ColliderGeometry cylinderGeometry, ColorIndex color, float uniformScale)
         {
             var shapeScale = new float3(2.0f * radius, height * 0.5f, 2.0f * radius);
+            var cylinderTransform = float4x4.TRS(center, orientation, uniformScale * shapeScale);
+            var worldTransform = math.mul(new float4x4(wfc), cylinderTransform);
 
-            var cylinderVerticesArray = cylinderGeometry.VerticesArray;
-            var cylinderIndicesArray = cylinderGeometry.IndicesArray;
+            var cylinderVerticesWorld = new NativeArray<float3>(cylinderGeometry.VerticesArray.Length, Allocator.Temp);
 
-            var i = 0;
-            while (i < cylinderIndicesArray.Length)
+            try
             {
-                var a = math.transform(wfc, center + math.rotate(orientation, uniformScale * shapeScale * cylinderVerticesArray[cylinderIndicesArray[i]]));
-                var b = math.transform(wfc, center + math.rotate(orientation, uniformScale * shapeScale * cylinderVerticesArray[cylinderIndicesArray[i + 1]]));
-                var c = math.transform(wfc, center + shapeScale * math.rotate(orientation, uniformScale * cylinderVerticesArray[cylinderIndicesArray[i + 2]]));
-                i += 3;
+                for (int i = 0; i < cylinderVerticesWorld.Length; ++i)
+                {
+                    cylinderVerticesWorld[i] = math.transform(worldTransform, cylinderGeometry.VerticesArray[i]);
+                }
 
-                BasePhysicsDebugDisplaySystem.Triangle(a, b, c, math.cross(a, b), color);
+                PhysicsDebugDisplaySystem.Triangles(cylinderVerticesWorld, cylinderGeometry.IndicesArray, color);
+            }
+            finally
+            {
+                cylinderVerticesWorld.Dispose();
             }
         }
 
@@ -535,29 +440,6 @@ namespace Unity.Physics.Authoring
             //GetWireArcSegments(ref capsuleEdges, 158, center2, heightAx1, heightAx2, 360f, radius);
 
             return capsuleEdges;
-        }
-
-        //wfc = worldFromCollider
-        //Note: assuming that reading in vertices correctly and that vertex winding is correct
-        static NativeArray<float3> TransformAndCalculateNormal(float3 v0, float3 v1, float3 v2, RigidTransform wfc)
-        {
-            var verts = new NativeArray<float3>(4, Allocator.Temp);
-
-            verts[0] = math.transform(wfc, v0);
-            verts[1] = math.transform(wfc, v1);
-            verts[2] = math.transform(wfc, v2);
-
-            //Calculate normal to two vectors. Already in wfc-space
-            verts[3] = math.normalize((math.cross(verts[1] - verts[0], verts[2] - verts[0])));
-
-            return verts;
-        }
-
-        public static void DrawTriangle(float3 v0, float3 v1, float3 v2, RigidTransform worldFromCollider,
-            DebugDisplay.ColorIndex colourIndex)
-        {
-            var v = TransformAndCalculateNormal(v0, v1, v2, worldFromCollider);
-            BasePhysicsDebugDisplaySystem.Triangle(v[0], v[1], v[2], v[3], colourIndex);
         }
     }
 }

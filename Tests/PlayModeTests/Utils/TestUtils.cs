@@ -51,6 +51,13 @@ namespace Unity.Physics.Tests
             return constraint;
         }
 
+        internal static FloatPrettyCloseConstraint PrettyCloseTo(this ConstraintExpression expression, float expected)
+        {
+            var constraint = new FloatPrettyCloseConstraint(expected);
+            expression.Append(constraint);
+            return constraint;
+        }
+
         internal static Float3PrettyCloseConstraint PrettyCloseTo(this ConstraintExpression expression, float3 expected)
         {
             var constraint = new Float3PrettyCloseConstraint(expected);
@@ -61,6 +68,9 @@ namespace Unity.Physics.Tests
 
     class Is : NUnit.Framework.Is
     {
+        public static FloatPrettyCloseConstraint PrettyCloseTo(float actual) =>
+            new FloatPrettyCloseConstraint(actual);
+
         public static Float3PrettyCloseConstraint PrettyCloseTo(float3 actual) =>
             new Float3PrettyCloseConstraint(actual);
 
@@ -69,6 +79,27 @@ namespace Unity.Physics.Tests
 
         public static QuaternionOrientationEquivalentConstraint OrientedEquivalentTo(quaternion actual) =>
             new QuaternionOrientationEquivalentConstraint(actual);
+    }
+
+    class FloatPrettyCloseConstraint : NUnit.Framework.Constraints.Constraint
+    {
+        public const float DefaultTolerance = 0.0001f;
+
+        readonly float m_Expected;
+        private float m_Tolerance = DefaultTolerance;
+
+        public FloatPrettyCloseConstraint(float expected) : base((object)expected) => m_Expected = expected;
+
+        public override string Description => $"value to be within {m_Tolerance} of {m_Expected}";
+
+        public override ConstraintResult ApplyTo(object actual) =>
+            new ConstraintResult(this, actual, math.abs((float)actual - m_Expected) < m_Tolerance);
+
+        public FloatPrettyCloseConstraint Within(float tolerance)
+        {
+            m_Tolerance = tolerance;
+            return this;
+        }
     }
 
     class Float3PrettyCloseConstraint : NUnit.Framework.Constraints.Constraint

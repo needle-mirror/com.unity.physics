@@ -1,11 +1,15 @@
 using System;
+using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
 
 namespace Unity.DebugDisplay
 {
-    unsafe internal struct TriangleBuffer : IDisposable
+    internal struct TriangleBuffer : IDisposable
     {
-        const int kMaxLines = 99999;
+        internal UnsafeList<Instance> m_Instance;
+
+        private bool m_ResizeRequested;
 
         internal struct Instance
         {
@@ -15,11 +19,11 @@ namespace Unity.DebugDisplay
             internal float3 normal;
         }
 
-        internal UnsafeArray<Instance> m_Instance;
-
-        internal void Initialize()
+        internal void Initialize(int size)
         {
-            m_Instance = new UnsafeArray<Instance>(kMaxLines);
+            m_Instance = new UnsafeList<Instance>(size, Allocator.Persistent);
+            m_Instance.Resize(size);
+            m_ResizeRequested = false;
         }
 
         internal void SetTriangle(float3 vertex0, float3 vertex1, float3 vertex2, float3 normal, Unity.DebugDisplay.ColorIndex colorIndex, int index)
@@ -32,6 +36,15 @@ namespace Unity.DebugDisplay
                 normal = new float3(normal.x, normal.y, normal.z)
             };
         }
+
+        internal int Size => m_Instance.Length;
+
+        internal void RequestResize()
+        {
+            m_ResizeRequested = true;
+        }
+
+        internal bool ResizeRequested => m_ResizeRequested;
 
         internal void ClearTriangle(int index)
         {

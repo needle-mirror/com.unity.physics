@@ -1,5 +1,5 @@
 #if UNITY_ANDROID && !UNITY_64
-#define UNITY_ANDROID_ARM7V 
+#define UNITY_ANDROID_ARM7V
 #endif
 
 using NUnit.Framework;

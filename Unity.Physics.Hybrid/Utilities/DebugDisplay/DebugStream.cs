@@ -1,10 +1,44 @@
+using System;
+using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
+using Unity.DebugDisplay;
 using Unity.Mathematics;
-using Unity.Physics.Systems;
 using UnityEngine;
 using Unity.Entities;
+using Unity.Transforms;
 
 namespace Unity.Physics.Authoring
 {
+    /// <summary>
+    /// A component system group that contains the physics debug display systems.
+    /// </summary>
+    [WorldSystemFilter(WorldSystemFilterFlags.Default)]
+    [UpdateInGroup(typeof(LateSimulationSystemGroup))]
+    public partial class PhysicsDebugDisplayGroup : ComponentSystemGroup
+    {
+    }
+
+    /// <summary>
+    /// A component system group that contains the physics debug display systems while in edit mode.
+    /// </summary>
+    [WorldSystemFilter(WorldSystemFilterFlags.Editor)]
+    [UpdateAfter(typeof(TransformSystemGroup))]
+    public partial class PhysicsDebugDisplayGroup_Editor : ComponentSystemGroup
+    {
+    }
+
+    /// <summary>
+    /// <para> Deprecated. Use PhysicsDebugDisplayGroup instead. </para>
+    /// A component system group that contains the physics debug display systems.
+    /// </summary>
+    [DisableAutoCreation]
+    [WorldSystemFilter(WorldSystemFilterFlags.Default)]
+    [UpdateInGroup(typeof(LateSimulationSystemGroup))]
+    [Obsolete("PhysicsDisplayDebugGroup has been deprecated (RemovedAfter 2023-05-04). Use PhysicsDebugDisplayGroup instead. (UnityUpgradable) -> PhysicsDebugDisplayGroup", true)]
+    public partial class PhysicsDisplayDebugGroup : ComponentSystemGroup
+    {
+    }
+
     /// <summary>
     /// A system which is responsible for drawing physics debug display data.
     /// Create a singleton entity with <see cref="PhysicsDebugDisplayData"/> and select what you want to be drawn.<para/>
@@ -13,22 +47,20 @@ namespace Unity.Physics.Authoring
     /// 1) Create a system which updates before PhysicsDebugDisplaySystem.<br/>
     /// 2) In OnUpdate() of that system, call GetSingleton <see cref="PhysicsDebugDisplayData"/> (even if you are not using it, it is important to do so to properly chain dependencies).<br/>
     /// 3) Afterwards, in OnUpdate() or in scheduled jobs, call one of the exposed draw methods (Line, Arrow, Plane, Triangle, Cone, Box, ...).<br/>
-    /// 4) Data will be drawn when PhysicsDebugDisplaySystem's OnUpdate() is called.<para/>
-    /// IMPORTANT: Drawing works only in Editor mode.
+    /// IMPORTANT: Drawing works only in the Editor.
     /// </summary>
-    public abstract partial class BasePhysicsDebugDisplaySystem : SystemBase
+    public abstract partial class PhysicsDebugDisplaySystem : SystemBase
     {
 #if UNITY_EDITOR
         GameObject m_DrawComponentGameObject;
 #endif
         class DrawComponent : MonoBehaviour
         {
+            public PhysicsDebugDisplaySystem System;
             public void OnDrawGizmos()
             {
 #if UNITY_EDITOR
-                if (World.DefaultGameObjectInjectionWorld == null)
-                    return;
-                World.DefaultGameObjectInjectionWorld.GetExistingSystemManaged<PhysicsDebugDisplaySystem>()?.CompleteDependency();
+                System?.CompleteDisplayDataDependencies();
                 Unity.DebugDisplay.DebugDisplay.Render();
 #endif
             }
@@ -38,11 +70,16 @@ namespace Unity.Physics.Authoring
         {
             RequireForUpdate<PhysicsDebugDisplayData>();
 #if UNITY_EDITOR
-            Unity.DebugDisplay.DebugDisplay.Reinstantiate();
+            Unity.DebugDisplay.DebugDisplay.Instantiate();
+#endif
+        }
 
+        protected override void OnStartRunning()
+        {
+#if UNITY_EDITOR
             if (m_DrawComponentGameObject == null)
             {
-                m_DrawComponentGameObject = new GameObject("BasePhysicsDebugDisplaySystem")
+                m_DrawComponentGameObject = new GameObject("PhysicsDebugDisplaySystem")
                 {
                     hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy
                 };
@@ -56,7 +93,9 @@ namespace Unity.Physics.Authoring
                 };
                 childGameObject.transform.parent = m_DrawComponentGameObject.transform;
 
-                childGameObject.AddComponent<DrawComponent>();
+                var drawComponent = childGameObject.AddComponent<DrawComponent>();
+
+                drawComponent.System = this;
             }
 #endif
         }
@@ -64,12 +103,12 @@ namespace Unity.Physics.Authoring
         static void DestroyGameObject(GameObject gameObject)
         {
             if (Application.isPlaying)
-                Object.Destroy(gameObject);
+                UnityEngine.Object.Destroy(gameObject);
             else
-                Object.DestroyImmediate(gameObject);
+                UnityEngine.Object.DestroyImmediate(gameObject);
         }
 
-protected override void OnDestroy()
+        protected override void OnStopRunning()
         {
 #if UNITY_EDITOR
             if (m_DrawComponentGameObject != null)
@@ -94,9 +133,9 @@ protected override void OnDestroy()
         /// <param name="x"> World space position. </param>
         /// <param name="size"> Extents. </param>
         /// <param name="color"> Color. </param>
-        public static void Point(float3 x, float size, Unity.DebugDisplay.ColorIndex color)
+        public static void Point(float3 x, float size, ColorIndex color)
         {
-            var lines = new Unity.DebugDisplay.Lines(3);
+            var lines = new Lines(3);
 
             lines.Draw(x - new float3(size, 0, 0), x + new float3(size, 0, 0), color);
             lines.Draw(x - new float3(0, size, 0), x + new float3(0, size, 0), color);
@@ -111,7 +150,44 @@ protected override void OnDestroy()
         /// <param name="color"> Color. </param>
         public static void Line(float3 x0, float3 x1, Unity.DebugDisplay.ColorIndex color)
         {
-            Unity.DebugDisplay.Line.Draw(x0, x1, color);
+            new Lines(1).Draw(x0, x1, color);
+        }
+
+        public static unsafe void Lines(float3* lineVertices, int numVertices, ColorIndex color)
+        {
+            var lines = new Lines(numVertices / 2);
+            for (int i = 0; i < numVertices; i += 2)
+            {
+                lines.Draw(lineVertices[i], lineVertices[i + 1], color);
+            }
+        }
+
+        public static void Lines(in NativeList<float3> lineVertices, ColorIndex color)
+        {
+            unsafe
+            {
+                Lines(lineVertices.GetUnsafeReadOnlyPtr(), lineVertices.Length, color);
+            }
+        }
+
+        public static void Lines(in NativeArray<float3> lineVertices, ColorIndex color)
+        {
+            unsafe
+            {
+                Lines((float3*)lineVertices.GetUnsafeReadOnlyPtr(), lineVertices.Length, color);
+            }
+        }
+
+        public static void TriangleEdges(in NativeArray<float3> vertices, in NativeArray<int> triangleIndices,
+            ColorIndex color)
+        {
+            var lines = new Lines(triangleIndices.Length);
+            for (int i = 0; i < triangleIndices.Length; i += 3)
+            {
+                lines.Draw(vertices[triangleIndices[i]], vertices[triangleIndices[i + 1]], color);
+                lines.Draw(vertices[triangleIndices[i + 1]], vertices[triangleIndices[i + 2]], color);
+                lines.Draw(vertices[triangleIndices[i + 2]], vertices[triangleIndices[i]], color);
+            }
         }
 
         /// <summary>
@@ -120,7 +196,7 @@ protected override void OnDestroy()
         /// <param name="x"> World space position of the arrow base. </param>
         /// <param name="v"> Arrow direction with length. </param>
         /// <param name="color"> Color. </param>
-        public static void Arrow(float3 x, float3 v, Unity.DebugDisplay.ColorIndex color)
+        public static void Arrow(float3 x, float3 v, ColorIndex color)
         {
             Unity.DebugDisplay.Arrow.Draw(x, v, color);
         }
@@ -131,7 +207,7 @@ protected override void OnDestroy()
         /// <param name="x"> Point in world space. </param>
         /// <param name="v"> Normal. </param>
         /// <param name="color"> Color. </param>
-        public static void Plane(float3 x, float3 v, Unity.DebugDisplay.ColorIndex color)
+        public static void Plane(float3 x, float3 v, ColorIndex color)
         {
             Unity.DebugDisplay.Plane.Draw(x, v, color);
         }
@@ -157,7 +233,7 @@ protected override void OnDestroy()
         /// <param name="axis"> Cone axis. </param>
         /// <param name="angle"> Cone angle. </param>
         /// <param name="color"> Color. </param>
-        public static void Cone(float3 point, float3 axis, float angle, Unity.DebugDisplay.ColorIndex color)
+        public static void Cone(float3 point, float3 axis, float angle, ColorIndex color)
         {
             Unity.DebugDisplay.Cone.Draw(point, axis, angle, color);
         }
@@ -169,52 +245,98 @@ protected override void OnDestroy()
         /// <param name="Center"> Center of the box in world space. </param>
         /// <param name="Orientation"> Orientation of the box in world space. </param>
         /// <param name="color"> Color. </param>
-        public static void Box(float3 Size, float3 Center, quaternion Orientation, Unity.DebugDisplay.ColorIndex color)
+        public static void Box(float3 Size, float3 Center, quaternion Orientation, ColorIndex color)
         {
             Unity.DebugDisplay.Box.Draw(Size, Center, Orientation, color);
         }
 
-        /// <summary>
-        /// Draws a triangle.
-        /// </summary>
-        /// <param name="vertex0"> Vertex 0 in world space. </param>
-        /// <param name="vertex1"> Vertex 1 in world space. </param>
-        /// <param name="vertex2"> Vertex 2 in world space. </param>
-        /// <param name="normal"> Triangle normal. </param>
-        /// <param name="color"> Color. </param>
-        public static void Triangle(float3 vertex0, float3 vertex1, float3 vertex2, float3 normal, Unity.DebugDisplay.ColorIndex color)
+        public static void Triangles(in NativeArray<float3> vertices, in NativeArray<int> triangleIndices, ColorIndex color)
         {
-            Unity.DebugDisplay.Triangle.Draw(vertex0, vertex1, vertex2, normal, color);
+            var triangles = new Triangles(triangleIndices.Length / 3);
+            for (int i = 0; i < triangleIndices.Length; i += 3)
+            {
+                var v0 = vertices[triangleIndices[i]];
+                var v1 = vertices[triangleIndices[i + 1]];
+                var v2 = vertices[triangleIndices[i + 2]];
+
+                float3 normal = math.normalize(math.cross(v1 - v0, v2 - v0));
+                triangles.Draw(v0, v1, v2, normal, color);
+            }
         }
 
-        private void ResetColliderDisplayData()
+        public static unsafe void Triangles(float3* vertices, int numVertices, ColorIndex color)
         {
-            DrawMeshUtility.ClearTRS();
-            AppendMeshColliders.GetMeshes.ClearReferenceMeshes();
+            var triangles = new Triangles(numVertices / 3);
+            for (int i = 0; i < numVertices; i += 3)
+            {
+                var v0 = vertices[i];
+                var v1 = vertices[i + 1];
+                var v2 = vertices[i + 2];
+
+                float3 normal = math.normalize(math.cross(v1 - v0, v2 - v0));
+                triangles.Draw(v0, v1, v2, normal, color);
+            }
+        }
+
+        public static void Triangles(in NativeList<float3> vertices, ColorIndex color)
+        {
+            unsafe
+            {
+                Triangles(vertices.GetUnsafePtr(), vertices.Length, color);
+            }
+        }
+
+        public static void Triangles(in NativeArray<float3> vertices, ColorIndex color)
+        {
+            unsafe
+            {
+                Triangles((float3*)vertices.GetUnsafePtr(), vertices.Length, color);
+            }
         }
 
         protected override void OnUpdate()
         {
-#if UNITY_EDITOR
-            CompleteDependency();
+        }
 
-            DrawMeshUtility.DrawPrimitiveMeshes();
-            ResetColliderDisplayData();
-#endif
+        /// <summary>
+        ///  Completes dependencies for all systems in the physics debug display groups, which ensures that the debug display
+        ///  data is fully produced by the corresponding debug display data systems before it is being prepared for rendering by this system.
+        /// </summary>
+        void CompleteDisplayDataDependencies()
+        {
+            var displayGroup = World.GetExistingSystemManaged<PhysicsDebugDisplayGroup>();
+            if (displayGroup != null)
+            {
+                using var systemHandles = displayGroup.GetAllSystems();
+                foreach (var handle in systemHandles)
+                {
+                    World.Unmanaged.ResolveSystemStateRef(handle).CompleteDependency();
+                }
+            }
+
+            var editorDisplayGroup = World.GetExistingSystemManaged<PhysicsDebugDisplayGroup_Editor>();
+            if (editorDisplayGroup != null)
+            {
+                using var systemHandles = editorDisplayGroup.GetAllSystems();
+                foreach (var handle in systemHandles)
+                {
+                    World.Unmanaged.ResolveSystemStateRef(handle).CompleteDependency();
+                }
+            }
         }
     }
 
     /// <summary>
-    /// Draw physics debug display data during simulation
+    /// Draws physics debug display data.
     /// </summary>
     [WorldSystemFilter(WorldSystemFilterFlags.Default)]
     [UpdateInGroup(typeof(PhysicsDebugDisplayGroup), OrderLast = true)]
     [RequireMatchingQueriesForUpdate]
-    public partial class PhysicsDebugDisplaySystem : BasePhysicsDebugDisplaySystem
+    public partial class PhysicsDebugDisplaySystem_Default : PhysicsDebugDisplaySystem
     {}
 
     /// <summary>
-    /// Draw physics debug display data when running in the  Editor
+    /// Draws physics debug display data while in edit mode.
     /// </summary>
     [WorldSystemFilter(WorldSystemFilterFlags.Editor)]
     [UpdateInGroup(typeof(PhysicsDebugDisplayGroup_Editor), OrderLast = true)]
