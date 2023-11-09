@@ -6,6 +6,7 @@ using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
+using Unity.Physics.Extensions;
 using Unity.Physics.Tests.Utils;
 
 namespace Unity.Physics.Tests.Collision.Colliders
@@ -216,5 +217,48 @@ namespace Unity.Physics.Tests.Collision.Colliders
         }
 
 #endif
+
+        [Test]
+        public void TestCompoundColliderToMesh()
+        {
+            // create a compound made of 2 boxes placed diagonally from each other and make sure we get the
+            // expected mesh center and bounds
+
+            var size = new float3(1, 2, 3);
+            var geometry = new BoxGeometry
+            {
+                Center = float3.zero,
+                Orientation = quaternion.identity,
+                Size = size
+            };
+            using var boxCollider = BoxCollider.Create(geometry);
+
+            var children = new NativeArray<CompoundCollider.ColliderBlobInstance>(2, Allocator.Temp);
+            try
+            {
+                for (int i = 0; i < 2; ++i)
+                {
+                    children[i] = new CompoundCollider.ColliderBlobInstance {Collider = boxCollider, CompoundFromChild = RigidTransform.Translate(i * size)};
+                }
+
+                var expectedBoundsSize = 2 * size;
+                var expectedBoundsCenter = size / 2;
+
+                using var compoundCollider = CompoundCollider.Create(children);
+                var aabb = compoundCollider.Value.CalculateAabb(RigidTransform.identity);
+                TestUtils.AreEqual(expectedBoundsCenter, aabb.Center, math.EPSILON);
+                TestUtils.AreEqual(expectedBoundsSize, aabb.Extents, math.EPSILON);
+
+                var mesh = compoundCollider.Value.ToMesh();
+                TestUtils.AreEqual(expectedBoundsCenter, mesh.bounds.center, math.EPSILON);
+                TestUtils.AreEqual(expectedBoundsSize, mesh.bounds.size, math.EPSILON);
+
+                UnityEngine.Object.DestroyImmediate(mesh);
+            }
+            finally
+            {
+                children.Dispose();
+            }
+        }
     }
 }

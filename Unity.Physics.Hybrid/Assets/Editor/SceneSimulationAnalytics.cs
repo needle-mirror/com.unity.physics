@@ -6,13 +6,61 @@ using Unity.Physics.Systems;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Analytics;
-
+#if UNITY_2023_2_OR_NEWER
+using Unity.CodeEditor;
+#endif
 
 namespace Unity.Physics.Hybrid
 {
     [InitializeOnLoad]
     public class SceneSimulationAnalytics
     {
+#if UNITY_2023_2_OR_NEWER
+        [AnalyticInfo(eventName: "sceneSimulationData", vendorKey: "unity.entities")]
+        private class SceneSimulationAnalytic : IAnalytic
+        {
+            private PhysicsAnalyticsSingleton physicsSingleton;
+            private string worldName;
+
+            public SceneSimulationAnalytic(PhysicsAnalyticsSingleton physicsSingleton, string worldName)
+            {
+                this.physicsSingleton = physicsSingleton;
+                this.worldName = worldName;
+            }
+
+            public bool TryGatherData(out IAnalytic.IData data, out Exception error)
+            {
+                data = new SimulationData();
+                SimulationData simulationData = new SimulationData
+                {
+                    world_name = worldName,
+                    simulation_type = physicsSingleton.m_SimulationType.ToString(),
+                    static_rigidbody_max_count = physicsSingleton.m_MaxNumberOfStaticBodiesInAScene,
+                    dynamic_rigidbody_max_count = physicsSingleton.m_MaxNumberOfDynamicBodiesInAScene,
+                    box_collider_max_count = physicsSingleton.m_MaxNumberOfBoxesInAScene,
+                    capsule_collider_max_count = physicsSingleton.m_MaxNumberOfCapsulesInAScene,
+                    mesh_collider_max_count = physicsSingleton.m_MaxNumberOfMeshesInAScene,
+                    sphere_collider_max_count = physicsSingleton.m_MaxNumberOfSpheresInAScene,
+                    terrain_collider_max_count = physicsSingleton.m_MaxNumberOfTerrainsInAScene,
+                    convex_collider_max_count = physicsSingleton.m_MaxNumberOfConvexesInAScene,
+                    quad_collider_max_count = physicsSingleton.m_MaxNumberOfQuadsInAScene,
+                    triangle_collider_max_count = physicsSingleton.m_MaxNumberOfTrianglesInAScene,
+                    compound_collider_max_count = physicsSingleton.m_MaxNumberOfCompoundsInAScene,
+                    linear_max_count = physicsSingleton.m_MaxNumberOfLinearConstraintsInAScene,
+                    angular_max_count = physicsSingleton.m_MaxNumberOfAngularConstraintsInAScene,
+                    motor_planar_max_count = physicsSingleton.m_MaxNumberOfPositionMotorsInAScene,
+                    rotation_motor_max_count = physicsSingleton.m_MaxNumberOfRotationMotorsInAScene,
+                    linear_velocity_motor_max_count = physicsSingleton.m_MaxNumberOfLinearVelocityMotorsInAScene,
+                    angular_velocity_motor_max_count = physicsSingleton.m_MaxNumberOfAngularVelocityMotorsInAScene
+                };
+
+                data = simulationData;
+
+                error = null;
+                return true;
+            }
+        }
+#else
         const int k_MaxEventsPerHour = 1000;
         const int k_MaxNumberOfElements = 1000;
         const string k_VendorKey = "unity.entities";
@@ -20,6 +68,8 @@ namespace Unity.Physics.Hybrid
 
         static bool s_EventRegistered = false;
         static SimulationData s_SimulationData;
+#endif
+
 
         // register an event handler when the class is initialized
         static SceneSimulationAnalytics()
@@ -35,6 +85,8 @@ namespace Unity.Physics.Hybrid
             }
         }
 
+#if UNITY_2023_2_OR_NEWER
+#else
         static bool EnableAnalytics()
         {
             if (!s_EventRegistered)
@@ -48,6 +100,9 @@ namespace Unity.Physics.Hybrid
             return s_EventRegistered;
         }
 
+#endif
+
+
         public static void SendAnalyticsEvent()
         {
             // The event shouldn't be able to report if this is disabled but if we know we're not going to report.
@@ -55,8 +110,11 @@ namespace Unity.Physics.Hybrid
             if (!EditorAnalytics.enabled)
                 return;
 
+#if UNITY_2023_2_OR_NEWER
+#else
             if (!EnableAnalytics())
                 return;
+#endif
 
             // Note: we update the physics analytics data in every update (see BuildPhysicsWorld.cs)
             // and send it off here on playmode exit only (see function ModeChanged() above), for each world that
@@ -67,16 +125,22 @@ namespace Unity.Physics.Hybrid
 
                 if (query.TryGetSingleton(out PhysicsAnalyticsSingleton physicsAnalyticsSingleton))
                 {
+#if UNITY_2023_2_OR_NEWER
+                    EditorAnalytics.SendAnalytic(new SceneSimulationAnalytic(physicsAnalyticsSingleton, world.Name));
+#else
                     CopyToSimulationData(physicsAnalyticsSingleton);
                     s_SimulationData.world_name = world.Name;
 
                     EditorAnalytics.SendEventWithLimit(k_EventName, s_SimulationData);
                     physicsAnalyticsSingleton.Clear();
                     s_SimulationData.Clear();
+#endif
                 }
             }
         }
 
+#if UNITY_2023_2_OR_NEWER
+#else
         static void CopyToSimulationData(PhysicsAnalyticsSingleton physicsSingleton)
         {
             s_SimulationData.simulation_type = physicsSingleton.m_SimulationType.ToString();
@@ -101,7 +165,13 @@ namespace Unity.Physics.Hybrid
             s_SimulationData.angular_velocity_motor_max_count = physicsSingleton.m_MaxNumberOfAngularVelocityMotorsInAScene;
         }
 
+#endif
+
+#if UNITY_2023_2_OR_NEWER
+        struct SimulationData : IAnalytic.IData
+#else
         struct SimulationData
+#endif
         {
             public string world_name;
             public string simulation_type;

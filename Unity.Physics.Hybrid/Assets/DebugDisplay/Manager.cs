@@ -199,12 +199,25 @@ namespace Unity.DebugDisplay
         internal unsafe Managed()
         {
             Unmanaged.Instance.Data.Initialize();
+
 #if UNITY_EDITOR
-            resources.lineMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(debugDirName, "LineMaterial.mat"));;
-            resources.meshMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(debugDirName, "MeshMaterial.mat"));;
+            resources.lineMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(debugDirName, "LineMaterial.mat"));
+            resources.meshMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(debugDirName, "MeshMaterial.mat"));
+
+            EditorApplication.wantsToQuit += OnEditorApplicationWantsToQuit;
 #endif
             AppDomain.CurrentDomain.DomainUnload += OnDomainUnload;
         }
+
+#if UNITY_EDITOR
+        bool OnEditorApplicationWantsToQuit()
+        {
+            AppDomain.CurrentDomain.DomainUnload -= OnDomainUnload;
+            instance?.Dispose();
+            return true;
+        }
+
+#endif
 
         static void OnDomainUnload(object sender, EventArgs e)
         {

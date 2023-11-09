@@ -8,7 +8,7 @@ This section describes each of these data components.
 
 | Topic                                      | Description                                                      |
 |--------------------------------------------|------------------------------------------------------------------|
-| [Collider](physics-collider-components.md) | Detailed description of the data representation of colliders.    |
 | [Rigid bodies](concepts-data.md)           | Detailed description of the data representation of rigid bodies. |
+| [Collider](physics-collider-components.md) | Detailed description of the data representation of colliders.    |
 | [Joints](custom-joints.md)                 | Detailed description of the data representation of joints.       |
 | [Motors](custom-motors.md)                 | Detailed description of the data representation of motors.       |

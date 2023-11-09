@@ -5,6 +5,7 @@ using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Mathematics;
+using Unity.Physics.Extensions;
 using TestUtils = Unity.Physics.Tests.Utils.TestUtils;
 
 namespace Unity.Physics.Tests.Collision.Colliders
@@ -188,6 +189,38 @@ namespace Unity.Physics.Tests.Collision.Colliders
             });
             float3 inertiaTensor = capsuleCollider.Value.MassProperties.MassDistribution.InertiaTensor;
             TestUtils.AreEqual(expectedInertiaTensor, inertiaTensor, 1e-3f);
+        }
+
+        #endregion
+
+        #region Utilities
+
+        [Test]
+        public void TestCapsuleColliderToMesh()
+        {
+            var capsuleHeightY = 2f;
+            var geometry = new CapsuleGeometry()
+            {
+                Radius = 1f,
+                Vertex0 = new float3(0, -capsuleHeightY / 2, 0),
+                Vertex1 = new float3(0, capsuleHeightY / 2, 0)
+            };
+
+            using var capsuleCollider = CapsuleCollider.Create(geometry);
+
+            var center = 0.5f * (geometry.Vertex0 + geometry.Vertex1);
+            var size = new float3(2 * geometry.Radius) + new float3(0, capsuleHeightY, 0);
+
+            var aabb = capsuleCollider.Value.CalculateAabb(RigidTransform.identity);
+            TestUtils.AreEqual(center, aabb.Center, math.EPSILON);
+            TestUtils.AreEqual(size, aabb.Extents, math.EPSILON);
+
+            var mesh = capsuleCollider.Value.ToMesh();
+            const float kEps = 1e-6f;
+            TestUtils.AreEqual(center, mesh.bounds.center, kEps);
+            TestUtils.AreEqual(size, mesh.bounds.size, kEps);
+
+            UnityEngine.Object.DestroyImmediate(mesh);
         }
 
         #endregion

@@ -68,7 +68,7 @@ namespace Unity.Physics
                 MassDistribution.Transform.pos *= uniformScale;
 
                 var absScale = math.abs(uniformScale);
-                var absScale2 = absScale * absScale;
+                var absScale2 = math.square(absScale);
 
                 // Assuming unit mass, the inertia tensor needs to be scaled by the squared scale
                 MassDistribution.InertiaTensor *= absScale2;
@@ -104,7 +104,7 @@ namespace Unity.Physics
         /// <returns>Mass properties of the sphere.</returns>
         public static MassProperties CreateSphere(in float radius)
         {
-            var radius2 = radius * radius;
+            var radius2 = math.square(radius);
             return new MassProperties
             {
                 MassDistribution = new MassDistribution

@@ -199,7 +199,7 @@ namespace Unity.Physics.Authoring
         /// </summary>
         public override void Bake(PhysicsDebugDisplayAuthoring authoring)
         {
-            var entity = GetEntity(TransformUsageFlags.Dynamic);
+            var entity = GetEntity(TransformUsageFlags.None);
             AddComponent(entity, authoring.AsComponent);
         }
     }

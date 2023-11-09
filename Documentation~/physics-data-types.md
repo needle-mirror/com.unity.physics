@@ -2,7 +2,7 @@
 
 Unity Physics references 2 _types_ of data at runtime: ECS components and physics simulation data.
 
-ECS components are structures that implement the `IComponentData` interface and their data is permanently stored in chunks. The key ECS components for physics are listed in [Physics Body Data](getting-started.md#physics-body-data) section (e.g. `PhysicsVelocity`).
+ECS components are structures that implement the `IComponentData` interface and their data is permanently stored in chunks. The key ECS components for physics are listed in [Physics Body Data](concepts-data.md) section (e.g. `PhysicsVelocity`).
 
 Physics simulation data is the runtime-only data stored in `PhysicsWorld`, formed from ECS components and restructured in a way that is more convenient for real-time physics simulation (this is done by `PhysicsInitializeGroup`). All collision queries are performed on physics simulation data.
 

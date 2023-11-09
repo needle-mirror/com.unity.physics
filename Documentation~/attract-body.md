@@ -1,6 +1,6 @@
 # Attracting bodies to an entity
 
-Interacting with Physics Bodies can be done using scripts. For example to alter velocity of a body, you can query for its `PhysicsVelocity` and set new values as you want. Let's make an example that attracts all bodies to a single point.
+Interacting with rigid bodies can be done using scripts. For example to alter the velocity of a body, you can query for its `PhysicsVelocity` and set new values. Let's make an example that attracts all bodies to a single point.
 
 First, we will create a `MonoBehaviour` script file called `TargetAuthoring.cs` (with two values, one float and one GameObject) and attach it to the Sphere GameObject. This will allow us to input data values from the inspector. Then, we need to add an `IComponentData` struct named `Target` and as well as a `Baker` called `TargetAuthoringBaker` and bridge the values from the `TargetAuthoring` with the `Target`. 
 

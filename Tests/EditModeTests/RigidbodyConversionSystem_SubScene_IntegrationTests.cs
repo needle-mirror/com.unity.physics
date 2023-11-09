@@ -215,7 +215,7 @@ namespace Unity.Physics.Tests.Authoring
 
         // Test proper reset of rigid bodies built with Rigidbody components contained in an open sub scene after leaving playmode
         [UnityTest]
-        [UnityPlatform(exclude = new [] {RuntimePlatform.OSXEditor})] // DOTS-9399
+        [UnityPlatform(exclude = new[] { RuntimePlatform.OSXEditor })]  // DOTS-9399
         public IEnumerator RigidbodyConversionSystem_IsInSubScene_PlayModeAndReset() => BasePlayModeAndResetTest<Rigidbody>(body =>
         {
             body.mass = 42f;

@@ -4,6 +4,13 @@ using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Profiling;
+#if UNITY_2023_3_OR_NEWER
+using UnityPhysicsMaterial = UnityEngine.PhysicsMaterial;
+using UnityPhysicsMaterialCombine = UnityEngine.PhysicsMaterialCombine;
+#else
+using UnityPhysicsMaterial = UnityEngine.PhysicMaterial;
+using UnityPhysicsMaterialCombine = UnityEngine.PhysicMaterialCombine;
+#endif
 
 namespace Unity.Physics.Authoring
 {
@@ -17,24 +24,24 @@ namespace Unity.Physics.Authoring
     {
         static List<UnityEngine.Collider> colliderComponents = new List<UnityEngine.Collider>();
 
-        static readonly IReadOnlyDictionary<PhysicMaterialCombine, Material.CombinePolicy> k_MaterialCombineLookup =
-            new Dictionary<PhysicMaterialCombine, Material.CombinePolicy>
+        static readonly IReadOnlyDictionary<UnityPhysicsMaterialCombine, Material.CombinePolicy> k_MaterialCombineLookup =
+            new Dictionary<UnityPhysicsMaterialCombine, Material.CombinePolicy>
         {
-            { PhysicMaterialCombine.Average, Material.CombinePolicy.ArithmeticMean },
-            { PhysicMaterialCombine.Maximum, Material.CombinePolicy.Maximum },
-            { PhysicMaterialCombine.Minimum, Material.CombinePolicy.Minimum }
+            { UnityPhysicsMaterialCombine.Average, Material.CombinePolicy.ArithmeticMean },
+            { UnityPhysicsMaterialCombine.Maximum, Material.CombinePolicy.Maximum },
+            { UnityPhysicsMaterialCombine.Minimum, Material.CombinePolicy.Minimum }
         };
 
-        static PhysicMaterial DefaultMaterial
+        static UnityPhysicsMaterial DefaultMaterial
         {
             get
             {
                 if (s_DefaultMaterial == null)
-                    s_DefaultMaterial = new PhysicMaterial { hideFlags = HideFlags.DontSave };
+                    s_DefaultMaterial = new UnityPhysicsMaterial { hideFlags = HideFlags.DontSave };
                 return s_DefaultMaterial;
             }
         }
-        static PhysicMaterial s_DefaultMaterial;
+        static UnityPhysicsMaterial s_DefaultMaterial;
 
         Material ProduceMaterial(UnityEngine.Collider collider)
         {
@@ -56,7 +63,7 @@ namespace Unity.Physics.Authoring
                 material.FrictionCombinePolicy = combine;
             else
                 Debug.LogWarning(
-                    $"{collider.name} uses {physicsMaterial.name}, which specifies non-convertible mode {physicsMaterial.frictionCombine} for {nameof(PhysicMaterial.frictionCombine)}.",
+                    $"{collider.name} uses {physicsMaterial.name}, which specifies non-convertible mode {physicsMaterial.frictionCombine} for {nameof(UnityPhysicsMaterial.frictionCombine)}.",
                     collider
                 );
 
@@ -65,7 +72,7 @@ namespace Unity.Physics.Authoring
                 material.RestitutionCombinePolicy = combine;
             else
                 Debug.LogWarning(
-                    $"{collider.name} uses {physicsMaterial.name}, which specifies non-convertible mode {physicsMaterial.bounceCombine} for {nameof(PhysicMaterial.bounceCombine)}.",
+                    $"{collider.name} uses {physicsMaterial.name}, which specifies non-convertible mode {physicsMaterial.bounceCombine} for {nameof(UnityPhysicsMaterial.bounceCombine)}.",
                     collider
                 );
 

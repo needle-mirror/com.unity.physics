@@ -1052,30 +1052,34 @@ namespace Unity.Physics.Tests.Utils
             return CompoundCollider.Create(children);
         }
 
-        // Assumes scale >= 1
-        public static BlobAssetReference<Collider> GenerateRandomConvex(ref Random rnd, float scale, CollisionFilter filter, Material material)
+        /// <summary>
+        /// Generate a convex collider of the specified collider type with random parameters.
+        /// </summary>
+        /// <param name="rnd">The random number generator used for collider generation.</param>
+        /// <param name="colliderType">The type of collider to generate, excluding any non-convex types, i.e., Compound, Mesh and Terrain.</param>
+        /// <param name="scale">A scaling factor applied to the randomly generated collider geometry. Must be larger equal 1.</param>
+        /// <param name="desiredBevelRadius">   The desired bevel radius for the collider, if the type supports it. Depending on the type of collider
+        ///                                     and the collider's randomly chosen size, the actual bevel radius will be capped to a collider dependent maximum.</param>
+        /// <param name="filter">The collision filter to be used for the collider.</param>
+        /// <param name="material">The Material to be used for the collider.</param>
+        /// <returns>The created collider.</returns>
+        public static BlobAssetReference<Collider> GenerateRandomConvex(ref Random rnd, ColliderType colliderType, float scale, float desiredBevelRadius, CollisionFilter filter,
+            Material material)
         {
             Assert.IsTrue(scale >= 1.0f);
 
-            ColliderType colliderType = (ColliderType)rnd.NextInt((int)ColliderType.Cylinder + 1);
-
-            float scaledConvexRadius = scale * ((rnd.NextInt(4) > 0) ? rnd.NextFloat(0.5f) : 0.0f);
             switch (colliderType)
             {
                 case ColliderType.Convex:
                 {
                     int numPoints = rnd.NextInt(1, 16);
-                    if (numPoints == 3)     // TODO - hull builder doesn't build faces for flat shapes, work around it for now to run the test
-                    {
-                        numPoints++;
-                    }
                     var points = new NativeArray<float3>(numPoints, Allocator.TempJob);
                     for (int i = 0; i < numPoints; i++)
                     {
                         points[i] = rnd.NextFloat3(-1.0f, 1.0f) * scale;
                     }
                     var generationParameters = ConvexHullGenerationParameters.Default;
-                    generationParameters.BevelRadius = scaledConvexRadius;
+                    generationParameters.BevelRadius = desiredBevelRadius;
                     var collider = ConvexCollider.Create(points, generationParameters, filter, material);
                     points.Dispose();
                     return collider;
@@ -1113,8 +1117,12 @@ namespace Unity.Physics.Tests.Utils
                     float3 point0 = rnd.NextFloat3(-1.0f, 1.0f);
                     float3 point1 = rnd.NextFloat3(-1.0f, 1.0f);
                     float3 point3 = rnd.NextFloat3(-1.0f, 1.0f);
-                    float t0 = rnd.NextFloat(0.0f, 1.0f);
-                    float t1 = rnd.NextFloat(0.0f, 1.0f);
+
+                    // choose a non-zero minimum here (0.1f) to ensure the line segment coordinates can't be zero,
+                    // preventing a degenerate quad
+                    float t0 = rnd.NextFloat(0.1f, 1.0f);
+                    float t1 = rnd.NextFloat(0.1f, 1.0f);
+
                     float3 e = point1 + point1 - point0;
                     float3 a = math.lerp(point1, e, t0);
                     float3 b = math.lerp(point3, point3 + point3 - point0, t0);
@@ -1134,7 +1142,7 @@ namespace Unity.Physics.Tests.Utils
                     };
 
                     float maxBevelRadius = math.max(math.cmin((boxGeometry.Size - minSize * scale) / (2.0f * (1.0f + float.Epsilon))), 0.0f);
-                    boxGeometry.BevelRadius = math.min(maxBevelRadius, scaledConvexRadius);
+                    boxGeometry.BevelRadius = math.min(maxBevelRadius, desiredBevelRadius);
 
                     return BoxCollider.Create(boxGeometry, filter, material);
                 }
@@ -1152,7 +1160,7 @@ namespace Unity.Physics.Tests.Utils
                     };
 
                     var maxBevelRadius = math.max(math.min(cylinderGeometry.Height / 2, cylinderGeometry.Radius) - minSize * scale, 0.0f);
-                    cylinderGeometry.BevelRadius = math.min(maxBevelRadius, scaledConvexRadius);
+                    cylinderGeometry.BevelRadius = math.min(maxBevelRadius, desiredBevelRadius);
 
                     return CylinderCollider.Create(cylinderGeometry, filter, material);
                 }
@@ -1160,6 +1168,26 @@ namespace Unity.Physics.Tests.Utils
                 default:
                     throw new NotImplementedException();
             }
+        }
+
+        public static BlobAssetReference<Collider> GenerateRandomConvex(ref Random rnd, ColliderType colliderType, float scale, float desiredBevelRadius)
+            => GenerateRandomConvex(ref rnd, colliderType, scale, desiredBevelRadius, CollisionFilter.Default, Material.Default);
+
+        /// <summary>
+        /// Generate a random convex collider with random parameters.
+        /// </summary>
+        /// <param name="rnd">The random number generator used for collider generation.</param>
+        /// <param name="scale">A scaling factor applied to the randomly generated collider geometry. Must be larger equal 1.</param>
+        /// <param name="filter">The collision filter to be used for the collider.</param>
+        /// <param name="material">The Material to be used for the collider.</param>
+        /// <returns>The created collider.</returns>
+        public static BlobAssetReference<Collider> GenerateRandomConvex(ref Random rnd, float scale, CollisionFilter filter, Material material)
+        {
+            Assert.IsTrue(scale >= 1.0f);
+
+            ColliderType colliderType = (ColliderType)rnd.NextInt((int)ColliderType.Cylinder + 1);
+            float scaledConvexRadius = scale * ((rnd.NextInt(4) > 0) ? rnd.NextFloat(0.5f) : 0.0f);
+            return GenerateRandomConvex(ref rnd, colliderType, scale, scaledConvexRadius, filter, material);
         }
 
         public static BlobAssetReference<Collider> GenerateRandomConvex(ref Random rnd, float scale) => GenerateRandomConvex(ref rnd, scale, CollisionFilter.Default, Material.Default);

@@ -308,7 +308,7 @@ namespace Unity.Physics.Authoring
         static Hash128 CalculateMeshHashes(ref ShapeComputationDataBaking res, PhysicsMeshAuthoringData physicsMeshData, UnityEngine.Mesh.MeshDataArray meshDataArray)
         {
             // Access the mesh vertices
-            MeshUtility.AppendMeshPropertiesToNativeBuffers(meshDataArray[physicsMeshData.MeshArrayIndex], !physicsMeshData.Convex, out var pointCloud, out var triangles);
+            MeshUtilities.AppendMeshPropertiesToNativeBuffers(meshDataArray[physicsMeshData.MeshArrayIndex], !physicsMeshData.Convex, out var pointCloud, out var triangles);
 
             // Hash Calculation
             return HashableShapeInputs.GetHash128(
@@ -352,7 +352,7 @@ namespace Unity.Physics.Authoring
             if (colliderData.RecalculateBlob)
             {
                 BuffersAcquire.Begin();
-                MeshUtility.AppendMeshPropertiesToNativeBuffers(meshDataArray[meshBakingData.MeshArrayIndex], !meshBakingData.Convex, out var pointCloud, out var triangles);
+                MeshUtilities.AppendMeshPropertiesToNativeBuffers(meshDataArray[meshBakingData.MeshArrayIndex], !meshBakingData.Convex, out var pointCloud, out var triangles);
                 var compoundMatrix = math.mul(meshBakingData.BakeFromShape, meshBakingData.ChildToShape);
                 for (int i = 0; i < pointCloud.Length; ++i)
                     pointCloud[i] = math.mul(compoundMatrix, new float4(pointCloud[i], 1f)).xyz;

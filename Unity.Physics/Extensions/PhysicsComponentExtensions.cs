@@ -21,6 +21,16 @@ namespace Unity.Physics.Extensions
     public static class PhysicsComponentExtensions
     {
         /// <summary>
+        ///  Converts a <see cref="PhysicsCollider"/> to a <see cref="UnityEngine.Mesh"/>.
+        /// </summary>
+        /// <param name="collider"> The collider to convert to a mesh.</param>
+        /// <returns> The created mesh. </returns>
+        public static UnityEngine.Mesh ToMesh(in this PhysicsCollider collider)
+        {
+            return collider.Value.Value.ToMesh();
+        }
+
+        /// <summary>
         /// Makes this collider <see cref="PhysicsCollider.IsUnique">unique</see> if this is not already the case.
         /// </summary>
         /// <param name="collider">The PhysicsCollider component representing the collider.</param>

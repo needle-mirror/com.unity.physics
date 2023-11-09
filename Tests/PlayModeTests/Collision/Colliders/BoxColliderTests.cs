@@ -5,6 +5,7 @@ using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Mathematics;
+using Unity.Physics.Extensions;
 using TestUtils = Unity.Physics.Tests.Utils.TestUtils;
 
 namespace Unity.Physics.Tests.Collision.Colliders
@@ -209,6 +210,33 @@ namespace Unity.Physics.Tests.Collision.Colliders
             MassProperties massProperties = boxCollider.Value.MassProperties;
             float3 inertiaTensor = massProperties.MassDistribution.InertiaTensor;
             TestUtils.AreEqual(expectedInertiaTensor, inertiaTensor, 1e-3f);
+        }
+
+        #endregion
+
+        #region Utilities
+
+        [Test]
+        public void TestBoxColliderToMesh()
+        {
+            var geometry = new BoxGeometry
+            {
+                Center = new float3(1, 2, 3),
+                Orientation = quaternion.identity,
+                Size = new float3(2, 3, 4),
+            };
+
+            using var boxCollider = BoxCollider.Create(geometry);
+
+            var aabb = boxCollider.Value.CalculateAabb(RigidTransform.identity);
+            TestUtils.AreEqual(geometry.Center, aabb.Center, math.EPSILON);
+            TestUtils.AreEqual(geometry.Size, aabb.Extents, math.EPSILON);
+
+            var mesh = boxCollider.Value.ToMesh();
+            TestUtils.AreEqual(geometry.Center, mesh.bounds.center, math.EPSILON);
+            TestUtils.AreEqual(geometry.Size, mesh.bounds.size, math.EPSILON);
+
+            UnityEngine.Object.DestroyImmediate(mesh);
         }
 
         #endregion

@@ -102,7 +102,7 @@ namespace Unity.Physics.Authoring
             // centroid is only needed in those cases
             if (hull.FaceLinks.Length > 0 || (drawVertices && hull.VertexEdges.Length > 0))
             {
-                centroid = AppendMeshColliders.GetMeshes.ComputeHullCentroid(ref hull);
+                centroid = MeshUtilities.ComputeHullCentroid(ref hull);
             }
 
             if (hull.FaceLinks.Length > 0)

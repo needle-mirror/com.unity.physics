@@ -4,9 +4,14 @@ using Unity.Physics.Extensions;
 
 namespace Unity.Physics.Systems
 {
+    /// <summary>
+    /// This system ensures that colliders which are flagged to be made unique via the EnsureUniqueColliderBlobTag
+    /// are made unique.
+    /// Specifically, it ensures that the forced unique colliders in newly instantiated prefabs are made unique.
+    /// </summary>
     [RequireMatchingQueriesForUpdate]
     [UpdateInGroup(typeof(BeforePhysicsSystemGroup), OrderFirst = true)]
-    public partial struct EnsureUniqueColliderSystem : ISystem
+    partial struct EnsureUniqueColliderSystem : ISystem
     {
         [BurstCompile]
         partial struct MakeUniqueJob : IJobEntity

@@ -6,6 +6,8 @@ using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
+using Unity.Physics.Extensions;
+using Unity.Physics.Tests.Utils;
 
 namespace Unity.Physics.Tests.Collision.Colliders
 {
@@ -96,6 +98,36 @@ namespace Unity.Physics.Tests.Collision.Colliders
         }
 
 #endif
+
+        #endregion
+
+        #region Utilities
+
+        [Test]
+        public void TestTerrainColliderToMesh([Values] TerrainCollider.CollisionMethod collisionMethod)
+        {
+            var heights = new NativeArray<float>(16, Allocator.Temp);
+            var size = new int2(4, 4);
+            try
+            {
+                for (int i = 0; i < heights.Length; ++i)
+                {
+                    heights[i] = i;
+                }
+
+                using var collider = TerrainCollider.Create(heights, size, 1, collisionMethod);
+                var aabb = collider.Value.CalculateAabb(RigidTransform.identity);
+                var mesh = collider.Value.ToMesh();
+                TestUtils.AreEqual(aabb.Center, mesh.bounds.center, math.EPSILON);
+                TestUtils.AreEqual(aabb.Extents, mesh.bounds.size, math.EPSILON);
+
+                UnityEngine.Object.DestroyImmediate(mesh);
+            }
+            finally
+            {
+                heights.Dispose();
+            }
+        }
 
         #endregion
     }

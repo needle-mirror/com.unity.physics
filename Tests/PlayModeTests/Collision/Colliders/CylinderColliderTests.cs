@@ -6,6 +6,8 @@ using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
+using Unity.Physics.Extensions;
+using Unity.Physics.Tests.Utils;
 
 namespace Unity.Physics.Tests.Collision.Colliders
 {
@@ -153,6 +155,36 @@ namespace Unity.Physics.Tests.Collision.Colliders
         }
 
 #endif
+
+        #endregion
+
+        #region Utilities
+
+        [Test]
+        public void TestCylinderColliderToMesh()
+        {
+            var geometry = new CylinderGeometry()
+            {
+                Center = new float3(1, 2, 3),
+                Orientation = quaternion.identity,
+                Height = 4,
+                Radius = 1,
+                SideCount = CylinderGeometry.MaxSideCount
+            };
+
+            using var cylinderCollider = CylinderCollider.Create(geometry);
+
+            var expectedSize = new float3(geometry.Radius * 2, geometry.Radius * 2, geometry.Height);
+            var aabb = cylinderCollider.Value.CalculateAabb(RigidTransform.identity);
+            TestUtils.AreEqual(geometry.Center, aabb.Center, math.EPSILON);
+            TestUtils.AreEqual(expectedSize, aabb.Extents, math.EPSILON);
+
+            var mesh = cylinderCollider.Value.ToMesh();
+            TestUtils.AreEqual(geometry.Center, mesh.bounds.center, math.EPSILON);
+            TestUtils.AreEqual(expectedSize, mesh.bounds.size, math.EPSILON);
+
+            UnityEngine.Object.DestroyImmediate(mesh);
+        }
 
         #endregion
     }

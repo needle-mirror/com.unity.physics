@@ -6,6 +6,7 @@ using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
+using Unity.Physics.Extensions;
 using TestUtils = Unity.Physics.Tests.Utils.TestUtils;
 
 namespace Unity.Physics.Tests.Collision.Colliders
@@ -150,6 +151,33 @@ namespace Unity.Physics.Tests.Collision.Colliders
             float3 expectedInertiaTensor = new float3(inertia, inertia, inertia);
             float3 inertiaTensor = sphereCollider.Value.MassProperties.MassDistribution.InertiaTensor;
             TestUtils.AreEqual(expectedInertiaTensor, inertiaTensor, 1e-3f);
+        }
+
+        #endregion
+
+        #region Utilities
+
+        [Test]
+        public void TestSphereColliderToMesh()
+        {
+            var geometry = new SphereGeometry()
+            {
+                Center = new float3(1, 2, 3),
+                Radius = 1
+            };
+
+            using var sphereCollider = SphereCollider.Create(geometry);
+
+            var expectedSize = new float3(geometry.Radius * 2);
+            var aabb = sphereCollider.Value.CalculateAabb(RigidTransform.identity);
+            TestUtils.AreEqual(geometry.Center, aabb.Center, math.EPSILON);
+            TestUtils.AreEqual(expectedSize, aabb.Extents, math.EPSILON);
+
+            var mesh = sphereCollider.Value.ToMesh();
+            TestUtils.AreEqual(geometry.Center, mesh.bounds.center, math.EPSILON);
+            TestUtils.AreEqual(expectedSize, mesh.bounds.size, math.EPSILON);
+
+            UnityEngine.Object.DestroyImmediate(mesh);
         }
 
         #endregion

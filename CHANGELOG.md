@@ -4,6 +4,32 @@ uid: unity-physics-changelog
 
 # Changelog
 
+## [1.2.0-exp.3] - 2023-11-09
+
+### Added
+
+* Added extension functions `PhysicsCollider.ToMesh()` and `Collider.ToMesh()` for the creation of `UnityEngine.Mesh` objects from colliders.
+* use of `PhysicsMaterial` instead of `PhysicMaterial` and `PhysicMaterialCombine` to `PhysicsMaterialCombine` API when the editor is newer than `2023.3`.
+* The `Layer Overrides` properties specified in `Collider` and `Rigidbody` authoring components are now baked into the `CollisionFilter` of the resultant Unity Physics colliders. For each individual `Collider` authoring component, the layer overrides on its `Rigidbody` and the collider itself are combined and together form the `CollidesWith` mask in the `CollisionFilter` of the baked collider. The collider collides with layers which are included, and does not collide with layers which are excluded. Furthermore, exclusions have precedence over inclusions.
+* `MassProperties.Scale` function allows uniformly scaling mass properties in a physically correct manner, assuming unit mass.
+
+### Changed
+
+* Update package `com.unity.mathematics` from `1.2.6` to `1.3.1` version.
+* Analytics API update to `SceneSimulationAnalytics.cs` file.
+* collider files renamed to `BoxCollider.cs`, `CapsuleCollider.cs`, `Collider.cs`, `MeshCollider.cs`, `SphereCollider.cs` and `TerrainCollider.cs`.
+* The `EnsureUniqueColliderSystem` now runs first in the `BeforePhysicsSystemGroup` instead of after the `AfterPhysicsSystemGroup`. A system that instantiates prefabs using unique colliders during runtime should run in the `BeforePhysicsSystemGroup` to avoid a bug where colliders would not be unique during prefab instantiation.
+* The minimum supported editor version is now 2022.3.11f1
+
+### Removed
+
+* `RayCastNode` and `ColliderCastNode`
+
+### Fixed
+
+* Prevent crash in debug display when exiting editor application.
+
+
 ## [1.1.0-pre.3] - 2023-10-17
 
 ### Added
@@ -38,6 +64,7 @@ uid: unity-physics-changelog
 ### Added
 
 * Tests for ensuring proper joint anchor and mass property baking
+* new demo scene (5m. Collider Modifications) demonstrating how to create colliders during runtime
 * Utility functions were added for the creation of MeshCollider blob assets from UnityEngine.Mesh, UnityEngine.MeshData and UnityEngine.MeshDataArray. These functions are located in the `MeshCollider` class as `MeshCollider.Create` variants with different function signatures.
 * Users can now verify if a collider blob is unique, and make it unique easily if required. The newly introduced `PhysicsCollider.IsUnique` property lets users check if a `PhysicsCollider` is unique and turn it into a unique collider if desired via the function `PhysicsCollider.MakeUnique()`. Making a collider unique with this function also takes care of the collider blob lifetime management and will automatically dispose it if it is no longer needed.
 * Added a custom entity inspector for the collider blob asset stored in the `PhysicsCollider` component. This inspector allows for two-way interaction with the collider. The displayed values update in accordance with the collider's latest runtime state, and the UI can be used in order to interact with the collider manually when it is unique (see `PhysicsCollider.IsUnique`). Among others, this lets users try out different material properties at runtime, such as friction and restitution, or modify the collider's size, local position or orientation.
@@ -52,7 +79,6 @@ uid: unity-physics-changelog
 * Updating APIs to `GetScriptingDefineSymbols()` and `SetScriptingDefineSymbols()`.
 * Included ragdoll authoring in documentation
 * Prefab instances will now contain unique colliders if the "force unique" collider authoring option is used. This allows collider runtime modifications without manual collider blob cloning now also on prefab instances. Note that prefab instances that contain "force unique" colliders will be made unique only after the next physics system group update following the prefab instantiation. Until then, the `PhysicsCollider.IsUnique` property will be false. If users require a unique collider immediately after prefab instantiation for runtime collider modifications, they can safely use the new `PhysicsCollider.MakeUnique()` function immediately after instantiation.
-* Updated Burst dependency to version 1.8.8
 * The internal component `DrawComponent`, required by the `Physics Debug Display`, is now hidden in the hierarchy.
 
 ### Deprecated
@@ -345,9 +371,38 @@ uid: unity-physics-changelog
 * Simplified math to improve performance in `CalculateTwistAngle()`
 * Fixed a bug in `ConvexHullBuilder.Compact()` where triangle indices in links were not properly updated after remapping.
 
-### Security
+### Changed
+* Package Dependencies
+    * `com.unity.entities` to version `0.51.1`
+    * `com.unity.physics` to version `0.51.1`
+    * `com.unity.collections` to version `1.4.0`
 
+## [0.51.0] - 2022-05-04
 
+### Changed
+* Package Dependencies
+    * `com.unity.burst` to version `1.6.6`
+    * `com.unity.entities` to version `0.51.0`
+    * `com.unity.mathematics` to version `1.2.6`
+    * `com.unity.physics` to version `0.51.0`
+    * `com.unity.collections` to version `1.3.1`
+
+## [0.50.0] - 2021-09-17
+
+### Changed
+
+* Upgraded com.unity.burst to 1.5.5
+* Adjusted code to remove obsolete APIs across all jobs inheriting IJobEntityBatch
+* Resources/ (used by Debug Draw) has been renamed DebugDisplayResources/ and now loads assets differently
+
+### Removed
+
+* All usages of PhysicsExclude from Demo and Runtime code.
+
+### Fixed
+
+* An issue with the rendering pipeline used for the package samples, which caused none of the samples to render post conversion
+* An issue with the materials present in the samples as their colors were no longer correct
 
 
 ## [0.10.0] - 2021-09-17
@@ -360,7 +415,6 @@ uid: unity-physics-changelog
 ### Removed
 
 * All usages of PhysicsExclude from Demo and Runtime code.
-
 
 
 ## [0.10.0-preview.1] - 2021-06-25

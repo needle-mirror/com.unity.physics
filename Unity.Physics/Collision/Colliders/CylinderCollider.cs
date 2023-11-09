@@ -27,7 +27,7 @@ namespace Unity.Physics
         public quaternion Orientation { get => m_Orientation; set => m_Orientation = value; }
         private quaternion m_Orientation;
 
-        /// <summary>   The height of the cylinder, centered along the local Y axis. </summary>
+        /// <summary>   The height of the cylinder along the local Z axis. </summary>
         ///
         /// <value> The height. </value>
         public float Height { get => m_Height; set => m_Height = value; }

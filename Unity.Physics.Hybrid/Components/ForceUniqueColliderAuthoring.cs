@@ -5,7 +5,7 @@ namespace Unity.Physics.Authoring
     /// <summary>
     /// An authoring component to tag the physics colliders used by this entity as unique. It is intended to be used with
     /// Built-In Physics Collider Components. Any collider that is present on a GameObject with this component will be
-    /// flagged as unique during the baking process. A unique collider will not share a BlobAssetReference<Collider> with
+    /// flagged as unique during the baking process. A unique collider will not share a BlobAssetReference&lt;Collider&gt; with
     /// any other collider.
     /// </summary>
     [Icon(k_IconPath)]

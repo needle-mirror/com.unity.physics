@@ -13,9 +13,9 @@
         "Unity.Physics.Hybrid",
         "Unity.Physics.Editor",
         "Unity.Transforms",
-        "Unity.DataFlowGraph",
         "UnityEngine.TestRunner",
-        "UnityEditor.TestRunner"
+        "UnityEditor.TestRunner",
+        "Unity.Async"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
@@ -29,11 +29,6 @@
         "UNITY_INCLUDE_TESTS"
     ],
     "versionDefines": [
-        {
-            "name": "com.unity.dataflowgraph",
-            "expression": "",
-            "define": "UNITY_DATAFLOWGRAPH_EXISTS"
-        },
         {
             "name": "com.unity.test-framework.performance",
             "expression": "0.0",

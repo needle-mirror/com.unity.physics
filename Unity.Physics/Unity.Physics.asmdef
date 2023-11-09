@@ -6,8 +6,7 @@
         "Unity.Collections",
         "Unity.Entities",
         "Unity.Mathematics",
-        "Unity.Transforms",
-        "Unity.DataFlowGraph"
+        "Unity.Transforms"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
@@ -21,11 +20,6 @@
             "name": "com.havok.physics",
             "expression": "0.0.0",
             "define": "HAVOK_PHYSICS_EXISTS"
-        },
-        {
-            "name": "com.unity.dataflowgraph",
-            "expression": "0.0.0",
-            "define": "UNITY_DATAFLOWGRAPH_EXISTS"
         },
         {
             "name": "com.unity.package-validation-suite",

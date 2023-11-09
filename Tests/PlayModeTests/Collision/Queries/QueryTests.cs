@@ -483,7 +483,7 @@ namespace Unity.Physics.Tests.Collision.Queries
         // See WorldCalculateDistanceTest, WorldColliderCastTest, and WorldRaycastTest for details about each query.
         // If the test fails, it will report a pair of seeds.  Set dbgWorld to the first and dbgTest to the second to run the failing case alone.
         [Test]
-#if UNITY_ANDROID_ARM7V
+#if UNITY_ANDROID_ARM7V || UNITY_IOS
         [Ignore("This test causes out of memory crashes on armv7 builds, due to the memory restrictions on such devices.")]
 #endif
         public unsafe void WorldQueryTest()
@@ -493,7 +493,7 @@ namespace Unity.Physics.Tests.Collision.Queries
             uint dbgWorld = 0; // set dbgWorld, dbgTest to the seed reported from a failure message to repeat the failing case alone
             uint dbgTest = 0;
 
-#if UNITY_ANDROID
+#if UNITY_ANDROID || UNITY_IOS
             int numWorlds = 50;
             int numTests = 1250;
 #else
@@ -709,8 +709,8 @@ namespace Unity.Physics.Tests.Collision.Queries
                             // Get the leaf shapes
                             ChildCollider leafA, leafB;
                             {
-                                Collider.GetLeafCollider(out leafA, (Collider*)bodyA.Collider.GetUnsafePtr(), header.ColliderKeys.ColliderKeyA , bodyA.WorldFromBody, bodyA.Scale);
-                                Collider.GetLeafCollider(out leafB, (Collider*)bodyB.Collider.GetUnsafePtr(), header.ColliderKeys.ColliderKeyB , bodyB.WorldFromBody, bodyB.Scale);
+                                Collider.GetLeafCollider(out leafA, (Collider*)bodyA.Collider.GetUnsafePtr(), header.ColliderKeys.ColliderKeyA, bodyA.WorldFromBody, bodyA.Scale);
+                                Collider.GetLeafCollider(out leafB, (Collider*)bodyB.Collider.GetUnsafePtr(), header.ColliderKeys.ColliderKeyB, bodyB.WorldFromBody, bodyB.Scale);
                             }
 
                             // Read each contact point

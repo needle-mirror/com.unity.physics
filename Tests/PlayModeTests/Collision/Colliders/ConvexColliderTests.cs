@@ -4,6 +4,7 @@ using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
+using Unity.Physics.Extensions;
 using Unity.Physics.Tests.Utils;
 using Random = Unity.Mathematics.Random;
 
@@ -170,6 +171,26 @@ namespace Unity.Physics.Tests.Collision.Colliders
 
             TestUtils.AreEqual(expectedAabb.Min, actualAabb.Min, maxError);
             TestUtils.AreEqual(expectedAabb.Max, actualAabb.Max, maxError);
+        }
+
+        #endregion
+
+        #region Utilities
+
+        [Test]
+        public void TestConvexColliderToMesh()
+        {
+            using var points = new NativeArray<float3>(k_TestPoints, Allocator.Temp);
+            var parameters = ConvexHullGenerationParameters.Default;
+            parameters.BevelRadius = 0;
+            using var convexCollider = ConvexCollider.Create(points, parameters);
+
+            var aabb = convexCollider.Value.CalculateAabb(RigidTransform.identity);
+            var mesh = convexCollider.Value.ToMesh();
+            TestUtils.AreEqual(aabb.Center, mesh.bounds.center, math.EPSILON);
+            TestUtils.AreEqual(aabb.Extents, mesh.bounds.size, math.EPSILON);
+
+            UnityEngine.Object.DestroyImmediate(mesh);
         }
 
         #endregion

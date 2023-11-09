@@ -299,16 +299,6 @@ namespace Unity.DebugDisplay
         }
 
         [BurstDiscard]
-        internal static void Reinstantiate()
-        {
-            if (Managed.Instance != null)
-            {
-                Managed.Instance.Dispose();
-            }
-            Managed.Instance = new Managed();
-        }
-
-        [BurstDiscard]
         internal static void Instantiate()
         {
             if (Managed.Instance == null)

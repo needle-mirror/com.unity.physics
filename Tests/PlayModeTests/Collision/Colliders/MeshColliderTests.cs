@@ -7,6 +7,8 @@ using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Physics.Authoring;
+using Unity.Physics.Extensions;
+using Unity.Physics.Tests.Utils;
 using Random = Unity.Mathematics.Random;
 
 namespace Unity.Physics.Tests.Collision.Colliders
@@ -298,5 +300,29 @@ namespace Unity.Physics.Tests.Collision.Colliders
         }
 
 #endif
+
+        [Test]
+        public void TestMeshColliderToMesh()
+        {
+            const int kNumTriangles = 100;
+            GenerateMeshData(kNumTriangles, out var vertices, out var triangles);
+            try
+            {
+                using var meshCollider = MeshCollider.Create(vertices, triangles);
+                var aabb = meshCollider.Value.CalculateAabb(RigidTransform.identity);
+
+                var mesh = meshCollider.Value.ToMesh();
+                TestUtils.AreEqual(aabb.Center, mesh.bounds.center, math.EPSILON);
+                TestUtils.AreEqual(aabb.Extents, mesh.bounds.size, math.EPSILON);
+                TestUtils.AreEqual(kNumTriangles, mesh.triangles.Length / 3);
+
+                UnityEngine.Object.DestroyImmediate(mesh);
+            }
+            finally
+            {
+                vertices.Dispose();
+                triangles.Dispose();
+            }
+        }
     }
 }

@@ -6,6 +6,7 @@ using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
+using Unity.Physics.Extensions;
 using TestUtils = Unity.Physics.Tests.Utils.TestUtils;
 
 namespace Unity.Physics.Tests.Collision.Colliders
@@ -386,6 +387,47 @@ namespace Unity.Physics.Tests.Collision.Colliders
         {
             // #TODO: Add function once inertia is properly computed in Physics
             return new float3(0, 0, 0);
+        }
+
+        #endregion
+
+        #region Utilities
+
+        void ValidateMeshCreation(ref Collider collider)
+        {
+            var aabb = collider.CalculateAabb(RigidTransform.identity);
+            var mesh = collider.ToMesh();
+            TestUtils.AreEqual(aabb.Center, mesh.bounds.center, math.EPSILON);
+            TestUtils.AreEqual(aabb.Extents, mesh.bounds.size, math.EPSILON);
+
+            UnityEngine.Object.DestroyImmediate(mesh);
+        }
+
+        [Test]
+        public void TestTriangleColliderToMesh()
+        {
+            float3[] vertices =
+            {
+                new(-1.4f, 1.4f, 5.6f),
+                new(1.4f, 1.4f, 3.6f),
+                new(0.2f, 1.2f, 5.6f)
+            };
+            using var triangleCollider = PolygonCollider.CreateTriangle(vertices[0], vertices[1], vertices[2]);
+            ValidateMeshCreation(ref triangleCollider.Value);
+        }
+
+        [Test]
+        public void TestQuadColliderToMesh()
+        {
+            float3[] vertices =
+            {
+                new(-4.5f, 0.0f, 1.0f),
+                new(3.4f, 0.7f, 1.0f),
+                new(3.4f, 2.7f, 1.0f),
+                new(-3.4f, 1.2f, 1.0f)
+            };
+            using var quadCollider = PolygonCollider.CreateQuad(vertices[0], vertices[1], vertices[2], vertices[3]);
+            ValidateMeshCreation(ref quadCollider.Value);
         }
 
         #endregion

@@ -1,6 +1,6 @@
 # Creating bodies in code
 
-Now that you know how to create bodies in the editor and how to alter their properties in code, let's see how to create them dynamically in code.
+Now that you know how to create rigid bodies in the editor and how to alter their properties in code, let's see how to create them dynamically in code.
 
 ## Starting from a Prefab
 

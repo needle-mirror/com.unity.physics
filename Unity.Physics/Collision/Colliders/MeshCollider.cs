@@ -69,7 +69,7 @@ namespace Unity.Physics
 
             //meshDataArray[0] always since we aren't doing an entity query. [MeshArrayIndex = 0]
             // bool trianglesNeeded = true because we are always getting a mesh. [!physicsMeshData.Convex]
-            MeshUtility.AppendMeshPropertiesToNativeBuffers(meshDataArray[0], true, out var vertices, out var triangles);
+            MeshUtilities.AppendMeshPropertiesToNativeBuffers(meshDataArray[0], true, out var vertices, out var triangles);
 
             return CreateInternal(vertices, triangles, filter, material);
         }
@@ -85,7 +85,7 @@ namespace Unity.Physics
         public static BlobAssetReference<Collider> Create(UnityEngine.Mesh.MeshData meshData, CollisionFilter filter,
             Material material)
         {
-            MeshUtility.AppendMeshPropertiesToNativeBuffers(meshData, true, out var vertices, out var triangles);
+            MeshUtilities.AppendMeshPropertiesToNativeBuffers(meshData, true, out var vertices, out var triangles);
             return CreateInternal(vertices, triangles, filter, material);
         }
 
@@ -100,7 +100,7 @@ namespace Unity.Physics
         public static BlobAssetReference<Collider> Create(UnityEngine.Mesh.MeshDataArray meshDataArray, CollisionFilter filter,
             Material material)
         {
-            MeshUtility.AppendMeshPropertiesToNativeBuffers(meshDataArray[0], true, out var vertices, out var triangles);
+            MeshUtilities.AppendMeshPropertiesToNativeBuffers(meshDataArray[0], true, out var vertices, out var triangles);
             return CreateInternal(vertices, triangles, filter, material);
         }
 

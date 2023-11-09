@@ -153,6 +153,12 @@ namespace Unity.Physics.Authoring
             new Lines(1).Draw(x0, x1, color);
         }
 
+        /// <summary>
+        /// Draws multiple lines between the provided pairs of points.
+        /// </summary>
+        /// <param name="lineVertices"> A pointer to a vertices array containing a sequence of point pairs. A line is drawn between every pair of points. </param>
+        /// <param name="numVertices"> Number of vertices. </param>
+        /// <param name="color"> Color. </param>
         public static unsafe void Lines(float3* lineVertices, int numVertices, ColorIndex color)
         {
             var lines = new Lines(numVertices / 2);
@@ -162,6 +168,11 @@ namespace Unity.Physics.Authoring
             }
         }
 
+        /// <summary>
+        /// Draws multiple lines between the provided pairs of points.
+        /// </summary>
+        /// <param name="lineVertices"> A list of vertices containing a sequence of point pairs. A line is drawn between every pair of points. </param>
+        /// <param name="color"> Color. </param>
         public static void Lines(in NativeList<float3> lineVertices, ColorIndex color)
         {
             unsafe
@@ -170,6 +181,11 @@ namespace Unity.Physics.Authoring
             }
         }
 
+        /// <summary>
+        /// Draws multiple lines between the provided pairs of points.
+        /// </summary>
+        /// <param name="lineVertices"> An array of vertices containing a sequence of point pairs. A line is drawn between every pair of points. </param>
+        /// <param name="color"> Color. </param>
         public static void Lines(in NativeArray<float3> lineVertices, ColorIndex color)
         {
             unsafe
@@ -178,6 +194,12 @@ namespace Unity.Physics.Authoring
             }
         }
 
+        /// <summary>
+        /// Draws multiple triangles from the provided data arrays.
+        /// </summary>
+        /// <param name="vertices"> An array of vertices. </param>
+        /// <param name="triangleIndices"> An array of triangle indices pointing into the vertices array. A triangle is drawn from every triplet of triangle indices. </param>
+        /// <param name="color"> Color. </param>
         public static void TriangleEdges(in NativeArray<float3> vertices, in NativeArray<int> triangleIndices,
             ColorIndex color)
         {
@@ -250,6 +272,12 @@ namespace Unity.Physics.Authoring
             Unity.DebugDisplay.Box.Draw(Size, Center, Orientation, color);
         }
 
+        /// <summary>
+        /// Draws multiple triangles from the provided data arrays.
+        /// </summary>
+        /// <param name="vertices"> An array of vertices. </param>
+        /// <param name="triangleIndices"> An array of triangle indices pointing into the vertices array. A triangle is drawn from every triplet of triangle indices. </param>
+        /// <param name="color"> Color. </param>
         public static void Triangles(in NativeArray<float3> vertices, in NativeArray<int> triangleIndices, ColorIndex color)
         {
             var triangles = new Triangles(triangleIndices.Length / 3);
@@ -264,6 +292,12 @@ namespace Unity.Physics.Authoring
             }
         }
 
+        /// <summary>
+        /// Draws multiple triangles from the provided array of triplets of vertices.
+        /// </summary>
+        /// <param name="vertices"> An array containing a sequence of vertex triplets. A triangle is drawn from every triplet of vertices. </param>
+        /// <param name="numVertices"> Number of vertices. </param>
+        /// <param name="color"> Color. </param>
         public static unsafe void Triangles(float3* vertices, int numVertices, ColorIndex color)
         {
             var triangles = new Triangles(numVertices / 3);
@@ -278,6 +312,11 @@ namespace Unity.Physics.Authoring
             }
         }
 
+        /// <summary>
+        /// Draws multiple triangles from the provided list of triplets of vertices.
+        /// </summary>
+        /// <param name="vertices"> A list containing a sequence of vertex triplets. A triangle is drawn from every triplet of vertices. </param>
+        /// <param name="color"> Color. </param>
         public static void Triangles(in NativeList<float3> vertices, ColorIndex color)
         {
             unsafe
@@ -286,6 +325,11 @@ namespace Unity.Physics.Authoring
             }
         }
 
+        /// <summary>
+        /// Draws multiple triangles from the provided array of triplets of vertices.
+        /// </summary>
+        /// <param name="vertices"> An array containing a sequence of vertex triplets. A triangle is drawn from every triplet of vertices. </param>
+        /// <param name="color"> Color. </param>
         public static void Triangles(in NativeArray<float3> vertices, ColorIndex color)
         {
             unsafe

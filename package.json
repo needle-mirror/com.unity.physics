@@ -4,9 +4,9 @@
   "description": "Unity's C# stateless physics library.\n\nBuilt on top of the Unity C# ECS framework, Unity Physics is network-ready, completely customizable, and built for performance out of the box. Whether you're building the next mobile hit or a new networked multiplayer console experience, Unity Physics leverages the Burst compiler and Job system to scale across a range of hardware.",
   "dependencies": {
     "com.unity.burst": "1.8.8",
-    "com.unity.collections": "2.3.0-pre.3",
-    "com.unity.entities": "1.1.0-pre.3",
-    "com.unity.mathematics": "1.2.6",
+    "com.unity.collections": "2.4.0-exp.2",
+    "com.unity.entities": "1.2.0-exp.3",
+    "com.unity.mathematics": "1.3.1",
     "com.unity.test-framework": "1.3.8",
     "com.unity.modules.imgui": "1.0.0",
     "com.unity.modules.jsonserialize": "1.0.0"
@@ -17,8 +17,8 @@
   ],
   "name": "com.unity.physics",
   "unity": "2022.3",
-  "unityRelease": "0f1",
-  "version": "1.1.0-pre.3",
+  "unityRelease": "11f1",
+  "version": "1.2.0-exp.3",
   "samples": [
     {
       "displayName": "Custom Physics Authoring",
@@ -28,15 +28,15 @@
     }
   ],
   "_upm": {
-    "changelog": "### Added\n\n* The `Physics Debug Display` component can now display colliders of type `TerrainCollider`.\n* The `Layer Overrides` properties specified in `Collider` and `Rigidbody` authoring components are now baked into the `CollisionFilter` of the resultant Unity Physics colliders. For each individual `Collider` authoring component, the layer overrides on its `Rigidbody` and the collider itself are combined and together form the `CollidesWith` mask in the `CollisionFilter` of the baked collider. The collider collides with layers which are included, and does not collide with layers which are excluded. Furthermore, exclusions have precedence over inclusions.\n* `MassProperties.Scale` function allows uniformly scaling mass properties in a physically correct manner, assuming unit mass.\n* `MassProperties.CreateSphere` function for creation of the mass properties of a sphere with the provided radius, assuming unit mass.\n\n### Changed\n\n* Significantly improved performance of `Physics Debug Display` through a reduced need for thread synchronization via batching of debug display data.\n* The `Physics Debug Display` now automatically resizes its debug draw data buffers dynamically to ensure all entities are drawn.\n* Game objects with built-in or custom collider authoring components that have a purely uniform scale at edit-time, will now have the scale carried over into their `LocalTransform` component's `Scale` property during entity baking. Thus far, any scale, including a purely uniform scale, was baked into the Unity Physics collider geometry instead and the corresponding entity's `LocalTransform.Scale` property was set to 1 rather than to the desired uniform scale value. This is no longer the case, and users can now expect to find the uniform edit-time scale they assign to their game objects also in the resultant, baked entities during run-time, making run-time modifications of already uniformly scaled objects much more intuitive and less cumbersome.\n* Rigid bodies baked from game objects which have any world-space scale or shear at edit-time can now be scaled at runtime using their `LocalTransform` component's `Scale` property. Previously, this was not possible. Runtime scaling using the `LocalTransform.Scale` property was only possible when the edit-time scale of the baked game object was identity, and no shear was present.\n* `Entity` references in `CompoundCollider` children are no longer automatically set during baking since these references are not guaranteed to be valid in the `World` after baking. Only those entity references that appear in components and buffers, such as the `PhysicsColliderKeyEntityPair` buffer, are always guaranteed to be valid. Note that the `PhysicsColliderKeyEntityPair` buffer is still present on entities which contain a baked compound collider. Via collider keys, this buffer provides a mapping between the child colliders and the original entities that they were in at bake time.\n\n### Fixed\n\n* Prevent race condition between the systems that produce the debug draw data and the display system that renders the data. This allows the debug data to be fully produced before the display system attempts to render it.\n* Fix draw of collider entities without `LocalToWorld` component when selecting `PostIntegration` in the Physics Debug Display.\n* Avoid leftover debug draw when switching scenes and new scene has no `Physics Debug Display`.\n* Mass properties debug display now correctly considers the rigid body scale, and correctly handles cases with unphysical inertia tensors.\n* Custom mass properties specified using the `Override Default Mass Distribution` option in the custom `Physics Body Authoring` component now work correctly even if no collider is present.\n* A rigid body's uniform scale value (`LocalTransform.Scale`) is now always considered correctly in the simulation. Previously, when the rigid body entity also contained a `PostTransformMatrix` component, its uniform scale was not applied to its collider and mass properties, leading to erroneous mass properties and missed collisions (if uniform scale > 1) or ghost collisions (if uniform scale < 1).\n* Collider debug display now correctly displays colliders with uniform scale other than 1 in accordance with their `LocalTransform` component's `Scale` value.\n* Collider debug display now correctly displays rigid body entities with `Parent` component."
+    "changelog": "### Added\n\n* Added extension functions `PhysicsCollider.ToMesh()` and `Collider.ToMesh()` for the creation of `UnityEngine.Mesh` objects from colliders.\n* use of `PhysicsMaterial` instead of `PhysicMaterial` and `PhysicMaterialCombine` to `PhysicsMaterialCombine` API when the editor is newer than `2023.3`.\n* The `Layer Overrides` properties specified in `Collider` and `Rigidbody` authoring components are now baked into the `CollisionFilter` of the resultant Unity Physics colliders. For each individual `Collider` authoring component, the layer overrides on its `Rigidbody` and the collider itself are combined and together form the `CollidesWith` mask in the `CollisionFilter` of the baked collider. The collider collides with layers which are included, and does not collide with layers which are excluded. Furthermore, exclusions have precedence over inclusions.\n* `MassProperties.Scale` function allows uniformly scaling mass properties in a physically correct manner, assuming unit mass.\n\n### Changed\n\n* Update package `com.unity.mathematics` from `1.2.6` to `1.3.1` version.\n* Analytics API update to `SceneSimulationAnalytics.cs` file.\n* collider files renamed to `BoxCollider.cs`, `CapsuleCollider.cs`, `Collider.cs`, `MeshCollider.cs`, `SphereCollider.cs` and `TerrainCollider.cs`.\n* The `EnsureUniqueColliderSystem` now runs first in the `BeforePhysicsSystemGroup` instead of after the `AfterPhysicsSystemGroup`. A system that instantiates prefabs using unique colliders during runtime should run in the `BeforePhysicsSystemGroup` to avoid a bug where colliders would not be unique during prefab instantiation.\n* The minimum supported editor version is now 2022.3.11f1\n\n### Removed\n\n* `RayCastNode` and `ColliderCastNode`\n\n### Fixed\n\n* Prevent crash in debug display when exiting editor application."
   },
   "upmCi": {
-    "footprint": "c41e72edbed1817b7e834bdb19e87f014a0f5797"
+    "footprint": "6b3704d2bbf6280b83a28114ed6e86726cf7a23e"
   },
-  "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.physics@1.1/manual/index.html",
+  "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.physics@1.2/manual/index.html",
   "repository": {
     "url": "https://github.cds.internal.unity3d.com/unity/dots.git",
     "type": "git",
-    "revision": "5edeb315aa3ca0d26060290a69660b2afdabe2ff"
+    "revision": "9bfd95fb576e8fa710c8544b6706bdd73e25afef"
   }
 }
