@@ -4,6 +4,13 @@ uid: unity-physics-changelog
 
 # Changelog
 
+## [1.2.0-pre.4] - 2023-11-28
+
+### Changed
+
+* Updated Burst dependency to 1.8.10
+
+
 ## [1.2.0-exp.3] - 2023-11-09
 
 ### Added

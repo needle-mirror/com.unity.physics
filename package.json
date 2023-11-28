@@ -3,9 +3,9 @@
   "category": "Unity",
   "description": "Unity's C# stateless physics library.\n\nBuilt on top of the Unity C# ECS framework, Unity Physics is network-ready, completely customizable, and built for performance out of the box. Whether you're building the next mobile hit or a new networked multiplayer console experience, Unity Physics leverages the Burst compiler and Job system to scale across a range of hardware.",
   "dependencies": {
-    "com.unity.burst": "1.8.8",
-    "com.unity.collections": "2.4.0-exp.2",
-    "com.unity.entities": "1.2.0-exp.3",
+    "com.unity.burst": "1.8.10",
+    "com.unity.collections": "2.4.0-pre.2",
+    "com.unity.entities": "1.2.0-pre.4",
     "com.unity.mathematics": "1.3.1",
     "com.unity.test-framework": "1.3.8",
     "com.unity.modules.imgui": "1.0.0",
@@ -18,7 +18,7 @@
   "name": "com.unity.physics",
   "unity": "2022.3",
   "unityRelease": "11f1",
-  "version": "1.2.0-exp.3",
+  "version": "1.2.0-pre.4",
   "samples": [
     {
       "displayName": "Custom Physics Authoring",
@@ -28,15 +28,15 @@
     }
   ],
   "_upm": {
-    "changelog": "### Added\n\n* Added extension functions `PhysicsCollider.ToMesh()` and `Collider.ToMesh()` for the creation of `UnityEngine.Mesh` objects from colliders.\n* use of `PhysicsMaterial` instead of `PhysicMaterial` and `PhysicMaterialCombine` to `PhysicsMaterialCombine` API when the editor is newer than `2023.3`.\n* The `Layer Overrides` properties specified in `Collider` and `Rigidbody` authoring components are now baked into the `CollisionFilter` of the resultant Unity Physics colliders. For each individual `Collider` authoring component, the layer overrides on its `Rigidbody` and the collider itself are combined and together form the `CollidesWith` mask in the `CollisionFilter` of the baked collider. The collider collides with layers which are included, and does not collide with layers which are excluded. Furthermore, exclusions have precedence over inclusions.\n* `MassProperties.Scale` function allows uniformly scaling mass properties in a physically correct manner, assuming unit mass.\n\n### Changed\n\n* Update package `com.unity.mathematics` from `1.2.6` to `1.3.1` version.\n* Analytics API update to `SceneSimulationAnalytics.cs` file.\n* collider files renamed to `BoxCollider.cs`, `CapsuleCollider.cs`, `Collider.cs`, `MeshCollider.cs`, `SphereCollider.cs` and `TerrainCollider.cs`.\n* The `EnsureUniqueColliderSystem` now runs first in the `BeforePhysicsSystemGroup` instead of after the `AfterPhysicsSystemGroup`. A system that instantiates prefabs using unique colliders during runtime should run in the `BeforePhysicsSystemGroup` to avoid a bug where colliders would not be unique during prefab instantiation.\n* The minimum supported editor version is now 2022.3.11f1\n\n### Removed\n\n* `RayCastNode` and `ColliderCastNode`\n\n### Fixed\n\n* Prevent crash in debug display when exiting editor application."
+    "changelog": "### Changed\n\n* Updated Burst dependency to 1.8.10"
   },
   "upmCi": {
-    "footprint": "6b3704d2bbf6280b83a28114ed6e86726cf7a23e"
+    "footprint": "be3834d960450613a4a8af0b035a9bd11b40bf37"
   },
   "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.physics@1.2/manual/index.html",
   "repository": {
     "url": "https://github.cds.internal.unity3d.com/unity/dots.git",
     "type": "git",
-    "revision": "9bfd95fb576e8fa710c8544b6706bdd73e25afef"
+    "revision": "38c44b22a14cc4a35bc1b7a2f5ab1846208176d5"
   }
 }
