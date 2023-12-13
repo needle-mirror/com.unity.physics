@@ -5,7 +5,7 @@
   "dependencies": {
     "com.unity.burst": "1.8.10",
     "com.unity.collections": "2.4.0-pre.2",
-    "com.unity.entities": "1.2.0-pre.4",
+    "com.unity.entities": "1.2.0-pre.6",
     "com.unity.mathematics": "1.3.1",
     "com.unity.test-framework": "1.3.8",
     "com.unity.modules.imgui": "1.0.0",
@@ -18,7 +18,7 @@
   "name": "com.unity.physics",
   "unity": "2022.3",
   "unityRelease": "11f1",
-  "version": "1.2.0-pre.4",
+  "version": "1.2.0-pre.6",
   "samples": [
     {
       "displayName": "Custom Physics Authoring",
@@ -28,15 +28,15 @@
     }
   ],
   "_upm": {
-    "changelog": "### Changed\n\n* Updated Burst dependency to 1.8.10"
+    "changelog": "### Changed\n\n* Promotion preparation"
   },
   "upmCi": {
-    "footprint": "be3834d960450613a4a8af0b035a9bd11b40bf37"
+    "footprint": "318b4ede24b3aa734131816c8d3c117bdfc48c85"
   },
   "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.physics@1.2/manual/index.html",
   "repository": {
     "url": "https://github.cds.internal.unity3d.com/unity/dots.git",
     "type": "git",
-    "revision": "38c44b22a14cc4a35bc1b7a2f5ab1846208176d5"
+    "revision": "c2136868e2bfbe78d7c68475d8ced6c623b4cb6d"
   }
 }
