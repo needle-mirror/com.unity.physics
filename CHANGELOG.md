@@ -4,6 +4,28 @@ uid: unity-physics-changelog
 
 # Changelog
 
+## [1.2.0-pre.12] - 2024-02-13
+
+### Added
+
+* ScheduleUpdateBroadphase and UpdateBroadphaseImmediate to update the Broadphase instead of doing a full rebuild.
+* ScheduleUpdateMotionData and UpdateMotionDataImmediate to update the pre-existing MotionData without recreating them.
+* BuildPhysicsWorldData.CompleteInputDependency method to complete the InputDependency if necessary.
+* Simulaton.ResetSimulationContext to make it possible reset the current simulation context.
+
+### Changed
+
+* Updated Burst dependency to version 1.8.12
+
+### Fixed
+
+* Fixed errors caused by memory corruption when selecting mesh-based custom Physics Shape Authoring components in the editor.
+
+### Updated
+
+* Upgraded Test Framework version to 1.4.3
+
+
 ## [1.2.0-pre.6] - 2023-12-13
 
 ### Changed

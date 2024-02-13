@@ -41,6 +41,16 @@ namespace Unity.Physics.Systems
     }
 
     /// <summary>
+    /// Group responsible to build the physics world data and wait for any dependencies before the
+    /// next simulation.
+    /// </summary>
+    [UpdateInGroup(typeof(PhysicsInitializeGroupInternal), OrderLast = true)]
+    [UpdateAfter(typeof(BuildPhysicsWorldDependencyResolver))]
+    public partial class PhysicsBuildWorldGroup : ComponentSystemGroup
+    {
+    }
+
+    /// <summary>
     /// Public system data for this world's instance of a <see cref="BuildPhysicsWorld"/> system.
     ///
     /// Contains physics world data based on the entity world. The physics world data will contain a
@@ -95,6 +105,15 @@ namespace Unity.Physics.Systems
         {
             m_InputDependencyToComplete = JobHandle.CombineDependencies(m_InputDependencyToComplete, dependencyToComplete);
         }
+
+        /// <summary>
+        /// Complete and reset all pending input dependencies.
+        /// </summary>
+        public void CompleteInputDependency()
+        {
+            m_InputDependencyToComplete.Complete();
+            m_InputDependencyToComplete = default;
+        }
     }
 
     /// <summary>
@@ -103,7 +122,7 @@ namespace Unity.Physics.Systems
     /// which has a joint component.
     /// </summary>
     [BurstCompile]
-    [UpdateInGroup(typeof(PhysicsInitializeGroupInternal), OrderLast = true)]
+    [UpdateInGroup(typeof(PhysicsBuildWorldGroup))]
     public partial struct BuildPhysicsWorld : ISystem
     {
         [BurstCompile]
@@ -115,9 +134,6 @@ namespace Unity.Physics.Systems
             {
                 WorldFilter = worldFilter,
                 PhysicsData = physicsData,
-#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
-                IntegrityCheckMap = new NativeParallelHashMap<uint, long>(4, Allocator.Persistent),
-#endif
             });
 
             state.EntityManager.CreateSingleton(
@@ -126,12 +142,6 @@ namespace Unity.Physics.Systems
                     PhysicsWorld = physicsData.PhysicsWorld,
                     PhysicsWorldIndex = worldFilter
                 });
-
-#if UNITY_EDITOR && ENABLE_CLOUD_SERVICES_ANALYTICS
-            var physicsAnalyticsSingleton = new PhysicsAnalyticsSingleton();
-            physicsAnalyticsSingleton.Clear();
-            state.EntityManager.CreateSingleton(physicsAnalyticsSingleton);
-#endif
         }
 
         [BurstCompile]
@@ -139,10 +149,6 @@ namespace Unity.Physics.Systems
         {
             ref var buildPhysicsData = ref state.EntityManager.GetComponentDataRW<BuildPhysicsWorldData>(state.SystemHandle).ValueRW;
             buildPhysicsData.PhysicsData.Dispose();
-
-#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
-            buildPhysicsData.IntegrityCheckMap.Dispose();
-#endif
         }
 
         [BurstCompile]
@@ -161,135 +167,139 @@ namespace Unity.Physics.Systems
             state.Dependency = PhysicsWorldBuilder.SchedulePhysicsWorldBuild(ref state, ref buildPhysicsData.PhysicsData, state.Dependency,
                 timeStep, stepComponent.MultiThreaded > 0, stepComponent.Gravity, state.LastSystemVersion);
 
-#if UNITY_EDITOR && ENABLE_CLOUD_SERVICES_ANALYTICS
-
-            // Store simulation type
-            var analyticsData = SystemAPI.GetSingletonRW<PhysicsAnalyticsSingleton>();
-            analyticsData.ValueRW.m_SimulationType = stepComponent.SimulationType;
-
-            // This is an overkill to what we are trying to do at the moment (get max number of bodies in a scene).
-            // But all other jobs which do analytics should be created using this pattern, either as part of this job,
-            // or running in parallel with it.
-            state.Dependency = new AnalyticsJobs.PhysicsJointsAnalyticsJob
-            {
-                Joints = buildPhysicsData.PhysicsData.PhysicsWorld.Joints,
-                PhysicsAnalyticsSingleton = analyticsData
-            }.Schedule(state.Dependency);
-
-            state.Dependency = new AnalyticsJobs.PhysicsBodiesAnalyticsJob
-            {
-                World = buildPhysicsData.PhysicsData.PhysicsWorld,
-                PhysicsAnalyticsSingleton = analyticsData
-            }.Schedule(state.Dependency);
-#endif
-
             SystemAPI.SetSingleton(new PhysicsWorldSingleton
             {
                 PhysicsWorld = buildPhysicsData.PhysicsData.PhysicsWorld,
                 PhysicsWorldIndex = buildPhysicsData.WorldFilter
             });
-
-#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
-            RecordIntegrity(buildPhysicsData.IntegrityCheckMap, ref state);
-#endif
-
-            buildPhysicsData.m_InputDependencyToComplete = default;
         }
-
-        #region Integrity checks
-
-        private static class Jobs
-        {
-            [BurstCompile]
-            internal struct RecordDynamicBodyIntegrity : IJobChunk
-            {
-                [ReadOnly] public ComponentTypeHandle<LocalTransform> LocalTransformType;
-
-                [ReadOnly] public ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
-                [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
-
-                public NativeParallelHashMap<uint, long> IntegrityCheckMap;
-
-                internal static void AddOrIncrement(NativeParallelHashMap<uint, long> integrityCheckMap, uint systemVersion)
-                {
-                    if (integrityCheckMap.TryGetValue(systemVersion, out long occurences))
-                    {
-                        integrityCheckMap.Remove(systemVersion);
-                        integrityCheckMap.Add(systemVersion, occurences + 1);
-                    }
-                    else
-                    {
-                        integrityCheckMap.Add(systemVersion, 1);
-                    }
-                }
-
-                public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
-                {
-                    Assert.IsFalse(useEnabledMask);
-                    AddOrIncrement(IntegrityCheckMap, chunk.GetOrderVersion());
-                    AddOrIncrement(IntegrityCheckMap, chunk.GetChangeVersion(ref PhysicsVelocityType));
-
-                    if (chunk.Has(ref LocalTransformType))
-                    {
-                        AddOrIncrement(IntegrityCheckMap, chunk.GetChangeVersion(ref LocalTransformType));
-                    }
-
-                    if (chunk.Has(ref PhysicsColliderType))
-                    {
-                        AddOrIncrement(IntegrityCheckMap, chunk.GetChangeVersion(ref PhysicsColliderType));
-                    }
-                }
-            }
-
-            [BurstCompile]
-            internal struct RecordColliderIntegrity : IJobChunk
-            {
-                [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
-                public NativeParallelHashMap<uint, long> IntegrityCheckMap;
-
-                public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
-                {
-                    Assert.IsFalse(useEnabledMask);
-                    if (chunk.Has(ref PhysicsColliderType))
-                    {
-                        RecordDynamicBodyIntegrity.AddOrIncrement(IntegrityCheckMap, chunk.GetChangeVersion(ref PhysicsColliderType));
-                    }
-                }
-            }
-        }
-
-        internal void RecordIntegrity(NativeParallelHashMap<uint, long> integrityCheckMap, ref SystemState state)
-        {
-            integrityCheckMap.Clear();
-
-            var buildPhysicsData = state.EntityManager.GetComponentData<BuildPhysicsWorldData>(state.SystemHandle);
-
-            var dynamicBodyIntegrity = new Jobs.RecordDynamicBodyIntegrity
-            {
-                IntegrityCheckMap = integrityCheckMap,
-
-                LocalTransformType = buildPhysicsData.PhysicsData.ComponentHandles.LocalTransformType,
-
-                PhysicsVelocityType = buildPhysicsData.PhysicsData.ComponentHandles.PhysicsVelocityType,
-                PhysicsColliderType = buildPhysicsData.PhysicsData.ComponentHandles.PhysicsColliderType
-            };
-
-            var handle = dynamicBodyIntegrity.Schedule(buildPhysicsData.PhysicsData.DynamicEntityGroup, state.Dependency);
-
-            var staticBodyColliderIntegrity = new Jobs.RecordColliderIntegrity
-            {
-                IntegrityCheckMap = integrityCheckMap,
-                PhysicsColliderType = buildPhysicsData.PhysicsData.ComponentHandles.PhysicsColliderType
-            };
-
-            handle = staticBodyColliderIntegrity.Schedule(buildPhysicsData.PhysicsData.StaticEntityGroup, handle);
-            state.Dependency = JobHandle.CombineDependencies(state.Dependency, handle);
-        }
-
-        #endregion
     }
 
+    #region Integrity checks
+
+#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
+    /// <summary>
+    /// Schedule check for integrity jobs in the Editor or in development build if the
+    /// UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS define is set.
+    /// </summary>
+    [BurstCompile]
+    [UpdateInGroup(typeof(PhysicsBuildWorldGroup), OrderLast = true)]
+    [CreateAfter(typeof(BuildPhysicsWorld))]
+    internal partial struct IntegrityCheckSystem : ISystem
+    {
+        NativeParallelHashMap<uint, long> m_IntegrityCheckMap;
+        SystemHandle m_BuildSystemHandle;
+
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
+        {
+            m_IntegrityCheckMap = new NativeParallelHashMap<uint, long>(4, Allocator.Persistent);
+            m_BuildSystemHandle = state.WorldUnmanaged.GetExistingUnmanagedSystem<BuildPhysicsWorld>();
+            ref var buildPhysicsWorldData = ref state.EntityManager.GetComponentDataRW<BuildPhysicsWorldData>(m_BuildSystemHandle).ValueRW;
+            buildPhysicsWorldData.IntegrityCheckMap = m_IntegrityCheckMap;
+            // To inject the right dependencies
+            state.GetComponentLookup<PhysicsWorldSingleton>();
+        }
+
+        public void OnDestroy(ref SystemState state)
+        {
+            m_IntegrityCheckMap.Dispose();
+        }
+
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
+        {
+            // these getter are not waiting for depedencies on the main thread, and that would avoid blocking for no
+            // reason.
+            var buildPhysicsData = state.EntityManager.GetComponentData<BuildPhysicsWorldData>(m_BuildSystemHandle);
+            buildPhysicsData.IntegrityCheckMap.Clear();
+            // Should be un-necessary to update the handles at this point (there are no structural changes at this point)
+            // has been added as extra safety measure.
+            // buildPhysicsData.PhysicsData.ComponentHandles.Update(ref state);
+            state.Dependency = new PhysicsIntegrityCheckJobs.RecordDynamicBodyIntegrity
+            {
+                IntegrityCheckMap = buildPhysicsData.IntegrityCheckMap,
+                LocalTransformType = buildPhysicsData.PhysicsData.ComponentHandles.LocalTransformType,
+                PhysicsVelocityType = buildPhysicsData.PhysicsData.ComponentHandles.PhysicsVelocityType,
+                PhysicsColliderType = buildPhysicsData.PhysicsData.ComponentHandles.PhysicsColliderType
+            }.Schedule(buildPhysicsData.PhysicsData.DynamicEntityGroup, state.Dependency);
+            state.Dependency = new PhysicsIntegrityCheckJobs.RecordColliderIntegrity
+            {
+                IntegrityCheckMap = buildPhysicsData.IntegrityCheckMap,
+                PhysicsColliderType = buildPhysicsData.PhysicsData.ComponentHandles.PhysicsColliderType
+            }.Schedule(buildPhysicsData.PhysicsData.StaticEntityGroup, state.Dependency);;
+        }
+    }
+
+    internal static class PhysicsIntegrityCheckJobs
+    {
+        [BurstCompile]
+        internal struct RecordDynamicBodyIntegrity : IJobChunk
+        {
+            [ReadOnly] public ComponentTypeHandle<LocalTransform> LocalTransformType;
+
+            [ReadOnly] public ComponentTypeHandle<PhysicsVelocity> PhysicsVelocityType;
+            [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
+
+            public NativeParallelHashMap<uint, long> IntegrityCheckMap;
+
+            internal static void AddOrIncrement(NativeParallelHashMap<uint, long> integrityCheckMap,
+                uint systemVersion)
+            {
+                if (integrityCheckMap.TryGetValue(systemVersion, out long occurences))
+                {
+                    integrityCheckMap.Remove(systemVersion);
+                    integrityCheckMap.Add(systemVersion, occurences + 1);
+                }
+                else
+                {
+                    integrityCheckMap.Add(systemVersion, 1);
+                }
+            }
+
+            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask,
+                in v128 chunkEnabledMask)
+            {
+                Assert.IsFalse(useEnabledMask);
+                AddOrIncrement(IntegrityCheckMap, chunk.GetOrderVersion());
+                AddOrIncrement(IntegrityCheckMap, chunk.GetChangeVersion(ref PhysicsVelocityType));
+
+                if (chunk.Has(ref LocalTransformType))
+                {
+                    AddOrIncrement(IntegrityCheckMap, chunk.GetChangeVersion(ref LocalTransformType));
+                }
+
+                if (chunk.Has(ref PhysicsColliderType))
+                {
+                    AddOrIncrement(IntegrityCheckMap, chunk.GetChangeVersion(ref PhysicsColliderType));
+                }
+            }
+        }
+
+        [BurstCompile]
+        internal struct RecordColliderIntegrity : IJobChunk
+        {
+            [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
+            public NativeParallelHashMap<uint, long> IntegrityCheckMap;
+
+            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask,
+                in v128 chunkEnabledMask)
+            {
+                Assert.IsFalse(useEnabledMask);
+                if (chunk.Has(ref PhysicsColliderType))
+                {
+                    RecordDynamicBodyIntegrity.AddOrIncrement(IntegrityCheckMap,
+                        chunk.GetChangeVersion(ref PhysicsColliderType));
+                }
+            }
+        }
+    }
+#endif
+
+    #endregion
+
     #region Analytics
+
 #if UNITY_EDITOR && ENABLE_CLOUD_SERVICES_ANALYTICS
     internal struct PhysicsAnalyticsSingleton : IComponentData
     {
@@ -339,16 +349,73 @@ namespace Unity.Physics.Systems
         }
     }
 
+    [UpdateInGroup(typeof(PhysicsInitializeGroupInternal), OrderLast = true)]
+    [UpdateAfter(typeof(PhysicsBuildWorldGroup))]
+    internal partial struct PhysicsAnalyticsSystem : ISystem
+    {
+        SystemHandle m_BuildSystemHandle;
+
+        public void OnCreate(ref SystemState state)
+        {
+            m_BuildSystemHandle = state.WorldUnmanaged.GetExistingUnmanagedSystem<BuildPhysicsWorld>();
+
+            var physicsAnalyticsSingleton = new PhysicsAnalyticsSingleton();
+            physicsAnalyticsSingleton.Clear();
+            state.EntityManager.CreateSingleton(physicsAnalyticsSingleton);
+
+            // To inject the right dependencies
+            state.GetComponentLookup<PhysicsWorldSingleton>();
+        }
+
+        public void OnUpdate(ref SystemState state)
+        {
+            if (!SystemAPI.TryGetSingleton(out PhysicsStep stepComponent))
+            {
+                stepComponent = PhysicsStep.Default;
+            }
+
+            // Store simulation type
+            var analyticsData = SystemAPI.GetSingletonRW<PhysicsAnalyticsSingleton>();
+            analyticsData.ValueRW.m_SimulationType = stepComponent.SimulationType;
+
+            if (m_BuildSystemHandle == SystemHandle.Null)
+            {
+                return;
+            }
+            // else:
+
+            if (!state.EntityManager.HasComponent<BuildPhysicsWorldData>(m_BuildSystemHandle))
+            {
+                return;
+            }
+            // else:
+
+            var buildPhysicsData = state.EntityManager.GetComponentData<BuildPhysicsWorldData>(m_BuildSystemHandle);
+
+            var jointAnalyticsJob = new AnalyticsJobs.PhysicsJointsAnalyticsJob
+            {
+                Joints = buildPhysicsData.PhysicsData.PhysicsWorld.Joints,
+                PhysicsAnalyticsSingleton = analyticsData
+            }.Schedule(state.Dependency);
+
+            var bodiesAnalyticsJob = new AnalyticsJobs.PhysicsBodiesAnalyticsJob
+            {
+                World = buildPhysicsData.PhysicsData.PhysicsWorld,
+                PhysicsAnalyticsSingleton = analyticsData
+            }.Schedule(state.Dependency);
+
+            state.Dependency = JobHandle.CombineDependencies(jointAnalyticsJob, bodiesAnalyticsJob);
+        }
+    }
+
     [BurstCompile]
     internal static class AnalyticsJobs
     {
         [BurstCompile]
         internal struct PhysicsJointsAnalyticsJob : IJob
         {
-            [NativeDisableUnsafePtrRestriction]
-            public RefRW<PhysicsAnalyticsSingleton> PhysicsAnalyticsSingleton;
-            [ReadOnly]
-            public NativeArray<Joint> Joints;
+            [NativeDisableUnsafePtrRestriction] public RefRW<PhysicsAnalyticsSingleton> PhysicsAnalyticsSingleton;
+            [ReadOnly] public NativeArray<Joint> Joints;
 
             [BurstCompile]
             public void Execute()
@@ -392,21 +459,29 @@ namespace Unity.Physics.Systems
                     }
                 }
 
-                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfLinearConstraintsInAScene = math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfLinearConstraintsInAScene, numLinearConstraints);
-                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfAngularConstraintsInAScene = math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfAngularConstraintsInAScene, numAngularConstraints);
-                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfPositionMotorsInAScene = math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfPositionMotorsInAScene, numPositionMotors);
-                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfRotationMotorsInAScene = math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfRotationMotorsInAScene, numRotationMotors);
-                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfAngularVelocityMotorsInAScene = math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfAngularVelocityMotorsInAScene, numAngularVelocityMotors);
-                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfLinearVelocityMotorsInAScene = math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfLinearVelocityMotorsInAScene, numLinearVelocityMotors);
+                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfLinearConstraintsInAScene = math.max(
+                    PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfLinearConstraintsInAScene, numLinearConstraints);
+                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfAngularConstraintsInAScene = math.max(
+                    PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfAngularConstraintsInAScene,
+                    numAngularConstraints);
+                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfPositionMotorsInAScene = math.max(
+                    PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfPositionMotorsInAScene, numPositionMotors);
+                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfRotationMotorsInAScene = math.max(
+                    PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfRotationMotorsInAScene, numRotationMotors);
+                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfAngularVelocityMotorsInAScene = math.max(
+                    PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfAngularVelocityMotorsInAScene,
+                    numAngularVelocityMotors);
+                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfLinearVelocityMotorsInAScene = math.max(
+                    PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfLinearVelocityMotorsInAScene,
+                    numLinearVelocityMotors);
             }
         }
+
         [BurstCompile]
         internal struct PhysicsBodiesAnalyticsJob : IJob
         {
-            [NativeDisableUnsafePtrRestriction]
-            public RefRW<PhysicsAnalyticsSingleton> PhysicsAnalyticsSingleton;
-            [ReadOnly]
-            public PhysicsWorld World;
+            [NativeDisableUnsafePtrRestriction] public RefRW<PhysicsAnalyticsSingleton> PhysicsAnalyticsSingleton;
+            [ReadOnly] public PhysicsWorld World;
 
             [BurstCompile]
             public void Execute()
@@ -427,8 +502,12 @@ namespace Unity.Physics.Systems
                 // and filled with uninitialized memory.
                 if (World.NumBodies <= 1) return;
 
-                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfStaticBodiesInAScene = math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfStaticBodiesInAScene, (uint)World.NumStaticBodies);
-                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfDynamicBodiesInAScene = math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfDynamicBodiesInAScene, (uint)World.NumDynamicBodies);
+                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfStaticBodiesInAScene = math.max(
+                    PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfStaticBodiesInAScene,
+                    (uint)World.NumStaticBodies);
+                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfDynamicBodiesInAScene = math.max(
+                    PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfDynamicBodiesInAScene,
+                    (uint)World.NumDynamicBodies);
 
                 for (int i = 0; i < World.Bodies.Length; i++)
                 {
@@ -471,26 +550,37 @@ namespace Unity.Physics.Systems
                     }
                 }
 
-                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfConvexesInAScene = math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfConvexesInAScene, numConvexes);
-                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfSpheresInAScene = math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfSpheresInAScene, numSpheres);
-                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfCapsulesInAScene = math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfCapsulesInAScene, numCapsules);
-                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfTrianglesInAScene = math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfTrianglesInAScene, numTriangles);
-                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfQuadsInAScene = math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfQuadsInAScene, numQuads);
-                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfBoxesInAScene = math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfBoxesInAScene, numBoxes);
-                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfCylindersInAScene = math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfCylindersInAScene, numCylinders);
-                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfMeshesInAScene = math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfMeshesInAScene, numMeshes);
-                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfCompoundsInAScene = math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfCompoundsInAScene, numCompounds);
-                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfTerrainsInAScene = math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfTerrainsInAScene, numTerrains);
+                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfConvexesInAScene =
+                    math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfConvexesInAScene, numConvexes);
+                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfSpheresInAScene =
+                    math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfSpheresInAScene, numSpheres);
+                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfCapsulesInAScene =
+                    math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfCapsulesInAScene, numCapsules);
+                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfTrianglesInAScene =
+                    math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfTrianglesInAScene, numTriangles);
+                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfQuadsInAScene =
+                    math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfQuadsInAScene, numQuads);
+                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfBoxesInAScene =
+                    math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfBoxesInAScene, numBoxes);
+                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfCylindersInAScene =
+                    math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfCylindersInAScene, numCylinders);
+                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfMeshesInAScene =
+                    math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfMeshesInAScene, numMeshes);
+                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfCompoundsInAScene =
+                    math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfCompoundsInAScene, numCompounds);
+                PhysicsAnalyticsSingleton.ValueRW.m_MaxNumberOfTerrainsInAScene =
+                    math.max(PhysicsAnalyticsSingleton.ValueRO.m_MaxNumberOfTerrainsInAScene, numTerrains);
             }
         }
     }
 
 #endif //UNITY_EDITOR && ENABLE_CLOUD_SERVICES_ANALYTICS
+
     #endregion
 
     struct DummySimulationData : IComponentData
     {
-        byte dummyData;  // Without data, the component is zero-sized, and accessing it will result in error
+        byte dummyData; // Without data, the component is zero-sized, and accessing it will result in error
         internal DummySimulation m_Simulation;
 
         internal unsafe void DisableSystemChain(ref SystemState systemStateRef)
@@ -523,7 +613,8 @@ namespace Unity.Physics.Systems
         [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
-            state.EntityManager.GetComponentDataRW<DummySimulationData>(state.SystemHandle).ValueRW.m_Simulation.Dispose();
+            state.EntityManager.GetComponentDataRW<DummySimulationData>(state.SystemHandle).ValueRW.m_Simulation
+                .Dispose();
         }
 
         [BurstCompile]

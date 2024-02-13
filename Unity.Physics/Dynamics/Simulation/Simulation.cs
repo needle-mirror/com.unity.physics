@@ -568,6 +568,17 @@ namespace Unity.Physics
             return m_StepHandles;
         }
 
+        /// <summary>
+        /// Resets the simulation storage
+        /// - Reallocates input velocities storage if necessary
+        /// - Disposes event streams and allocates new ones with a single work item
+        /// </summary>
+        /// <param name="input">    The input. </param>
+        public void ResetSimulationContext(SimulationStepInput input)
+        {
+            SimulationContext.Reset(input);
+        }
+
         /// <summary>   Steps the world immediately. </summary>
         ///
         /// <param name="input">    The input. </param>

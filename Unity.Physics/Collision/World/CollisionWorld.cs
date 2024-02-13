@@ -219,6 +219,42 @@ namespace Unity.Physics
             Broadphase.BuildDynamicTree(world.DynamicBodies, world.MotionVelocities, gravity, timeStep, aabbMargin);
         }
 
+        /// <summary> Rebuild the static collision world. </summary>
+        ///
+        /// <param name="world">    [in,out] The world. </param>
+        public void UpdateStaticTree(ref PhysicsWorld world)
+        {
+            float aabbMargin = world.CollisionWorld.CollisionTolerance * 0.5f;
+            Broadphase.BuildStaticTree(world.StaticBodies, aabbMargin);
+        }
+
+        /// <summary>
+        /// Schedule a set of jobs to update the static collision world.
+        /// </summary>
+        ///
+        /// <param name="world">            [in,out] The world. </param>
+        /// <param name="buildStaticTree">  The build static tree. </param>
+        /// <param name="inputDeps">        The input deps. </param>
+        /// <param name="multiThreaded">    (Optional) True if multi threaded. </param>
+        ///
+        /// <returns>   A JobHandle. </returns>
+        public JobHandle ScheduleUpdateStaticTree(ref PhysicsWorld world,
+            NativeReference<int>.ReadOnly buildStaticTree, JobHandle inputDeps, bool multiThreaded = true)
+        {
+            if (!multiThreaded)
+            {
+                return new UpdateStaticTreeJob
+                {
+                    World = world
+                }.Schedule(inputDeps);
+            }
+            else
+            {
+                // Thread count is +1 for main thread
+                return Broadphase.ScheduleStaticTreeBuildJobs(ref world, JobsUtility.JobWorkerCount + 1, buildStaticTree, inputDeps);
+            }
+        }
+
         /// <summary>
         /// Schedule a set of jobs to synchronize the collision world with the dynamics world.
         /// </summary>
@@ -234,7 +270,7 @@ namespace Unity.Physics
         {
             if (!multiThreaded)
             {
-                return new UpdateDynamicLayerJob
+                return new UpdateDynamicTreeJob
                 {
                     World = world,
                     TimeStep = timeStep,
@@ -278,7 +314,7 @@ namespace Unity.Physics
         }
 
         [BurstCompile]
-        private struct UpdateDynamicLayerJob : IJob
+        struct UpdateDynamicTreeJob : IJob
         {
             public PhysicsWorld World;
             public float TimeStep;
@@ -287,6 +323,17 @@ namespace Unity.Physics
             public void Execute()
             {
                 World.CollisionWorld.UpdateDynamicTree(ref World, TimeStep, Gravity);
+            }
+        }
+        [BurstCompile]
+        struct UpdateStaticTreeJob : IJob
+        {
+            public PhysicsWorld World;
+            public NativeReference<int>.ReadOnly buildStaticTree;
+            public void Execute()
+            {
+                if(buildStaticTree.Value != 0)
+                    World.CollisionWorld.UpdateStaticTree(ref World);
             }
         }
 

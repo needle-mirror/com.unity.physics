@@ -15,6 +15,8 @@ To import the **Custom Physics Authoring** sample, open the Package Manager wind
 
 ## Custom authoring components
 
+By manually importing the **Custom Physics Authoring** sample into your project, the following components will be added under **Assets &gt; Samples** (folder).
+
 * [Custom Shape Component](custom-shapes.md)
   * [Custom Material](custom-materials.md)
 * [Custom Body Component](custom-bodies.md)

@@ -20,6 +20,7 @@ namespace Unity.Physics.Systems
     public partial struct ExportPhysicsWorld : ISystem
     {
         private PhysicsWorldExporter.ExportPhysicsWorldTypeHandles m_ComponentTypeHandles;
+        private SystemHandle m_BuildPhysicsWorldHandle;
 
 #if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
         private IntegrityComponentHandles m_IntegrityCheckHandles;
@@ -29,27 +30,24 @@ namespace Unity.Physics.Systems
         public void OnCreate(ref SystemState state)
         {
             m_ComponentTypeHandles = new PhysicsWorldExporter.ExportPhysicsWorldTypeHandles(ref state);
-
+            m_BuildPhysicsWorldHandle = state.WorldUnmanaged.GetExistingUnmanagedSystem<BuildPhysicsWorld>();
 #if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
 
             m_IntegrityCheckHandles = new IntegrityComponentHandles(ref state);
 #endif
+            // Register a ReadOnly deps on PhysicsWorldSingleton
+            SystemAPI.GetSingleton<PhysicsWorldSingleton>();
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            // Register a ReadOnly deps on PhysicsWorldSingleton
-            SystemAPI.GetSingleton<PhysicsWorldSingleton>();
-
-            var bpw = state.WorldUnmanaged.GetExistingUnmanagedSystem<BuildPhysicsWorld>();
-
             JobHandle handle = state.Dependency;
 
 #if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
-            handle = CheckIntegrity(ref state, handle, bpw);
+            handle = CheckIntegrity(ref state, handle, m_BuildPhysicsWorldHandle);
 #endif
-            var buildPhysicsData = state.EntityManager.GetComponentData<BuildPhysicsWorldData>(bpw);
+            var buildPhysicsData = state.EntityManager.GetComponentData<BuildPhysicsWorldData>(m_BuildPhysicsWorldHandle);
             handle = PhysicsWorldExporter.SchedulePhysicsWorldExport(ref state, ref m_ComponentTypeHandles, buildPhysicsData.PhysicsData.PhysicsWorld, handle, buildPhysicsData.PhysicsData.DynamicEntityGroup);
 
             // Combine implicit output dependency with user one
@@ -94,7 +92,6 @@ namespace Unity.Physics.Systems
             var checkDynamicBodyIntegrity = new CheckDynamicBodyIntegrity
             {
                 IntegrityCheckMap = buildPhysicsData.IntegrityCheckMap,
-
                 LocalTransformType = localTransformType,
                 PhysicsVelocityType = physicsVelocityType,
                 PhysicsColliderType = physicsColliderType

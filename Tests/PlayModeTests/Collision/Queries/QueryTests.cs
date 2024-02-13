@@ -198,6 +198,7 @@ namespace Unity.Physics.Tests.Collision.Queries
         // are validated in the same way as those in ConvexConvexDistanceTest().
         // If the test fails, it will report a pair of seeds.  Set dbgShape to the first and dbgTest to the second to run the failing case alone.
         [Test]
+        [Timeout(300000)]
         public unsafe void ConvexConvexDistanceEdgeCaseTest()
         {
             Random rnd = new Random(0x90456148);
@@ -486,6 +487,7 @@ namespace Unity.Physics.Tests.Collision.Queries
 #if UNITY_ANDROID_ARM7V || UNITY_IOS
         [Ignore("This test causes out of memory crashes on armv7 builds, due to the memory restrictions on such devices.")]
 #endif
+        [Timeout(300000)]
         public unsafe void WorldQueryTest()
         {
             // todo.papopov: switch the seed back to 0x12345678 when [UNI-281] is resolved

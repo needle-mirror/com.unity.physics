@@ -25,7 +25,7 @@ namespace Unity.Physics.Systems
         /// <param name="physicsData">                    [in,out] Information describing the physics. </param>
         /// <param name="inputDep">                         The input dependency. </param>
         /// <param name="timeStep">                         The time step. </param>
-        /// <param name="isBroadphaseBuildMultiThreaded"> True if is broadphase build multi threaded, false
+        /// <param name="isBroadphaseBuildMultiThreaded"> True if the broadphase build is multi threaded, false
         /// if not. </param>
         /// <param name="gravity">                          The gravity. </param>
         /// <param name="lastSystemVersion">                The last system version. </param>
@@ -51,7 +51,7 @@ namespace Unity.Physics.Systems
         /// <param name="componentHandles">                 The component handles. </param>
         /// <param name="inputDep">                         The input dependency. </param>
         /// <param name="timeStep">                         The time step. </param>
-        /// <param name="isBroadphaseBuildMultiThreaded"> True if is broadphase build multi threaded, false
+        /// <param name="isBroadphaseBuildMultiThreaded">   True if the broadphase build is multi threaded, false
         /// if not. </param>
         /// <param name="gravity">                          The gravity. </param>
         /// <param name="lastSystemVersion">                The last system version. </param>
@@ -229,24 +229,123 @@ namespace Unity.Physics.Systems
         }
 
         /// <summary>
-        /// Schedule jobs to build broadphase BoundingVolumeHierarchy of the specified PhysicsWorld.
+        /// Schedule jobs to build the broadphase of the specified PhysicsWorld.
         /// </summary>
         ///
         /// <param name="world">                            [in,out] The world. </param>
         /// <param name="haveStaticBodiesChanged">          The have static bodies changed. </param>
         /// <param name="inputDep">                         The input dependency. </param>
         /// <param name="timeStep">                         The time step. </param>
-        /// <param name="isBroadphaseBuildMultiThreaded"> True if is broadphase build multi threaded, false
+        /// <param name="isBroadphaseUpdateMultiThreaded">  True if the broadphase update is multi threaded, false
         /// if not. </param>
         /// <param name="gravity">                          The gravity. </param>
         ///
         /// <returns>   A JobHandle. </returns>
         public static JobHandle ScheduleBroadphaseBVHBuild(ref PhysicsWorld world, NativeReference<int>.ReadOnly haveStaticBodiesChanged,
-            in JobHandle inputDep, float timeStep, bool isBroadphaseBuildMultiThreaded, float3 gravity)
+            in JobHandle inputDep, float timeStep, bool isBroadphaseUpdateMultiThreaded, float3 gravity)
         {
             return world.CollisionWorld.ScheduleBuildBroadphaseJobs(
                 ref world, timeStep, gravity,
-                haveStaticBodiesChanged, inputDep, isBroadphaseBuildMultiThreaded);
+                haveStaticBodiesChanged, inputDep, isBroadphaseUpdateMultiThreaded);
+        }
+
+        /// <summary>
+        /// Schedule jobs to update the broadphase of the specified PhysicsWorld.
+        /// </summary>
+        ///
+        /// <param name="physicsWorldData">                 [in,out] Information describing the physics world. </param>
+        /// <param name="inputDep">                         The input dependency. </param>
+        /// <param name="timeStep">                         The time step. </param>
+        /// <param name="isBroadphaseUpdatedMultiThreaded"> True if is broadphase update is multi threaded, false if not. </param>s
+        /// <param name="gravity">                          The gravity. </param>
+        /// <param name="lastSystemVersion">                The last system version. </param>
+        ///
+        /// <returns>   A JobHandle. </returns>
+        public static JobHandle ScheduleUpdateBroadphase(ref PhysicsWorldData physicsWorldData,
+            float timeStep, float3 gravity, uint lastSystemVersion, in JobHandle inputDep, bool isBroadphaseUpdatedMultiThreaded)
+        {
+            physicsWorldData.HaveStaticBodiesChanged.Value = 0;
+            var jobHandle = physicsWorldData.PhysicsWorld.CollisionWorld.ScheduleUpdateDynamicTree(
+                ref physicsWorldData.PhysicsWorld, timeStep, gravity, inputDep, isBroadphaseUpdatedMultiThreaded);
+            jobHandle = new Jobs.CheckStaticBodyChangesJob
+            {
+                LocalToWorldType = physicsWorldData.ComponentHandles.LocalToWorldType,
+                ParentType = physicsWorldData.ComponentHandles.ParentType,
+                LocalTransformType = physicsWorldData.ComponentHandles.LocalTransformType,
+                PhysicsColliderType = physicsWorldData.ComponentHandles.PhysicsColliderType,
+                m_LastSystemVersion = lastSystemVersion,
+                Result = physicsWorldData.HaveStaticBodiesChanged
+            }.ScheduleParallel(physicsWorldData.StaticEntityGroup, inputDep);
+            jobHandle = physicsWorldData.PhysicsWorld.CollisionWorld.ScheduleUpdateStaticTree(
+                ref physicsWorldData.PhysicsWorld, physicsWorldData.HaveStaticBodiesChanged.AsReadOnly(), jobHandle, isBroadphaseUpdatedMultiThreaded);
+            return jobHandle;
+        }
+
+        /// <summary>
+        /// Update the pre-existing <see cref="MotionData"/> and <see cref="MotionVelocity"/> using the current state of the physic object (transform and physics velocities).
+        /// This method can be used to update the state of the physic simulation when running physic multiple time in the same frame.
+        /// Assumes that the number of physics objects (static and dynamic) and joints remain the same after the physics world as been built.
+        /// </summary>
+        /// <param name="systemState"> [in,out] State of the system. </param>
+        /// <param name="physicsData">[in,out] Information describing the physics. </param>
+        /// <param name="inputDeps">the input dependencies</param>
+        public static JobHandle ScheduleUpdateMotionData(ref SystemState systemState, ref PhysicsWorldData physicsData, JobHandle inputDeps)
+        {
+            var numDynamicBodies = physicsData.StaticEntityGroup.CalculateEntityCount();
+            if (numDynamicBodies == 0)
+            {
+                return inputDeps;
+            }
+            using var chunkBaseEntityIndices = physicsData.DynamicEntityGroup.CalculateBaseEntityIndexArrayAsync(
+                systemState.WorldUpdateAllocator, inputDeps, out var jobHandle);
+            inputDeps = new Jobs.CreateMotions
+            {
+                LocalTransformType = physicsData.ComponentHandles.LocalTransformType,
+                PhysicsVelocityType = physicsData.ComponentHandles.PhysicsVelocityType,
+                PhysicsMassType = physicsData.ComponentHandles.PhysicsMassType,
+                PhysicsMassOverrideType = physicsData.ComponentHandles.PhysicsMassOverrideType,
+                PhysicsDampingType = physicsData.ComponentHandles.PhysicsDampingType,
+                PhysicsGravityFactorType = physicsData.ComponentHandles.PhysicsGravityFactorType,
+                SimulateType = physicsData.ComponentHandles.SimulateType,
+
+                MotionDatas = physicsData.PhysicsWorld.MotionDatas,
+                MotionVelocities = physicsData.PhysicsWorld.MotionVelocities,
+                ChunkBaseEntityIndices = chunkBaseEntityIndices,
+            }.ScheduleParallel(physicsData.DynamicEntityGroup, jobHandle);
+            return inputDeps;
+        }
+
+        /// <summary>
+        /// Update the pre-existing <see cref="MotionData"/> and <see cref="MotionVelocity"/> using the current state of the physic object (transform and physics velocities).
+        /// This method can be used to update the state of the physic simulation when running physic multiple time in the same frame.
+        /// Assumes that the number of physics objects (static and dynamic) and joints remain the same after the physics world as been built.
+        /// </summary>
+        /// <param name="systemState"> [in,out] State of the system. </param>
+        /// <param name="physicsData">[in,out] Information describing the physics. </param>
+        public static void UpdateMotionDataImmediate(ref SystemState systemState, ref PhysicsWorldData physicsData)
+        {
+            var numStaticBodies = physicsData.DynamicEntityGroup.CalculateEntityCount();
+            var numDynamicBodies = physicsData.StaticEntityGroup.CalculateEntityCount();
+            if (numStaticBodies + numDynamicBodies == 0)
+            {
+                physicsData.HaveStaticBodiesChanged.Value = 0;
+                return;
+            }
+            using var chunkBaseEntityIndices = physicsData.DynamicEntityGroup.CalculateBaseEntityIndexArray(systemState.WorldUpdateAllocator);
+            new Jobs.CreateMotions
+            {
+                LocalTransformType = physicsData.ComponentHandles.LocalTransformType,
+                PhysicsVelocityType = physicsData.ComponentHandles.PhysicsVelocityType,
+                PhysicsMassType = physicsData.ComponentHandles.PhysicsMassType,
+                PhysicsMassOverrideType = physicsData.ComponentHandles.PhysicsMassOverrideType,
+                PhysicsDampingType = physicsData.ComponentHandles.PhysicsDampingType,
+                PhysicsGravityFactorType = physicsData.ComponentHandles.PhysicsGravityFactorType,
+                SimulateType = physicsData.ComponentHandles.SimulateType,
+
+                MotionDatas = physicsData.PhysicsWorld.MotionDatas,
+                MotionVelocities = physicsData.PhysicsWorld.MotionVelocities,
+                ChunkBaseEntityIndices = chunkBaseEntityIndices,
+            }.Run(physicsData.DynamicEntityGroup);
         }
 
         /// <summary>
@@ -426,6 +525,33 @@ namespace Unity.Physics.Systems
         public static void BuildBroadphaseBVHImmediate(ref PhysicsWorld world, bool haveStaticBodiesChanged, float timeStep, float3 gravity)
         {
             world.CollisionWorld.BuildBroadphase(ref world, timeStep, gravity, haveStaticBodiesChanged);
+        }
+
+        /// <summary>
+        /// Update the broadphase BoundingVolumeHierarchy of the of the specified PhysicsWorld (run immediately on
+        /// the current thread).
+        /// </summary>
+        /// <param name="physicsWorldData"></param>
+        /// <param name="timeStep"></param>
+        /// <param name="gravity"></param>
+        /// <param name="lastSystemVersion"></param>
+        public static void UpdateBroadphaseImmediate(ref PhysicsWorldData physicsWorldData, float timeStep, float3 gravity, uint lastSystemVersion)
+        {
+            physicsWorldData.HaveStaticBodiesChanged.Value = 0;
+            physicsWorldData.PhysicsWorld.CollisionWorld.UpdateDynamicTree(ref physicsWorldData.PhysicsWorld, timeStep, gravity);
+            new Jobs.CheckStaticBodyChangesJob
+            {
+                LocalToWorldType = physicsWorldData.ComponentHandles.LocalToWorldType,
+                ParentType = physicsWorldData.ComponentHandles.ParentType,
+                LocalTransformType = physicsWorldData.ComponentHandles.LocalTransformType,
+                PhysicsColliderType = physicsWorldData.ComponentHandles.PhysicsColliderType,
+                m_LastSystemVersion = lastSystemVersion,
+                Result = physicsWorldData.HaveStaticBodiesChanged
+            }.Run(physicsWorldData.StaticEntityGroup);
+            if (physicsWorldData.HaveStaticBodiesChanged.Value != 0)
+            {
+                physicsWorldData.PhysicsWorld.CollisionWorld.UpdateStaticTree(ref physicsWorldData.PhysicsWorld);
+            }
         }
 
         #region Jobs
