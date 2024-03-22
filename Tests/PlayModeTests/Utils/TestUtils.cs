@@ -1049,7 +1049,10 @@ namespace Unity.Physics.Tests.Utils
                 };
             }
 
-            return CompoundCollider.Create(children);
+            var compoundBlob = CompoundCollider.Create(children);
+            for (int i = 0; i < numChildren; ++i)
+                children[i].Collider.Dispose();
+            return compoundBlob;
         }
 
         /// <summary>
@@ -1263,6 +1266,17 @@ namespace Unity.Physics.Tests.Utils
             }
 
             return world;
+        }
+
+        public static void DisposeAllColliderBlobs(ref PhysicsWorld world) => DisposeAllColliderBlobs(ref world.CollisionWorld);
+
+        public static void DisposeAllColliderBlobs(ref CollisionWorld world)
+        {
+            for (int i = 0; i < world.NumBodies; ++i)
+            {
+                if (world.Bodies[i].Collider.IsCreated)
+                    world.Bodies[i].Collider.Dispose();
+            }
         }
     }
 }

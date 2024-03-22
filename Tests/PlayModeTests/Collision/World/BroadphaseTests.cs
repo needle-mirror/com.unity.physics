@@ -4,6 +4,7 @@ using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
+using Unity.Physics.Tests.Utils;
 using Unity.Transforms;
 using UnityEngine;
 using Assert = UnityEngine.Assertions.Assert;
@@ -75,6 +76,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), buildStaticTree, handle, numThreads == 1);
                 result.Complete();
                 Assert.IsTrue(result.IsCompleted);
+                TestUtils.DisposeAllColliderBlobs(ref world);
                 world.Dispose();
                 buildStaticTree.Dispose();
             }
@@ -97,6 +99,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
 
                 result.Complete();
                 Assert.IsTrue(result.IsCompleted);
+                TestUtils.DisposeAllColliderBlobs(ref world);
                 world.Dispose();
                 buildStaticTree.Dispose();
             }
@@ -118,6 +121,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), buildStaticTree, handle, numThreads == 1);
                 result.Complete();
                 Assert.IsTrue(result.IsCompleted);
+                TestUtils.DisposeAllColliderBlobs(ref world);
                 world.Dispose();
                 buildStaticTree.Dispose();
             }
@@ -131,6 +135,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             addStaticBoxToWorld(world, 0, new Vector3(0, 0, 0), Quaternion.identity, new Vector3(10, 0.1f, 10));
             world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
                 world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
+            TestUtils.DisposeAllColliderBlobs(ref world);
             world.Dispose();
         }
 
@@ -145,6 +150,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             }
             world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
                 world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
+            TestUtils.DisposeAllColliderBlobs(ref world);
             world.Dispose();
         }
 
@@ -159,6 +165,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             }
             world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
                 world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
+            TestUtils.DisposeAllColliderBlobs(ref world);
             world.Dispose();
         }
 
@@ -175,6 +182,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), buildStaticTree, handle, numThreads == 1);
                 result.Complete();
                 Assert.IsTrue(result.IsCompleted);
+                TestUtils.DisposeAllColliderBlobs(ref world);
                 world.Dispose();
                 buildStaticTree.Dispose();
             }
@@ -196,6 +204,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), buildStaticTree, handle, numThreads == 1);
                 result.Complete();
                 Assert.IsTrue(result.IsCompleted);
+                TestUtils.DisposeAllColliderBlobs(ref world);
                 world.Dispose();
                 buildStaticTree.Dispose();
             }
@@ -217,6 +226,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), buildStaticTree, handle, numThreads == 1);
                 result.Complete();
                 Assert.IsTrue(result.IsCompleted);
+                TestUtils.DisposeAllColliderBlobs(ref world);
                 world.Dispose();
                 buildStaticTree.Dispose();
             }
@@ -230,6 +240,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             addDynamicBoxToWorld(world, 0, new Vector3(0, 0, 0), Quaternion.identity, new Vector3(10, 10, 10));
             world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
                 world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
+            TestUtils.DisposeAllColliderBlobs(ref world);
             world.Dispose();
         }
 
@@ -244,6 +255,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             }
             world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
                 world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
+            TestUtils.DisposeAllColliderBlobs(ref world);
             world.Dispose();
         }
 
@@ -258,6 +270,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             }
             world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
                 world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
+            TestUtils.DisposeAllColliderBlobs(ref world);
             world.Dispose();
         }
 
@@ -277,6 +290,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), buildStaticTree, handle, numThreads == 1);
                 result.Complete();
                 Assert.IsTrue(result.IsCompleted);
+                TestUtils.DisposeAllColliderBlobs(ref world);
                 world.Dispose();
                 buildStaticTree.Dispose();
             }
@@ -293,6 +307,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             }
             world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
                 world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
+            TestUtils.DisposeAllColliderBlobs(ref world);
             world.Dispose();
         }
 
@@ -307,6 +322,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 var buildStaticTree = new NativeReference<int>(1, Allocator.TempJob);
                 JobHandle result = world.CollisionWorld.Broadphase.ScheduleBuildJobs(ref world, 1 / 60, -9.81f * math.up(), buildStaticTree, handle, numThreads == 1);
                 result.Complete();
+                TestUtils.DisposeAllColliderBlobs(ref world);
                 world.Dispose();
                 buildStaticTree.Dispose();
             }
@@ -319,6 +335,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             Physics.PhysicsWorld world = createTestWorld();
             world.CollisionWorld.Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
                 world.CollisionWorld.CollisionTolerance, 1 / 60, -9.81f * math.up());
+            TestUtils.DisposeAllColliderBlobs(ref world);
             world.Dispose();
         }
     }

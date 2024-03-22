@@ -101,7 +101,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         {
             float3 center = new float3(-8.4f, 5.63f, -7.2f);
             float radius = 2.3f;
-            var sphereCollider = SphereCollider.Create(new SphereGeometry { Center = center, Radius = radius });
+            using var sphereCollider = SphereCollider.Create(new SphereGeometry { Center = center, Radius = radius });
 
             Aabb expected = new Aabb();
             expected.Min = center - new float3(radius, radius, radius);
@@ -120,7 +120,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         {
             float3 center = new float3(-3.4f, 0.63f, -17.2f);
             float radius = 5.3f;
-            var sphereCollider = SphereCollider.Create(new SphereGeometry { Center = center, Radius = radius });
+            using var sphereCollider = SphereCollider.Create(new SphereGeometry { Center = center, Radius = radius });
 
             float3 translation = new float3(8.3f, -0.5f, 170.0f);
             quaternion rotation = quaternion.AxisAngle(math.normalize(new float3(1.1f, 4.5f, 0.0f)), 146.0f);
@@ -145,7 +145,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         {
             float3 center = new float3(-8.4f, 5.63f, 77.2f);
             float radius = 2.3f;
-            var sphereCollider = SphereCollider.Create(new SphereGeometry { Center = center, Radius = radius });
+            using var sphereCollider = SphereCollider.Create(new SphereGeometry { Center = center, Radius = radius });
 
             float inertia = 2.0f / 5.0f * radius * radius;
             float3 expectedInertiaTensor = new float3(inertia, inertia, inertia);

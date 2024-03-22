@@ -11,7 +11,7 @@ namespace Unity.Physics.Tests.Components
     partial class PhysicsColliderTests
     {
         #region TestUtilities
-        static void CreateConvexColliderComponents(ColliderType colliderType, float desiredBevelRadius, EntityManager entityManager)
+        static Entity CreateConvexColliderComponents(ColliderType colliderType, float desiredBevelRadius, EntityManager entityManager)
         {
             BlobAssetReference<Collider> colliderBlob = default;
             Entity body = entityManager.CreateEntity();
@@ -47,6 +47,7 @@ namespace Unity.Physics.Tests.Components
             {
                 Value = colliderBlob
             });
+            return body;
         }
 
         internal static void RunTest<S>(ColliderType type, float desiredBevelRadius)
@@ -54,9 +55,10 @@ namespace Unity.Physics.Tests.Components
         {
             using (var world = new World("Test World"))
             {
-                CreateConvexColliderComponents(type, desiredBevelRadius, world.EntityManager);
+                var bodyEntity = CreateConvexColliderComponents(type, desiredBevelRadius, world.EntityManager);
                 var system = world.GetOrCreateSystemManaged<S>();
                 system.Update();
+                world.EntityManager.GetComponentData<PhysicsCollider>(bodyEntity).Value.Dispose();
             }
         }
 

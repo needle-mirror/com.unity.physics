@@ -53,7 +53,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             void TestCompoundBox(RigidTransform transform)
             {
                 // Create a unit box
-                var box = BoxCollider.Create(new BoxGeometry
+                using var box = BoxCollider.Create(new BoxGeometry
                 {
                     Center = transform.pos,
                     Orientation = transform.rot,
@@ -62,7 +62,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
                 });
 
                 // Create a compound of mini boxes, matching the volume of the single box
-                var miniBox = BoxCollider.Create(new BoxGeometry
+                using var miniBox = BoxCollider.Create(new BoxGeometry
                 {
                     Center = float3.zero,
                     Orientation = quaternion.identity,
@@ -80,7 +80,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
                     [6] = new CompoundCollider.ColliderBlobInstance { Collider = miniBox, CompoundFromChild = math.mul(transform, new RigidTransform(quaternion.identity, new float3(-0.25f, +0.25f, -0.25f))) },
                     [7] = new CompoundCollider.ColliderBlobInstance { Collider = miniBox, CompoundFromChild = math.mul(transform, new RigidTransform(quaternion.identity, new float3(-0.25f, -0.25f, -0.25f))) }
                 };
-                var compound = CompoundCollider.Create(children);
+                using var compound = CompoundCollider.Create(children);
                 children.Dispose();
 
                 var boxMassProperties = box.Value.MassProperties;

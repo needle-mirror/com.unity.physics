@@ -184,8 +184,8 @@ namespace Unity.Physics.Tests.Collision.Queries
                 uint state = rnd.state;
 
                 // Generate random query inputs
-                var target = TestUtils.GenerateRandomConvex(ref rnd, 1.0f);
-                var query = TestUtils.GenerateRandomConvex(ref rnd, 1.0f);
+                using var target = TestUtils.GenerateRandomConvex(ref rnd, 1.0f);
+                using var query = TestUtils.GenerateRandomConvex(ref rnd, 1.0f);
                 MTransform queryFromTarget = new MTransform(
                     (rnd.NextInt(10) > 0) ? rnd.NextQuaternionRotation() : quaternion.identity,
                     rnd.NextFloat3(-3.0f, 3.0f));
@@ -198,7 +198,7 @@ namespace Unity.Physics.Tests.Collision.Queries
         // are validated in the same way as those in ConvexConvexDistanceTest().
         // If the test fails, it will report a pair of seeds.  Set dbgShape to the first and dbgTest to the second to run the failing case alone.
         [Test]
-        [Timeout(300000)]
+        [Timeout(600000)]
         public unsafe void ConvexConvexDistanceEdgeCaseTest()
         {
             Random rnd = new Random(0x90456148);
@@ -222,7 +222,7 @@ namespace Unity.Physics.Tests.Collision.Queries
                 uint shapeState = rnd.state;
 
                 // Generate a random collider
-                var collider = TestUtils.GenerateRandomConvex(ref rnd, 1.0f);
+                using var collider = TestUtils.GenerateRandomConvex(ref rnd, 1.0f);
 
                 for (int iTest = 0; iTest < numTests; iTest++)
                 {
@@ -487,7 +487,7 @@ namespace Unity.Physics.Tests.Collision.Queries
 #if UNITY_ANDROID_ARM7V || UNITY_IOS
         [Ignore("This test causes out of memory crashes on armv7 builds, due to the memory restrictions on such devices.")]
 #endif
-        [Timeout(300000)]
+        [Timeout(600000)]
         public unsafe void WorldQueryTest()
         {
             // todo.papopov: switch the seed back to 0x12345678 when [UNI-281] is resolved
@@ -549,7 +549,7 @@ namespace Unity.Physics.Tests.Collision.Queries
                             queryInputScale = rnd.NextBool() ? queryInputScale : -queryInputScale;
                         }
 
-                        var collider = TestUtils.GenerateRandomCollider(ref rnd, colliderCreationScale);
+                        using var collider = TestUtils.GenerateRandomCollider(ref rnd, colliderCreationScale);
                         RigidTransform transform = new RigidTransform
                         {
                             pos = rnd.NextFloat3(-10.0f, 10.0f),
@@ -595,6 +595,7 @@ namespace Unity.Physics.Tests.Collision.Queries
                         }
                     }
 
+                    TestUtils.DisposeAllColliderBlobs(ref world);
                     world.Dispose(); // TODO leaking memory if the test fails
                 }
             }
@@ -767,6 +768,7 @@ namespace Unity.Physics.Tests.Collision.Queries
                     }
                 }
 
+                TestUtils.DisposeAllColliderBlobs(ref world);
                 world.Dispose(); // TODO leaking memory if the test fails
             }
         }

@@ -51,8 +51,8 @@ namespace Unity.Physics.Tests.Aspects
                     break;
                 case ColliderAspectType.COMPOUND_CONVEX_CHILDREN:
                 {
-                    var child1 = TestUtils.GenerateRandomConvex(ref rnd, 1.0f, AspectTestUtils.NonDefaultFilter, AspectTestUtils.Material1);
-                    var child2 = TestUtils.GenerateRandomConvex(ref rnd, 1.0f, AspectTestUtils.DefaultFilter, AspectTestUtils.Material2);
+                    using var child1 = TestUtils.GenerateRandomConvex(ref rnd, 1.0f, AspectTestUtils.NonDefaultFilter, AspectTestUtils.Material1);
+                    using var child2 = TestUtils.GenerateRandomConvex(ref rnd, 1.0f, AspectTestUtils.DefaultFilter, AspectTestUtils.Material2);
                     NativeArray<ColliderBlobInstance> instances = new NativeArray<ColliderBlobInstance>(2, Allocator.Temp);
                     instances[0] = new ColliderBlobInstance { Collider = child1, CompoundFromChild = RigidTransform.identity, Entity = Entity.Null };
                     instances[1] = new ColliderBlobInstance { Collider = child2, CompoundFromChild = RigidTransform.identity, Entity = Entity.Null };
@@ -62,16 +62,13 @@ namespace Unity.Physics.Tests.Aspects
                 break;
                 case ColliderAspectType.NESTED_COMPOUND_CONVEX_MESH_CHILDREN:
                 {
-                    BlobAssetReference<Collider> compoundChild;
-                    {
-                        var child1 = TestUtils.GenerateRandomConvex(ref rnd, 1.0f, AspectTestUtils.NonDefaultFilter, AspectTestUtils.Material1);
-                        var child2 = TestUtils.GenerateRandomMesh(ref rnd, 1.0f, AspectTestUtils.DefaultFilter, AspectTestUtils.Material2);
-                        NativeArray<ColliderBlobInstance> instances = new NativeArray<ColliderBlobInstance>(2, Allocator.Temp);
-                        instances[0] = new ColliderBlobInstance { Collider = child1, CompoundFromChild = RigidTransform.identity, Entity = Entity.Null };
-                        instances[1] = new ColliderBlobInstance { Collider = child2, CompoundFromChild = RigidTransform.identity, Entity = Entity.Null };
+                    using var child1 = TestUtils.GenerateRandomConvex(ref rnd, 1.0f, AspectTestUtils.NonDefaultFilter, AspectTestUtils.Material1);
+                    using var child2 = TestUtils.GenerateRandomMesh(ref rnd, 1.0f, AspectTestUtils.DefaultFilter, AspectTestUtils.Material2);
+                    NativeArray<ColliderBlobInstance> instances = new NativeArray<ColliderBlobInstance>(2, Allocator.Temp);
+                    instances[0] = new ColliderBlobInstance { Collider = child1, CompoundFromChild = RigidTransform.identity, Entity = Entity.Null };
+                    instances[1] = new ColliderBlobInstance { Collider = child2, CompoundFromChild = RigidTransform.identity, Entity = Entity.Null };
 
-                        compoundChild = CompoundCollider.Create(instances);
-                    }
+                    using var compoundChild = CompoundCollider.Create(instances);
                     NativeArray<ColliderBlobInstance> instance = new NativeArray<ColliderBlobInstance>(1, Allocator.Temp);
                     instance[0] = new ColliderBlobInstance { Collider = compoundChild, CompoundFromChild = RigidTransform.identity, Entity = Entity.Null };
 
@@ -92,9 +89,11 @@ namespace Unity.Physics.Tests.Aspects
         {
             using (var world = new World("Test World"))
             {
-                CreateBodyComponents(type, world.EntityManager);
+                var bodyEntity = CreateBodyComponents(type, world.EntityManager);
                 var system = world.GetOrCreateSystemManaged<S>();
                 system.Update();
+
+                world.EntityManager.GetComponentData<PhysicsCollider>(bodyEntity).Value.Dispose();
             }
         }
 
@@ -624,6 +623,7 @@ namespace Unity.Physics.Tests.Aspects
                         }
                     }
 
+                    TestUtils.DisposeAllColliderBlobs(ref world);
                     world.Dispose();
                 }
             }

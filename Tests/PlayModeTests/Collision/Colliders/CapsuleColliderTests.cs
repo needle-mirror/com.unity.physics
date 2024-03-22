@@ -59,10 +59,10 @@ namespace Unity.Physics.Tests.Collision.Colliders
                 Vertex1 = new float3(100.45f, -80.34f, -8.65f),
                 Radius = 1.45f
             };
-            var collider = CapsuleCollider.Create(geometry);
+            using var collider = CapsuleCollider.Create(geometry);
             ValidateCapsuleCollider(collider, geometry);
 
-            var colliderClone = collider.Value.Clone();
+            using var colliderClone = collider.Value.Clone();
             ValidateCapsuleCollider(colliderClone, geometry);
         }
 
@@ -108,7 +108,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             float length = 5.5f;
             float3 p0 = new float3(1.1f, 2.2f, 3.4f);
             float3 p1 = p0 + length * math.normalize(new float3(1, 1, 1));
-            var capsuleCollider = CapsuleCollider.Create(new CapsuleGeometry
+            using var capsuleCollider = CapsuleCollider.Create(new CapsuleGeometry
             {
                 Vertex0 = p0,
                 Vertex1 = p1,
@@ -134,7 +134,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             float length = 5.5f;
             float3 p0 = new float3(1.1f, 2.2f, 3.4f);
             float3 p1 = p0 + length * math.normalize(new float3(1, 1, 1));
-            var capsuleCollider = CapsuleCollider.Create(new CapsuleGeometry
+            using var capsuleCollider = CapsuleCollider.Create(new CapsuleGeometry
             {
                 Vertex0 = p0,
                 Vertex1 = p1,
@@ -181,7 +181,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             float itZ = itX;
             float3 expectedInertiaTensor = new float3(itX, itY, itZ);
 
-            var capsuleCollider = CapsuleCollider.Create(new CapsuleGeometry
+            using var capsuleCollider = CapsuleCollider.Create(new CapsuleGeometry
             {
                 Vertex0 = p0,
                 Vertex1 = p1,

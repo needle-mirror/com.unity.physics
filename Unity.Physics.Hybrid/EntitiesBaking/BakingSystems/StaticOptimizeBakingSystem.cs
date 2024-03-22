@@ -32,21 +32,13 @@ namespace Unity.Physics.Authoring
     {
         EntityQuery _ChangedBakeStaticRootQuery;
         EntityQuery _PreviousBakeStaticRootQuery;
-        EntityQuery _StateQuery;
         ComponentTypeSet _RootComponents;
-
-        /// <summary>
-        /// Holds the set of static roots baked in a previous iteration.
-        /// </summary>
-        struct StaticRootState : ICleanupComponentData
-        {
-            public NativeHashSet<Entity> State;
-        }
+        NativeHashSet<Entity> _StaticRootState; // Holds the set of static roots baked in a previous iteration.
 
         [BurstCompile]
         public void OnCreate(ref SystemState systemState)
         {
-            _StateQuery = new EntityQueryBuilder(Allocator.Temp).WithAllRW<StaticRootState>().Build(ref systemState);
+            _StaticRootState = new NativeHashSet<Entity>(10, Allocator.Persistent);
 
             _PreviousBakeStaticRootQuery = new EntityQueryBuilder(Allocator.Temp)
                 .WithAll<BakeStaticRoot>()
@@ -67,29 +59,12 @@ namespace Unity.Physics.Authoring
         [BurstCompile]
         public void OnDestroy(ref SystemState systemState)
         {
-            if (!_StateQuery.IsEmpty)
-            {
-                var state = _StateQuery.GetSingleton<StaticRootState>();
-                state.State.Dispose();
-
-                systemState.EntityManager.RemoveComponent<StaticRootState>(_StateQuery);
-            }
+            _StaticRootState.Dispose();
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState systemState)
         {
-            if (_StateQuery.IsEmpty)
-            {
-                var singleton = systemState.EntityManager.CreateSingleton<StaticRootState>("StaticOptimizeBakingSystemState");
-                systemState.EntityManager.SetComponentData(singleton, new StaticRootState()
-                {
-                    State = new NativeHashSet<Entity>(10, Allocator.Persistent)
-                });
-            }
-
-            var state = _StateQuery.GetSingletonRW<StaticRootState>().ValueRW;
-
             var previousStaticRoots = _PreviousBakeStaticRootQuery.ToComponentDataArray<BakeStaticRoot>(Allocator.Temp);
             var changedStaticRoots = _ChangedBakeStaticRootQuery.ToComponentDataArray<BakeStaticRoot>(Allocator.Temp);
 
@@ -98,14 +73,14 @@ namespace Unity.Physics.Authoring
 
             // clear the root components from roots that are no longer needed
             GetUniqueRoots(previousStaticRoots, ref uniqueRoots);
-            var oldState = state.State.ToNativeArray(Allocator.Temp);
+            var oldState = _StaticRootState.ToNativeArray(Allocator.Temp);
             for (int i = 0, count = oldState.Length; i < count; ++i)
             {
                 var r = oldState[i];
                 if (!uniqueRoots.ContainsKey(r))
                 {
                     systemState.EntityManager.RemoveComponent(r, _RootComponents);
-                    state.State.Remove(r);
+                    _StaticRootState.Remove(r);
                 }
             }
 
@@ -115,7 +90,7 @@ namespace Unity.Physics.Authoring
             foreach (var kv in uniqueRoots)
             {
                 var rootEntity = kv.Value.Body;
-                state.State.Add(rootEntity);
+                _StaticRootState.Add(rootEntity);
                 systemState.EntityManager.AddComponent(rootEntity, _RootComponents);
 
                 systemState.EntityManager.SetSharedComponent(rootEntity, new PhysicsWorldIndex());

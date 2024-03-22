@@ -4,6 +4,14 @@ uid: unity-physics-changelog
 
 # Changelog
 
+## [1.2.0] - 2024-03-22
+
+### Fixed
+
+* Fix a number of memory leaks in the package and its test code.
+* Make sure that the `ColliderBlobCleanupSystem` does not dispose the same collider blob multiple times in Netcode environments, preventing a crash.
+
+
 ## [1.2.0-pre.12] - 2024-02-13
 
 ### Added
@@ -24,7 +32,6 @@ uid: unity-physics-changelog
 ### Updated
 
 * Upgraded Test Framework version to 1.4.3
-
 
 ## [1.2.0-pre.6] - 2023-12-13
 

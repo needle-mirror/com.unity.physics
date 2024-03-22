@@ -305,11 +305,12 @@ namespace Unity.Physics
         }
 
         /// <summary>
-        /// Create a compound collider containing an array of other colliders. The source colliders are
-        /// copied into the compound, so that it becomes one blob.
+        /// Create a compound collider containing an array of other colliders. The source colliders from
+        /// <paramref name="children"/> are copied into the new compound collider, so that it becomes one blob.
         /// </summary>
         ///
-        /// <param name="children"> The children. </param>
+        /// <param name="children"> The children. Their individual blobs can be safely disposed after the compound
+        /// collider is created, if they're no longer needed.</param>
         ///
         /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
         public static BlobAssetReference<Collider> Create(NativeArray<ColliderBlobInstance> children)

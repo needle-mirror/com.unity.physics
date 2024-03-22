@@ -7,7 +7,9 @@ using Unity.Mathematics;
 using Unity.Physics.Extensions;
 using Unity.Transforms;
 using Unity.Physics.Aspects;
+using Unity.Physics.Tests.Utils;
 using UnityEngine;
+using UnityEngine.Assertions.Must;
 using static Unity.Entities.SystemAPI;
 using ForceMode = Unity.Physics.Extensions.ForceMode;
 
@@ -128,9 +130,10 @@ namespace Unity.Physics.Tests.Aspects
         {
             using (var world = new World("Test World"))
             {
-                CreateBodyComponents(type, world.EntityManager);
+                var bodyEntity = CreateBodyComponents(type, world.EntityManager);
                 var system = world.GetOrCreateSystemManaged<S>();
                 system.Update();
+                world.EntityManager.GetComponentData<PhysicsCollider>(bodyEntity).Value.Dispose();
             }
         }
 

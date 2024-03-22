@@ -21,10 +21,12 @@ namespace Unity.Physics.Tests.Collision.RigidBody
             };
 
             Physics.RigidBody rigidbodyBox = Unity.Physics.RigidBody.Zero;
-            rigidbodyBox.Collider = BoxCollider.Create(geometry);
+            using var collider = BoxCollider.Create(geometry);
+            rigidbodyBox.Collider = collider;
 
             var boxAabb = rigidbodyBox.CalculateAabb();
-            var boxCollider = (BoxCollider*)BoxCollider.Create(geometry).GetUnsafePtr();
+            using var collider2 = BoxCollider.Create(geometry);
+            var boxCollider = (BoxCollider*)collider2.GetUnsafePtr();
             Assert.IsTrue(boxAabb.Equals(boxCollider->CalculateAabb()));
         }
 
@@ -38,10 +40,12 @@ namespace Unity.Physics.Tests.Collision.RigidBody
             };
 
             Physics.RigidBody rigidbodySphere = Unity.Physics.RigidBody.Zero;
-            rigidbodySphere.Collider = SphereCollider.Create(geometry);
+            using var collider = SphereCollider.Create(geometry);
+            rigidbodySphere.Collider = collider;
 
             var sphereAabb = rigidbodySphere.CalculateAabb();
-            var sphere = (Collider*)SphereCollider.Create(geometry).GetUnsafePtr();
+            using var collider2 = SphereCollider.Create(geometry);
+            var sphere = (Collider*)collider2.GetUnsafePtr();
             Assert.IsTrue(sphereAabb.Equals(sphere->CalculateAabb()));
         }
 
@@ -59,13 +63,14 @@ namespace Unity.Physics.Tests.Collision.RigidBody
             var rayStartFail = new float3(-10, 10, -10);
             var rayEndFail = new float3(10, 10, 10);
 
-            rigidbody.Collider = BoxCollider.Create(new BoxGeometry
+            using var collider = BoxCollider.Create(new BoxGeometry
             {
                 Center = float3.zero,
                 Orientation = quaternion.identity,
                 Size = size,
                 BevelRadius = convexRadius
             });
+            rigidbody.Collider = collider;
 
             var raycastInput = new RaycastInput();
             var closestHit = new RaycastHit();
@@ -104,13 +109,14 @@ namespace Unity.Physics.Tests.Collision.RigidBody
             var rayStartFail = new float3(-10, 10, -10);
             var rayEndFail = new float3(10, 10, 10);
 
-            rigidbody.Collider = BoxCollider.Create(new BoxGeometry
+            using var collider = BoxCollider.Create(new BoxGeometry
             {
                 Center = float3.zero,
                 Orientation = quaternion.identity,
                 Size = size,
                 BevelRadius = convexRadius
             });
+            rigidbody.Collider = collider;
 
             var colliderCastInput = new ColliderCastInput();
             var closestHit = new ColliderCastHit();
@@ -119,9 +125,10 @@ namespace Unity.Physics.Tests.Collision.RigidBody
             // OK case : Sphere hits the box collider
             colliderCastInput.Start = rayStartOK;
             colliderCastInput.End = rayEndOK;
-            colliderCastInput.Collider = (Collider*)SphereCollider.Create(
+            using var collider2 = SphereCollider.Create(
                 new SphereGeometry { Center = float3.zero, Radius = sphereRadius }
-                ).GetUnsafePtr();
+            );
+            colliderCastInput.Collider = (Collider*)collider2.GetUnsafePtr();
 
             Assert.IsTrue(rigidbody.CastCollider(colliderCastInput));
             Assert.IsTrue(rigidbody.CastCollider(colliderCastInput, out closestHit));
@@ -146,13 +153,14 @@ namespace Unity.Physics.Tests.Collision.RigidBody
 
             var queryPos = new float3(-10, -10, -10);
 
-            rigidbody.Collider = BoxCollider.Create(new BoxGeometry
+            using var collider = BoxCollider.Create(new BoxGeometry
             {
                 Center = float3.zero,
                 Orientation = quaternion.identity,
                 Size = size,
                 BevelRadius = convexRadius
             });
+            rigidbody.Collider = collider;
 
             var pointDistanceInput = new PointDistanceInput();
 
@@ -184,14 +192,14 @@ namespace Unity.Physics.Tests.Collision.RigidBody
 
             var queryPos = new float3(-10, -10, -10);
 
-            BlobAssetReference<Collider> boxCollider = BoxCollider.Create(new BoxGeometry
+            using BlobAssetReference<Collider> boxCollider = BoxCollider.Create(new BoxGeometry
             {
                 Center = float3.zero,
                 Orientation = quaternion.identity,
                 Size = size,
                 BevelRadius = convexRadius
             });
-            BlobAssetReference<Collider> sphereCollider = SphereCollider.Create(new SphereGeometry
+            using BlobAssetReference<Collider> sphereCollider = SphereCollider.Create(new SphereGeometry
             {
                 Center = float3.zero,
                 Radius = sphereRadius
@@ -224,9 +232,6 @@ namespace Unity.Physics.Tests.Collision.RigidBody
             Assert.IsFalse(rigidBody.CalculateDistance(colliderDistanceInput));
             Assert.IsFalse(rigidBody.CalculateDistance(colliderDistanceInput, out closestHit));
             Assert.IsFalse(rigidBody.CalculateDistance(colliderDistanceInput, ref allHits));
-
-            boxCollider.Dispose();
-            sphereCollider.Dispose();
         }
     }
 }

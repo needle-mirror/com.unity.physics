@@ -1,6 +1,7 @@
 using System;
 using NUnit.Framework;
 using Unity.Mathematics;
+using Unity.Physics.Tests.Utils;
 using UnityEngine;
 using Assert = UnityEngine.Assertions.Assert;
 
@@ -23,12 +24,13 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         {
             CollisionWorld world = new CollisionWorld(10, 0);
             Assert.IsTrue(world.NumBodies == 10);
+            // The bodies/colliders in this world not not initialized, so they do not need to be disposed.
             world.Dispose();
         }
 
         //Tests updating an empty world
         [Test]
-        public void SheduleUpdateJobsEmptyWorldTest()
+        public void ScheduleUpdateJobsEmptyWorldTest()
         {
             for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
@@ -37,6 +39,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads == 1);
                 worldJobHandle.Complete();
                 Assert.IsTrue(worldJobHandle.IsCompleted);
+                TestUtils.DisposeAllColliderBlobs(ref world);
                 world.Dispose();
             }
         }
@@ -47,12 +50,13 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
         {
             Physics.PhysicsWorld world = BroadPhaseTests.createTestWorld();
             world.CollisionWorld.UpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up());
+            TestUtils.DisposeAllColliderBlobs(ref world);
             world.Dispose();
         }
 
         //Tests updating a static box
         [Test]
-        public void SheduleUpdateJobsOneStaticBoxTest()
+        public void ScheduleUpdateJobsOneStaticBoxTest()
         {
             for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
@@ -62,6 +66,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads == 1);
                 worldJobHandle.Complete();
                 Assert.IsTrue(worldJobHandle.IsCompleted);
+                TestUtils.DisposeAllColliderBlobs(ref world);
                 world.Dispose();
             }
         }
@@ -73,12 +78,13 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             Unity.Physics.PhysicsWorld world = BroadPhaseTests.createTestWorld(1);
             BroadPhaseTests.addStaticBoxToWorld(world, 0, Vector3.zero, quaternion.identity, new Vector3(10, .1f, 10));
             world.CollisionWorld.UpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up());
+            TestUtils.DisposeAllColliderBlobs(ref world);
             world.Dispose();
         }
 
         //Tests updating 10 static boxes
         [Test]
-        public void SheduleUpdateJobsTenStaticBoxesTest()
+        public void ScheduleUpdateJobsTenStaticBoxesTest()
         {
             for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
@@ -89,6 +95,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads == 1);
                 worldJobHandle.Complete();
                 Assert.IsTrue(worldJobHandle.IsCompleted);
+                TestUtils.DisposeAllColliderBlobs(ref world);
                 world.Dispose();
             }
         }
@@ -101,12 +108,13 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             for (int i = 0; i < 10; ++i)
                 BroadPhaseTests.addStaticBoxToWorld(world, i, new Vector3(11 * i, 0, 0), quaternion.identity, new Vector3(10, .1f, 10));
             world.CollisionWorld.UpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up());
+            TestUtils.DisposeAllColliderBlobs(ref world);
             world.Dispose();
         }
 
         //Tests updating 100 static boxes
         [Test]
-        public void SheduleUpdateJobsOneHundredStaticBoxesTest()
+        public void ScheduleUpdateJobsOneHundredStaticBoxesTest()
         {
             for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
@@ -117,6 +125,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads == 1);
                 worldJobHandle.Complete();
                 Assert.IsTrue(worldJobHandle.IsCompleted);
+                TestUtils.DisposeAllColliderBlobs(ref world);
                 world.Dispose();
             }
         }
@@ -129,12 +138,13 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             for (int i = 0; i < 100; ++i)
                 BroadPhaseTests.addStaticBoxToWorld(world, i, new Vector3(11 * i, 0, 0), quaternion.identity, new Vector3(10, .1f, 10));
             world.CollisionWorld.UpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up());
+            TestUtils.DisposeAllColliderBlobs(ref world);
             world.Dispose();
         }
 
         //Tests updating a Dynamic box
         [Test]
-        public void SheduleUpdateJobsOneDynamicBoxTest()
+        public void ScheduleUpdateJobsOneDynamicBoxTest()
         {
             for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
@@ -144,6 +154,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads == 1);
                 worldJobHandle.Complete();
                 Assert.IsTrue(worldJobHandle.IsCompleted);
+                TestUtils.DisposeAllColliderBlobs(ref world);
                 world.Dispose();
             }
         }
@@ -155,12 +166,13 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             Physics.PhysicsWorld world = BroadPhaseTests.createTestWorld(0, 1);
             BroadPhaseTests.addDynamicBoxToWorld(world, 0, Vector3.zero, quaternion.identity, new Vector3(10, .1f, 10));
             world.CollisionWorld.UpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up());
+            TestUtils.DisposeAllColliderBlobs(ref world);
             world.Dispose();
         }
 
         //Tests updating 10 dynamic boxes
         [Test]
-        public void SheduleUpdateJobsTenDynamicBoxesTest()
+        public void ScheduleUpdateJobsTenDynamicBoxesTest()
         {
             for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
@@ -171,6 +183,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads == 1);
                 worldJobHandle.Complete();
                 Assert.IsTrue(worldJobHandle.IsCompleted);
+                TestUtils.DisposeAllColliderBlobs(ref world);
                 world.Dispose();
             }
         }
@@ -183,12 +196,13 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             for (int i = 0; i < 10; ++i)
                 BroadPhaseTests.addDynamicBoxToWorld(world, i, new Vector3(11 * i, 0, 0), quaternion.identity, new Vector3(10, .1f, 10));
             world.CollisionWorld.UpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up());
+            TestUtils.DisposeAllColliderBlobs(ref world);
             world.Dispose();
         }
 
         //Tests updating 100 dynamic boxes
         [Test]
-        public void SheduleUpdateJobsOneHundredDynamicBoxesTest()
+        public void ScheduleUpdateJobsOneHundredDynamicBoxesTest()
         {
             for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
@@ -199,6 +213,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads == 1);
                 worldJobHandle.Complete();
                 Assert.IsTrue(worldJobHandle.IsCompleted);
+                TestUtils.DisposeAllColliderBlobs(ref world);
                 world.Dispose();
             }
         }
@@ -211,12 +226,13 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             for (int i = 0; i < 100; ++i)
                 BroadPhaseTests.addDynamicBoxToWorld(world, i, new Vector3(11 * i, 0, 0), quaternion.identity, new Vector3(10, .1f, 10));
             world.CollisionWorld.UpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up());
+            TestUtils.DisposeAllColliderBlobs(ref world);
             world.Dispose();
         }
 
         //Tests updating 100 static and dynamic boxes
         [Test]
-        public void SheduleUpdateJobsStaticAndDynamicBoxesTest()
+        public void ScheduleUpdateJobsStaticAndDynamicBoxesTest()
         {
             for (int numThreads = 0; numThreads <= 1; numThreads++)
             {
@@ -231,6 +247,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
                 Unity.Jobs.JobHandle worldJobHandle = world.CollisionWorld.ScheduleUpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up(), handle, numThreads == 1);
                 worldJobHandle.Complete();
                 Assert.IsTrue(worldJobHandle.IsCompleted);
+                TestUtils.DisposeAllColliderBlobs(ref world);
                 world.Dispose();
             }
         }
@@ -247,6 +264,7 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
             }
 
             world.CollisionWorld.UpdateDynamicTree(ref world, 1 / 60, -9.81f * math.up());
+            TestUtils.DisposeAllColliderBlobs(ref world);
             world.Dispose();
         }
     }

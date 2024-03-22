@@ -8,7 +8,8 @@ namespace Unity.Physics.Systems
     [UpdateInGroup(typeof(PhysicsSystemGroup))]
     partial struct ColliderBlobCleanupSystem : ISystem
     {
-        EntityQuery m_ColliderBlobCleanupGroup;
+        EntityQuery m_ColliderBlobCleanupOnUpdateQuery;
+        EntityQuery m_ColliderBlobCleanupOnDestroyQuery;
 
         partial struct ColliderBlobCleanupJob : IJobEntity
         {
@@ -17,9 +18,13 @@ namespace Unity.Physics.Systems
             // Process all ColliderBlobCleanupData components on entities that don't have a PhysicsCollider anymore.
             // That is, the containing entity was destroyed but there is still cleanup work to do.
             // For all those, dispose of the collider blob.
-            void Execute(in Entity entity, in ColliderBlobCleanupData collider, [ChunkIndexInQuery] int chunkIndex)
+            void Execute(in Entity entity, ref ColliderBlobCleanupData collider, [ChunkIndexInQuery] int chunkIndex)
             {
-                collider.Value.Dispose();
+                if (collider.Value.IsCreated)
+                {
+                    collider.Value.Dispose();
+                }
+
                 ECB.RemoveComponent<ColliderBlobCleanupData>(chunkIndex, entity);
             }
         }
@@ -29,22 +34,37 @@ namespace Unity.Physics.Systems
         {
             state.RequireForUpdate<EndFixedStepSimulationEntityCommandBufferSystem.Singleton>();
 
-            m_ColliderBlobCleanupGroup = new EntityQueryBuilder(Allocator.Temp)
-                .WithAll<ColliderBlobCleanupData>()
+            m_ColliderBlobCleanupOnUpdateQuery = new EntityQueryBuilder(Allocator.Temp)
+                .WithAllRW<ColliderBlobCleanupData>()
                 .WithAbsent<PhysicsCollider>()
                 .Build(ref state);
-            state.RequireForUpdate(m_ColliderBlobCleanupGroup);
+            m_ColliderBlobCleanupOnDestroyQuery = new EntityQueryBuilder(Allocator.Temp)
+                .WithAllRW<ColliderBlobCleanupData>()
+                .Build(ref state);
+            state.RequireForUpdate(m_ColliderBlobCleanupOnUpdateQuery);
+        }
+
+        public void OnDestroy(ref SystemState state)
+        {
+            foreach (var blobCleanup in SystemAPI.Query<ColliderBlobCleanupData>())
+            {
+                var colliderBlob = blobCleanup.Value;
+                if (colliderBlob.IsCreated)
+                {
+                    colliderBlob.Dispose();
+                }
+            }
+            state.EntityManager.RemoveComponent<ColliderBlobCleanupData>(m_ColliderBlobCleanupOnDestroyQuery);
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
             var ecb = SystemAPI.GetSingleton<EndFixedStepSimulationEntityCommandBufferSystem.Singleton>().CreateCommandBuffer(state.WorldUnmanaged);
-
             state.Dependency = new ColliderBlobCleanupJob
             {
                 ECB = ecb.AsParallelWriter()
-            }.ScheduleParallel(m_ColliderBlobCleanupGroup, state.Dependency);
+            }.ScheduleParallel(m_ColliderBlobCleanupOnUpdateQuery, state.Dependency);
         }
     }
 }

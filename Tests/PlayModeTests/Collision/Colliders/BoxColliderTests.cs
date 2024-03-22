@@ -176,7 +176,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
                     Max = new float3(0.57f, 5.795f, 8.595f)
                 };
 
-                var boxCollider = BoxCollider.Create(geometry);
+                using var boxCollider = BoxCollider.Create(geometry);
                 Aabb aabb = boxCollider.Value.CalculateAabb();
                 TestUtils.AreEqual(expectedAabb.Min, aabb.Min, 1e-3f);
                 TestUtils.AreEqual(expectedAabb.Max, aabb.Max, 1e-3f);
@@ -200,7 +200,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
                 BevelRadius = 0.25f
             };
 
-            var boxCollider = BoxCollider.Create(geometry);
+            using var boxCollider = BoxCollider.Create(geometry);
 
             float3 expectedInertiaTensor = 1.0f / 12.0f * new float3(
                 geometry.Size.y * geometry.Size.y + geometry.Size.z * geometry.Size.z,

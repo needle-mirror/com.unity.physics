@@ -99,7 +99,7 @@ namespace Unity.Physics.Tests.Authoring
 
         public static BlobAssetReference<Collider> MakeCompound()
         {
-            var box = MakeBox();
+            using var box = MakeBox();
             var children = new NativeArray<CompoundCollider.ColliderBlobInstance>(4, Allocator.Temp)
             {
                 [0] = new CompoundCollider.ColliderBlobInstance { Collider = box, CompoundFromChild = math.mul(RigidTransform.identity, new RigidTransform(quaternion.identity, new float3(+0.5f, +0.5f, +0.5f))) },

@@ -6,9 +6,14 @@ See the [Unity Physics Samples](https://github.com/Unity-Technologies/EntityComp
 
 ![](images/entities-splash-image.png)
 
+## Supported Unity Versions
+
+* 2022.3 (LTS)
+* 2023.3 (Latest Beta and beyond)
+
 ## Package installation
 
-To use the Unity Physics package, you must have Unity version 2022.2.0b8 and later installed.
+To use the Unity Physics package, you must have a supported version of Unity installed.
 
 To install the package, open the Package Manager window (**Window &gt; Package Manager**) and perform one of the following options:
 

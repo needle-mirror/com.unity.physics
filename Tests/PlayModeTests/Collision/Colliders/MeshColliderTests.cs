@@ -74,9 +74,9 @@ namespace Unity.Physics.Tests.Collision.Colliders
         {
             var meshData = new NativeArray<UnityEngine.Mesh.MeshData>(3, Allocator.TempJob);
             var engineMesh = DebugMeshCache.GetMesh(MeshType.Cube);
+            using var meshDataArray = UnityEngine.Mesh.AcquireReadOnlyMeshData(engineMesh);
             for (int i = 0; i < 3; i++)
             {
-                var meshDataArray = UnityEngine.Mesh.AcquireReadOnlyMeshData(engineMesh);
                 meshData[i] = meshDataArray[0];
             }
 
@@ -84,6 +84,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             {
                 MeshData = meshData
             }.Run(3);
+            meshData.Dispose();
         }
 
         [BurstCompile(CompileSynchronously = true)]
@@ -103,7 +104,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         public void MeshCollider_CreateFromMeshDataArray_WhenCalledFromBurstJob_DoesNotThrow()
         {
             var engineMesh = DebugMeshCache.GetMesh(MeshType.Cube);
-            var meshDataArray = UnityEngine.Mesh.AcquireReadOnlyMeshData(engineMesh);
+            using var meshDataArray = UnityEngine.Mesh.AcquireReadOnlyMeshData(engineMesh);
 
             new CreateFromMeshDataArrayJob()
             {
@@ -238,7 +239,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         public void MeshCollider_CreateFromEngineMeshDataArray_ResultHasExpectedValues(MeshType meshType, int numTrianglesExpected, int numQuadsExpected)
         {
             UnityEngine.Mesh mesh = DebugMeshCache.GetMesh(meshType);
-            var engineMeshDataArray = UnityEngine.Mesh.AcquireReadOnlyMeshData(mesh);
+            using var engineMeshDataArray = UnityEngine.Mesh.AcquireReadOnlyMeshData(mesh);
             var filter = CollisionFilter.Default;
             using var collider = MeshCollider.Create(engineMeshDataArray, filter, Material.Default);
             ValidateMeshCollider(collider, numTrianglesExpected, numQuadsExpected);
@@ -251,7 +252,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         public void MeshCollider_CreateFromEngineMeshData_ResultHasExpectedValues(MeshType meshType, int numTrianglesExpected, int numQuadsExpected)
         {
             UnityEngine.Mesh mesh = DebugMeshCache.GetMesh(meshType);
-            var engineMeshDataArray = UnityEngine.Mesh.AcquireReadOnlyMeshData(mesh);
+            using var engineMeshDataArray = UnityEngine.Mesh.AcquireReadOnlyMeshData(mesh);
             var filter = CollisionFilter.Default;
             using var collider = MeshCollider.Create(engineMeshDataArray[0], filter, Material.Default);
             ValidateMeshCollider(collider, numTrianglesExpected, numQuadsExpected);

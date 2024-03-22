@@ -117,6 +117,8 @@ namespace Unity.Physics.Tests.Authoring
                 new[] {typeof(UnityEngine.SphereCollider), typeof(Rigidbody)}
             );
 
+            var colliderBlobsToDispose = new NativeList<BlobAssetReference<Collider>>(Allocator.Temp);
+
             TestConvertedData<PhysicsCollider>((world, entities, colliders)  =>
             {
                 // ensure that the colliders indicate that they are shared.
@@ -155,11 +157,19 @@ namespace Unity.Physics.Tests.Authoring
                         }
                 }
                 colliders[0] = c;
+                if (world.EntityManager.HasComponent<ColliderBlobCleanupData>(entities[0]))
+                {
+                    colliderBlobsToDispose.Add(world.EntityManager
+                        .GetComponentData<ColliderBlobCleanupData>(entities[0]).Value);
+                }
 
                 // ensure that the collider is now unique.
                 Assert.That(c.IsUnique, Is.True);
                 ValidateUniqueColliderCount(colliders, 2);
             }, 2);
+
+            foreach (var blob in colliderBlobsToDispose)
+                blob.Dispose();
         }
 
         private static readonly TestCaseData[] k_ColliderTypeTestCases =

@@ -65,7 +65,8 @@ namespace Unity.Physics.Tests.Collision.Colliders
             );
 
             ValidateConvexCollider(collider);
-            ValidateConvexCollider(collider.Value.Clone());
+            using var colliderClone = collider.Value.Clone();
+            ValidateConvexCollider(colliderClone);
         }
 
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
@@ -119,7 +120,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             expectedAabb.Include(points[4]);
             expectedAabb.Include(points[5]);
 
-            var collider = ConvexCollider.Create(
+            using var collider = ConvexCollider.Create(
                 points, new ConvexHullGenerationParameters { BevelRadius = maxShrinkMovement }, CollisionFilter.Default
             );
             points.Dispose();
@@ -160,7 +161,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
             expectedAabb.Include(transformedPoints[4]);
             expectedAabb.Include(transformedPoints[5]);
 
-            var collider = ConvexCollider.Create(
+            using var collider = ConvexCollider.Create(
                 points, new ConvexHullGenerationParameters { BevelRadius = maxShrinkMovement }, CollisionFilter.Default
             );
             points.Dispose();
