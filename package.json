@@ -3,9 +3,9 @@
   "category": "Unity",
   "description": "Unity's C# stateless physics library.\n\nBuilt on top of the Unity C# ECS framework, Unity Physics is network-ready, completely customizable, and built for performance out of the box. Whether you're building the next mobile hit or a new networked multiplayer console experience, Unity Physics leverages the Burst compiler and Job system to scale across a range of hardware.",
   "dependencies": {
-    "com.unity.burst": "1.8.12",
-    "com.unity.collections": "2.4.0",
-    "com.unity.entities": "1.2.0",
+    "com.unity.burst": "1.8.13",
+    "com.unity.collections": "2.4.1",
+    "com.unity.entities": "1.2.1",
     "com.unity.mathematics": "1.3.1",
     "com.unity.test-framework": "1.4.3",
     "com.unity.modules.imgui": "1.0.0",
@@ -18,7 +18,7 @@
   "name": "com.unity.physics",
   "unity": "2022.3",
   "unityRelease": "11f1",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "samples": [
     {
       "displayName": "Custom Physics Authoring",
@@ -28,15 +28,15 @@
     }
   ],
   "_upm": {
-    "changelog": "### Fixed\n\n* Fix a number of memory leaks in the package and its test code.\n* Make sure that the `ColliderBlobCleanupSystem` does not dispose the same collider blob multiple times in Netcode environments, preventing a crash."
+    "changelog": "### Changed\n\n* Updated Burst dependency to version 1.8.13\n* Updated entities packages dependencies"
   },
   "upmCi": {
-    "footprint": "5892208842dd44376f40f54de23910589e038f4a"
+    "footprint": "2078b29983ee0340a120e9aaff3664bd22b69083"
   },
   "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.physics@1.2/manual/index.html",
   "repository": {
     "url": "https://github.cds.internal.unity3d.com/unity/dots.git",
     "type": "git",
-    "revision": "ea4236421d61011e37e71d22108c5e4e70cf71d7"
+    "revision": "6ecf7a215623cca37079c6f1a3e6f2f686c91721"
   }
 }

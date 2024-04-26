@@ -301,6 +301,7 @@ namespace Unity.Physics.Tests.Base.Math
         }
 
         [Test]
+        [Timeout(360000)]
         public void TestIndexOfMaxComponent()
         {
             var indexOfMaxComponent2Job = IndexOfMaxComponent2Job.Init();
