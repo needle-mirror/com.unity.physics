@@ -4,6 +4,7 @@ using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Mathematics;
+using Unity.Transforms;
 
 namespace Unity.Physics
 {
@@ -392,6 +393,41 @@ namespace Unity.Physics
         public void SetCollisionFilter(CollisionFilter filter)
         {
             if (!m_Header.Filter.Equals(filter)) { m_Header.Version++; m_Header.Filter = filter; }
+        }
+
+        /// <summary>
+        /// <para>Bakes the provided transformation into the box collider geometry.</para>
+        ///
+        /// <para>
+        /// Applies the transformation to the box collider in local space, consequently scaling, shearing, rotating
+        /// and translating its geometry exactly or approximately depending on the provided transformation.
+        /// </para>
+        /// </summary>
+        /// <param name="transform"> The affine transformation to apply. </param>
+        public void BakeTransform(AffineTransform transform)
+        {
+            var box = Geometry;
+            var center = box.Center;
+            var size = box.Size;
+            var orientation = box.Orientation;
+
+            var transformMatrix = (float4x4)transform;
+            var rigidTransform = Math.DecomposeRigidBodyTransform(transformMatrix);
+            var bakeToShape = Math.GetBakeToShape(transformMatrix, new float4x4(rigidTransform), ref center, ref orientation);
+            bakeToShape = math.mul(bakeToShape, float4x4.Scale(size));
+
+            var scale = bakeToShape.DecomposeScale();
+
+            center = math.transform(rigidTransform, center);
+            orientation = math.normalize(math.mul(rigidTransform.rot, orientation));
+
+            SetGeometry(new BoxGeometry
+            {
+                Center = center,
+                Orientation = orientation,
+                Size = scale,
+                BevelRadius = math.clamp(box.BevelRadius, 0f, 0.5f * math.cmin(size)),
+            });
         }
 
         internal bool RespondsToCollision => m_Header.Material.CollisionResponse != CollisionResponsePolicy.None;

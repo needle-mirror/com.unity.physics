@@ -198,6 +198,31 @@ namespace Unity.Physics
             if (!m_Header.Filter.Equals(filter)) { m_Header.Version++; m_Header.Filter = filter; }
         }
 
+        /// <summary>
+        /// <para>Bakes the provided transformation into the sphere collider geometry.</para>
+        ///
+        /// <para>
+        /// Applies the transformation to the sphere collider in local space, consequently scaling, shearing, rotating
+        /// and translating its geometry exactly or approximately depending on the provided transformation.
+        /// </para>
+        /// </summary>
+        /// <param name="transform"> The affine transformation to apply. </param>
+        public void BakeTransform(AffineTransform transform)
+        {
+            var sphere = Geometry;
+            var center = sphere.Center;
+            var radius = sphere.Radius;
+
+            center = math.transform(transform, center);
+            radius *= math.cmax(math.abs(transform.DecomposeScale()));
+
+            SetGeometry(new SphereGeometry
+            {
+                Center = center,
+                Radius = radius
+            });
+        }
+
         /// <summary>   Gets the mass properties. </summary>
         ///
         /// <value> The mass properties. </value>

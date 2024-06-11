@@ -14,7 +14,6 @@ namespace Unity.Physics
     struct Mesh
     {
         // A set of vertex indices into the section's vertex buffer
-        // TODO: "Primitive" is an overloaded term, rename?
         public struct PrimitiveVertexIndices
         {
             public byte A, B, C, D;
@@ -26,7 +25,7 @@ namespace Unity.Physics
         {
             IsTriangle = 1 << 0,        // the primitive stores a single triangle
             IsTrianglePair = 1 << 1,    // the primitive stores a pair of triangles
-            IsQuad = 1 << 2            // the primitive stores a pair of coplanar triangles, which can be represented as a single quad
+            IsQuad = 1 << 2             // the primitive stores a pair of coplanar triangles, which can be represented as a single quad
         }
 
         // A section of the mesh, containing up to 256 vertices.
@@ -58,16 +57,92 @@ namespace Unity.Physics
 
         internal float m_BoundingRadius;
 
-        // The bounding volume
+        internal Aabb Aabb => BoundingVolumeHierarchy.Domain;
+
+        // The bounding volume hierarchy
         private BlobArray m_BvhNodesBlob;
-        public unsafe BoundingVolumeHierarchy BoundingVolumeHierarchy
+        public unsafe BoundingVolumeHierarchy BoundingVolumeHierarchy => new BoundingVolumeHierarchy(BvhNodesPtr, nodeFilters: null);
+
+        private unsafe BoundingVolumeHierarchy.Node* BvhNodesPtr
         {
             get
             {
                 fixed(BlobArray* blob = &m_BvhNodesBlob)
                 {
-                    var firstNode = (BoundingVolumeHierarchy.Node*)((byte*)&(blob->Offset) + blob->Offset);
-                    return new BoundingVolumeHierarchy(firstNode, nodeFilters: null);
+                    return (BoundingVolumeHierarchy.Node*)((byte*)&(blob->Offset) + blob->Offset);
+                }
+            }
+        }
+
+        private int BvhNodeCount => m_BvhNodesBlob.Length;
+
+        internal void RefitBoundingVolumeHierarchy()
+        {
+            // Update BV tree through refitting, without any structural changes in the tree. This ensures
+            // that the memory occupied by the mesh remains identical, which is imperative given that the
+            // mesh is stored in a blob asset within the mesh collider.
+            unsafe
+            {
+                int nodeEndIndex = BvhNodeCount - 1;
+                BoundingVolumeHierarchy.Node* baseNode = BvhNodesPtr;
+                BoundingVolumeHierarchy.Node* currentNode = baseNode + nodeEndIndex;
+                var primitiveVertices = new float3x4();
+                for (int i = nodeEndIndex; i >= 1; i--, currentNode--)
+                {
+                    if (currentNode->IsLeaf)
+                    {
+                        for (int j = 0; j < 4; ++j)
+                        {
+                            Aabb aabb;
+                            if (currentNode->IsLeafValid(j))
+                            {
+                                // extract section index and index of primitive in section from the primitive key stored within the
+                                // bounding volume hierarchy node
+                                int primitiveKey = currentNode->Data[j];
+                                int sectionIndex = primitiveKey >> 8;
+                                int sectionPrimitiveIndex = primitiveKey & 0xFF;
+
+                                // extract primitive's vertices and calculate its AABB
+                                ref var section = ref Sections[sectionIndex];
+                                var vertices = section.Vertices;
+                                var indices = section.PrimitiveVertexIndices[sectionPrimitiveIndex];
+
+                                // Note: we know that even if the primitive is a single triangle, the 4th vertex (D) is valid.
+                                // In this case it is identical to the 3rd Vertex (C).
+                                // We therefore ignore the primitive flags and simply always calculate the AABB assuming four vertices,
+                                // which will not change the size of the AABB.
+                                primitiveVertices[0] = vertices[indices.A];
+                                primitiveVertices[1] = vertices[indices.B];
+                                primitiveVertices[2] = vertices[indices.C];
+                                primitiveVertices[3] = vertices[indices.D];
+
+                                aabb = Aabb.CreateFromPoints(primitiveVertices);
+                            }
+                            else
+                            {
+                                aabb = Aabb.Empty;
+                            }
+
+                            currentNode->Bounds.SetAabb(j, aabb);
+                        }
+                    }
+                    else
+                    {
+                        for (int j = 0; j < 4; j++)
+                        {
+                            Aabb aabb;
+                            if (currentNode->IsInternalValid(j))
+                            {
+                                aabb = baseNode[currentNode->Data[j]].Bounds.GetCompoundAabb();
+                            }
+                            else
+                            {
+                                aabb = Aabb.Empty;
+                            }
+
+                            currentNode->Bounds.SetAabb(j, aabb);
+                        }
+                    }
                 }
             }
         }

@@ -1,9 +1,9 @@
+using System;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Mathematics;
-using static Unity.Physics.Math;
 
 namespace Unity.Physics
 {
@@ -89,6 +89,140 @@ namespace Unity.Physics
             }
             SafetyChecks.ThrowInvalidOperationException("Calling GetCollisionFilter() on a CompoundCollider requires a valid or empty collider key!");
             return CollisionFilter.Default;
+        }
+
+        /// <summary>
+        /// Indicates whether this compound collider contains shared child colliders, that is, two or more
+        /// child colliders within this compound collider share the same collider blob.
+        ///
+        /// <remarks>
+        /// This situation occurs if during <see cref="Create">compound collider creation</see> the provided array of
+        /// child collider blobs contains duplicate entries (identical collider blob pointers).
+        /// </remarks>
+        /// </summary>
+        public bool HasSharedChildColliders()
+        {
+            unsafe
+            {
+                using var childColliderPtrHashSet = new NativeHashSet<IntPtr>(Children.Length, Allocator.Temp);
+                for (var i = 0; i < Children.Length; ++i)
+                {
+                    var ptr = (IntPtr)Children[i].Collider;
+                    // check if collider ptr has already been encountered
+                    if (!childColliderPtrHashSet.Add(ptr))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// <para>
+        /// Bakes the provided transformation into the compound collider geometry, accordingly affecting
+        /// all its <see cref="Children">child colliders</see>.
+        /// </para>
+        ///
+        /// <para>
+        /// Applies the transformation to the compound collider in local space, consequently scaling, shearing, rotating
+        /// and translating the geometry of its child colliders exactly or approximately depending on the types of the
+        /// encountered child colliders and their geometric representations.
+        /// </para>
+        ///
+        /// <para>
+        /// Automatically <see cref="Update">updates</see> the bounding volume information and mass properties of the
+        /// compound collider after the transformation has been applied.
+        /// </para>
+        ///
+        /// <remarks>
+        /// This function will do nothing when called on compound colliders that have
+        /// <see cref="HasSharedChildColliders">shared colliders</see>. If you want to use this function on a compound
+        /// collider, make sure that all of its child colliders are unique. This can be achieved either by forcing all
+        /// children of the compound collider to be unique at edit time or by ensuring that the list of child collider
+        /// blobs provided when <see cref="Create">creating</see> the compound collider doesn't contain any duplicate
+        /// collider blobs.
+        /// </remarks>
+        ///
+        /// </summary>
+        /// <param name="transform"> The affine transformation to apply. </param>
+        public void BakeTransform(AffineTransform transform)
+        {
+            unsafe
+            {
+                // Check if we can safely bake the transform. This is only possible if this compound does not share
+                // collider blobs among its children (see CreateInternal for collider blob sharing in the compound).
+                if (HasSharedChildColliders())
+                {
+                    SafetyChecks.LogWarning(
+                        "BakeTransform: Unable to bake provided transform since the compound collider contains duplicate collider blobs. " +
+                        "Make sure the compound contains only unique collider blobs before calling BakeTransform.");
+                    return;
+                }
+
+                for (var i = 0; i < Children.Length; ++i)
+                {
+                    ref Child c = ref Children[i];
+
+                    // bring transform into local space of child
+                    var localRotScale = math.mul(new float3x3(math.conjugate(c.CompoundFromChild.rot)), math.mul(transform.rs, new float3x3(c.CompoundFromChild.rot)));
+                    c.Collider->BakeTransform(new AffineTransform(localRotScale));
+
+                    // update position
+                    c.CompoundFromChild.pos = math.transform(transform, c.CompoundFromChild.pos);
+                }
+
+                Update(updateMassProperties: true);
+            }
+        }
+
+        /// <summary>
+        /// <para>
+        /// Updates the compound collider's <see cref="CalculateAabb">bounding volume information</see> and optionally
+        /// also its <see cref="MassProperties">mass properties</see>.
+        /// </para>
+        ///
+        /// <para>
+        /// For correct behavior in collision detection and collider queries, this function must be called after the
+        /// shape or transformation of the compound collider's <see cref="Children">children</see> have been modified.
+        /// </para>
+        ///
+        /// <remark>
+        /// Note that this function only performs a refit of the compound collider's bounding volume hierarchy,
+        /// which is a very efficient way to ensure its proper function in the collision detection and in
+        /// collider queries. However, a refit likely leaves the bounding hierarchy in a suboptimal state, specifically
+        /// if substantial changes have been made to the compound collider's <see cref="Children">children</see>.
+        /// This can lead to performance reductions in collision detection and collider queries. In such cases,
+        /// consider <see cref="Create">recreating</see> the compound collider from scratch instead.
+        /// </remark>
+        ///
+        /// <param name="updateMassProperties"> If true, also updates the mass properties of the compound collider.</param>
+        /// </summary>
+        public void Update(bool updateMassProperties = true)
+        {
+            m_Header.Version++;
+
+            if (updateMassProperties)
+            {
+                // rebuild mass properties
+                MassProperties = BuildMassProperties();
+            }
+
+            unsafe
+            {
+                // update bounding volume hierarchy
+                var aabbs = new NativeArray<Aabb>(NumChildren, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+                for (var i = 0; i < Children.Length; ++i)
+                {
+                    aabbs[i] = Children[i].Collider->CalculateAabb(Children[i].CompoundFromChild);
+                }
+
+                BoundingVolumeHierarchy.Refit(aabbs, 1, m_BvhNodesBlob.Length - 1);
+            }
+
+            // update bounding radius
+            UpdateCachedBoundingRadius();
         }
 
         /// <summary>   Sets the root collision filter. This also sets the filter of all children to the input value.</summary>
@@ -323,19 +457,22 @@ namespace Unity.Physics
                 SafetyChecks.CheckNotEmptyAndThrow(children, nameof(children));
 
                 // Get the total required memory size for the compound plus all its children,
-                // and the combined filter of all children
-                // TODO: Verify that the size is enough
+                // and the combined filter of all children.
+                // Note: we do not copy duplicate colliders from the input child array and instead reuse their
+                // collider blob ptr for the corresponding child entry in the compound.
                 int totalSize = Math.NextMultipleOf16(UnsafeUtility.SizeOf<CompoundCollider>());
                 CollisionFilter filter = children[0].Collider.Value.GetCollisionFilter();
-                var srcToDestInstanceAddrs = new NativeParallelHashMap<long, long>(children.Length, Allocator.Temp);
+                var srcToDestInstanceAddrs = new NativeHashMap<long, long>(children.Length, Allocator.Temp);
                 for (var childIndex = 0; childIndex < children.Length; childIndex++)
                 {
                     var child = children[childIndex];
                     var instanceKey = (long)child.Collider.GetUnsafePtr();
+                    // check if we already came across this collider blob. If yes, continue.
                     if (srcToDestInstanceAddrs.ContainsKey(instanceKey))
                         continue;
                     totalSize += Math.NextMultipleOf16(child.Collider.Value.MemorySize);
                     filter = CollisionFilter.CreateUnion(filter, child.Collider.Value.GetCollisionFilter());
+                    // mark this collider blob in the hash map for later copy of the data
                     srcToDestInstanceAddrs.Add(instanceKey, 0L);
                 }
                 totalSize += (children.Length + BoundingVolumeHierarchy.Constants.MaxNumTreeBranches) * UnsafeUtility.SizeOf<BoundingVolumeHierarchy.Node>();
@@ -364,7 +501,10 @@ namespace Unity.Physics
                 {
                     Collider* collider = (Collider*)children[i].Collider.GetUnsafePtr();
                     var srcInstanceKey = (long)collider;
+                    // obtain memory address of the collider blob
                     var dstAddr = srcToDestInstanceAddrs[srcInstanceKey];
+                    // check if this is the first occurrence of the collider blob (see duplicate collider blob
+                    // detection above)
                     if (dstAddr == 0L)
                     {
                         dstAddr = (long)end;
@@ -425,11 +565,8 @@ namespace Unity.Physics
 
             // Build BVH
             // Todo: cleanup, better size of nodes array
-            nodes = new NativeArray<BoundingVolumeHierarchy.Node>(2 + NumChildren, Allocator.Temp, NativeArrayOptions.UninitializedMemory)
-            {
-                [0] = BoundingVolumeHierarchy.Node.Empty,
-                [1] = BoundingVolumeHierarchy.Node.Empty
-            };
+            nodes = new NativeArray<BoundingVolumeHierarchy.Node>(2 + NumChildren, Allocator.Temp,
+                NativeArrayOptions.UninitializedMemory);
 
             var bvh = new BoundingVolumeHierarchy(nodes);
             bvh.Build(points, aabbs, out int numNodes);
@@ -679,20 +816,17 @@ namespace Unity.Physics
         /// <returns>   The calculated aabb. </returns>
         public Aabb CalculateAabb(RigidTransform transform, float uniformScale = 1.0f)
         {
-            unsafe
+            Aabb outAabb = Math.TransformAabb(BoundingVolumeHierarchy.Domain, transform, uniformScale);
+            float3 center = outAabb.Center;
+            float scaledBoundingRadius = m_BoundingRadius * math.abs(uniformScale);
+            Aabb sphereAabb = new Aabb
             {
-                Aabb outAabb = Math.TransformAabb(BoundingVolumeHierarchy.Domain, transform, uniformScale);
-                float3 center = outAabb.Center;
-                float scaledBoundingRadius = m_BoundingRadius * math.abs(uniformScale);
-                Aabb sphereAabb = new Aabb
-                {
-                    Min = new float3(center - scaledBoundingRadius),
-                    Max = new float3(center + scaledBoundingRadius)
-                };
-                outAabb.Intersect(sphereAabb);
+                Min = new float3(center - scaledBoundingRadius),
+                Max = new float3(center + scaledBoundingRadius)
+            };
+            outAabb.Intersect(sphereAabb);
 
-                return outAabb;
-            }
+            return outAabb;
         }
 
         /// <summary>   Cast a ray against this collider. </summary>
@@ -1215,7 +1349,7 @@ namespace Unity.Physics
                     ColliderKey childKey = new ColliderKey(NumColliderKeyBits, i);
                     if (c.Collider->CollisionType == CollisionType.Composite)
                     {
-                        collector.PushCompositeCollider(new ColliderKeyPath(childKey, NumColliderKeyBits), new MTransform(c.CompoundFromChild), out MTransform worldFromCompound);
+                        collector.PushCompositeCollider(new ColliderKeyPath(childKey, NumColliderKeyBits), new Math.MTransform(c.CompoundFromChild), out Math.MTransform worldFromCompound);
                         c.Collider->GetLeaves(ref collector);
                         collector.PopCompositeCollider(NumColliderKeyBits, worldFromCompound);
                     }

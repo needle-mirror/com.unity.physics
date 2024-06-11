@@ -34,6 +34,8 @@ namespace Unity.Physics.Tests.Collision.Colliders
             }
         }
 
+        #region Construction
+
         [BurstCompile(CompileSynchronously = true)]
         struct CreateFromBurstJob : IJob
         {
@@ -301,6 +303,106 @@ namespace Unity.Physics.Tests.Collision.Colliders
         }
 
 #endif
+        #endregion
+
+        struct VertexDataExtractor : ILeafColliderCollector
+        {
+            public NativeList<float3> Vertices;
+
+            public unsafe void AddLeaf(ColliderKey key, ref ChildCollider leaf)
+            {
+                var collider = leaf.Collider;
+                var polygon = (PolygonCollider*)collider;
+                var vertices = polygon->Vertices;
+                for (int i = 0; i < vertices.Length; ++i)
+                {
+                    Vertices.Add(vertices[i]);
+                }
+            }
+
+            public void PushCompositeCollider(ColliderKeyPath compositeKey, Math.MTransform parentFromComposite, out Math.MTransform worldFromParent)
+            {
+                worldFromParent = new Math.MTransform();
+
+                // does nothing
+            }
+
+            public void PopCompositeCollider(uint numCompositeKeyBits, Math.MTransform worldFromParent)
+            {
+                // does nothing
+            }
+        }
+
+        #region Modification
+
+        /// <summary>
+        /// Modify a <see cref="MeshCollider"/> by baking a user-provided affine transformation,
+        /// containing translation, rotation, scale and shear, into its geometry.
+        /// </summary>
+        [Test]
+        public void TestMeshColliderBakeTransformAffine()
+        {
+            const int kNumTriangles = 100;
+            GenerateMeshData(kNumTriangles, out var vertices, out var triangles);
+            try
+            {
+                using var collider = MeshCollider.Create(vertices, triangles);
+
+                var translation = new float3(3.4f, 2.5f, -1.1f);
+                var rotation = quaternion.AxisAngle(math.normalize(new float3(1.1f, 10.1f, -3.4f)), 78.0f);
+                var scale = new float3(1.5f, 2.5f, 4.2f);
+                var transform = new AffineTransform(translation, rotation, scale);
+
+                // add some shear deformation
+                var shearXY = float3x3.zero;
+                var shearXZ = float3x3.zero;
+                var shearYZ = float3x3.zero;
+
+                shearXY[2][0] = shearXY[2][1] = 0.5f;
+                shearXZ[1][0] = shearXZ[1][2] = 0.42f;
+                shearYZ[0][1] = shearYZ[0][2] = 0.3f;
+
+                transform = math.mul(shearXY, math.mul(shearXZ, math.mul(shearYZ, transform)));
+
+
+                // obtain original vertices and transform them into expected vertices
+                ref var meshCollider = ref collider.As<MeshCollider>();
+                var expectedVertices = new NativeList<float3>(kNumTriangles * 3, Allocator.Temp);
+                var vertexDataExtractor = new VertexDataExtractor
+                {
+                    Vertices = expectedVertices
+                };
+                meshCollider.GetLeaves(ref vertexDataExtractor);
+                for (int i = 0; i < expectedVertices.Length; ++i)
+                {
+                    expectedVertices[i] = math.transform(transform, expectedVertices[i]);
+                }
+
+                // apply the transformation to the mesh collider
+                collider.Value.BakeTransform(transform);
+
+                // validate the resultant mesh collider
+                var actualVertices = new NativeList<float3>(kNumTriangles * 3, Allocator.Temp);
+                vertexDataExtractor.Vertices = actualVertices;
+                meshCollider.GetLeaves(ref vertexDataExtractor);
+
+                Assert.AreEqual(expectedVertices.Length, actualVertices.Length);
+                for (int i = 0; i < expectedVertices.Length; ++i)
+                {
+                    TestUtils.AreEqual(expectedVertices[i], actualVertices[i], math.EPSILON);
+                }
+            }
+            finally
+            {
+                vertices.Dispose();
+                triangles.Dispose();
+            }
+        }
+
+        #endregion
+
+
+        #region Utilitis
 
         [Test]
         public void TestMeshColliderToMesh()
@@ -325,5 +427,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
                 triangles.Dispose();
             }
         }
+
+        #endregion
     }
 }

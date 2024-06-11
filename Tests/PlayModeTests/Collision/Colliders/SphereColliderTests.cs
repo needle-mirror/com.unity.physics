@@ -91,6 +91,53 @@ namespace Unity.Physics.Tests.Collision.Colliders
 
         #endregion
 
+        #region Modification
+
+        void ValidateGeometryEqual(in SphereGeometry expectedGeometry, in SphereGeometry actualGeometry)
+        {
+            const float kDelta = 1e-5f;
+            TestUtils.AreEqual(expectedGeometry.Center, actualGeometry.Center, kDelta);
+            TestUtils.AreEqual(expectedGeometry.Radius, actualGeometry.Radius, kDelta);
+        }
+
+        /// <summary>
+        /// Modify a <see cref="SphereCollider"/> by baking a user-provided transformation matrix,
+        /// containing translation, rotation and scale, into its geometry.
+        /// </summary>
+        [Test]
+        public void TestSphereColliderBakeTransformTRS()
+        {
+            var geometry = new SphereGeometry
+            {
+                Center = new float3(1, 2, 4.2f),
+                Radius = 0.5f,
+            };
+
+            using var collider = SphereCollider.Create(geometry);
+            ref var sphereCollider = ref collider.As<SphereCollider>();
+
+            var translation = new float3(1, 2, 4.2f);
+            var rotation = quaternion.Euler(math.radians(10), math.radians(30), math.radians(42));
+            var scale = new float3(1.5f, 2.5f, 4.2f);
+            var transform = new AffineTransform(translation, rotation, scale);
+            collider.Value.BakeTransform(transform);
+
+            var expectedRadius = geometry.Radius * math.cmax(scale);
+            var expectedGeometry = new SphereGeometry()
+            {
+                Center = math.transform(transform, geometry.Center),
+                Radius = expectedRadius,
+            };
+
+            ValidateGeometryEqual(expectedGeometry, sphereCollider.Geometry);
+
+            // Test that the mass properties are as expected
+            using var expectedCollider = SphereCollider.Create(expectedGeometry);
+            TestUtils.AreEqual(expectedCollider.Value.MassProperties, sphereCollider.MassProperties, 1e-5f);
+        }
+
+        #endregion
+
         #region IConvexCollider
 
         /// <summary>

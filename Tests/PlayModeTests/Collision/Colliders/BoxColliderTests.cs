@@ -121,6 +121,96 @@ namespace Unity.Physics.Tests.Collision.Colliders
 
         #endregion
 
+        #region Modification
+
+        void ValidateGeometryEqual(in BoxGeometry expectedGeometry, in BoxGeometry actualGeometry)
+        {
+            const float kDelta = 1e-5f;
+            TestUtils.AreEqual(expectedGeometry.Center, actualGeometry.Center, kDelta);
+            Assert.That(expectedGeometry.Orientation, Is.OrientedEquivalentTo(actualGeometry.Orientation));
+            TestUtils.AreEqual(expectedGeometry.Size, actualGeometry.Size, kDelta);
+            TestUtils.AreEqual(expectedGeometry.BevelRadius, actualGeometry.BevelRadius, kDelta);
+        }
+
+        /// <summary>
+        /// Modify a <see cref="BoxCollider"/> by baking a user-provided transformation matrix,
+        /// containing translation, rotation and scale, into its geometry.
+        /// </summary>
+        [Test]
+        public void TestBoxColliderBakeTransformTRS()
+        {
+            var geometry = new BoxGeometry
+            {
+                Center = new float3(4.2f, 2, 1),
+                Orientation = quaternion.identity,
+                Size = new float3(1),
+                BevelRadius = 0.01f
+            };
+
+            using var collider = BoxCollider.Create(geometry);
+            ref var boxCollider = ref collider.As<BoxCollider>();
+
+            var translation = new float3(1, 2, 4.2f);
+            var rotation = quaternion.Euler(math.radians(10), math.radians(30), math.radians(42));
+            var scale = new float3(1.5f, 2.5f, 4.2f);
+            var transform = new AffineTransform(translation, rotation, scale);
+            collider.Value.BakeTransform(transform);
+
+            var expectedGeometry = new BoxGeometry
+            {
+                Center = math.transform(transform, geometry.Center),
+                Orientation = rotation,
+                Size = geometry.Size * scale,
+                BevelRadius = geometry.BevelRadius
+            };
+
+            ValidateGeometryEqual(expectedGeometry, boxCollider.Geometry);
+
+            // Test that the mass properties are as expected
+            using var expectedCollider = BoxCollider.Create(expectedGeometry);
+            TestUtils.AreEqual(expectedCollider.Value.MassProperties, boxCollider.MassProperties, 1e-5f);
+        }
+
+        /// <summary>
+        /// Modify a <see cref="BoxCollider"/> by baking a user-provided transformation matrix,
+        /// containing translation and rotation, into its geometry.
+        /// </summary>
+        [Test]
+        public void TestBoxColliderBakeTransformTR()
+        {
+            var geometry = new BoxGeometry
+            {
+                Center = new float3(4.2f, 2, 1),
+                Orientation = quaternion.Euler(math.radians(20), math.radians(42), math.radians(50)),
+                Size = new float3(1, 2, 3),
+                BevelRadius = 0.01f
+            };
+
+            using var collider = BoxCollider.Create(geometry);
+            ref var boxCollider = ref collider.As<BoxCollider>();
+
+            var translation = new float3(1, 2, 4.2f);
+            var rotation = quaternion.Euler(math.radians(10), math.radians(30), math.radians(42));
+            var transform = new AffineTransform(translation, rotation);
+            collider.Value.BakeTransform(transform);
+
+            var expectedGeometry = new BoxGeometry
+            {
+                Center = math.transform(transform, geometry.Center),
+                Orientation = math.mul(rotation, geometry.Orientation),
+                Size = geometry.Size,
+                BevelRadius = geometry.BevelRadius
+            };
+
+            ValidateGeometryEqual(expectedGeometry, boxCollider.Geometry);
+
+            // Test that the mass properties are as expected
+            using var expectedCollider = BoxCollider.Create(expectedGeometry);
+            TestUtils.AreEqual(expectedCollider.Value.MassProperties, boxCollider.MassProperties, 1e-5f);
+        }
+
+        #endregion
+
         #region IConvexCollider
 
         /// <summary>

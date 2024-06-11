@@ -4,6 +4,34 @@ uid: unity-physics-changelog
 
 # Changelog
 
+## [1.3.0-exp.1] - 2024-06-11
+
+### Added
+
+* Motors authored via built-in component, api, or custom component now use spring frequency and the damping ratio to fine-tune the motor behaviour.
+* New `Collider.BakeTransform` function which allows deforming a collider at runtime. This function is implemented for all collider types except the `TerrainCollider` and applies a provided affine transformation to the collider geometry, rotating, translating, scaling and shearing it accordingly. The geometric transformation will be either perfect for mesh types, or approximate for primitives. Specific deformations will be perfect even for primitives depending on the type of deformation and the primitive's parametrization. As such a `BoxCollider` with identity orientation in local space will be uniformly scaled, updating its width, height and length perfectly, if the provided affine transformation is a pure scaling matrix.
+* The broadphase can now be changed to operate incrementally using the `PhysicsStepAuthoring` component (see parameters `Incremental Dynamic Broadphase` and `Incremental Static Broadphase`), and the `PhysicsStep` Entities components. When the feature is enabled, the bounding volume hierarchy inside the broadphase, used for spatial acceleration during collision detection and for collider queries such as ray and collider casts, is no longer built from scratch every frame, but incrementally updated from one frame to the next. This can lead to drastic performance improvements for scenes with large numbers of rigid bodies of which only a very small subset changes between frames, that is, changes to rigid body transformations or colliders are rare. This feature can be enabled for dynamic bodies and static bodies separately, which makes it applicable to large and mostly static worlds with massive numbers of static rigid bodies and a reasonable number of dynamic bodies. By default this feature is disabled.
+* Through the new `CompoundCollider.Update` function, the shape or transformation of children in a compound collider can now be safely modified. By calling the provided function, the compound collider's bounding volume information and optionally also its mass properties are updated in accordance with the modifications of its child colliders, thereby ensuring correct behavior in collision detection and collider queries.
+* Added a new `CollisionWorld.Clone()` function which allows cloning a collision world and deep copying select colliders which otherwise would be shared across clones. Deep copying is important in cases where the collision world clone is used over multiple frames and colliders are modified, which is frequently the case in Netcode environments with lag compensation for physics queries (see `Unity.NetCode.PhysicsWorldHistorySingleton`). For these cases, the colliders which are likely to be modified or deleted (such as colliders in dynamic rigid bodies) can now be deep copied, ensuring independent collision world clones. Without deep copying in these cases, modifying colliders in the original collision world after having cloned it will inadvertently also affect the clone, which can lead to erroneous collision queries and crashes.
+* By setting the "Provides Contacts" option in built-in collider authoring components, users can now enable collision event reporting for physically simulated rigid bodies. The collision events can be received by using an `ICollisionEventsJob`.
+
+### Changed
+
+* When baking a built-in hinge joint as a rotation motor, the Joint.Motor.Force parameter must be non-zero. This value is baked into the maximum impulse of the motor.
+* Add missing `[BurstCompile]` attributes in the collider blob systems to ensure maximum performance.
+* In `EnsureUniqueColliderBlobSystem`, prevent extra delay in adding the required unique collider blob cleanup components by using a different ECB system. This change also batches the corresponding commands with the commands coming from other physics systems, preventing an unnecessary extra sync point in the overall simulation.
+
+### Fixed
+
+* Possible race condition in debug displays when modifying the geometry of colliders.
+* Prevent unnecessary memory allocations in builds due to the editor-only debug display.
+* Fixed errors caused by memory corruption when selecting mesh-based custom Physics Shape Authoring components in the editor.
+* Prevent slowdowns caused by physics analytics data gathering through job parallelization and by disabling the analytics jobs when editor analytics are disabled.
+* Prevent crash in debug display caused by dangling system pointer in certain cases.
+* Fully remove any trace of the integrity checks unless we are in the editor or in a development build.
+* Fixed an issue that prevented contacts in the Physics Debug Display to show up when Draw Contacts was enabled.
+
+
 ## [1.2.3] - 2024-05-30
 
 ### Changed

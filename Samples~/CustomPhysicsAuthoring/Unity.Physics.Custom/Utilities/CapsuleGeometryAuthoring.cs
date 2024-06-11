@@ -70,7 +70,7 @@ namespace Unity.Physics.Authoring
         public static CapsuleGeometryAuthoring ToAuthoring(this CapsuleGeometry input)
         {
             var orientationEuler = EulerAngles.Default;
-            orientationEuler.SetValue(quaternion.LookRotationSafe(input.Vertex1 - input.Vertex0, math.up()));
+            orientationEuler.SetValue(quaternion.LookRotationSafe(input.Vertex0 - input.Vertex1, new float3 { z = 1f }));
             return new CapsuleGeometryAuthoring
             {
                 Height = input.GetHeight(),

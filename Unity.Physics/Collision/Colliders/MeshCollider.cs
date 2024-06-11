@@ -252,6 +252,44 @@ namespace Unity.Physics
             }
         }
 
+        /// <summary>
+        /// <para>Bakes the provided transformation into the mesh collider geometry.</para>
+        ///
+        /// <para>
+        /// Applies the transformation to the mesh collider in local space, consequently scaling, shearing, rotating
+        /// and translating its geometry according to the provided transformation.
+        /// </para>
+        ///
+        /// <remarks>
+        /// The transformation is applied to all the mesh's vertices individually, leaving its topology intact
+        /// while updating its internal spatial acceleration structure accordingly. Note however that for extreme
+        /// deformations, such as extreme shear or extreme non-uniform scale, the updated spatial acceleration
+        /// structure might be sub-optimal and can lead to slight performance regressions during collision detection
+        /// and queries (e.g., ray casts). For optimal performance in such extreme cases, it is recommended to
+        /// <see cref="Create(NativeArray&lt;float3&gt;, NativeArray&lt;int3&gt;)">recreate the mesh collider from
+        /// scratch</see> instead.
+        /// </remarks>
+        /// </summary>
+        /// <param name="transform"> The affine transformation to apply. </param>
+        public void BakeTransform(AffineTransform transform)
+        {
+            m_Header.Version++;
+
+            for (var i = 0; i < Mesh.Sections.Length; ++i)
+            {
+                ref var section = ref Mesh.Sections[i];
+                var vertices = section.Vertices;
+                for (var j = 0; j < vertices.Length; ++j)
+                {
+                    vertices[j] = math.transform(transform, vertices[j]);
+                }
+            }
+
+            Mesh.RefitBoundingVolumeHierarchy();
+            Mesh.UpdateCachedBoundingRadius();
+            m_Aabb = Mesh.Aabb;
+        }
+
         internal bool RespondsToCollision
         {
             get

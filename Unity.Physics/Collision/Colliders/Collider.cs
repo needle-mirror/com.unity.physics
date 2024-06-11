@@ -81,6 +81,18 @@ namespace Unity.Physics
         ///
         /// <param name="filter">   Specifies the filter. </param>
         void SetCollisionFilter(CollisionFilter filter);
+
+        /// <summary>
+        /// <para>Bakes the provided transformation into the collider geometry.</para>
+        ///
+        /// <para>
+        /// Applies the transformation to the collider in local space, consequently scaling, shearing, rotating
+        /// and translating its geometry exactly or approximately depending on the type of the collider
+        /// and its geometric representation.
+        /// </para>
+        /// </summary>
+        /// <param name="transform"> The affine transformation to apply. </param>
+        void BakeTransform(AffineTransform transform);
     }
 
     // Interface for convex colliders
@@ -137,6 +149,7 @@ namespace Unity.Physics
     public struct Collider : ICompositeCollider
     {
         private ColliderHeader m_Header;
+        internal byte Version => m_Header.Version;
 
         /// <summary>   Indicates whether this collider is unique, i.e., not shared between rigid bodies. </summary>
         ///
@@ -250,6 +263,60 @@ namespace Unity.Physics
         ///
         /// <param name="filter">   Specifies the filter. </param>
         public void SetCollisionFilter(CollisionFilter filter) => SetCollisionFilter(filter, ColliderKey.Empty);
+
+        /// <summary>
+        /// <para>Bakes the provided transformation into the collider geometry.</para>
+        ///
+        /// <para>
+        /// Applies the transformation to the collider in local space, consequently scaling, shearing, rotating
+        /// and translating its geometry exactly or approximately depending on the type of the collider
+        /// and its geometric representation.
+        /// </para>
+        /// </summary>
+        /// <param name="transform"> The affine transformation to apply. </param>
+        public void BakeTransform(AffineTransform transform)
+        {
+            unsafe
+            {
+                fixed(Collider* collider = &this)
+                {
+                    switch (collider->Type)
+                    {
+                        case ColliderType.Convex:
+                            ((ConvexCollider*)collider)->BakeTransform(transform);
+                            break;
+                        case ColliderType.Box:
+                            ((BoxCollider*)collider)->BakeTransform(transform);
+                            break;
+                        case ColliderType.Capsule:
+                            ((CapsuleCollider*)collider)->BakeTransform(transform);
+                            break;
+                        case ColliderType.Cylinder:
+                            ((CylinderCollider*)collider)->BakeTransform(transform);
+                            break;
+                        case ColliderType.Quad:
+                        case ColliderType.Triangle:
+                            ((PolygonCollider*)collider)->BakeTransform(transform);
+                            break;
+                        case ColliderType.Sphere:
+                            ((SphereCollider*)collider)->BakeTransform(transform);
+                            break;
+                        case ColliderType.Terrain:
+                            ((TerrainCollider*)collider)->BakeTransform(transform);
+                            break;
+                        case ColliderType.Mesh:
+                            ((MeshCollider*)collider)->BakeTransform(transform);
+                            break;
+                        case ColliderType.Compound:
+                            ((CompoundCollider*)collider)->BakeTransform(transform);
+                            break;
+                        default:
+                            SafetyChecks.ThrowInvalidOperationException($"Not implemented for collider type {collider->Type}.");
+                            break;
+                    }
+                }
+            }
+        }
 
         /// <summary>
         /// Sets the collision filter of a child specified by the collider key. Collider key is only read
@@ -1439,7 +1506,14 @@ namespace Unity.Physics
         /// </returns>
         public int CompareTo(ColliderKey other)
         {
-            return (int)(Value - other.Value);
+            // represent collider key as 16 bit integer pair to avoid overflow when subtracting, and compare using
+            // lexicographical ordering
+            var hiOther = (Int32)other.Value >> 16;
+            var loOther = (Int32)other.Value & UInt16.MaxValue;
+            var hi = (Int32)Value >> 16;
+            var lo = (Int32)Value & UInt16.MaxValue;
+            var i = hi - hiOther;
+            return math.select(i, lo - loOther, i == 0);
         }
 
         /// <summary>

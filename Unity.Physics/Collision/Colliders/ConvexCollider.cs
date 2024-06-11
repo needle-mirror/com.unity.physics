@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -463,6 +464,185 @@ namespace Unity.Physics
         public void SetCollisionFilter(CollisionFilter filter)
         {
             if (!m_Header.Filter.Equals(filter)) { m_Header.Version++; m_Header.Filter = filter; }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        float3 ComputeCentroid(BlobArray.Accessor<float3> positions)
+        {
+            var sum = float3.zero;
+            foreach (var pos in positions)
+            {
+                sum += pos;
+            }
+
+            return sum / positions.Length;
+        }
+
+        /// <summary>
+        /// <para>Bakes the provided transformation into the convex collider geometry.</para>
+        ///
+        /// <para>
+        /// Applies the transformation to the convex collider in local space, consequently scaling, shearing, rotating
+        /// and translating its geometry according to the provided transformation.
+        /// </para>
+        /// </summary>
+        /// <param name="transform"> The affine transformation to apply. </param>
+        public void BakeTransform(AffineTransform transform)
+        {
+            m_Header.Version++;
+
+            var vertexAccessor = ConvexHull.Vertices;
+            for (int i = 0; i < vertexAccessor.Length; ++i)
+            {
+                vertexAccessor[i] = math.transform(transform, vertexAccessor[i]);
+            }
+
+            // Update convex hull:
+
+            // Update planes
+            var planeAccessor = ConvexHull.Planes;
+            for (int i = 0; i < planeAccessor.Length; ++i)
+            {
+                // transform the plane using the provided transformation matrix
+                var plane = planeAccessor[i];
+                var pointOnPlane = plane.Distance * plane.Normal;
+                pointOnPlane = math.transform(transform, pointOnPlane);
+                plane.Normal = math.normalize(math.rotate(transform, plane.Normal));
+                plane.Distance = math.dot(plane.Normal, pointOnPlane);
+            }
+
+            // Update faces
+            var faceAccessor = ConvexHull.Faces;
+            var faceLinksAccessor = ConvexHull.FaceLinks;
+            for (int i = 0; i < faceAccessor.Length; ++i)
+            {
+                ref var face = ref faceAccessor[i];
+                ref var plane = ref planeAccessor[i];
+                var maxCosAngle = -1.0f;
+                // Access every edge of the face and obtain the corresponding face incident to this edge, and adjacent to the face.
+                // Compute the minimum angle between the current face and all such adjacent faces using the hull's planes.
+                for (int j = 0; j < face.NumVertices; ++j)
+                {
+                    // get the face link for the given edge
+                    ref var faceLink = ref faceLinksAccessor[face.FirstIndex + j];
+                    // get the plane of the adjacent face
+                    ref var adjacentPlane = ref planeAccessor[faceLink.FaceIndex];
+                    maxCosAngle = math.max(maxCosAngle, math.dot(plane.Normal, adjacentPlane.Normal));
+                }
+
+                face.MinHalfAngle = math.acos(maxCosAngle) * 0.5f;
+            }
+
+            // Update mass properties:
+
+            // Recompute mass properties from scratch based on updated convex hull
+            var centerOfMass = float3.zero;
+            var volume = 0f;
+            var inertiaTensor = float3x3.identity;
+
+            if (vertexAccessor.Length >= 3)
+            {
+                var offset = ComputeCentroid(vertexAccessor);
+                unsafe
+                {
+                    // Split convex hull volume into pyramids formed by its triangles
+                    // and the centroid.
+                    // Compute the volume of the convex hull as the sum of the pyramid volumes
+                    // and its center of mass as a weighted sum of the pyramid centroids.
+                    var faceVertexIndexAccessor = ConvexHull.FaceVertexIndices;
+
+                    var numTriangles = 0;
+                    for (int i = 0; i < faceAccessor.Length; ++i)
+                    {
+                        ref var face = ref faceAccessor[i];
+                        numTriangles += face.NumVertices - 2;
+                    }
+
+                    float* dets = stackalloc float[numTriangles];
+                    int k = 0;
+                    for (int i = 0; i < faceAccessor.Length; ++i)
+                    {
+                        ref var face = ref faceAccessor[i];
+                        // walk around the face and split it into triangles
+                        for (int j = 1; j < face.NumVertices - 1; ++j, ++k)
+                        {
+                            float3 v0 = vertexAccessor[faceVertexIndexAccessor[face.FirstIndex]] - offset;
+                            float3 v1 = vertexAccessor[faceVertexIndexAccessor[face.FirstIndex + j]] - offset;
+                            float3 v2 = vertexAccessor[faceVertexIndexAccessor[face.FirstIndex + j + 1]] - offset;
+                            // volume of parallelepiped spanned by v0, v1 and v3
+                            float v = math.determinant(new float3x3(v0, v1, v2));
+                            centerOfMass += (v0 + v1 + v2) * v;
+                            volume += v;
+                            dets[k] = v;
+                        }
+                    }
+
+                    if (volume > 0)
+                    {
+                        centerOfMass = centerOfMass / (volume * 4) + offset;
+                    }
+
+                    var diag = float3.zero;
+                    var offdiag = float3.zero;
+                    k = 0;
+                    for (int i = 0; i < faceAccessor.Length; ++i)
+                    {
+                        ref var face = ref faceAccessor[i];
+                        // walk around the face and split it into triangles
+                        for (int j = 1; j < face.NumVertices - 1; ++j, ++k)
+                        {
+                            float3 v0 = vertexAccessor[faceVertexIndexAccessor[face.FirstIndex]] - offset;
+                            float3 v1 = vertexAccessor[faceVertexIndexAccessor[face.FirstIndex + j]] - offset;
+                            float3 v2 = vertexAccessor[faceVertexIndexAccessor[face.FirstIndex + j + 1]] - offset;
+                            diag += (v0 * v1 + v1 * v2 + v2 * v0 + v0 * v0 + v1 * v1 + v2 * v2) * dets[k];
+                            offdiag += (v0.yzx * v1.zxy + v1.yzx * v2.zxy + v2.yzx * v0.zxy +
+                                v0.yzx * v2.zxy + v1.yzx * v0.zxy + v2.yzx * v1.zxy +
+                                (v0.yzx * v0.zxy + v1.yzx * v1.zxy + v2.yzx * v2.zxy) * 2) * dets[k];
+                        }
+                    }
+
+                    if (volume > 0)
+                    {
+                        diag /= volume * 10f; /* (60 / 6)  */
+                        offdiag /= volume * 20f; /* (120 / 6) */
+
+                        inertiaTensor.c0 = new float3(diag.y + diag.z, -offdiag.z, -offdiag.y);
+                        inertiaTensor.c1 = new float3(-offdiag.z, diag.x + diag.z, -offdiag.x);
+                        inertiaTensor.c2 = new float3(-offdiag.y, -offdiag.x, diag.x + diag.y);
+                    }
+                }
+
+                // divide volume by 6 to get from volume of parallelepiped to volume of
+                // a pyramid with three sides
+                volume /= 6;
+            }
+            else if (vertexAccessor.Length == 2)
+            {
+                centerOfMass = (vertexAccessor[0] + vertexAccessor[1]) * 0.5f;
+            }
+            else if (vertexAccessor.Length == 1)
+            {
+                centerOfMass = vertexAccessor[0];
+            }
+
+            Math.DiagonalizeSymmetricApproximation(inertiaTensor, out float3x3 orientation, out float3 inertia);
+
+            float maxLengthSquared = 0.0f;
+            for (int v = 0, count = vertexAccessor.Length; v < count; ++v)
+            {
+                maxLengthSquared = math.max(maxLengthSquared, math.lengthsq(vertexAccessor[v] - centerOfMass));
+            }
+
+            MassProperties = new MassProperties
+            {
+                MassDistribution = new MassDistribution
+                {
+                    Transform = new RigidTransform(orientation, centerOfMass),
+                    InertiaTensor = inertia
+                },
+                Volume = volume,
+                AngularExpansionFactor = math.sqrt(maxLengthSquared)
+            };
         }
 
         internal bool RespondsToCollision => m_Header.Material.CollisionResponse != CollisionResponsePolicy.None;

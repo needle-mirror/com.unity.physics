@@ -158,6 +158,109 @@ namespace Unity.Physics.Tests.Collision.Colliders
 
         #endregion
 
+        #region Modification
+
+        void ValidateGeometryEqual(in CylinderGeometry expectedGeometry, in CylinderGeometry actualGeometry)
+        {
+            const float kDelta = 1e-5f;
+            TestUtils.AreEqual(expectedGeometry.Center, actualGeometry.Center, kDelta);
+            Assert.That(expectedGeometry.Orientation, Is.OrientedEquivalentTo(actualGeometry.Orientation));
+            TestUtils.AreEqual(expectedGeometry.Radius, actualGeometry.Radius, kDelta);
+            TestUtils.AreEqual(expectedGeometry.Height, actualGeometry.Height, kDelta);
+            TestUtils.AreEqual(expectedGeometry.BevelRadius, actualGeometry.BevelRadius, kDelta);
+            TestUtils.AreEqual(expectedGeometry.SideCount, actualGeometry.SideCount);
+        }
+
+        /// <summary>
+        /// Modify a <see cref="CylinderCollider"/> by baking a user-provided transformation matrix,
+        /// containing translation, rotation and scale, into its geometry.
+        /// </summary>
+        [Test]
+        public void TestCylinderColliderBakeTransformTRS([Values(0, 1, 2)] int axisID)
+        {
+            var geometry = new CylinderGeometry
+            {
+                Center = new float3(1, 2, 4.2f),
+                Orientation = quaternion.LookRotationSafe(new float3 {[axisID] = 1f}, new float3 {[Math.Constants.PrevAxis[axisID]] = 1f}),
+                Radius = 0.5f,
+                Height = 4.2f,
+                BevelRadius = 0.01f,
+                SideCount = CylinderGeometry.MaxSideCount
+            };
+
+            using var collider = CylinderCollider.Create(geometry);
+            ref var cylinderCollider = ref collider.As<CylinderCollider>();
+
+            var translation = new float3(1, 2, 4.2f);
+            var rotation = quaternion.Euler(math.radians(10), math.radians(30), math.radians(42));
+            var scale = new float3(1.5f, 2.5f, 4.2f);
+            var transform = new AffineTransform(translation, rotation, scale);
+            collider.Value.BakeTransform(transform);
+
+            var nonAxisScales = new float2(scale[Math.Constants.NextAxis[axisID]], scale[Math.Constants.PrevAxis[axisID]]);
+            var expectedRadius = geometry.Radius * math.cmax(nonAxisScales);
+            var expectedHeight = geometry.Height * scale[axisID];
+            var expectedGeometry = new CylinderGeometry
+            {
+                Center = math.transform(transform, geometry.Center),
+                Orientation = math.mul(rotation, geometry.Orientation),
+                Radius = expectedRadius,
+                Height = expectedHeight,
+                BevelRadius = geometry.BevelRadius,
+                SideCount = geometry.SideCount
+            };
+
+            ValidateGeometryEqual(expectedGeometry, cylinderCollider.Geometry);
+
+            // Test that the mass properties are as expected
+            using var expectedCollider = CylinderCollider.Create(expectedGeometry);
+            TestUtils.AreEqual(expectedCollider.Value.MassProperties, cylinderCollider.MassProperties, 1e-4f);
+        }
+
+        /// <summary>
+        /// Modify a <see cref="CylinderCollider"/> by baking a user-provided transformation matrix,
+        /// containing translation and rotation, into its geometry.
+        /// </summary>
+        [Test]
+        public void TestCylinderColliderBakeTransformTR()
+        {
+            var geometry = new CylinderGeometry
+            {
+                Center = new float3(1, 2, 4.2f),
+                Orientation = quaternion.Euler(math.radians(20), math.radians(42), math.radians(50)),
+                Radius = 0.5f,
+                Height = 4.2f,
+                BevelRadius = 0.01f,
+                SideCount = CylinderGeometry.MaxSideCount
+            };
+
+            using var collider = CylinderCollider.Create(geometry);
+            ref var cylinderCollider = ref collider.As<CylinderCollider>();
+
+            var translation = new float3(1, 2, 4.2f);
+            var rotation = quaternion.Euler(math.radians(10), math.radians(30), math.radians(42));
+            var transform = new AffineTransform(translation, rotation);
+            collider.Value.BakeTransform(transform);
+
+            var expectedGeometry = new CylinderGeometry
+            {
+                Center = math.transform(transform, geometry.Center),
+                Orientation = math.mul(rotation, geometry.Orientation),
+                Radius = geometry.Radius,
+                Height = geometry.Height,
+                BevelRadius = geometry.BevelRadius,
+                SideCount = geometry.SideCount
+            };
+
+            ValidateGeometryEqual(expectedGeometry, cylinderCollider.Geometry);
+
+            // Test that the mass properties are as expected
+            using var expectedCollider = CylinderCollider.Create(expectedGeometry);
+            TestUtils.AreEqual(expectedCollider.Value.MassProperties, cylinderCollider.MassProperties, 1e-4f);
+        }
+
+        #endregion
+
         #region Utilities
 
         [Test]

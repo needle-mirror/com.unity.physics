@@ -24,6 +24,8 @@ namespace Unity.Physics.Editor
         [AutoPopulate] SerializedProperty m_EnableSolverStabilizationHeuristic;
         [AutoPopulate] SerializedProperty m_MultiThreaded;
         [AutoPopulate] SerializedProperty m_SynchronizeCollisionWorld;
+        [AutoPopulate] SerializedProperty m_IncrementalDynamicBroadphase;
+        [AutoPopulate] SerializedProperty m_IncrementalStaticBroadphase;
 #pragma warning restore 649
 
         public override void OnInspectorGUI()
@@ -44,6 +46,10 @@ namespace Unity.Physics.Editor
 
                 EditorGUILayout.PropertyField(m_SynchronizeCollisionWorld);
 
+                EditorGUILayout.PropertyField(m_IncrementalDynamicBroadphase);
+
+                EditorGUILayout.PropertyField(m_IncrementalStaticBroadphase);
+
 #if HAVOK_PHYSICS_EXISTS
                 bool havokPhysics = m_SimulationType.intValue == (int)SimulationType.HavokPhysics;
                 using (new EditorGUI.DisabledScope(havokPhysics))
@@ -52,14 +58,18 @@ namespace Unity.Physics.Editor
 
                     // Temporarily invalidate
                     if (havokPhysics)
+                    {
                         m_EnableSolverStabilizationHeuristic.boolValue = false;
+                    }
 
                     EditorGUILayout.PropertyField(m_EnableSolverStabilizationHeuristic,
                         havokPhysics ? Content.SolverStabilizationLabelHavokPhysics : Content.SolverStabilizationLabelUnityPhysics);
 
                     // Revert back
                     if (havokPhysics)
+                    {
                         m_EnableSolverStabilizationHeuristic.boolValue = enableStabilization;
+                    }
                 }
 #else
                 EditorGUILayout.PropertyField(m_EnableSolverStabilizationHeuristic, Content.SolverStabilizationLabelUnityPhysics);

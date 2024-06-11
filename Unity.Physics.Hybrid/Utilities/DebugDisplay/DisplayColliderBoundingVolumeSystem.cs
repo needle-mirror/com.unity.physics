@@ -1,4 +1,3 @@
-using Unity.Physics.Systems;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
@@ -45,17 +44,22 @@ namespace Unity.Physics.Authoring
     {
         private EntityQuery ColliderQuery;
 
-        void OnCreate(ref SystemState state)
+        public void OnCreate(ref SystemState state)
         {
             ColliderQuery = state.GetEntityQuery(ComponentType.ReadOnly<PhysicsCollider>(),
                 ComponentType.ReadOnly<LocalToWorld>());
 
             state.RequireForUpdate(ColliderQuery);
             state.RequireForUpdate<PhysicsDebugDisplayData>();
+
+            // Register a ReadOnly dependency on PhysicsCollider components
+            state.GetComponentLookup<PhysicsCollider>(true);
+            // Register a ReadOnly dependency on PhysicsWorldSingleton
+            state.GetComponentLookup<PhysicsWorldSingleton>(true);
         }
 
         [BurstCompile]
-        void OnUpdate(ref SystemState state)
+        public void OnUpdate(ref SystemState state)
         {
             if (!SystemAPI.TryGetSingleton(out PhysicsDebugDisplayData debugDisplay) || debugDisplay.DrawColliderAabbs == 0)
                 return;
@@ -101,17 +105,22 @@ namespace Unity.Physics.Authoring
     {
         private EntityQuery ColliderQuery;
 
-        void OnCreate(ref SystemState state)
+        public void OnCreate(ref SystemState state)
         {
             ColliderQuery = state.GetEntityQuery(ComponentType.ReadOnly<PhysicsCollider>(),
                 ComponentType.ReadOnly<LocalToWorld>());
 
             state.RequireForUpdate(ColliderQuery);
             state.RequireForUpdate<PhysicsDebugDisplayData>();
+
+            // Register a ReadOnly dependency on PhysicsCollider components
+            state.GetComponentLookup<PhysicsCollider>(true);
+            // Register a ReadOnly dependency on PhysicsWorldSingleton
+            state.GetComponentLookup<PhysicsWorldSingleton>(true);
         }
 
         [BurstCompile]
-        void OnUpdate(ref SystemState state)
+        public void OnUpdate(ref SystemState state)
         {
             if (!SystemAPI.TryGetSingleton(out PhysicsDebugDisplayData debugDisplay) || debugDisplay.DrawColliderAabbs == 0)
                 return;

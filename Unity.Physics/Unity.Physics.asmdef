@@ -6,6 +6,7 @@
         "Unity.Collections",
         "Unity.Entities",
         "Unity.Mathematics",
+        "Unity.Profiling.Core",
         "Unity.Transforms"
     ],
     "includePlatforms": [],

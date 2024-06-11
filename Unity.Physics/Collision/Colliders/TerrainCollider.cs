@@ -144,6 +144,13 @@ namespace Unity.Physics
             if (!m_Header.Filter.Equals(filter)) { m_Header.Version++; m_Header.Filter = filter; }
         }
 
+        /// <summary>   This function is not implemented for this collider type. </summary>
+        /// <param name="transform"> Affine transformation </param>
+        public void BakeTransform(AffineTransform transform)
+        {
+            SafetyChecks.LogWarning($"Not implemented for collider type {Type}.");
+        }
+
         internal bool RespondsToCollision => Material.CollisionResponse != CollisionResponsePolicy.None;
 
         /// <summary>   Gets the number of collider key bits. </summary>

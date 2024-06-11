@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace Unity.Physics.Authoring
 {
-    internal partial class DisplayGizmoColliderEdges
+    internal class DisplayGizmoColliderEdges
     {
         unsafe class DrawWithGizmos : MonoBehaviour
         {

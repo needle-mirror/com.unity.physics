@@ -405,6 +405,45 @@ namespace Unity.Physics
             if (!m_Header.Filter.Equals(filter)) { m_Header.Version++; m_Header.Filter = filter; }
         }
 
+        /// <summary>
+        /// <para>Bakes the provided transformation into the cylinder collider geometry.</para>
+        ///
+        /// <para>
+        /// Applies the transformation to the cylinder collider in local space, consequently scaling, shearing, rotating
+        /// and translating its geometry exactly or approximately depending on the provided transformation.
+        /// </para>
+        /// </summary>
+        /// <param name="transform"> The affine transformation to apply. </param>
+        public void BakeTransform(AffineTransform transform)
+        {
+            var cylinder = Geometry;
+            var center = cylinder.Center;
+            var orientation = cylinder.Orientation;
+            var height = cylinder.Height;
+            var radius = cylinder.Radius;
+
+            var transformMatrix = (float4x4)transform;
+            var rigidTransform = Math.DecomposeRigidBodyTransform(transformMatrix);
+            var bakeToShape = Math.GetBakeToShape(transformMatrix, new float4x4(rigidTransform), ref center, ref orientation, bakeUniformScale: true, makeZAxisPrimaryBasis: true);
+            var scale = bakeToShape.DecomposeScale();
+
+            radius *= math.cmax(scale.xy);
+            height *= scale.z;
+
+            center = math.transform(rigidTransform, center);
+            orientation = math.normalize(math.mul(rigidTransform.rot, orientation));
+
+            SetGeometry(new CylinderGeometry
+            {
+                Center = center,
+                Orientation = orientation,
+                Height = height,
+                Radius = radius,
+                BevelRadius = math.min(cylinder.BevelRadius, math.min(height * 0.5f, radius)),
+                SideCount = cylinder.SideCount
+            });
+        }
+
         internal bool RespondsToCollision => m_Header.Material.CollisionResponse != CollisionResponsePolicy.None;
 
         /// <summary>   Gets the mass properties. </summary>

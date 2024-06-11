@@ -106,6 +106,39 @@ namespace Unity.Physics.Tests.Authoring
         }
 
         [Test]
+        // Test which ensures that a baked collider with the isTrigger and providesContacts option uses the expected CollisionResponsePolicy.
+        public void ColliderConversionSystem_IsTriggerOrProvidesContact_HasExpectedCollisionResponsePolicy([Values] bool isTrigger, [Values] bool providesContacts)
+        {
+            CreateHierarchy(
+                Array.Empty<Type>(),
+                Array.Empty<Type>(),
+                new[] {typeof(UnityEngine.SphereCollider)}
+            );
+
+            var collider = Child.GetComponent<UnityEngine.Collider>();
+            collider.isTrigger = isTrigger;
+            collider.providesContacts = providesContacts;
+
+            TestConvertedData<PhysicsCollider>(colliders =>
+            {
+                ref var colliderBlob = ref colliders[0].Value.As<Collider>();
+                var response = colliderBlob.GetCollisionResponse();
+                if (isTrigger)
+                {
+                    Assert.That(response, Is.EqualTo(CollisionResponsePolicy.RaiseTriggerEvents));
+                }
+                else if (providesContacts)
+                {
+                    Assert.That(response, Is.EqualTo(CollisionResponsePolicy.CollideRaiseCollisionEvents));
+                }
+                else
+                {
+                    Assert.That(response, Is.EqualTo(CollisionResponsePolicy.Collide));
+                }
+            }, 1);
+        }
+
+        [Test]
         // Test which ensures that a baked collider is initially shared but can be made unique
         public void ColliderConversionSystem_SharedColliders_MadeUnique([Values] MakeUniqueMode makeUniqueMode)
         {

@@ -45,11 +45,18 @@ namespace Unity.Physics.Authoring
 
         Material ProduceMaterial(UnityEngine.Collider collider)
         {
-            // n.b. need to manually opt in to collision events with legacy colliders if desired
             var material = new Material();
             if (collider.isTrigger)
             {
                 material.CollisionResponse = CollisionResponsePolicy.RaiseTriggerEvents;
+            }
+            else if (collider.providesContacts)
+            {
+                material.CollisionResponse = CollisionResponsePolicy.CollideRaiseCollisionEvents;
+            }
+            else
+            {
+                material.CollisionResponse = CollisionResponsePolicy.Collide;
             }
 
             var physicsMaterial = collider.sharedMaterial;

@@ -34,7 +34,7 @@ namespace Unity.Physics.Tests.Collision.Colliders
         [Test]
         public void ConvexCollider_Create_WhenCalledFromBurstJob_DoesNotThrow() => new CreateFromBurstJob().Run();
 
-        static readonly float3[] k_TestPoints =
+        internal static readonly float3[] k_TestPoints =
         {
             new float3(1.45f, 8.67f, 3.45f),
             new float3(8.75f, 1.23f, 6.44f),
@@ -95,6 +95,60 @@ namespace Unity.Physics.Tests.Collision.Colliders
         }
 
 #endif
+
+        #endregion
+
+        #region Modification
+
+        /// <summary>
+        /// Modify a <see cref="ConvexCollider"/> by baking a user-provided affine transformation,
+        /// containing translation, rotation, scale and shear, into its geometry.
+        /// </summary>
+        [Test]
+        public void TestConvexColliderBakeTransformAffine()
+        {
+            var points = new NativeArray<float3>(k_TestPoints, Allocator.Temp);
+            using var collider = ConvexCollider.Create(points, ConvexHullGenerationParameters.Default);
+
+            var translation = new float3(3.4f, 2.5f, -1.1f);
+            var rotation = quaternion.AxisAngle(math.normalize(new float3(1.1f, 10.1f, -3.4f)), math.radians(78.0f));
+            var scale = new float3(1.5f, 2.5f, 4.2f);
+            var transform = new AffineTransform(translation, rotation, scale);
+
+            // add some shear deformation
+            var shearXY = float3x3.identity;
+            var shearXZ = float3x3.identity;
+            var shearYZ = float3x3.identity;
+
+            shearXY[2][0] = shearXY[2][1] = 0.5f;
+            shearXZ[1][0] = shearXZ[1][2] = 0.42f;
+            shearYZ[0][1] = shearYZ[0][2] = 0.3f;
+
+            transform = math.mul(shearXY, math.mul(shearXZ, math.mul(shearYZ, transform)));
+
+            // obtain original vertices and transform them into expected vertices
+            ref var convexCollider = ref collider.As<ConvexCollider>();
+            var originalVertices = convexCollider.ConvexHull.Vertices;
+            var expectedVertices = new NativeArray<float3>(originalVertices.Length, Allocator.Temp);
+            for (int i = 0; i < originalVertices.Length; ++i)
+            {
+                expectedVertices[i] = math.transform(transform, originalVertices[i]);
+            }
+            var expectedConvexRadius = convexCollider.ConvexHull.ConvexRadius;
+
+            // apply the transformation to the convex collider
+            collider.Value.BakeTransform(transform);
+
+            // validate the resultant convex collider
+            var actualVertices = convexCollider.ConvexHull.Vertices;
+            Assert.AreEqual(expectedVertices.Length, actualVertices.Length);
+            for (int i = 0; i < expectedVertices.Length; ++i)
+            {
+                TestUtils.AreEqual(expectedVertices[i], actualVertices[i], math.EPSILON);
+            }
+
+            TestUtils.AreEqual(expectedConvexRadius, convexCollider.ConvexHull.ConvexRadius);
+        }
 
         #endregion
 

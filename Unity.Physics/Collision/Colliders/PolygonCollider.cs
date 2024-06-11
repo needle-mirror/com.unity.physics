@@ -304,7 +304,7 @@ namespace Unity.Physics
         /// <summary>   Gets or sets the material. </summary>
         ///
         /// <value> The material. </value>
-        public Material Material { get => m_Header.Material; set { if (!m_Header.Material.Equals(value)) { m_Header.Version += 1; m_Header.Material = value; } } }
+        public Material Material { get => m_Header.Material; set { if (!m_Header.Material.Equals(value)) { m_Header.Version++; m_Header.Material = value; } } }
 
         /// <summary>   Gets the collision filter. </summary>
         ///
@@ -317,6 +317,34 @@ namespace Unity.Physics
         public void SetCollisionFilter(CollisionFilter filter)
         {
             if (!m_Header.Filter.Equals(filter)) { m_Header.Version++; m_Header.Filter = filter; }
+        }
+
+        /// <summary>
+        /// <para>Bakes the provided transformation into the polygon collider geometry.</para>
+        ///
+        /// <para>
+        /// Applies the transformation to the polygon collider in local space, consequently scaling, shearing, rotating
+        /// and translating its geometry according to the provided transformation.
+        /// </para>
+        /// </summary>
+        /// <param name="transform"> The affine transformation to apply. </param>
+        public void BakeTransform(AffineTransform transform)
+        {
+            unsafe
+            {
+                m_Header.Version++;
+
+                fixed(PolygonCollider* collider = &this)
+                {
+                    var vertices = (float3*)collider->m_ConvexHullData.Vertices;
+                    for (int i = 0; i < ConvexHull.VerticesBlob.Length; ++i)
+                    {
+                        vertices[i] = math.transform(transform, vertices[i]);
+                    }
+                }
+
+                SetPlanes();
+            }
         }
 
         /// <summary>   Gets the mass properties. </summary>

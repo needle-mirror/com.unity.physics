@@ -77,7 +77,7 @@ namespace Unity.Physics
     static class SafetyChecks
     {
         [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
-        public static unsafe void CheckColliderTypeAndThrow<ExpectedType>(ColliderType type)
+        public static void CheckColliderTypeAndThrow<ExpectedType>(ColliderType type)
             where ExpectedType : ICollider
         {
             var dummyHeader = ColliderHeaderFakes.GetHeaderForColliderType<ExpectedType>();
@@ -136,10 +136,10 @@ namespace Unity.Physics
         }
 
         [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
-        public static void CheckAreEqualAndThrow(SimulationType expected, SimulationType actual)
+        public static void CheckAreEqualAndThrow<T>(T expected, T actual) where T : unmanaged, IEquatable<T>
         {
-            if (actual != expected)
-                throw new ArgumentException($"Simulation type {actual} is not supported. This method should only be called when using {expected}.");
+            if (!actual.Equals(expected))
+                throw new ArgumentException($"Actual value {actual} does not equal expected value {expected}.");
         }
 
         [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
@@ -263,7 +263,7 @@ namespace Unity.Physics
             Geometry_CheckFiniteAndPositiveAndThrow(geometry.Size, paramName, nameof(BoxGeometry.Size));
             Geometry_CheckFiniteAndPositiveAndThrow(geometry.BevelRadius, paramName, nameof(BoxGeometry.BevelRadius));
             if (geometry.BevelRadius < 0f || geometry.BevelRadius > math.cmin(geometry.Size) * 0.5f)
-                throw new ArgumentException($"{paramName}", $"{nameof(BoxGeometry.BevelRadius)} must be greater than or equal to and);less than or equal to half the smallest size dimension.");
+                throw new ArgumentException($"{paramName}", $"{nameof(BoxGeometry.BevelRadius)} must be greater than or equal to 0 and less than or equal to half the smallest size dimension.");
         }
 
         [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
@@ -295,6 +295,62 @@ namespace Unity.Physics
             Geometry_CheckFiniteAndPositiveAndThrow(geometry.Radius, paramName, nameof(SphereGeometry.Radius));
         }
 
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
+        public static void CheckValidBasisPriorityAndThrow(int3 basisPriority)
+        {
+            if (basisPriority.x == basisPriority.y
+                || basisPriority.x == basisPriority.z
+                || basisPriority.y == basisPriority.z)
+            {
+                throw new ArgumentException($"The provided {nameof(basisPriority)} is invalid. Every basis vector index must appear exactly once.");
+            }
+        }
+
+        #endregion
+
+        #region CollisionWorld Validation
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
+        public static void CheckValidCloneRequestAndThrow(CollisionWorld world, bool deepCopyDynamicColliders, bool deepCopyStaticColliders, NativeList<int> deepCopyRigidBodyList)
+        {
+            if (deepCopyRigidBodyList.IsEmpty)
+            {
+                return;
+            }
+            // else:
+
+            var numBodies = world.NumBodies;
+            var numDynamicBodies = world.NumDynamicBodies;
+
+            if (deepCopyRigidBodyList.Length > numBodies)
+            {
+                throw new ArgumentException("deepCopyRigidBodyIndexList.Length must be less than or equal to the number of rigid bodies.");
+            }
+
+            // ensure the provided rigid body indices are valid
+            foreach (var index in deepCopyRigidBodyList)
+            {
+                if (index < 0 || index >= numBodies)
+                {
+                    throw new ArgumentException("deepCopyRigidBodyIndexList contains an invalid index.");
+                }
+                if (deepCopyDynamicColliders && index < numDynamicBodies ||
+                    deepCopyStaticColliders && index > numDynamicBodies)
+                {
+                    throw new ArgumentException("deepCopyRigidBodyIndexList contains the index of a rigid body that is already deep copied using the deep copy input arguments.");
+                }
+            }
+
+            // ensure the provided rigid body indices are unique
+            var indexSet = new NativeHashSet<int>(deepCopyRigidBodyList.Length, Allocator.Temp);
+            foreach (var index in deepCopyRigidBodyList)
+            {
+                if (!indexSet.Add(index))
+                {
+                    throw new ArgumentException("deepCopyRigidBodyIndexList contains duplicate indices.");
+                }
+            }
+        }
+
         #endregion
 
         #region Throw Exceptions
@@ -311,6 +367,14 @@ namespace Unity.Physics
         [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void ThrowArgumentException(in FixedString32Bytes paramName, FixedString64Bytes message = default) =>
             throw new ArgumentException($"{message}", $"{paramName}");
+
+        #endregion
+
+        #region Log
+
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
+        public static void LogWarning(FixedString64Bytes message = default) =>
+            UnityEngine.Debug.LogWarning(message);
 
         #endregion
     }

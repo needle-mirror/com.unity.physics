@@ -1,5 +1,3 @@
-using System;
-using Unity.Physics.Systems;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -382,6 +380,11 @@ namespace Unity.Physics.Authoring
             state.RequireForUpdate<PhysicsDebugDisplayData>();
 
             DrawColliderUtility.CreateGeometries(out DefaultGeometries);
+
+            // Register a ReadOnly dependency on PhysicsCollider components
+            state.GetComponentLookup<PhysicsCollider>(true);
+            // Register a ReadOnly dependency on PhysicsWorldSingleton
+            state.GetComponentLookup<PhysicsWorldSingleton>(true);
         }
 
         [BurstCompile]
@@ -452,6 +455,11 @@ namespace Unity.Physics.Authoring
             state.RequireForUpdate<PhysicsDebugDisplayData>();
 
             DrawColliderUtility.CreateGeometries(out DefaultGeometries);
+
+            // Register a ReadOnly dependency on PhysicsCollider components
+            state.GetComponentLookup<PhysicsCollider>(true);
+            // Register a ReadOnly dependency on PhysicsWorldSingleton
+            state.GetComponentLookup<PhysicsWorldSingleton>(true);
         }
 
         [BurstCompile]

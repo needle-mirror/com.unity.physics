@@ -8,14 +8,6 @@ namespace Unity.Physics.Authoring
 {
     static partial class PhysicsShapeExtensions
     {
-        static void MakeZAxisPrimaryBasis(ref int3 basisPriority)
-        {
-            if (basisPriority[1] == 2)
-                basisPriority = basisPriority.yxz;
-            else if (basisPriority[2] == 2)
-                basisPriority = basisPriority.zxy;
-        }
-
         #region Box
         [BurstCompile]
         internal struct BakeBoxJob : IJob
@@ -27,45 +19,14 @@ namespace Unity.Physics.Authoring
             public EulerAngles Orientation;
             public bool BakeUniformScale;
 
-            public static float4x4 GetBakeToShape(float4x4 localToWorld, float4x4 shapeToWorld, ref float3 center,
-                ref EulerAngles orientation, bool bakeUniformScale = true)
-            {
-                float4x4 bakeToShape;
-                float4x4 rotationMatrix = float4x4.identity;
-                var basisPriority = k_DefaultAxisPriority;
-                var sheared = localToWorld.HasShear();
-                if (localToWorld.HasNonUniformScale() || sheared)
-                {
-                    if (sheared)
-                    {
-                        var transformScale = localToWorld.DecomposeScale();
-                        var basisToWorld =
-                            GetBasisToWorldMatrix(localToWorld, center, orientation, transformScale);
-                        basisPriority = GetBasisAxisPriority(basisToWorld);
-                    }
-
-                    rotationMatrix = new float4x4(
-                        new float4 { [basisPriority[2]] = 1 },
-                        new float4 { [basisPriority[1]] = 1 },
-                        new float4 { [basisPriority[0]] = 1 },
-                        new float4 { [3] = 1 }
-                    );
-                }
-
-                bakeToShape = GetPrimitiveBakeToShapeMatrix(localToWorld, shapeToWorld, ref center,
-                    ref orientation, 1f, basisPriority, bakeUniformScale);
-
-                bakeToShape = math.mul(bakeToShape, rotationMatrix);
-                return bakeToShape;
-            }
-
             public void Execute()
             {
                 var center = Box[0].Center;
                 var size = Box[0].Size;
                 var bevelRadius = Box[0].BevelRadius;
+                quaternion orientation = Orientation;
 
-                var bakeToShape = GetBakeToShape(LocalToWorld, ShapeToWorld, ref center, ref Orientation, BakeUniformScale);
+                var bakeToShape = Math.GetBakeToShape(LocalToWorld, ShapeToWorld, ref center, ref orientation, BakeUniformScale);
                 bakeToShape = math.mul(bakeToShape, float4x4.Scale(size));
 
                 var scale = bakeToShape.DecomposeScale();
@@ -75,7 +36,7 @@ namespace Unity.Physics.Authoring
                 Box[0] = new BoxGeometry
                 {
                     Center = center,
-                    Orientation = Orientation,
+                    Orientation = orientation,
                     Size = size,
                     BevelRadius = math.clamp(bevelRadius, 0f, 0.5f * math.cmin(size)),
                 };
@@ -93,35 +54,14 @@ namespace Unity.Physics.Authoring
             public float4x4 ShapeToWorld;
             public bool BakeUniformScale;
 
-            public static float4x4 GetBakeToShape(float4x4 localToWorld, float4x4 shapeToWorld, ref float3 center,
-                ref EulerAngles orientation, bool bakeUniformScale = true)
-            {
-                var basisPriority = k_DefaultAxisPriority;
-                var sheared = localToWorld.HasShear();
-                if (localToWorld.HasNonUniformScale() || sheared)
-                {
-                    if (sheared)
-                    {
-                        var transformScale = localToWorld.DecomposeScale();
-                        var basisToWorld = GetBasisToWorldMatrix(localToWorld, center, orientation, transformScale);
-                        basisPriority = GetBasisAxisPriority(basisToWorld);
-                    }
-
-                    MakeZAxisPrimaryBasis(ref basisPriority);
-                }
-
-                return GetPrimitiveBakeToShapeMatrix(localToWorld, shapeToWorld, ref center, ref orientation, 1f,
-                    basisPriority, bakeUniformScale);
-            }
-
             public void Execute()
             {
                 var radius = Capsule[0].Radius;
                 var center = Capsule[0].Center;
                 var height = Capsule[0].Height;
-                var orientationEuler = Capsule[0].OrientationEuler;
+                quaternion orientation = Capsule[0].OrientationEuler;
 
-                var bakeToShape = GetBakeToShape(LocalToWorld, ShapeToWorld, ref center, ref orientationEuler, BakeUniformScale);
+                var bakeToShape = Math.GetBakeToShape(LocalToWorld, ShapeToWorld, ref center, ref orientation, BakeUniformScale, makeZAxisPrimaryBasis: true);
                 var scale = bakeToShape.DecomposeScale();
 
                 radius *= math.cmax(scale.xy);
@@ -129,7 +69,7 @@ namespace Unity.Physics.Authoring
 
                 Capsule[0] = new CapsuleGeometryAuthoring
                 {
-                    OrientationEuler = orientationEuler,
+                    OrientationEuler = orientation,
                     Center = center,
                     Height = height,
                     Radius = radius
@@ -150,35 +90,15 @@ namespace Unity.Physics.Authoring
             public EulerAngles Orientation;
             public bool BakeUniformScale;
 
-            public static float4x4 GetBakeToShape(float4x4 localToWorld, float4x4 shapeToWorld, ref float3 center,
-                ref EulerAngles orientation, bool bakeUniformScale = true)
-            {
-                var basisPriority = k_DefaultAxisPriority;
-                var sheared = localToWorld.HasShear();
-                if (localToWorld.HasNonUniformScale() || sheared)
-                {
-                    if (sheared)
-                    {
-                        var transformScale = localToWorld.DecomposeScale();
-                        var basisToWorld = GetBasisToWorldMatrix(localToWorld, center, orientation, transformScale);
-                        basisPriority = GetBasisAxisPriority(basisToWorld);
-                    }
-
-                    MakeZAxisPrimaryBasis(ref basisPriority);
-                }
-
-                return GetPrimitiveBakeToShapeMatrix(localToWorld, shapeToWorld, ref center, ref orientation, 1f,
-                    basisPriority, bakeUniformScale);
-            }
-
             public void Execute()
             {
                 var center = Cylinder[0].Center;
                 var height = Cylinder[0].Height;
                 var radius = Cylinder[0].Radius;
                 var bevelRadius = Cylinder[0].BevelRadius;
+                quaternion orientation = Orientation;
 
-                var bakeToShape = GetBakeToShape(LocalToWorld, ShapeToWorld, ref center, ref Orientation, BakeUniformScale);
+                var bakeToShape = Math.GetBakeToShape(LocalToWorld, ShapeToWorld, ref center, ref orientation, BakeUniformScale, makeZAxisPrimaryBasis: true);
                 var scale = bakeToShape.DecomposeScale();
 
                 height *= scale.z;
@@ -187,7 +107,7 @@ namespace Unity.Physics.Authoring
                 Cylinder[0] = new CylinderGeometry
                 {
                     Center = center,
-                    Orientation = Orientation,
+                    Orientation = orientation,
                     Height = height,
                     Radius = radius,
                     BevelRadius = math.min(bevelRadius, math.min(height * 0.5f, radius)),
@@ -232,11 +152,11 @@ namespace Unity.Physics.Authoring
             {
                 var center = Sphere[0].Center;
                 var radius = Sphere[0].Radius;
-                var orientation = Orientation[0];
+                quaternion orientation = Orientation[0];
 
-                var basisToWorld = GetBasisToWorldMatrix(LocalToWorld, center, orientation, 1f);
-                var basisPriority = basisToWorld.HasShear() ? GetBasisAxisPriority(basisToWorld) : k_DefaultAxisPriority;
-                var bakeToShape = GetPrimitiveBakeToShapeMatrix(LocalToWorld, ShapeToWorld, ref center, ref orientation, 1f, basisPriority, BakeUniformScale);
+                var basisToWorld = Math.GetBasisToWorldMatrix(LocalToWorld, center, orientation, 1f);
+                var basisPriority = basisToWorld.HasShear() ? Math.GetBasisAxisPriority(basisToWorld) : Math.Constants.DefaultAxisPriority;
+                var bakeToShape = Math.GetPrimitiveBakeToShapeMatrix(LocalToWorld, ShapeToWorld, ref center, ref orientation, basisPriority, BakeUniformScale);
 
                 radius *= math.cmax(bakeToShape.DecomposeScale());
 
@@ -358,24 +278,6 @@ namespace Unity.Physics.Authoring
                     ForceUniqueIdentifier, GenerationParameters, Material, CollisionFilter, BakeFromShape,
                     Inputs, AllSkinIndices, AllBlendShapeWeights
                 );
-            }
-        }
-        #endregion
-
-
-        #region AABB
-        [BurstCompile]
-        internal struct GetAabbJob : IJob
-        {
-            [ReadOnly] public NativeArray<float3> Points;
-            public NativeArray<Aabb> Aabb;
-
-            public void Execute()
-            {
-                var aabb = new Aabb { Min = float.MaxValue, Max = float.MinValue };
-                for (var i = 0; i < Points.Length; ++i)
-                    aabb.Include(Points[i]);
-                Aabb[0] = aabb;
             }
         }
         #endregion

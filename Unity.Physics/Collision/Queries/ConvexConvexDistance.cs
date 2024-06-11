@@ -94,7 +94,7 @@ namespace Unity.Physics
                         float detB = math.dot(crossB, C.Xyz);
                         if (detA < 0)
                         {
-                            if (detB >= 0 || Det(n, crossA, C.Xyz) < 0)
+                            if (detB >= 0 || math.determinant(new float3x3(n, crossA, C.Xyz)) < 0)
                             {
                                 A = B;
                             }
@@ -216,10 +216,10 @@ namespace Unity.Physics
                     }
                     case 4:
                     {
-                        coordinates.x = Det(D.Xyz, C.Xyz, B.Xyz);
-                        coordinates.y = Det(D.Xyz, A.Xyz, C.Xyz);
-                        coordinates.z = Det(D.Xyz, B.Xyz, A.Xyz);
-                        coordinates.w = Det(A.Xyz, B.Xyz, C.Xyz);
+                        coordinates.x = math.determinant(new float3x3(D.Xyz, C.Xyz, B.Xyz));
+                        coordinates.y = math.determinant(new float3x3(D.Xyz, A.Xyz, C.Xyz));
+                        coordinates.z = math.determinant(new float3x3(D.Xyz, B.Xyz, A.Xyz));
+                        coordinates.w = math.determinant(new float3x3(A.Xyz, B.Xyz, C.Xyz));
                         float sum = math.csum(coordinates.xyzw);
                         UnityEngine.Assertions.Assert.AreNotEqual(sum, 0.0f); // TODO just checking that this doesn't happen in my tests
                         if (sum == 0.0f) // Unexpected case, may introduce significant error by dropping a vertex but it's better than nan

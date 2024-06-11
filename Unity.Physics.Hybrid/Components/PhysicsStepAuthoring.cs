@@ -94,6 +94,38 @@ namespace Unity.Physics.Authoring
         [Tooltip("Specifies whether to update the collision world an additional time after the step for more precise collider queries.")]
         bool m_SynchronizeCollisionWorld = Default.SynchronizeCollisionWorld > 0 ? true : false;
 
+        /// <summary>
+        /// Enables the incremental dynamic broadphase. <para/>
+        /// Enabling this option will update the dynamic broadphase incrementally whenever changes between simulation steps occur,
+        /// potentially leading to time savings for cases with many dynamic rigid bodies that don't move or otherwise change."
+        /// </summary>
+        public bool IncrementalDynamicBroadphase
+        {
+            get => m_IncrementalDynamicBroadphase;
+            set => m_IncrementalDynamicBroadphase = value;
+        }
+        [SerializeField]
+        [Tooltip("Enables the incremental dynamic broadphase.\n" +
+            "Enabling this option will update the dynamic broadphase incrementally whenever changes between simulation steps occur," +
+            "potentially leading to time savings for cases with many dynamic rigid bodies that don't move or otherwise change.")]
+        bool m_IncrementalDynamicBroadphase = Default.IncrementalDynamicBroadphase;
+
+        /// <summary>
+        /// Enables the incremental static broadphase. <para/>
+        /// Enabling this option will update the static broadphase incrementally whenever changes between simulation steps occur,
+        /// potentially leading to time savings for cases with many static rigid bodies that don't move or otherwise change."
+        /// </summary>
+        public bool IncrementalStaticBroadphase
+        {
+            get => m_IncrementalStaticBroadphase;
+            set => m_IncrementalStaticBroadphase = value;
+        }
+        [SerializeField]
+        [Tooltip("Enables the incremental static broadphase.\n" +
+            "Enabling this option will update the static broadphase incrementally whenever changes between simulation steps occur," +
+            "potentially leading to time savings for cases with many static rigid bodies that don't move or otherwise change.")]
+        bool m_IncrementalStaticBroadphase = Default.IncrementalStaticBroadphase;
+
         internal PhysicsStep AsComponent => new PhysicsStep
         {
             SimulationType = SimulationType,
@@ -109,7 +141,9 @@ namespace Unity.Physics.Authoring
             } :
             Solver.StabilizationHeuristicSettings.Default,
             MultiThreaded = (byte)(MultiThreaded ? 1 : 0),
-            SynchronizeCollisionWorld = (byte)(SynchronizeCollisionWorld ? 1 : 0)
+            SynchronizeCollisionWorld = (byte)(SynchronizeCollisionWorld ? 1 : 0),
+            IncrementalDynamicBroadphase = IncrementalDynamicBroadphase,
+            IncrementalStaticBroadphase = IncrementalStaticBroadphase
         };
 
         void OnValidate()

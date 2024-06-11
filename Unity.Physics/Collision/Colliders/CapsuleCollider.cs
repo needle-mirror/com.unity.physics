@@ -204,6 +204,55 @@ namespace Unity.Physics
             if (!m_Header.Filter.Equals(filter)) { m_Header.Version++; m_Header.Filter = filter; }
         }
 
+        /// <summary>
+        /// <para>Bakes the provided transformation into the capsule collider geometry.</para>
+        ///
+        /// <para>
+        /// Applies the transformation to the capsule collider in local space, consequently scaling, shearing, rotating
+        /// and translating its geometry exactly or approximately depending on the provided transformation.
+        /// </para>
+        /// </summary>
+        /// <param name="transform"> The affine transformation to apply. </param>
+        public void BakeTransform(AffineTransform transform)
+        {
+            var capsule = Geometry;
+            var radius = capsule.Radius;
+            var center = capsule.GetCenter();
+            var height = capsule.GetHeight();
+            var zAxis = new float3 { z = 1f };
+            // flip sign if capsule aligned with z axis and axis points in opposite direction
+            var capsuleVector = capsule.Vertex1 - capsule.Vertex0;
+            var sum = math.csum(capsuleVector);
+            var dot = capsuleVector.z; // i.e., math.dot(capsuleVector, zAxis)
+            var sign = math.select(1f, math.sign(dot), math.abs(sum) - math.abs(dot) < 1e-5f);
+            var orientation = quaternion.LookRotationSafe(capsuleVector, zAxis);
+
+            var transformMatrix = (float4x4)transform;
+            var rigidTransform = Math.DecomposeRigidBodyTransform(transformMatrix);
+            var bakeToShape = Math.GetBakeToShape(transformMatrix, new float4x4(rigidTransform), ref center, ref orientation, bakeUniformScale: true, makeZAxisPrimaryBasis: true);
+            var scale = bakeToShape.DecomposeScale();
+
+            radius *= math.cmax(scale.xy);
+            height *= scale.z;
+
+            center = math.transform(rigidTransform, center);
+            orientation = math.normalize(math.mul(rigidTransform.rot, orientation));
+
+            var halfHeight   = 0.5f * height;
+            var halfDistance = halfHeight - radius;
+            var axis         = math.normalize(math.rotate(orientation, sign * zAxis));
+            var halfAxis     = axis * halfDistance;
+            var vertex0      = center - halfAxis;
+            var vertex1      = center + halfAxis;
+
+            SetGeometry(new CapsuleGeometry
+            {
+                Vertex0 = vertex0,
+                Vertex1 = vertex1,
+                Radius = radius
+            });
+        }
+
         /// <summary>   Gets the type. </summary>
         ///
         /// <value> The type. </value>

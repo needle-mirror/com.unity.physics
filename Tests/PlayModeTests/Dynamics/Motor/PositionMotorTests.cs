@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 using Unity.Mathematics;
 using Random = Unity.Mathematics.Random;
@@ -15,13 +16,10 @@ namespace Unity.Physics.Tests.Motors
         // 3) Verifies that the maxImpulse is never exceeded
         void TestSimulatePositionMotor(string testName, Joint jointData,
             MotionVelocity velocityA, MotionVelocity velocityB, MotionData motionA, MotionData motionB,
-            bool useGravity, float3 targetPosition, float maxImpulse)
+            bool useGravity, float3 targetPosition, float maxImpulse, int numStabilizingSteps)
         {
-            string failureMessage;
-
             int numIterations = 4;
             int numSteps = 30; // duration = 0.5s
-            int numStabilizingSteps = 0; //takes some iterations to reach the target velocity
 
             var position0 = motionA.WorldFromMotion.pos;
             var rotation0 = motionA.WorldFromMotion.rot;
@@ -32,8 +30,8 @@ namespace Unity.Physics.Tests.Motors
                 useGravity, maxImpulse, motorOrientation, numIterations, numSteps, numStabilizingSteps,
                 out float3 accumulateAngularVelocity, out float3 accumulateLinearVelocity);
 
-            // Note: some off-axis / gravity enabled tests require the *1000 to pass
-            var testThreshold = math.EPSILON * 1000.0f;
+            // Note: some off-axis / gravity / softer spring & damping enabled tests require a larger threshold
+            var testThreshold = 0.01f;
 
             // Verify that bodyA arrived at target position by some threshold, unless the maxImpulse was zero
             var distanceAmoved = motionA.WorldFromMotion.pos - position0;
@@ -41,7 +39,7 @@ namespace Unity.Physics.Tests.Motors
                 ? math.abs(distanceAmoved) //if maxImpulse=0, then motor shouldn't move
                 : math.abs(targetPosition - distanceAmoved);
 
-            failureMessage = $"{testName}: Position motor didn't arrive at target {targetPosition} by this margin {compareToTarget}";
+            string failureMessage = $"{testName}: Position motor didn't arrive at target {targetPosition} by this margin {compareToTarget}";
             Assert.Less(compareToTarget.x, testThreshold, failureMessage);
             Assert.Less(compareToTarget.y, testThreshold, failureMessage);
             Assert.Less(compareToTarget.z, testThreshold, failureMessage);
@@ -54,45 +52,90 @@ namespace Unity.Physics.Tests.Motors
             Assert.Less(orientationDifference.z, testThreshold, failureMessage);
         }
 
-        // Goal of the test cases are to check for positive and negative targets that are both axis-aligned and off-axis.
-        // For each case, we test with gravity enabled and disabled.
-        static readonly TestCaseData[] k_PM_OrientationTestCases =
+        // Check for positive and negative targets that are both axis-aligned and off-axis.
+        private static readonly float3[] k_PM_DirectionOfMovement =
         {
-            new TestCaseData(new float3(0f, 0f, -1f), false).SetName("Axis Aligned -z, without gravity"),
-            new TestCaseData(new float3(0f, 0f, -1f), true).SetName("Axis Aligned -z, with gravity"),
-            new TestCaseData(new float3(0f, 0f, 1f), false).SetName("Axis Aligned +z, without gravity"),
-            new TestCaseData(new float3(0f, 0f, 1f), true).SetName("Axis Aligned +z, with gravity"),
+            new float3(0f, 0f, -1f),
+            new float3(0f, 0f, 1f),
+            new float3(0f, -1f, 0f),
+            new float3(0f, 1f, 0f),
+            new float3(-1f, 0f, 0f),
+            new float3(1f, 0f, 0f),
 
-            new TestCaseData(new float3(0f, -1f, 0f), false).SetName("Axis Aligned -y, without gravity"),
-            //new TestCaseData(new float3(0f, -1f, 0f), true).SetName("Axis Aligned -y, with gravity"), //Disabled since applying gravity along the axis of motion fails tests
-            new TestCaseData(new float3(0f, 1f, 0f), false).SetName("Axis Aligned +y, without gravity"),
-            //new TestCaseData(new float3(0f, 1f, 0f), true).SetName("Axis Aligned +y, with gravity"), //Disabled since applying gravity along the axis of motion fails tests
-
-            new TestCaseData(new float3(-1f, 0f, 0f), false).SetName("Axis Aligned -x, without gravity"),
-            new TestCaseData(new float3(-1f, 0f, 0f), true).SetName("Axis Aligned -x, with gravity"),
-            new TestCaseData(new float3(1f, 0f, 0f), false).SetName("Axis Aligned +x, without gravity"),
-            new TestCaseData(new float3(1f, 0f, 0f), true).SetName("Axis Aligned +x, with gravity"),
-
-            new TestCaseData(new float3(-1f, 1f, 0f), false).SetName("Not Axis Aligned 1 without gravity"),
-            new TestCaseData(new float3(3f, 0f, -2f), false).SetName("Not Axis Aligned 2, without gravity"),
-            new TestCaseData(new float3(0f, 0.5f, -2f), false).SetName("Not Axis Aligned 3, without gravity"),
-            new TestCaseData(new float3(1.5f, 1.5f, 1.5f), false).SetName("Not Axis Aligned 4, without gravity"),
-            new TestCaseData(new float3(-1.5f, -1.5f, -1.5f), false).SetName("Not Axis Aligned 5, without gravity"),
-            new TestCaseData(new float3(1.5f, -1.5f, 1.5f), false).SetName("Not Axis Aligned 6, without gravity"),
-
-            new TestCaseData(new float3(-1f, 1f, 0f), true).SetName("Not Axis Aligned 1 with gravity"),
-            new TestCaseData(new float3(3f, 0f, -2f), true).SetName("Not Axis Aligned 2, with gravity"),
-            new TestCaseData(new float3(0f, 0.5f, -2f), true).SetName("Not Axis Aligned 3, with gravity"),
-            new TestCaseData(new float3(1.5f, 1.5f, 1.5f), true).SetName("Not Axis Aligned 4, with gravity"),
-            new TestCaseData(new float3(-1.5f, -1.5f, -1.5f), true).SetName("Not Axis Aligned 5, with gravity"),
-            new TestCaseData(new float3(1.5f, -1.5f, 1.5f), true).SetName("Not Axis Aligned 6, with gravity"),
+            new float3(-1f, 1f, 0f),
+            new float3(3f, 0f, -2f),
+            new float3(0f, 0.5f, -2f),
+            new float3(1.5f, 1.5f, 1.5f),
+            new float3(-1.5f, -1.5f, -1.5f),
+            new float3(1.5f, -1.5f, 1.5f)
         };
 
+        // Test with gravity enabled and disabled.
+        private static readonly bool[] k_PM_UseGravity =
+        {
+            true,
+            false
+        };
+
+        // Since the value of spring frequency and damping ratio are so coupled, do not test the permutations separately
+        // First index (x) = Spring Frequency, Second index (y) = Damping Ratio
+        private static readonly float2[] k_PM_SpringFrequencyAndDampingRatio =
+        {
+            new float2(Constraint.DefaultSpringFrequency, Constraint.DefaultDampingRatio),
+            new float2(5.0f, 0.7f)
+        };
+
+        private static TestCaseData[] k_PM_Permutations = MakePermutations();
+
+        // Using a constant of numStabilizingStep = 30 for the softer spring/damping parameters right now. With the
+        // default spring/damping parameters, a value of 0 can be used
+        private static TestCaseData[] MakePermutations()
+        {
+            int count = 0;
+            int length = k_PM_UseGravity.Length * k_PM_DirectionOfMovement.Length *
+                k_PM_SpringFrequencyAndDampingRatio.Length;
+            TestCaseData[] testList = new TestCaseData[length];
+
+            foreach (bool iGravity in k_PM_UseGravity)
+            {
+                foreach (float3 iDirection in k_PM_DirectionOfMovement)
+                {
+                    foreach (float2 iSpringAndDamping in k_PM_SpringFrequencyAndDampingRatio)
+                    {
+                        // skip conditions (for tests known to fail)
+                        if (iGravity && (math.abs(iSpringAndDamping.x - Constraint.DefaultSpringFrequency) < 0.0001f))
+                        {
+                            // iDirection = (0f, -1f, 0f), iGravity=true, spring = Constraint.DefaultSpringFrequency) //Disabled since applying gravity along the axis of motion fails tests
+                            // iDirection = (0f, 1f, 0f), iGravity=true, spring = Constraint.DefaultSpringFrequency)  //Disabled since applying gravity along the axis of motion fails tests
+
+                            var check = math.length(math.abs(iDirection) - new float3(0f, 1f, 0f));
+                            if (check < 0.0001f)
+                            {
+                                length--;
+                                continue;
+                            }
+                        }
+
+                        var name =
+                            $"Test {count}: gravity:{iGravity}, direction:{iDirection}, springF:{iSpringAndDamping.x}, dampingR:{iSpringAndDamping.y}";
+                        testList[count] = new TestCaseData(iDirection, iGravity,
+                            iSpringAndDamping.x, iSpringAndDamping.y, 30).SetName(name);
+                        count++;
+                    }
+                }
+            }
+
+            Array.Resize(ref testList, count);
+
+            return testList;
+        }
+
         // Tests that with a given direction of movement of specified that bodyA arrives at the target position within a
-        // set number of steps. Variables: direction of movement, if gravity is enabled/disabled.
-        // Held constant: the target distance, the anchor position of bodyA, the maxImpulse for the motor
-        [TestCaseSource(nameof(k_PM_OrientationTestCases))]
-        public void OrientationTests_PM(float3 directionOfMovement, bool useGravity)
+        // set number of steps. Variables: direction of movement, if gravity is enabled/disabled, springFrequency and dampingRatio.
+        // Held constant: the target distance, the anchor position of bodyA, the maxImpulse for the motor, numStabilizingSteps
+        [TestCaseSource(nameof(k_PM_Permutations))]
+        public void OrientationTests_PM(float3 directionOfMovement, bool useGravity, float springFrequency,
+            float dampingRatio, int numStabilizingSteps)
         {
             // Constants: BodyB is resting above BodyA
             RigidTransform worldFromA = new RigidTransform(quaternion.identity, new float3(-0.5f, 5f, -4f));
@@ -112,10 +155,10 @@ namespace Unity.Physics.Tests.Motors
                 worldFromA, worldFromB, anchorA, axisInB, out BodyFrame jointFrameB, false);
 
             Joint joint = MotorTestRunner.CreateTestMotor(
-                PhysicsJoint.CreatePositionMotor(jointFrameA, jointFrameB, targetDistance, maxImpulse));
+                PhysicsJoint.CreatePositionMotor(jointFrameA, jointFrameB, targetDistance, maxImpulse, springFrequency, dampingRatio));
 
             TestSimulatePositionMotor("OrientationTests (PM)", joint,
-                velocityA, velocityB, motionA, motionB, useGravity, targetPosition, maxImpulse);
+                velocityA, velocityB, motionA, motionB, useGravity, targetPosition, maxImpulse, numStabilizingSteps);
         }
 
         // Test cases to verify: for a given direction of movement and with gravity
@@ -160,7 +203,7 @@ namespace Unity.Physics.Tests.Motors
                 PhysicsJoint.CreatePositionMotor(jointFrameA, jointFrameB, targetDistance, maxImpulse));
 
             TestSimulatePositionMotor("Max Impulse Tests (PM)", joint,
-                velocityA, velocityB, motionA, motionB, useGravity, targetDisplacement, maxImpulse);
+                velocityA, velocityB, motionA, motionB, useGravity, targetDisplacement, maxImpulse, 0);
         }
 
         // Runs a simulation with random pivots, random axes, and random velocities for both bodyA and bodyB,

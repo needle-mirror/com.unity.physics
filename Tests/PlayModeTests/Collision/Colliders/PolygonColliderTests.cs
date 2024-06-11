@@ -227,6 +227,61 @@ namespace Unity.Physics.Tests.Collision.Colliders
 
         #endregion
 
+        #region Modification
+
+        /// <summary>
+        /// Modify a <see cref="PolygonCollider"/> by baking a user-provided affine transformation,
+        /// containing translation, rotation, scale and shear, into its geometry.
+        /// </summary>
+        [Test]
+        public void TestPolygonColliderBakeTransformAffine()
+        {
+            float3[] vertices =
+            {
+                new(-4.5f, 0.0f, 1.0f),
+                new(3.4f, 0.7f, 1.0f),
+                new(3.4f, 2.7f, 1.0f),
+                new(-3.4f, 1.2f, 1.0f)
+            };
+
+            using var collider = PolygonCollider.CreateQuad(vertices[0], vertices[1], vertices[2], vertices[3]);
+
+            var translation = new float3(3.4f, 2.5f, -1.1f);
+            var rotation = quaternion.AxisAngle(math.normalize(new float3(1.1f, 10.1f, -3.4f)), 78.0f);
+            var scale = new float3(1.5f, 2.5f, 4.2f);
+            var transform = new AffineTransform(translation, rotation, scale);
+
+            // add some shear deformation
+            var shearXY = float3x3.zero;
+            var shearXZ = float3x3.zero;
+            var shearYZ = float3x3.zero;
+
+            shearXY[2][0] = shearXY[2][1] = 0.5f;
+            shearXZ[1][0] = shearXZ[1][2] = 0.42f;
+            shearYZ[0][1] = shearYZ[0][2] = 0.3f;
+
+            transform = math.mul(shearXY, math.mul(shearXZ, math.mul(shearYZ, transform)));
+
+            // apply the transformation
+            collider.Value.BakeTransform(transform);
+
+            // transform original vertices
+            for (int i = 0; i < 4; ++i)
+            {
+                vertices[i] = math.transform(transform, vertices[i]);
+            }
+
+            // validate polygon collider geometry
+            ref var quadCollider = ref collider.As<PolygonCollider>();
+
+            for (int i = 0; i < 4; ++i)
+            {
+                TestUtils.AreEqual(quadCollider.Vertices[i], vertices[i], 1e-5f);
+            }
+        }
+
+        #endregion
+
         #region IConvexCollider
 
         /// <summary>

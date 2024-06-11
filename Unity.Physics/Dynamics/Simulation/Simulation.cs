@@ -407,6 +407,11 @@ namespace Unity.Physics
         /// <returns>   The SimulationJobHandles. </returns>
         public SimulationJobHandles ScheduleBroadphaseJobs(SimulationStepInput input, JobHandle inputDeps, bool multiThreaded = true)
         {
+            return ScheduleBroadphaseJobsInternal(input, inputDeps, multiThreaded, incrementalDynamicBroadphase: false, incrementalStaticBroadphase: false);
+        }
+
+        internal SimulationJobHandles ScheduleBroadphaseJobsInternal(SimulationStepInput input, JobHandle inputDeps, bool multiThreaded, bool incrementalDynamicBroadphase, bool incrementalStaticBroadphase)
+        {
             SafetyChecks.CheckFiniteAndPositiveAndThrow(input.TimeStep, nameof(input.TimeStep));
             SafetyChecks.CheckInRangeAndThrow(input.NumSolverIterations, new int2(1, int.MaxValue), nameof(input.NumSolverIterations));
             SafetyChecks.CheckSimulationStageAndThrow(m_SimulationScheduleStage, SimulationScheduleStage.Idle);
@@ -428,8 +433,9 @@ namespace Unity.Physics
             }
 
             // Find all body pairs that overlap in the broadphase
-            var handles = input.World.CollisionWorld.ScheduleFindOverlapsJobs(
-                out NativeStream dynamicVsDynamicBodyPairs, out NativeStream dynamicVsStaticBodyPairs, handle, multiThreaded);
+            var handles = input.World.CollisionWorld.ScheduleFindOverlapsJobsInternal(
+                out NativeStream dynamicVsDynamicBodyPairs, out NativeStream dynamicVsStaticBodyPairs, handle,
+                multiThreaded, incrementalDynamicBroadphase, incrementalStaticBroadphase);
             handle = handles.FinalExecutionHandle;
             var disposeHandle = handles.FinalDisposeHandle;
             var postOverlapsHandle = handle;

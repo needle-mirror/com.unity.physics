@@ -121,7 +121,7 @@ namespace Unity.Physics
             float3x3 effectiveMass = JacobianUtilities.BuildSymmetricMatrix(EffectiveMassDiag, EffectiveMassOffDiag);
 
             var targetFromOrientationB = math.mul(WorldFromB.rot, Target); // Target vector is shifted based on the orientation of body B
-            float3 solveError = targetFromOrientationB - velocityA.LinearVelocity; //in world space, units: m/s
+            float3 solveError = (targetFromOrientationB - velocityA.LinearVelocity) * Damping; //in world space, units: m/s
 
             float3 impulse = math.mul(effectiveMass, solveError);
             impulse = JacobianUtilities.CapImpulse(impulse, ref AccumulatedImpulsePerAxis, MaxImpulseOfMotor);

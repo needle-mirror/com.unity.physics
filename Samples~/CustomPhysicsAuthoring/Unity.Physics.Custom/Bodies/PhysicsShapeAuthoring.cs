@@ -802,22 +802,23 @@ namespace Unity.Physics.Authoring
         internal unsafe void BakePoints(NativeArray<float3> points)
         {
             var localToShapeQuantized = GetLocalToShapeMatrix();
-            using (var aabb = new NativeArray<Aabb>(1, Allocator.TempJob))
-            {
-                new PhysicsShapeExtensions.GetAabbJob { Points = points, Aabb = aabb }.Run();
-                HashableShapeInputs.GetQuantizedTransformations(localToShapeQuantized, aabb[0], out localToShapeQuantized);
-            }
-            using (var bakedPoints = new NativeArray<float3>(points.Length, Allocator.TempJob, NativeArrayOptions.UninitializedMemory))
-            {
-                new BakePointsJob
-                {
-                    Points = points,
-                    LocalToShape = localToShapeQuantized,
-                    Output = bakedPoints
-                }.Schedule(points.Length, 16).Complete();
+            var aabb = new Aabb { Min = float.MaxValue, Max = float.MinValue };
+            foreach (var p in points)
+                aabb.Include(p);
 
-                UnsafeUtility.MemCpy(points.GetUnsafePtr(), bakedPoints.GetUnsafePtr(), points.Length * UnsafeUtility.SizeOf<float3>());
-            }
+            HashableShapeInputs.GetQuantizedTransformations(localToShapeQuantized, aabb, out localToShapeQuantized);
+            using var bakedPoints = new NativeArray<float3>(points.Length, Allocator.TempJob,
+                NativeArrayOptions.UninitializedMemory);
+
+            new BakePointsJob
+            {
+                Points = points,
+                LocalToShape = localToShapeQuantized,
+                Output = bakedPoints
+            }.Schedule(points.Length, 16).Complete();
+
+            UnsafeUtility.MemCpy(points.GetUnsafePtr(), bakedPoints.GetUnsafePtr(),
+                points.Length * UnsafeUtility.SizeOf<float3>());
         }
 
         [BurstCompile]

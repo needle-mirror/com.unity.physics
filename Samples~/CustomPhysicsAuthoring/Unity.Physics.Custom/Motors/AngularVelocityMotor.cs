@@ -14,6 +14,8 @@ namespace Unity.Physics.Authoring
         public float TargetSpeed;
         [Tooltip("The magnitude of the maximum impulse the motor can exert in a single step. Applies only to the motor constraint.")]
         public float MaxImpulseAppliedByMotor = math.INFINITY;
+        [Tooltip("A ratio describing how quickly a motor will arrive at the target. A value of 0 will oscillate about a solution indefinitely, while a value of 1 is critically damped. Default value is 2530.126 which describes a stiff spring")]
+        public float DampingRatio = Constraint.DefaultDampingRatio;
 
         private float3 PerpendicularAxisLocal;
         private float3 PositionInConnectedEntity;
@@ -48,7 +50,10 @@ namespace Unity.Physics.Authoring
                         Position = authoring.PositionInConnectedEntity
                     },
                     math.radians(authoring.TargetSpeed),
-                    authoring.MaxImpulseAppliedByMotor
+                    authoring.MaxImpulseAppliedByMotor,
+
+                    Constraint.DefaultSpringFrequency,
+                    authoring.DampingRatio
                 );
 
                 joint.SetImpulseEventThresholdAllConstraints(authoring.MaxImpulse);

@@ -497,6 +497,11 @@ namespace Unity.Physics
             float exp2 = math.pow(exp1, 1f / iterations);
 
             constraintDamping = 1 - exp2;
+            if (denom < math.EPSILON)
+            {
+                constraintTau = 0.0f;
+                return;
+            }
             constraintTau = hhww / denom * constraintDamping;
         }
 

@@ -545,8 +545,7 @@ namespace Unity.Physics
         /// <param name="springFrequency">  The spring frequency used to relax this constraint. </param>
         /// <param name="dampingRatio">     The damping ratio used to relax this constraint. </param>
         /// <returns>   A Constraint. </returns>
-        public static Constraint AngularVelocityMotor(float target, float maxImpulseOfMotor = DefaultMaxImpulse, float springFrequency = DefaultSpringFrequency,
-            float dampingRatio = DefaultDampingRatio)
+        public static Constraint AngularVelocityMotor(float target, float maxImpulseOfMotor = DefaultMaxImpulse, float springFrequency = DefaultSpringFrequency, float dampingRatio = DefaultDampingRatio)
         {
             SafetyChecks.CheckInRangeAndThrow(maxImpulseOfMotor, new float2(0f, float.PositiveInfinity), "maxImpulseOfMotor");
             return new Constraint

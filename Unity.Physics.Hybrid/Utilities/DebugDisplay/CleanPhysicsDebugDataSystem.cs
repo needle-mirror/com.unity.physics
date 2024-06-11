@@ -3,14 +3,15 @@ using Unity.Physics.Systems;
 
 namespace Unity.Physics.Authoring
 {
+#if UNITY_EDITOR
+
     /// <summary>
-    /// A system which cleans physics debug display data from the previous frame.
+    /// A system which cleans physics debug display data from the previous frame while in play mode.
     /// When using multiple physics worlds, in order for the debug display to work properly, you need to disable
-    /// the update of this system in either main physics group (<see cref="PhysicsSystemGroup"/>)
-    /// or in the custom physics group, whichever updates later in the loop.
+    /// the update of this system in any <see cref="PhysicsSystemGroup">physics system group</see> following the first one.
     /// </summary>
     [WorldSystemFilter(WorldSystemFilterFlags.Default)]
-    [UpdateInGroup(typeof(PhysicsDebugDisplayGroup), OrderFirst = true)]
+    [UpdateInGroup(typeof(PhysicsInitializeGroup), OrderFirst = true)]
     public partial struct CleanPhysicsDebugDataSystem_Default : ISystem
     {
         public void OnCreate(ref SystemState state)
@@ -26,8 +27,6 @@ namespace Unity.Physics.Authoring
 
     /// <summary>
     /// A system which cleans physics debug display data from the previous frame while in edit mode.
-    /// In case of using multiple worlds feature, in order for debug display to work properly
-    /// on multiple worlds, you need to disable the update of this system in editor display physics group (<see cref="PhysicsDisplayDebugGroup"/>).
     /// </summary>
     [WorldSystemFilter(WorldSystemFilterFlags.Editor)]
     [UpdateInGroup(typeof(PhysicsDebugDisplayGroup_Editor), OrderFirst = true)]
@@ -43,4 +42,5 @@ namespace Unity.Physics.Authoring
             DebugDisplay.DebugDisplay.Clear();
         }
     }
+#endif
 }

@@ -39,11 +39,14 @@ There are two potential methods to create a rotation motor using a GameObject Co
    - `Axis` = (0, 0, 1). The axis that the pivot will rotate about. This data is baked into the `BodyFrame` axis of bodyA.
    - `Auto Configure Connected Anchor` = True. This is always baked as if True. The `BodyFrame` of bodyB (the `Connected Body`) will be automatically calculated from the `Axis` and `Anchor` of bodyA. If it is not enabled, the baking pipeline will calculate the `BodyFrame` for the `Connected Body` as if it were enabled. This setting takes the `Anchor` and `Axis` and calculates the position of the `Connected Body` relative to the body with the motor on it. If a design requires this to be false then the motor API method must be used (see section on Authoring via the C# API).
    - `Use Spring` = True. This enables the position-based motor. This data is not baked directly, but is used to determine that this Hinge Joint should be a motor.
+   - `Spring` > `Spring` != 987. This is the spring constant of the spring behaviour of the motor. If set to zero, then the default value describing a stiff spring is used.
+   - `Spring` > `Damper` != 44. This is the damping coefficient of the motor. If set to zero, then the default value describing a stiff spring is used.
    - `Spring` > `Target Position` = 45. The target that the motor should drive for relative to its starting position. In degrees. The rotation direction follows the Left-Hand Rule for rotations.
-   - `Break Torque` = 1000 (Value arbitrarily set in this example). This is the maximum impulse that the motor constraint will be able to exert. Within the code, this is multiplied by 'fixedDeltaTime' to get an impulse. This data is baked into `maxImpulseOfMotor`. If set to Infinity (the default), then this motor is capable of exerting any force needed to reach the target. It is also baked into `MaxImpulse` for non-motorized angular constraints.
+   - `Motor` > ` Force` = 1000 (Value arbitrarily set in this example). This is the maximum impulse that the motor constraint will be able to exert. Within the code, this is multiplied by 'fixedDeltaTime' to get an impulse. This data is baked into `maxImpulseOfMotor`. If set to Infinity (the default), then this motor is capable of exerting any force needed to reach the target. It is also baked into `MaxImpulse` for non-motorized angular constraints.
+   - `Break Torque` : This value will be baked into the MaxImpulse data to enable breakable events. This data is baked into `MaxImpulse` and applies to non-motorized angular constraints.
    - `Break Force`: This value will be baked into the MaxImpulse data to enable breakable events. This data is baked into `MaxImpulse` and applies to non-motorized linear constraints.
 
-No other data is used by the baking pipeline at this time to create a Rotation Motor. In particular, note that in the `Spring` section of the `Hinge Joint` component, that neither `Spring` or `Damping` parameters are baked into the Entities data. The default values of the Unity Physics engine are used instead.
+No other data is used by the baking pipeline at this time to create a Rotation Motor. 
 
 #### Method 2) Using a `Configurable Joint` Component:
 
@@ -67,9 +70,9 @@ The General Rotation Motor Example is modified in the steps below to get around 
    - `Angular Y Motion` = Locked. The baking pipeline currently requires this to be Locked. (Applies to the `Secondary Axis` field).
    - `Angular Z Motion` = Locked. The baking pipeline currently requires this to be Locked. (Applies to the axis perpendicular to both `Axis` and `Secondary Axis` field).
    - `Angular X Drive`:
-     - `Position Spring` = 10000. While not directly used by the baking, it is used to determine if a `Configurable Joint` is a rotation motor. For it to be identified as such, it needs to be non-zero.
-     - `Position Damper`: is not used to bake a `Rotation Motor`
-     - `Maximum Force` = 3.402823e+38. This is the maximum impulse that the motor constraint will be able to exert. Within the code, this is multiplied by 'fixedDeltaTime' to get an impulse. This would set the equivalent of `Break Torque` for a `Hinge Joint`. This data is baked into `MaxImpulseOfMotor`. 
+     - `Position Spring` = 987. This is the spring constant of the motor. It describes how 'bouncy' a motor will be when it converges to its target angle. This value will be baked and used by the solver.
+     - `Position Damper` = 44. This is the damping coefficient of the motor. This value will be baked and used by the solver.
+     - `Maximum Force` = 60,000. This is the maximum impulse that the motor constraint will be able to exert. Within the code, this is multiplied by 'fixedDeltaTime' to get an impulse. This would set the equivalent of `Motor` > `Force` for a `Hinge Joint`. This data is baked into `MaxImpulseOfMotor`. 
    - `Target Rotation` = (45, 0, 0). The target rotation in degrees, relative to the target rotation. Note that the x,y,z components of this field align with the setting of `Axis` and `Secondary Axis`, not x,y,z in world space. Since drives along the primary `Axis` are only supported, only the x-component of this field is baked into `Target`.
    - `Break Force` = Infinity. This value is multiplied by 'fixedDeltaTime' to get an impulse. It is baked into 'MaxImpulse' for breakable events and applies only to linear non-motorized constraints.
    - `Break Torque` = Infinity. This value is multiplied by 'fixedDeltaTime' to get an impulse. It is baked into 'MaxImpulse' for breakable events and applies only to angular non-motorized constraints.
@@ -85,13 +88,17 @@ PhysicsJoint.CreateRotationalMotor(
     bodyAFromJoint, 
     bodyBFromJoint, 
     target, 
-    maxImpulseOfMotor)
+    maxImpulseOfMotor,
+    springFrequency, 
+    dampingRatio)
 ```
 where:
 - `bodyAFromJoint`: A `BodyFrame` that specifies the pivot point and axis of rotation in the space of body A
 - `bodyBFromJoint`: A `BodyFrame` that specifies the pivot point and axis of alignment in the space of body B (the Connected Body).
 - `target`: The magnitude of the target in radians. It is relative to the current orientation.
 - `maxImpulseOfMotor`: The magnitude of the max impulse that a motor constraint can exert in a single step. If adjusting this parameter, a trial and error approach may be needed to get the desired behaviour.
+- `springFrequency`: The spring frequency of the spring behaviour to be simulated, in Hz. If this field is omitted, the default spring frequency of 74341.31 will be used.
+- `dampingRatio`: The damping ratio of the spring behaviour to be simulated. If this field is omitted, the default damping ratio of 2530.126 will be used.
 
 When authoring via Component, it is required to set `Auto Configure Connected Anchor` = True, however, if a design requires this to be false then it is possible to use this API method instead. Particular care should be taken to ensure that `bodyBFromJoint` is set correctly. However, disconnecting bodyA and bodyB in this way is unsupported for this version.
 
@@ -105,14 +112,16 @@ To author the General Rotation Motor Example 1, use the following settings:
   - `PerpendicularAxis` = (-1,0,0)
   - `Position` = (0.5, -0.5, 0)
 - `target` = 0.7853982
-- `maxImpulseOfMotor`: Infinity
+- `maxImpulseOfMotor`: 10,000
+- `springFrequency` : 5
+- `dampingRatio` : 0.7
 
 See the C# API Documentation for more details.
 
 **Important!** All axes within the `BodyFrame` parameters must be normalized.
 
 ### Authoring via the Rotational Motor Authoring Component in Physics Samples
-The Rotational Motor component exists only in the Unity Physics Samples Project and is intended for educational/internal testing purposes. To use this component, the script must be available locally. It can be found in the Unity Physics Samples Project at this path: `Assets/Common/Scripts/Creators/Motors/RotationalMotor.cs`. Arguments for this component may change, or the component may be deprecated in the future. See the Joints/Motors Demos in the Unity Physics Samples for sample usage.
+The Rotational Motor component exists only in the Unity Physics Samples Project and is intended for educational/internal testing purposes. To use this component, the Unity Physics Samples must be imported from the Package Manager. Then, the script can be found in the Unity Physics Samples Project at this path: `Assets/Samples/Unity Physics/0.62.0-preview.162/Custom Physics Authoring/Unity.Physics.Custom/Motors/RotationalMotor.cs`. Arguments for this component may change, or the component may be deprecated in the future. See the Joints/Motors Demos in the Unity Physics Samples for sample usage.
 
 To set up the General Rotation Motor Example 1, follow these steps:
 1. Starting from a SubScene, add a GameObject > Cube. Rename it 'StaticCube'. A BoxCollider should already be present as a component. Remove the Box Collider. 
@@ -127,7 +136,9 @@ To set up the General Rotation Motor Example 1, follow these steps:
   - `Pivot Position` = (0.5, 0.5, 0). This is the pivot position of the motor. It is relative to the centre of 'RotationMotor'. This data is baked into the `BodyFrame` position of bodyA.
   - `Axis of Rotation` = (0, 0, 1). The axis that the pivot will rotate about. This data is baked into the `BodyFrame` axis of bodyA.
   - `Target Angle` = 45. The target that the motor should drive for is relative to its starting orientation. In degrees. The rotation direction follows the Left-Hand Rule.
-  - `Max Impulse Applied by Motor` = Infinity. This is the maximum impulse that can be exerted by the motor. This applies only to motorized constraints. Since this maximum cannot be exceeded, a motorized constraint cannot break.
+  - `Max Impulse Applied by Motor` = 10,000. This is the maximum impulse that can be exerted by the motor. This applies only to motorized constraints. Since this maximum cannot be exceeded, a motorized constraint cannot break if this value is less than `Max Impulse`.
+  - `Spring Frequency`: 5. The spring frequency of the spring behaviour to be simulated, in Hz. If this field is omitted, the default spring frequency of 74341.31 will be used.
+  - `Damping Ratio`: 0.7. The damping ratio of the spring behaviour to be simulated. If this field is omitted, the default damping ratio of 2530.126 will be used.
 
 All data in the `Rotational Motor` component is baked.
 
@@ -163,17 +174,19 @@ There are two potential methods to create an angular velocity motor using a Game
   - `Anchor` = (0.5, 0, 0.5). This is the pivot position of the motor. It is relative to the centre of 'AngularVelocityMotor'. This data is baked into the `BodyFrame` position of bodyA.
   - `Axis` = (0, 1, 0). The axis that the pivot will rotate about. This data is baked into the `BodyFrame` axis of bodyA.
   - `Auto Configure Connected Anchor` = True. This is always baked as if True. The `BodyFrame` of bodyB (the `Connected Body`) will be automatically calculated from the `Axis` and `Anchor` of bodyA. If it is not enabled, the baking pipeline will calculate the `BodyFrame` for the `Connected Body` as if it were enabled. This setting takes the `Anchor` and `Axis` and calculates the position of the `Connected Body` relative to the body with the motor on it. If a design requires this to be false then the motor API method must be used (see section on Authoring via the C# API).
+  - `Spring` > `Spring` = 0. This is the spring constant of the spring behaviour of the motor. If set to zero, then the default value describing a stiff spring is used. This doesn't need to be set for a velocity motor.
+  - `Spring` > `Damper` = 1. This is the damping coefficient of the motor. If set to zero, then the default value describing a stiff spring is used.
   - `Use Motor` = True. This enables the velocity-based motor. This data is not baked directly, but is used to determine that this Hinge Joint should be an angular velocity motor.
   - `Motor` > `Target Velocity` = 90. The target that the motor should drive for relative its starting position. In degrees/s. The rotation direction follows the Left-Hand Rule for rotations.
   - `Motor` > `Force` = 2000. (Value arbitrarily set in this example). This is the maximum impulse that the motor constraint will be able to exert. Within the code, this is multiplied by 'fixedDeltaTime' to get an impulse. This data is baked into `maxImpulseOfMotor`. If set to Infinity (the default), then this motor is capable of exerting any force needed to reach the target.
   - `Break Force` = Infinity. This value is multiplied by 'fixedDeltaTime' to get an impulse. It is baked into 'MaxImpulse' for breakable events and applies only to linear non-motorized constraints.
   - `Break Torque` = Infinity. This value is multiplied by 'fixedDeltaTime' to get an impulse. It is baked into 'MaxImpulse' for breakable events and applies only to angular non-motorized constraints.
 
-No other data is used by the baking pipeline at this time to create a Rotation Motor. In particular, note that in the `Spring` section of the `Hinge Joint` component, that neither `Spring` or `Damping` parameters are baked into the Entities data. The default values of the Unity Physics engine are used instead.
+No other data is used by the baking pipeline at this time to create an Angular Velocity Motor.
 
 #### Method 2) Using a `Configurable Joint` Component:
 
-While using this method is possible, it is recommended to use the `Hinge Joint` instead.
+While using this method is possible, it is recommended to use the `Hinge Joint` for simplicity.
 
 1. Repeat Steps 1-3 from Method 1 
 2. Add a `Configurable Joint` to the 'AngularVelocityMotor' GameObject 
@@ -189,8 +202,8 @@ While using this method is possible, it is recommended to use the `Hinge Joint` 
    - `Angular Z Motion` = Locked. The baking pipeline currently requires this to be Locked. (Applies to the axis perpendicular to both `Axis` and `Secondary Axis` field).
    - `Angular X Drive`:
       - `Position Spring` = 0. Is not used to bake an `Angular Velocity Motor`.
-      - `Position Damper` = 10000. While not directly used by the baking, it is used to determine if a `Configurable Joint` is an angular velocity motor For it to be identified as such, it needs to be non-zero.
-      - `Maximum Force` = 3.402823e+38. This would set the equivalent of `Break Torque` for a `Hinge Joint`. This data is baked into `MaxImpulseOfMotor`.
+      - `Position Damper` = 1. While not directly used by the baking, it is used to determine if a `Configurable Joint` is an angular velocity motor For it to be identified as such, it needs to be non-zero.
+      - `Maximum Force` = 2000. This is the maximum impulse that the motor constraint will be able to exert. Within the code, this is multiplied by 'fixedDeltaTime' to get an impulse. This data is baked into `MaxImpulseOfMotor`.
    - `Target Angular Velocity` = (pi/2, 0, 0). The angular velocity to target, in radians/s. Rotation direction follows the Left-Hand Rule for rotations. This data is baked into `Target`. Note that the x,y,z components of this field align with the setting of `Axis` and `Secondary Axis`, not x,y,z in world space.
    - `Break Force` = Infinity. This value is multiplied by 'fixedDeltaTime' to get an impulse. It is baked into 'MaxImpulse' for breakable events and applies only to linear non-motorized constraints.
    - `Break Torque` = Infinity. This value is multiplied by 'fixedDeltaTime' to get an impulse. It is baked into 'MaxImpulse' for breakable events and applies only to angular non-motorized constraints.
@@ -207,13 +220,17 @@ PhysicsJoint.CreateAngularVelocityMotor(
     bodyAFromJoint, 
     bodyBFromJoint, 
     target, 
-    maxImpulseOfMotor)
+    maxImpulseOfMotor,
+    springFrequency, 
+    dampingRatio)
 ```
 where:
 - `bodyAFromJoint`: A `BodyFrame` that specifies the pivot point and axis of rotation in the space of body A
 - `bodyBFromJoint`: A `BodyFrame` that specifies the pivot point and axis of alignment in the space of body B (the Connected Body).
 - `target`:  The target velocity in radians/s. The sign obeys the left-hand rule for rotations.
 - `maxImpulseOfMotor`: The magnitude of the max impulse that a motor constraint can exert in a single step. If adjusting this parameter, a trial and error approach may be needed to get the desired behaviour.
+- `springFrequency`: The spring frequency of the spring behaviour to be simulated, in Hz. If this field is omitted, the default spring frequency of 74341.31 will be used.
+- `dampingRatio`: The damping ratio of the spring behaviour to be simulated. If this field is omitted, the default damping ratio of 2530.126 will be used.
 
 When authoring via Component, it is required to set `Auto Configure Connected Anchor` = True, however, if a design requires this to be false then it is possible to use this API method instead. Particular care should be taken to ensure that `bodyBFromJoint` is set correctly. However, disconnecting bodyA and bodyB in this way is unsupported for this version.
 
@@ -228,13 +245,15 @@ To author the General Angular Velocity Motor Example 1, use the following settin
   - `Position` = (-0.5, 0, -0.5)
 - `target` = 1.570796
 - `maxImpulseOfMotor`: Infinity
+- `springFrequency` : 74341.31f
+- `dampingRatio` : 1
 
 See the C# API Documentation for more details.
 
 **Important!** All axes within the `BodyFrame` parameters must be normalized.
 
 ### Authoring via the Angular Velocity Motor Authoring Component in Physics Samples
-The Angular Velocity Motor component exists only in the Unity Physics Samples Project and is intended for educational/internal testing purposes. To use this component, the script must be available locally. It can be found in the Unity Physics Samples Project at this path: `Assets/Demos/4. Joints/Scripts/Creators/Motors/AngularVelocityMotor.cs`. Arguments for this component may change, or the component may be deprecated in the future. See the Joints/Motors Demos in the Unity Physics Samples for sample usage.
+The Angular Velocity Motor component exists only in the Unity Physics Samples Project and is intended for educational/internal testing purposes. To use this component, the Unity Physics Samples must be imported from the Package Manager. Then, the script can be found in the Unity Physics Samples Project at this path: `Assets/Samples/Unity Physics/0.62.0-preview.162/Custom Physics Authoring/Unity.Physics.Custom/Motors/AngularVelocityMotor.cs`. Arguments for this component may change, or the component may be deprecated in the future. See the Joints/Motors Demos in the Unity Physics Samples for sample usage.
 
 To set up the General Angular Velocity Motor Example 1, follow these steps:
 1. Starting from a SubScene, add a GameObject > Cube. Rename it 'StaticCube'. A BoxCollider should already be present as a component. Remove the Box Collider. 
@@ -250,6 +269,7 @@ To set up the General Angular Velocity Motor Example 1, follow these steps:
 - `Axis of Rotation` = (0, 1, 0). The axis that the pivot will rotate about. This data is baked into the `BodyFrame` axis of bodyA.
 - `Target Angle` = 90. The target velocity that the motor should drive for. In degrees/s. The rotation direction follows the Left-Hand Rule for rotations.
 - `Max Impulse Applied by Motor` = Infinity. This is the maximum impulse that can be exerted by the motor. This applies only to motorized constraints. Since this maximum cannot be exceeded, a motorized constraint cannot break.
+- `Damping Ratio`: 1. The damping ratio of the spring behaviour to be simulated. If this field is omitted, the default damping ratio of 2530.126 will be used.
 
 All data in the `Angular Velocity Motor` component is baked.
 
@@ -291,9 +311,9 @@ Using a `Configurable Joint` Component:
   - `Y / Z Motion` = Locked. The baking pipeline currently requires this to be Locked. (Applies to the `Secondary Axis` field and the implied tertiary axis).
   - `Angular X / Y / Z Motion` = Locked. For a linear motor, these must be locked. Required by the baking pipeline.
   - `X Drive`:
-    - `Position Spring` = 500. While not directly used by the baking, it is used to determine if a `Configurable Joint` is a position motor. For it to be identified as such, it needs to be non-zero.
-    - `Position Damper` = 0. Is not used to bake a `Position Motor`.
-    - `Maximum Force` = 3.402823e+38. This is the maximum impulse that the motor constraint will be able to exert. Within the code, this is multiplied by 'fixedDeltaTime' to get an impulse. This data is baked into `MaxImpulseOfMotor`.
+    - `Position Spring` = 987. This is the spring constant of the motor. It describes how 'bouncy' a motor will be when it converges to its target position. This value will be baked and used by the solver.
+    - `Position Damper` = 44. This is the damping coefficient of the motor. This value will be baked and used by the solver.
+    - `Maximum Force` = 60000. This is the maximum impulse that the motor constraint will be able to exert. Within the code, this is multiplied by 'fixedDeltaTime' to get an impulse. This data is baked into `MaxImpulseOfMotor`.
   - `Target Position` = (-2, 0, 0). This position is set relative to the targeted location. This data is baked into `Target`. Units are in m. Note that the x,y,z components of this field align with the setting of `Axis` and `Secondary Axis`, not x,y,z in world space. Since drives along the primary `Axis` are only supported, only the x-component of this field is baked.
   - `Break Force` = Infinity. This value is multiplied by 'fixedDeltaTime' to get an impulse. It is baked into 'MaxImpulse' for breakable events and applies only to linear non-motorized constraints.
   - `Break Torque` = Infinity. This value is multiplied by 'fixedDeltaTime' to get an impulse. It is baked into 'MaxImpulse' for breakable events and applies only to angular non-motorized constraints.
@@ -310,13 +330,17 @@ PhysicsJoint.CreatePositionMotor(
     bodyAFromJoint, 
     bodyBFromJoint, 
     target, 
-    maxImpulseOfMotor)
+    maxImpulseOfMotor,
+    springFrequency, 
+    dampingRatio)
 ```
 where:
 - `bodyAFromJoint`: A `BodyFrame` that specifies the anchor point and axis of movement in the space of body A
 - `bodyBFromJoint`: A `BodyFrame` that specifies the anchor point and axis of movement in the space of body B (the Connected Body).
 - `target`:  The target position in m, between the anchors of bodyA and bodyB, that the motor should drive for. Is relative to where you want to go.
 - `maxImpulseOfMotor`: The magnitude of the max impulse that a motor constraint can exert in a single step. If adjusting this parameter, a trial and error approach may be needed to get the desired behaviour.
+- `springFrequency`: The spring frequency of the spring behaviour to be simulated, in Hz. If this field is omitted, the default spring frequency of 74341.31 will be used.
+- `dampingRatio`: The damping ratio of the spring behaviour to be simulated. If this field is omitted, the default damping ratio of 2530.126 will be used.
 
 When authoring via Component, it is required to set `Auto Configure Connected Anchor` = True, however, if a design requires this to be false then it is possible to use this API method instead. Particular care should be taken to ensure that `bodyBFromJoint` is set correctly. However, disconnecting bodyA and bodyB in this way is unsupported for this version.
 
@@ -330,14 +354,16 @@ To author the General Position Motor Example 1, use the following settings:
   - `PerpendicularAxis` = (0,1,0)
   - `Position` = (1, 0, 0)
 - `target` = 2
-- `maxImpulseOfMotor`: Infinity
+- `maxImpulseOfMotor`: 10,000
+- `springFrequency` : 5
+- `dampingRatio` : 0.7
 
 See the C# API Documentation for more details.
 
 **Important!** All axes within the `BodyFrame` parameters must be normalized.
 
 ### Authoring via the Position Motor Authoring Component in Physics Samples
-The Position Motor component exists only in the Unity Physics Samples Project and is intended for educational/internal testing purposes. To use this component, the script must be available locally. It can be found in the Unity Physics Samples Project at this path: `Assets/Demos/4. Joints/Scripts/Creators/Motors/PositionMotor.cs`. Arguments for this component may change, or the component may be deprecated in the future. See the Joints/Motors Demos in the Unity Physics Samples for sample usage.
+The Position Motor component exists only in the Unity Physics Samples Project and is intended for educational/internal testing purposes. To use this component, the Unity Physics Samples must be imported from the Package Manager. Then, the script can be found in the Unity Physics Samples Project at this path: `Assets/Samples/Unity Physics/0.62.0-preview.162/Custom Physics Authoring/Unity.Physics.Custom/Motors/PositionMotor.cs`. Arguments for this component may change, or the component may be deprecated in the future. See the Joints/Motors Demos in the Unity Physics Samples for sample usage.
 
 To set up the General Position Motor Example 1, follow these steps:
 1. Starting from a SubScene, add a GameObject > Cube. Rename it 'StaticCube'. A BoxCollider should already be present as a component. Remove the Box Collider. 
@@ -352,7 +378,9 @@ To set up the General Position Motor Example 1, follow these steps:
    - `Anchor Position` = (0, 0, 0). This is the anchor position of the motor. It is relative to the centre of 'PositionMotor'. This data is baked into the `BodyFrame` position of bodyA.
    - `Direction of Movement` = (1, 0, 0). The translation axis of the motor. This data is baked into the `BodyFrame` axis of bodyA.
    - `Target Distance` = 2. The target distance that the motor should drive for is relative to the anchor of BodyB.
-   - `Max Impulse Applied by Motor` = Infinity. This is the maximum impulse that can be exerted by the motor. This applies only to motorized constraints. Since this maximum cannot be exceeded, a motorized constraint cannot break.
+   - `Max Impulse Applied by Motor` = 10,000. This is the maximum impulse that can be exerted by the motor. This applies only to motorized constraints. Since this maximum cannot be exceeded, a motorized constraint cannot break.
+   - `Spring Frequency`: 5. The spring frequency of the spring behaviour to be simulated, in Hz. If this field is omitted, the default spring frequency of 74341.31 will be used.
+   - `Damping Ratio`: 0.7. The damping ratio of the spring behaviour to be simulated. If this field is omitted, the default damping ratio of 2530.126 will be used.
 
 All data in the `Position Motor` component is baked.
 
@@ -387,9 +415,9 @@ Using a `Configurable Joint` Component:
    - `Y / Z Motion` = Locked. The baking pipeline currently requires this to be Locked. (`Y Motion` applies to the `Secondary Axis` field and `Z Motion` to the implied tertiary axis).
    - `Angular X / Y / Z Motion` = Locked. For a linear motor, these must be locked. Required by the baking pipeline.
    - `X Drive`:
-     - `Position Spring` = 0. Is not used to bake a `Linear Velocity Motor`.
-     - `Position Damper` =  500. While not directly used by the baking, it is used to determine if a `Configurable Joint` is a linear velocity motor. For it to be identified as such, it needs to be non-zero.
-     - `Maximum Force` = 3.402823e+38. This is the maximum impulse that the motor constraint will be able to exert. Within the code, this is multiplied by 'fixedDeltaTime' to get an impulse. This data is baked into `MaxImpulseOfMotor`.
+     - `Position Spring` = 0. This is the spring constant of the spring behaviour of the motor. If set to zero, then the default value describing a stiff spring is used. This doesn't need to be set for a velocity motor.
+     - `Position Damper` = 0.75. This is the damping coefficient of the motor. This value will be baked and used by the solver.
+     - `Maximum Force` = 60,000. (Value arbitrarily set in this example). This is the maximum impulse that the motor constraint will be able to exert. Within the code, this is multiplied by 'fixedDeltaTime' to get an impulse. This data is baked into maxImpulseOfMotor. If set to Infinity (the default), then this motor is capable of exerting any force needed to reach the target.
    - `Target Velocity` = (-1, 0, 0). This position is set relative to the targeted velocity. This data is baked into `Target`. Units are in m/s. Note that the x,y,z components of this field align with the setting of `Axis` and `Secondary Axis`, not x,y,z in world space. Since drives along the primary `Axis` are only supported, only the x-component of this field is baked.
    - `Break Force` = Infinity. This value is multiplied by 'fixedDeltaTime' to get an impulse. It is baked into 'MaxImpulse' for breakable events and applies only to linear non-motorized constraints.
    - `Break Torque` = Infinity. This value is multiplied by 'fixedDeltaTime' to get an impulse. It is baked into 'MaxImpulse' for breakable events and applies only to angular non-motorized constraints.
@@ -406,13 +434,17 @@ PhysicsJoint.CreateLinearVelocityMotor(
     bodyAFromJoint, 
     bodyBFromJoint, 
     target, 
-    maxImpulseOfMotor)
+    maxImpulseOfMotor,
+    springFrequency, 
+    dampingRatio)
 ```
 where:
 - `bodyAFromJoint`: A `BodyFrame` that specifies the anchor point and axis of movement in the space of body A
 - `bodyBFromJoint`: A `BodyFrame` that specifies the anchor point and axis of movement in the space of body B (the Connected Body).
 - `target`:  The target velocity in m/s, that the motor should drive for. Is relative to where you want to go.
 - `maxImpulseOfMotor`: The magnitude of the max impulse that a motor constraint can exert in a single step. If adjusting this parameter, a trial and error approach may be needed to get the desired behaviour.
+- `springFrequency`: The spring frequency of the spring behaviour to be simulated, in Hz. If this field is omitted, the default spring frequency of 74341.31 will be used.
+- `dampingRatio`: The damping ratio of the spring behaviour to be simulated. If this field is omitted, the default damping ratio of 2530.126 will be used.
 
 When authoring via Component, it is required to set `Auto Configure Connected Anchor` = True, however, if a design requires this to be false then it is possible to use this API method instead. Particular care should be taken to ensure that `bodyBFromJoint` is set correctly. However, disconnecting bodyA and bodyB in this way is unsupported for this version.
 
@@ -426,14 +458,15 @@ To author the General Linear Velocity Motor Example 1, use the following setting
   - `PerpendicularAxis` = (-0.7071068f, 0f, 0.7071068f)
   - `Position` = (0, 0, 0)
 - `target` = 1
-- `maxImpulseOfMotor`: Infinity
+- `maxImpulseOfMotor`: 10,000
+- `dampingRatio` : 0.75
 
 See the C# API Documentation for more details.
 
 **Important!** All axes within the `BodyFrame` parameters must be normalized.
 
 ### Authoring via the Linear Velocity Motor Authoring Component in Physics Samples
-The Linear Velocity Motor component exists only in the Unity Physics Samples Project and is intended for educational/internal testing purposes. To use this component, the script must be available locally. It can be found in the Unity Physics Samples Project at this path: `Assets/Demos/4. Joints/Scripts/Creators/Motors/LinearVelocityMotor.cs`. Arguments for this component may change, or the component may be deprecated in the future. See the Joints/Motors Demos in the Unity Physics Samples for sample usage.
+The Linear Velocity Motor component exists only in the Unity Physics Samples Project and is intended for educational/internal testing purposes. To use this component, the Unity Physics Samples must be imported from the Package Manager. Then, the script can be found in the Unity Physics Samples Project at this path: `Assets/Samples/Unity Physics/0.62.0-preview.162/Custom Physics Authoring/Unity.Physics.Custom/Motors/LinearVelocityMotor.cs`. Arguments for this component may change, or the component may be deprecated in the future. See the Joints/Motors Demos in the Unity Physics Samples for sample usage.
 
 To set up the General Linear Velocity Motor Example 1, follow these steps:
 1. Starting from a SubScene, add a GameObject > Cube. Rename it 'LVM'. A BoxCollider should already be present as a component. Remove the Box Collider. 
@@ -454,3 +487,25 @@ All data in the `Linear Velocity Motor` component is baked.
 - Do not stack different motors inside one GameObject component since the baking pipeline may not recognize the setting. If you want to create multiple motors on one GameObject, you will need to add a new component for each. Note that stacking joints/motors may lead to constraints fighting each other during solve and yield unstable simulation.
 - If no `Connected Body` is specified, then the motor will behave as if it is connected to the world. This is equivalent to a static rigid body at the origin with default orientation.
 - When setting the `MaxImpulseOfMotor` an iterative/trial-and-error approach is best to get the desired behavior.
+
+## Using Spring and Damping Parameters
+
+The spring frequency and damping ratio are used to control how the motor moves towards its target. The spring frequency determines how 'bouncy' the motor is, while the damping ratio determines how quickly the motor converges towards its target.
+
+While setting these values can be done by feel, the values used for each parameter depend on what method you are using to author the motor since the mapping of built-in authoring is not one-to-one with Unity Physics.
+
+Unity Physics uses a default spring frequency of 74341.31 Hz and a default damping ratio of 2530.126 (unitless). These values describe a ‘stiff’spring’ type of behaviour, which, for a motor, means that the motor will arrive at its target quickly without much bounce.
+
+The built-in components use different units to describe the same behaviour. The spring parameter is a spring constant, which has units of kg/s^2 and damper has units of kg/s. If authoring using a built-in joint type, it may be useful to keep the following in mind:
+
+To convert from a built-in spring constant, k, to a Unity Physics spring frequency, f, we calculate
+
+f  = (1 / 2*pi) * sqrt (k / m) where m is the mass of the joint in kg and f is the frequency in Hz.
+
+To convert a built-in damper coefficient, c, to a Unity Physics damping ratio, R, we calculate
+
+R = c / [2* sqrt(k * m)] where m is the mass of the joint in kg and R is unitless
+
+It is important to note that both calculations are dependent on the mass of the joint involved and that the spring constant is used to convert the damping parameter.
+
+When authoring a motor, if `spring`=0, then internally, the Unity Physics default spring frequency will be used for simulation. Similarly, if `damper`=0, the Unity Physics default damping ratio will be used. This means that when setting `spring` for a velocity type motor, you won't have to figure out the conversion needed.

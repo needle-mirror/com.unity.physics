@@ -1,11 +1,9 @@
-using System;
 using NUnit.Framework;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Physics.Tests.Utils;
-using Unity.Transforms;
 using UnityEngine;
 using Assert = UnityEngine.Assertions.Assert;
 
@@ -15,42 +13,86 @@ namespace Unity.Physics.Tests.Collision.PhysicsWorld
     {
         /// Util functions
         //Creates a world
-        static public Physics.PhysicsWorld createTestWorld(int staticBodies = 0, int dynamicBodies = 0, int joints = 0)
+        public static Physics.PhysicsWorld createTestWorld(int staticBodies = 0, int dynamicBodies = 0)
         {
-            return new Physics.PhysicsWorld(staticBodies, dynamicBodies, joints);
+            var world = new Physics.PhysicsWorld(staticBodies, dynamicBodies, 0);
+            // make sure we zero initialize all the motion data so that we don't run into issues in the tests
+            // which rely on motion (such as building the dynamic tree in the broadphase).
+            for (int i = 0; i < world.DynamicsWorld.MotionVelocities.Length; ++i)
+            {
+                world.DynamicsWorld.m_MotionVelocities[i] = new MotionVelocity();
+            }
+
+            return world;
+        }
+
+        public static Physics.PhysicsWorld createPopulatedTestWorld(int staticBodies, int dynamicBodies, bool createColliders = true)
+        {
+            var world = createTestWorld(staticBodies, dynamicBodies);
+
+            var bodies = world.Bodies;
+            for (int i = 0; i < staticBodies + dynamicBodies; ++i)
+            {
+                var varyingScalar = 1 + 0.142f * i;
+                var varyingVector = new float3(varyingScalar, varyingScalar, varyingScalar);
+                var body = createBody((uint)i, new float3(0.42f, 1.42f, 2.42f) * i, quaternion.Euler(varyingVector), varyingScalar);
+                if (createColliders)
+                {
+                    body.Collider = createBoxCollider(varyingVector, quaternion.Euler(0.42f * varyingVector),
+                        varyingVector);
+                }
+
+                bodies[i] = body;
+            }
+
+            // make sure the entity/body map is constructed
+            world.UpdateIndexMaps();
+
+            // build broadphase
+            world.CollisionWorld.BuildBroadphase(ref world, 0, float3.zero, buildStaticTree: true);
+
+            return world;
+        }
+
+        static Physics.RigidBody createBody(uint uniqueID, float3 position, quaternion orientation, float scale)
+        {
+            return new Physics.RigidBody
+            {
+                CustomTags = (byte)uniqueID,
+                Entity = new Entity { Index = (int)(1 + uniqueID) },
+                Scale = scale,
+                WorldFromBody = new RigidTransform(orientation, position)
+            };
+        }
+
+        static BlobAssetReference<Collider> createBoxCollider(float3 pos, quaternion orientation, float3 size)
+        {
+            return BoxCollider.Create(new BoxGeometry
+            {
+                Center = pos,
+                Orientation = orientation,
+                Size = size,
+                BevelRadius = math.min(0.01f, math.cmin(size) * 0.5f)
+            });
         }
 
         //Adds a static box to the world
-        static public unsafe void addStaticBoxToWorld(Physics.PhysicsWorld world, int index, Vector3 pos, Quaternion orientation, Vector3 size)
+        public static void addStaticBoxToWorld(Physics.PhysicsWorld world, int index, Vector3 pos, Quaternion orientation, Vector3 size)
         {
             Assert.IsTrue(index < world.NumStaticBodies, "Static body index is out of range in addStaticBoxToWorld");
             NativeArray<Physics.RigidBody> staticBodies = world.StaticBodies;
             Physics.RigidBody rb = staticBodies[index];
-            BlobAssetReference<Collider> collider = BoxCollider.Create(new BoxGeometry
-            {
-                Center = pos,
-                Orientation = orientation,
-                Size = size,
-                BevelRadius = 0.01f
-            });
-            rb.Collider = collider;
+            rb.Collider = createBoxCollider(pos, orientation, size);
             staticBodies[index] = rb;
         }
 
         //Adds a dynamic box to the world
-        static public unsafe void addDynamicBoxToWorld(Physics.PhysicsWorld world, int index, Vector3 pos, Quaternion orientation, Vector3 size)
+        public static void addDynamicBoxToWorld(Physics.PhysicsWorld world, int index, Vector3 pos, Quaternion orientation, Vector3 size)
         {
             Assert.IsTrue(index < world.NumDynamicBodies, "Dynamic body index is out of range in addDynamicBoxToWorld");
             NativeArray<Physics.RigidBody> dynamicBodies = world.DynamicBodies;
             Physics.RigidBody rb = dynamicBodies[index];
-            BlobAssetReference<Collider> collider = BoxCollider.Create(new BoxGeometry
-            {
-                Center = pos,
-                Orientation = orientation,
-                Size = size,
-                BevelRadius = 0.01f
-            });
-            rb.Collider = collider;
+            rb.Collider = createBoxCollider(pos, orientation, size);
             dynamicBodies[index] = rb;
         }
 

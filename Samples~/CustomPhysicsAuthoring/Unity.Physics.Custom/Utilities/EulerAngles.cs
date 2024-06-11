@@ -18,6 +18,13 @@ namespace Unity.Physics.Authoring
         public static implicit operator quaternion(EulerAngles euler) =>
             math.normalize(quaternion.Euler(math.radians(euler.Value), euler.RotationOrder));
 
+        public static implicit operator EulerAngles(quaternion orientation)
+        {
+            var euler = new EulerAngles();
+            euler.SetValue(orientation);
+            return euler;
+        }
+
         public bool Equals(EulerAngles other) => Value.Equals(other.Value) && RotationOrder == other.RotationOrder;
 
         public override bool Equals(object obj) => obj is EulerAngles other && Equals(other);

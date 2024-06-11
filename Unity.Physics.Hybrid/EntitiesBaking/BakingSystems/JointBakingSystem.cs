@@ -48,24 +48,35 @@ namespace Unity.Physics.Authoring
         protected void ConvertSpringDamperSettings(float inSpringConstant, float inDampingCoefficient, float inConstrainedMass,
             out float outSpringFrequency, out float outDampingRatio)
         {
-            // If stiffness and damping coefficient are both zero, then we treat the constraint as locked by
-            // using the default spring settings for a stiff spring and zero damping for a rapid response.
+            const float threshold = 0.001f;
 
-            if (inSpringConstant > 0.0f || inDampingCoefficient > 0.0f)
+            if (inSpringConstant <= threshold)
             {
-                // If the spring coefficient is zero, we can not calculate the damping ratio. So, we enforce a minimum spring stiffness in this case.
-                var springConstant = inSpringConstant == 0.0f ? 1e-3f : inSpringConstant;
-                outSpringFrequency = CalculateSpringFrequencyFromSpringConstant(springConstant, inConstrainedMass);
-                outDampingRatio = CalculateDampingRatio(springConstant, inDampingCoefficient, inConstrainedMass);
+                // Case: k=0, c=0: Want a stiff constraint
+                // Case: k=0, c!=0: Velocity motor case. Use damping coefficient as if it as a ratio (an approximation making it easier to tune)
+                outSpringFrequency = Constraint.DefaultSpringFrequency;
+                outDampingRatio = inDampingCoefficient <= threshold ?
+                    Constraint.DefaultDampingRatio : inDampingCoefficient;
             }
             else
             {
-                // default spring-damper (stiff)
-                outSpringFrequency = Constraint.DefaultSpringFrequency;
-                outDampingRatio = Constraint.DefaultDampingRatio;
+                // Case: k!=0, c=0: Calculate for k and use damping ratio as 0
+                // Case: k!=0, c!=0: Calculate both terms
+                outSpringFrequency = CalculateSpringFrequencyFromSpringConstant(inSpringConstant, inConstrainedMass);
+                outDampingRatio = inDampingCoefficient <= threshold ?
+                    0.0f : CalculateDampingRatio(inSpringConstant, inDampingCoefficient, inConstrainedMass);
             }
         }
 
+        /// <summary>
+        /// Calculates the spring frequency from the spring constant and mass for Built-in -> Unity Physics conversion
+        /// f = (1 / 2pi) * sqrt(k / m)
+        /// - Built-in uses spring as a spring constant
+        /// - Unity Physics uses spring as a spring frequency
+        /// </summary>
+        /// <param name="springConstant"></param>
+        /// <param name="mass"></param>
+        /// <returns></returns>
         protected float CalculateSpringFrequencyFromSpringConstant(float springConstant, float mass = 1.0f)
         {
             if (springConstant < Math.Constants.Eps) return 0.0f;
@@ -73,6 +84,33 @@ namespace Unity.Physics.Authoring
             return math.sqrt(springConstant / mass) * Math.Constants.OneOverTau;
         }
 
+        /// <summary>
+        /// Calculates the spring constant from the spring frequency and mass for Unity Physics -> Built-in conversion
+        /// k = (2pi * f)^2 * m
+        /// - Built-in uses spring as a spring constant
+        /// - Unity Physics uses spring as a spring frequency
+        /// </summary>
+        /// <param name="springFrequency"></param>
+        /// <param name="mass"></param>
+        /// <returns></returns>
+        protected float CalculateSpringConstantFromSpringFrequency(float springFrequency, float mass = 1.0f)
+        {
+            if (springFrequency < Math.Constants.Eps) return 0.0f;
+
+            var tauXFrequency = Math.Constants.Tau * springFrequency;
+            return tauXFrequency * tauXFrequency * mass;
+        }
+
+        /// <summary>
+        /// Calculates the damping ratio from the spring constant, damping coefficient and mass for
+        /// Built-in -> Unity Physics conversion. Note that the spring *constant* is required as input. For cases where a
+        /// spring constant isn't required (ex: motors), the dampingCoefficient is used directly as an approximation.
+        /// Calculation: damping ratio = damping coefficient / [2 * sqrt(k * m)]
+        /// </summary>
+        /// <param name="springConstant"></param>
+        /// <param name="dampingCoefficient"></param>
+        /// <param name="mass"></param>
+        /// <returns></returns>
         protected float CalculateDampingRatio(float springConstant, float dampingCoefficient, float mass = 1.0f)
         {
             if (dampingCoefficient < Math.Constants.Eps) return 0.0f;
@@ -262,7 +300,9 @@ namespace Unity.Physics.Authoring
             return combinedJoint;
         }
 
-        protected PhysicsJoint ConvertMotor(quaternion jointFrameOrientation, UnityEngine.Joint joint, JacobianType motorType, float target, float maxImpulseForMotor)
+        protected PhysicsJoint ConvertMotor(quaternion jointFrameOrientation, UnityEngine.Joint joint, JacobianType motorType,
+            float target, float maxImpulseForMotor,
+            float springFrequencyIn = Constraint.DefaultSpringFrequency, float springDampingIn = Constraint.DefaultDampingRatio)
         {
             var bodyAFromJoint = new BodyFrame {};
             var bodyBFromJoint = new BodyFrame {};
@@ -277,19 +317,27 @@ namespace Unity.Physics.Authoring
             // Targets are set local to bodyA as the offset of the final target relative to  the starting bodyA position
             var jointData = new PhysicsJoint();
 
+            var constrainedMass = GetConstrainedBodyMass(joint);
+            ConvertSpringDamperSettings(springFrequencyIn, springDampingIn, constrainedMass,
+                out var springFrequencyOut, out var springDampingOut);
+
             switch (motorType)
             {
                 case JacobianType.PositionMotor:
-                    jointData = PhysicsJoint.CreatePositionMotor(bodyAFromJoint, bodyBFromJoint, target, maxImpulseForMotor);
+                    jointData = PhysicsJoint.CreatePositionMotor(bodyAFromJoint, bodyBFromJoint, target,
+                        maxImpulseForMotor, springFrequencyOut, springDampingOut);
                     break;
                 case JacobianType.LinearVelocityMotor:
-                    jointData = PhysicsJoint.CreateLinearVelocityMotor(bodyAFromJoint, bodyBFromJoint, target, maxImpulseForMotor);
+                    jointData = PhysicsJoint.CreateLinearVelocityMotor(bodyAFromJoint, bodyBFromJoint, target,
+                        maxImpulseForMotor, springFrequencyOut, springDampingOut);
                     break;
                 case JacobianType.RotationMotor:
-                    jointData = PhysicsJoint.CreateRotationalMotor(bodyAFromJoint, bodyBFromJoint, target, maxImpulseForMotor);
+                    jointData = PhysicsJoint.CreateRotationalMotor(bodyAFromJoint, bodyBFromJoint, target,
+                        maxImpulseForMotor, springFrequencyOut, springDampingOut);
                     break;
                 case JacobianType.AngularVelocityMotor:
-                    jointData = PhysicsJoint.CreateAngularVelocityMotor(bodyAFromJoint, bodyBFromJoint, target, maxImpulseForMotor);
+                    jointData = PhysicsJoint.CreateAngularVelocityMotor(bodyAFromJoint, bodyBFromJoint, target,
+                        maxImpulseForMotor, springFrequencyOut, springDampingOut);
                     break;
                 default:
                     SafetyChecks.ThrowNotImplementedException();
@@ -406,37 +454,32 @@ namespace Unity.Physics.Authoring
 
             var jointFrameOrientation = GetJointFrameOrientation(joint.axis, joint.secondaryAxis);
 
+            // Determine if a motor is present:
             bool requiredDoF_forLinearMotors = math.any(linearLocks) && math.all(angularLocks) && math.all(!linearLimited);
             bool requiredDoF_forAngularMotors = math.all(linearLocks) && math.any(angularLocks) && math.all(!linearLimited);
 
-            // Enforcing motor authoring on X Drive (primary Axis aligned) only. If either of these values are zero, then it will not be flagged be a position motor.
-            bool3 isPositionMotor;
-            isPositionMotor.x = joint.xDrive.positionSpring * joint.xDrive.maximumForce > 0;
-            isPositionMotor.y = false;
-            isPositionMotor.z = false;
+            // Motor authoring ONLY on X Drive (primary Axis aligned). Drive settings on Y Drive or Z Drive will not function.
+            IdentifyIfLinearMotor(joint.xDrive, joint.yDrive, joint.zDrive, joint.name,
+                joint.targetPosition, joint.targetVelocity,
+                out bool3 isPositionMotor, out bool3 isLinearVelocityMotor, out float3 maxForceForLinearMotor);
 
-            // Enforcing motor authoring on X Drive (primary Axis aligned) only. If either of these values are zero, then it will not be flagged be a velocity motor
-            bool3 isLinearVelocityMotor;
-            isLinearVelocityMotor.x = joint.xDrive.positionDamper * joint.xDrive.maximumForce > 0;
-            isLinearVelocityMotor.y = false;
-            isLinearVelocityMotor.z = false;
+            // Motor authoring ONLY on Angular X Drive (primary Axis aligned). Drive settings on Angular YZ Drive will not function.
+            JointDrive angularXDrive;
+            JointDrive angularYZDrive;
+            if (joint.rotationDriveMode == RotationDriveMode.XYAndZ)
+            {
+                angularXDrive = joint.angularXDrive;
+                angularYZDrive = joint.angularYZDrive;
+            }
+            else
+            {
+                angularXDrive = angularYZDrive = joint.slerpDrive;
+            }
+            IdentifyIfAngularMotor(angularXDrive, angularYZDrive, joint.name,
+                joint.targetRotation, joint.targetAngularVelocity,
+                out bool3 isRotationMotor, out bool3 isAngularVelocityMotor, out float3 maxForceForAngularMotor);
 
-            var maxForceForLinearMotor = new float3(joint.xDrive.maximumForce, joint.yDrive.maximumForce, joint.zDrive.maximumForce);
-
-            // Enforcing motor authoring on Angular X Drive (primary Axis aligned) only. If either of these values are zero, then it will not be flagged be a rotation motor
-            bool3 isRotationMotor;
-            isRotationMotor.x = joint.angularXDrive.positionSpring * joint.angularXDrive.maximumForce > 0;
-            isRotationMotor.y = false;
-            isRotationMotor.z = false;
-
-            // Enforcing motor authoring on Angular X Drive (primary Axis aligned) only. If either of these values are zero, then it will not be flagged be an angular velocity motor
-            bool3 isAngularVelocityMotor;
-            isAngularVelocityMotor.x = joint.angularXDrive.positionDamper * joint.angularXDrive.maximumForce > 0;
-            isAngularVelocityMotor.y = false;
-            isAngularVelocityMotor.z = false;
-
-            var maxForceForAngularMotor = new float3(joint.angularXDrive.maximumForce, joint.angularYZDrive.maximumForce, joint.angularYZDrive.maximumForce);
-
+            // If any motor is present, bake as a motor. Otherwise bake as a joint.
             PhysicsJoint motorJointData;
             uint worldIndex;
             bool isMotor = false;
@@ -452,7 +495,11 @@ namespace Unity.Physics.Authoring
                     float3 targetVector = (int3)isPositionMotor * (float3)joint.targetPosition;
                     var target = targetVector.x * -1; //need -1: PhysX sets target as offset from the target, whereas ECS Physics targets target as where to go
 
-                    motorJointData = ConvertMotor(jointFrameOrientation, joint, JacobianType.PositionMotor, target, maxImpulseForLinearMotor);
+                    var bakedSpring = joint.xDrive.positionSpring;
+                    var bakedDamper = joint.xDrive.positionDamper;
+
+                    motorJointData = ConvertMotor(jointFrameOrientation, joint, JacobianType.PositionMotor, target,
+                        maxImpulseForLinearMotor, bakedSpring, bakedDamper);
                     motorJointData.SetImpulseEventThresholdAllConstraints(
                         joint.breakForce * Time.fixedDeltaTime,
                         joint.breakTorque * Time.fixedDeltaTime);
@@ -475,7 +522,11 @@ namespace Unity.Physics.Authoring
                     float3 targetVector = (int3)isLinearVelocityMotor * (float3)joint.targetVelocity;
                     var target = targetVector.x * -1; //need -1: PhysX sets target as offset from the target, whereas ECS Physics targets target as where to go
 
-                    motorJointData = ConvertMotor(jointFrameOrientation, joint, JacobianType.LinearVelocityMotor, target, maxImpulseForLinearMotor);
+                    var bakedSpring = joint.xDrive.positionSpring;
+                    var bakedDamper = joint.xDrive.positionDamper;
+
+                    motorJointData = ConvertMotor(jointFrameOrientation, joint, JacobianType.LinearVelocityMotor, target,
+                        maxImpulseForLinearMotor, bakedSpring, bakedDamper);
                     motorJointData.SetImpulseEventThresholdAllConstraints(
                         joint.breakForce * Time.fixedDeltaTime,
                         joint.breakTorque * Time.fixedDeltaTime);
@@ -498,7 +549,11 @@ namespace Unity.Physics.Authoring
                     float3 targetVector = (int3)isRotationMotor * (float3)joint.targetRotation.eulerAngles; //in degrees, targetRotation a Quaternion
                     var target = math.radians(targetVector.x) * -1; //need -1: PhysX sets target as offset from the target, whereas ECS Physics targets target as where to go
 
-                    motorJointData = ConvertMotor(jointFrameOrientation, joint, JacobianType.RotationMotor, target, maxImpulseForAngularMotor);
+                    var bakedSpring = joint.angularXDrive.positionSpring;
+                    var bakedDamper = joint.angularXDrive.positionDamper;
+                    motorJointData = ConvertMotor(jointFrameOrientation, joint, JacobianType.RotationMotor, target,
+                        maxImpulseForAngularMotor, bakedSpring, bakedDamper);
+
                     motorJointData.SetImpulseEventThresholdAllConstraints(
                         joint.breakForce * Time.fixedDeltaTime,
                         joint.breakTorque * Time.fixedDeltaTime);
@@ -521,7 +576,11 @@ namespace Unity.Physics.Authoring
                     float3 targetVector = (int3)isAngularVelocityMotor * (float3)joint.targetAngularVelocity; //target in radian/s
                     var target = targetVector.x;
 
-                    motorJointData = ConvertMotor(jointFrameOrientation, joint, JacobianType.AngularVelocityMotor, target, maxImpulseForAngularMotor);
+                    var bakedSpring = joint.angularXDrive.positionSpring;
+                    var bakedDamper = joint.angularXDrive.positionDamper;
+                    motorJointData = ConvertMotor(jointFrameOrientation, joint, JacobianType.AngularVelocityMotor, target,
+                        maxImpulseForAngularMotor, bakedSpring, bakedDamper);
+
                     motorJointData.SetImpulseEventThresholdAllConstraints(
                         joint.breakForce * Time.fixedDeltaTime,
                         joint.breakTorque * Time.fixedDeltaTime);
@@ -550,6 +609,112 @@ namespace Unity.Physics.Authoring
         public override void Bake(UnityEngine.ConfigurableJoint authoring)
         {
             ConvertConfigurableJoint(authoring);
+        }
+
+        private void IdentifyIfLinearMotor(JointDrive xDrive, JointDrive yDrive, JointDrive zDrive,
+            string name, float3 targetPosition, float3 targetVelocity,
+            out bool3 isPositionMotor, out bool3 isLinearVelocityMotor, out float3 maxForceForLinearMotor)
+        {
+            CheckPerAxis(targetPosition.x, targetVelocity.x, xDrive.positionSpring, xDrive.positionDamper, xDrive.maximumForce, name,
+                out isPositionMotor.x, out isLinearVelocityMotor.x);
+
+            //CheckPerAxis(targetPosition.y, targetVelocity.y, yDrive.positionSpring, yDrive.positionDamper, yDrive.maximumForce, name,
+            //    out isPositionMotor.y, out isVelocityMotor.y);
+            isPositionMotor.y = false;
+            isLinearVelocityMotor.y = false;
+
+            //CheckPerAxis(targetPosition.z, targetVelocity.z, zDrive.positionSpring, zDrive.positionDamper, zDrive.maximumForce, name,
+            //    out isPositionMotor.z, out isVelocityMotor.z);
+            isPositionMotor.z = false;
+            isLinearVelocityMotor.z = false;
+
+            maxForceForLinearMotor = new float3(xDrive.maximumForce, yDrive.maximumForce, zDrive.maximumForce);
+        }
+
+        private void IdentifyIfAngularMotor(JointDrive xDrive, JointDrive yzDrive,
+            string name, quaternion targetPosition, float3 targetVelocity,
+            out bool3 isPositionMotor, out bool3 isVelocityMotor, out float3 maxForceForMotor)
+        {
+            CheckPerAxis(targetPosition.value.x, targetVelocity.x, xDrive.positionSpring, xDrive.positionDamper, xDrive.maximumForce, name,
+                out isPositionMotor.x, out isVelocityMotor.x);
+
+            //CheckPerAxis(targetPosition.y, targetVelocity.y, yzDrive.positionSpring, yzDrive.positionDamper, yzDrive.maximumForce, name,
+            //    out isPositionMotor.y, out isVelocityMotor.y);
+            isPositionMotor.y = false;
+            isVelocityMotor.y = false;
+
+            //CheckPerAxis(targetPosition.z, targetVelocity.z, yzDrive.positionSpring, yzDrive.positionDamper, yzDrive.maximumForce, name,
+            //    out isPositionMotor.z, out isVelocityMotor.z);
+            isPositionMotor.z = false;
+            isVelocityMotor.z = false;
+
+            maxForceForMotor = new float3(xDrive.maximumForce, yzDrive.maximumForce, yzDrive.maximumForce);
+        }
+
+        internal static void CheckPerAxis(float targetPosition, float targetVelocity, float spring, float damper, float force, string name,
+            out bool isPositionMotor, out bool isVelocityMotor)
+        {
+            // for comparisons we must use an absolute value
+            targetPosition = math.abs(targetPosition);
+            targetVelocity = math.abs(targetVelocity);
+            spring = math.abs(spring);
+            damper = math.abs(damper);
+            force = math.abs(force);
+
+            float threshold = 0.0001f;
+
+            // Initialize for early exit / default values
+            isPositionMotor = false;
+            isVelocityMotor = false;
+
+            if (force <= threshold) return; // if no force applied at all, it isn't a motor
+
+            // If target position==0 AND target velocity==0 AND spring==0 AND damper== 0. This is not a motor.
+            if (targetPosition <= threshold && targetVelocity <= threshold &&
+                spring <= threshold && damper <= threshold)
+            {
+                // Nothing is set. This is not a motor. Likely most common case
+                return;
+            }
+
+            if (targetPosition > threshold && targetVelocity > threshold)
+            {
+                Assert.IsTrue(true,
+                    $"Configurable Joint Baking Failed for {name}: Invalid configuration. Both target position and target velocity are non-zero.");
+                return;
+            }
+
+            // If the target velocity is set but the target position is not, then it is a velocity motor (this does not guarantee the motor will function)
+            if (targetPosition <= threshold && targetVelocity > threshold)
+            {
+                isVelocityMotor = true;
+                return;
+            }
+
+            // If the target position is set but the target velocity is not, then it is a position motor (this does not guarantee the motor will function)
+            if (targetPosition > threshold && targetVelocity <= threshold)
+            {
+                isPositionMotor = true;
+                return;
+            }
+
+            // If the target position and target velocity are both zero, then it depends on the value of spring and damping
+            if (targetPosition <= threshold && targetVelocity <= threshold)
+            {
+                if (spring <= threshold)
+                {
+                    if (damper > threshold)
+                    {
+                        isVelocityMotor = true;  // spring=0, damper!=0
+                    }
+                    //else // case already covered (nothing is set)
+                }
+                else
+                {
+                    // Regardless of damping value, if spring!=0, this is a position motor
+                    isPositionMotor = true;
+                }
+            }
         }
     }
 
@@ -623,19 +788,24 @@ namespace Unity.Physics.Authoring
 
             var limits = math.radians(new FloatRange(joint.limits.min, joint.limits.max).Sorted());
 
+            // Convert spring-damper settings
+            ConvertSpringDamperSettings(joint.spring.spring, joint.spring.damper, GetConstrainedBodyMass(joint),
+                out var springFrequency, out var dampingRatio);
+
             // Create different types of joints based on: are there limits, is there a motor?
             PhysicsJoint jointData;
-            if (joint.useSpring && !joint.useMotor) //a rotational motor if Use Spring = T, Spring: Spring, Damper, Target Position are set
+            var maxImpulseOfMotor = joint.motor.force * Time.fixedDeltaTime;
+            if (joint.useSpring && !joint.useMotor) //a rotational motor if Use Spring = T, Spring: Spring, Damper, Target Position are set AND Motor.Force !=0
             {
-                var maxImpulseOfMotor = joint.breakTorque * Time.fixedDeltaTime;
                 var target = math.radians(joint.spring.targetPosition);
-                jointData = PhysicsJoint.CreateRotationalMotor(bodyAFromJoint, bodyBFromJoint, target, maxImpulseOfMotor);
+                jointData = PhysicsJoint.CreateRotationalMotor(bodyAFromJoint, bodyBFromJoint,
+                    target, maxImpulseOfMotor, springFrequency, dampingRatio);
             }
-            else if (joint.useMotor) //an angular velocity motor if use Motor = T, Motor: Target Velocity, Force are set
+            else if (joint.useMotor) //an angular velocity motor if use Motor = T, Motor: Target Velocity is set
             {
                 var targetSpeedInRadians = math.radians(joint.motor.targetVelocity);
-                var maxImpulseOfMotor = joint.motor.force * Time.fixedDeltaTime;
-                jointData = PhysicsJoint.CreateAngularVelocityMotor(bodyAFromJoint, bodyBFromJoint, targetSpeedInRadians, maxImpulseOfMotor);
+                jointData = PhysicsJoint.CreateAngularVelocityMotor(bodyAFromJoint, bodyBFromJoint,
+                    targetSpeedInRadians, maxImpulseOfMotor, springFrequency, dampingRatio);
             }
             else //non-motorized
             {

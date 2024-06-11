@@ -1,11 +1,15 @@
 using System;
 using Unity.Burst;
+using Unity.Burst.Intrinsics;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Jobs.LowLevel.Unsafe;
 using Unity.Collections;
 using Unity.Physics.Aspects;
+using Unity.Collections.LowLevel.Unsafe;
+using Unity.Physics.Systems;
+using Unity.Transforms;
 
 namespace Unity.Physics
 {
@@ -19,6 +23,8 @@ namespace Unity.Physics
         [NoAlias] private NativeArray<RigidBody> m_Bodies;    // storage for all the rigid bodies
         [NoAlias] internal Broadphase Broadphase;             // bounding volume hierarchies around subsets of the rigid bodies
         [NoAlias] internal NativeParallelHashMap<Entity, int> EntityBodyIndexMap;
+        [NativeDisableContainerSafetyRestriction]
+        [NoAlias] private NativeList<BlobAssetReference<Collider>> m_ColliderDeepCopies;
 
         /// <summary>   Gets the number of bodies. </summary>
         ///
@@ -56,7 +62,7 @@ namespace Unity.Physics
         /// </summary>
         ///
         /// <value> The collision tolerance. </value>
-        public float CollisionTolerance => 0.1f; // todo - make this configurable?
+        public float CollisionTolerance => 0.1f;
 
         /// <summary>
         /// Construct a collision world with the given number of uninitialized rigid bodies.
@@ -69,6 +75,7 @@ namespace Unity.Physics
             m_Bodies = new NativeArray<RigidBody>(numStaticBodies + numDynamicBodies, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
             Broadphase = new Broadphase(numStaticBodies, numDynamicBodies);
             EntityBodyIndexMap = new NativeParallelHashMap<Entity, int>(m_Bodies.Length, Allocator.Persistent);
+            m_ColliderDeepCopies = new NativeList<BlobAssetReference<Collider>>();
         }
 
         /// <summary>   Resets this object. </summary>
@@ -108,9 +115,24 @@ namespace Unity.Physics
             {
                 EntityBodyIndexMap.Dispose();
             }
+
+            if (m_ColliderDeepCopies.IsCreated)
+            {
+                foreach (var blob in m_ColliderDeepCopies)
+                {
+                    blob.Dispose();
+                }
+                m_ColliderDeepCopies.Dispose();
+            }
         }
 
-        /// <summary>   Clone the world. Bodies and Broadphase are deep copied. Colliders are shallow copied. </summary>
+        /// <summary>
+        /// <para>Clone the world.</para>
+        /// <para>
+        /// The Broadphase is deep copied.
+        /// All data in rigid bodies is deep copied, except for their colliders, which are shallow copied.
+        /// </para>
+        /// </summary>
         ///
         /// <returns>   A copy of this object. </returns>
         public CollisionWorld Clone()
@@ -118,11 +140,114 @@ namespace Unity.Physics
             var clone = new CollisionWorld
             {
                 m_Bodies = new NativeArray<RigidBody>(m_Bodies, Allocator.Persistent),
-                Broadphase = (Broadphase)Broadphase.Clone(),
+                Broadphase = Broadphase.Clone(),
                 EntityBodyIndexMap = new NativeParallelHashMap<Entity, int>(m_Bodies.Length, Allocator.Persistent),
+                m_ColliderDeepCopies = default
             };
             clone.UpdateBodyIndexMap();
             return clone;
+        }
+
+        /// <summary>
+        /// <para>Clone the world.</para>
+        /// <para>
+        /// The Broadphase is deep copied.
+        /// All data in rigid bodies is deep copied, except for their colliders,
+        /// which are optionally deep copied or shallow copied.
+        /// </para>
+        /// </summary>
+        ///
+        /// <param name="deepCopyDynamicColliders">     Deep copy all dynamic colliders.</param>
+        /// <param name="deepCopyStaticColliders">      Deep copy all static colliders.</param>
+        /// <param name="deepCopyRigidBodyList">        Deep copy colliders of the rigid bodies in the list, each specified
+        ///                                             by its <see cref="GetRigidBodyIndex">index</see>.
+        ///                                             Must not contain duplicate entries, and must not contain indices of rigid bodies whose
+        ///                                             colliders will already be deep copied due to the values chosen for the
+        ///                                             <paramref name="deepCopyDynamicColliders"/> and
+        ///                                             <paramref name="deepCopyStaticColliders"/> parameters.</param>
+        /// <returns>   A copy of this object. </returns>
+        public CollisionWorld Clone(bool deepCopyDynamicColliders, bool deepCopyStaticColliders = false, NativeList<int> deepCopyRigidBodyList = default)
+        {
+            SafetyChecks.CheckValidCloneRequestAndThrow(this, deepCopyDynamicColliders, deepCopyStaticColliders, deepCopyRigidBodyList);
+
+            var clone = new CollisionWorld
+            {
+                m_Bodies = new NativeArray<RigidBody>(m_Bodies, Allocator.Persistent),
+                Broadphase = Broadphase.Clone(),
+                EntityBodyIndexMap = new NativeParallelHashMap<Entity, int>(m_Bodies.Length, Allocator.Persistent),
+                m_ColliderDeepCopies = default
+            };
+            clone.UpdateBodyIndexMap();
+
+            if (!deepCopyDynamicColliders && !deepCopyStaticColliders && deepCopyRigidBodyList.IsEmpty)
+            {
+                // no deep copies requested.
+                return clone;
+            }
+            // else:
+
+            // Deep copy colliders:
+
+            // Compute required number of deep copies, assuming there are no overlaps between the requested static / dynamic collider deep copies
+            // and the provided rigid body indices.
+            var numDeepCopies = (deepCopyDynamicColliders ? NumDynamicBodies : 0)
+                + (deepCopyStaticColliders ? NumStaticBodies : 0)
+                + (deepCopyRigidBodyList.IsEmpty ? 0 : deepCopyRigidBodyList.Length);
+
+            if (numDeepCopies == 0)
+            {
+                return clone;
+            }
+            // else:
+
+            clone.m_ColliderDeepCopies = new NativeList<BlobAssetReference<Collider>>(numDeepCopies, Allocator.Persistent);
+
+            // Deep copy dynamic colliders
+            if (deepCopyDynamicColliders)
+            {
+                CloneColliders(clone.DynamicBodies, clone.m_ColliderDeepCopies);
+            }
+
+            // Deep copy static colliders
+            if (deepCopyStaticColliders)
+            {
+                CloneColliders(clone.StaticBodies, clone.m_ColliderDeepCopies);
+            }
+
+            // Deep copy colliders of rigid bodies specified by index
+            if (!deepCopyRigidBodyList.IsEmpty)
+            {
+                foreach (var i in deepCopyRigidBodyList)
+                {
+                    var body = clone.m_Bodies[i];
+                    if (body.Collider.IsCreated)
+                    {
+                        var colliderClone = body.Collider.Value.Clone();
+                        body.Collider = colliderClone;
+                        clone.m_Bodies[i] = body;
+                        clone.m_ColliderDeepCopies.Add(colliderClone);
+                    }
+                }
+            }
+
+            return clone;
+        }
+
+        static void CloneColliders(NativeArray<RigidBody> bodies, NativeList<BlobAssetReference<Collider>> colliderClones)
+        {
+            var numBodies = bodies.Length;
+            for (int i = 0; i < numBodies; ++i)
+            {
+                var body = bodies[i];
+                if (body.Collider.IsCreated)
+                {
+                    // clone and replace collider. Then add it to the collider clone list.
+                    var colliderClone = body.Collider.Value.Clone();
+                    body.Collider = colliderClone;
+                    bodies[i] = body;
+                    colliderClones.Add(colliderClone);
+                }
+            }
         }
 
         /// <summary>   Updates the body index map. </summary>
@@ -154,7 +279,7 @@ namespace Unity.Physics
         public void BuildBroadphase(ref PhysicsWorld world, float timeStep, float3 gravity, bool buildStaticTree = true)
         {
             Broadphase.Build(world.StaticBodies, world.DynamicBodies, world.MotionVelocities,
-                world.CollisionWorld.CollisionTolerance, timeStep, gravity, buildStaticTree);
+                world.CollisionWorld.CollisionTolerance, timeStep, gravity, buildStaticTree, reset: true);
         }
 
         /// <summary>   Schedule a set of jobs to build the broadphase based on the given world. </summary>
@@ -169,7 +294,302 @@ namespace Unity.Physics
         /// <returns>   A JobHandle. </returns>
         public JobHandle ScheduleBuildBroadphaseJobs(ref PhysicsWorld world, float timeStep, float3 gravity, NativeReference<int>.ReadOnly buildStaticTree, JobHandle inputDeps, bool multiThreaded = true)
         {
-            return Broadphase.ScheduleBuildJobs(ref world, timeStep, gravity, buildStaticTree, inputDeps, multiThreaded);
+            return Broadphase.ScheduleBuildJobs(ref world, timeStep, gravity, buildStaticTree, inputDeps, multiThreaded, reset: true);
+        }
+
+        internal JobHandle ScheduleBuildBroadphaseJobs(ref PhysicsWorld world, float timeStep, float3 gravity, int numDynamicBodies, int numStaticBodies, NativeReference<int>.ReadOnly buildStaticTree,
+            EntityQuery dynamicEntityQuery, EntityQuery staticEntityQuery, EntityQuery invalidatedTemporalCoherenceInfoQuery, NativeArray<int> dynamicBodyChunkBaseEntityIndices, NativeArray<int> staticBodyChunkBaseEntityIndices,
+            JobHandle inputDeps, Allocator worldUpdateAllocator, in PhysicsWorldData.PhysicsWorldComponentHandles componentHandles, uint lastSystemVersion,
+            bool multiThreaded, bool incrementalDynamicBroadphase, bool incrementalStaticBroadphase)
+        {
+            using var jobHandles = new NativeList<JobHandle>(16, Allocator.Temp);
+            jobHandles.Add(inputDeps);
+
+            NativeArray<int> numDynamicBodyRemovalChunksArray = default;
+            NativeArray<int> numStaticBodyRemovalChunksArray = default;
+            int numInvalidatedTemporalCoherenceInfoChunks = 0;
+            int numDynamicEntityChunks = 0;
+            int numStaticEntityChunks = 0;
+            int numDynamicOrStaticEntityChunks = 0;
+            NativeStream removeDynamicBodyDataStream = default;
+            NativeStream removeStaticBodyDataStream = default;
+            NativeStream insertDynamicBodyDataStream = default;
+            NativeStream insertStaticBodyDataStream = default;
+            JobHandle removeDynamicBodyStreamHandle = default;
+            JobHandle removeStaticBodyStreamHandle = default;
+
+            if (incrementalDynamicBroadphase || incrementalStaticBroadphase)
+            {
+                numDynamicBodyRemovalChunksArray = CollectionHelper.CreateNativeArray<int>(1, worldUpdateAllocator, NativeArrayOptions.UninitializedMemory);
+                numStaticBodyRemovalChunksArray = CollectionHelper.CreateNativeArray<int>(1, worldUpdateAllocator, NativeArrayOptions.UninitializedMemory);
+                numInvalidatedTemporalCoherenceInfoChunks = invalidatedTemporalCoherenceInfoQuery.CalculateChunkCount();
+                numDynamicBodyRemovalChunksArray[0] = numInvalidatedTemporalCoherenceInfoChunks;
+                numStaticBodyRemovalChunksArray[0] = numInvalidatedTemporalCoherenceInfoChunks;
+
+                if (numStaticBodies > 0)
+                {
+                    numStaticEntityChunks = staticEntityQuery.CalculateChunkCount();
+                    numDynamicOrStaticEntityChunks += numStaticEntityChunks;
+                }
+
+                if (numDynamicBodies > 0)
+                {
+                    numDynamicEntityChunks = dynamicEntityQuery.CalculateChunkCount();
+                    numDynamicOrStaticEntityChunks += numDynamicEntityChunks;
+                }
+
+                numDynamicBodyRemovalChunksArray[0] += numDynamicOrStaticEntityChunks;
+                numStaticBodyRemovalChunksArray[0] += numDynamicOrStaticEntityChunks;
+
+                // Two reasons we need a remove body stream handle when either the incremental dynamic or static broadphase is used:
+                // 1. Reinsertion required for bodies that have changed and were previously in the same tree.
+                // 2. Removal of bodies that have been moved to the other tree. This is why we don't check here if there are
+                //    any dynamic or static bodies currently available (numDynamicBodies > 0, numStaticBodies > 0).
+                if (numDynamicBodyRemovalChunksArray[0] > 0)
+                {
+                    removeDynamicBodyStreamHandle = NativeStream.ScheduleConstruct(out removeDynamicBodyDataStream,
+                        numDynamicBodyRemovalChunksArray, inputDeps, worldUpdateAllocator);
+                    jobHandles.Add(removeDynamicBodyStreamHandle);
+                }
+
+                if (numStaticBodyRemovalChunksArray[0] > 0)
+                {
+                    removeStaticBodyStreamHandle = NativeStream.ScheduleConstruct(out removeStaticBodyDataStream,
+                        numStaticBodyRemovalChunksArray, inputDeps, worldUpdateAllocator);
+                    jobHandles.Add(removeStaticBodyStreamHandle);
+                }
+            }
+
+            if (numDynamicBodies > 0 && incrementalDynamicBroadphase)
+            {
+                var numChunksArray = CollectionHelper.CreateNativeArray<int>(1, worldUpdateAllocator,
+                    NativeArrayOptions.UninitializedMemory);
+                numChunksArray[0] = numDynamicEntityChunks;
+
+                var insertDynamicBodyStreamHandle = NativeStream.ScheduleConstruct(
+                    out insertDynamicBodyDataStream,
+                    numChunksArray, inputDeps, worldUpdateAllocator);
+                jobHandles.Add(insertDynamicBodyStreamHandle);
+            }
+
+            if (numStaticBodies > 0 && incrementalStaticBroadphase)
+            {
+                var numChunksArray = CollectionHelper.CreateNativeArray<int>(1, worldUpdateAllocator, NativeArrayOptions.UninitializedMemory);
+                numChunksArray[0] = numStaticEntityChunks;
+
+                var insertStaticBodyStreamHandle = NativeStream.ScheduleConstruct(
+                    out insertStaticBodyDataStream,
+                    numChunksArray, inputDeps, worldUpdateAllocator);
+                jobHandles.Add(insertStaticBodyStreamHandle);
+            }
+
+            if (numInvalidatedTemporalCoherenceInfoChunks > 0)
+            {
+                // fallback creation in case the removal streams have not yet been created
+                if (!removeDynamicBodyDataStream.IsCreated)
+                {
+                    removeDynamicBodyStreamHandle = NativeStream.ScheduleConstruct(out removeDynamicBodyDataStream, numDynamicBodyRemovalChunksArray, inputDeps, worldUpdateAllocator);
+                }
+                if (!removeStaticBodyDataStream.IsCreated)
+                {
+                    removeStaticBodyStreamHandle = NativeStream.ScheduleConstruct(out removeStaticBodyDataStream, numStaticBodyRemovalChunksArray, inputDeps, worldUpdateAllocator);
+                }
+
+                var removeBodyStreamDependency = JobHandle.CombineDependencies(removeDynamicBodyStreamHandle, removeStaticBodyStreamHandle);
+                var collectInvalidatedCoherenceInfoJob = new CollectInvalidatedTemporalCoherenceInfoJob
+                {
+                    PhysicsTemporalCoherenceInfoTypeRW = componentHandles.PhysicsTemporalCoherenceInfoTypeRW,
+                    RemoveDynamicBodyDataWriter = removeDynamicBodyDataStream.AsWriter(),
+                    RemoveStaticBodyDataWriter = removeStaticBodyDataStream.AsWriter(),
+                    DynamicStreamBufferOffset = numDynamicOrStaticEntityChunks,
+                    StaticStreamBufferOffset = numDynamicOrStaticEntityChunks
+                }.ScheduleParallel(invalidatedTemporalCoherenceInfoQuery, removeBodyStreamDependency);
+
+                jobHandles.Add(collectInvalidatedCoherenceInfoJob);
+            }
+
+            if (incrementalStaticBroadphase)
+            {
+                world.CollisionWorld.Broadphase.StaticTree.RemoveBodyDataStream = removeStaticBodyDataStream;
+            }
+
+            if (incrementalDynamicBroadphase)
+            {
+                world.CollisionWorld.Broadphase.DynamicTree.RemoveBodyDataStream = removeDynamicBodyDataStream;
+            }
+
+            inputDeps = JobHandle.CombineDependencies(jobHandles.AsArray());
+            jobHandles.Clear();
+
+            if (incrementalDynamicBroadphase || incrementalStaticBroadphase)
+            {
+                JobHandle collectDynamicCoherenceInfoHandle = inputDeps;
+                JobHandle collectStaticCoherenceInfoHandle = inputDeps;
+
+                if (incrementalDynamicBroadphase)
+                {
+                    if (numDynamicBodies > 0)
+                    {
+                        collectDynamicCoherenceInfoHandle = new CollectTemporalCoherenceInfoJob
+                        {
+                            PhysicsTemporalCoherenceInfoTypeRW = componentHandles.PhysicsTemporalCoherenceInfoTypeRW,
+                            LocalToWorldType = componentHandles.LocalToWorldType,
+                            LocalTransformType = componentHandles.LocalTransformType,
+                            PhysicsColliderType = componentHandles.PhysicsColliderType,
+#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
+                            PhysicsWorldIndexType = componentHandles.PhysicsWorldIndexType,
+#endif
+                            ChunkBaseEntityIndices = dynamicBodyChunkBaseEntityIndices,
+                            InsertBodyDataWriter = insertDynamicBodyDataStream.AsWriter(),
+                            RemoveBodyDataWriter = removeDynamicBodyDataStream.AsWriter(),
+                            RemoveBodyDataWriterOtherTree = removeStaticBodyDataStream.AsWriter(),
+                            OtherTreeBufferOffset = numStaticEntityChunks,
+
+                            Nodes = world.CollisionWorld.Broadphase.DynamicTree.Nodes,
+                            BodyFilters = world.CollisionWorld.Broadphase.DynamicTree.BodyFilters.AsArray(),
+                            RespondsToCollision =
+                                world.CollisionWorld.Broadphase.DynamicTree.RespondsToCollision.AsArray(),
+                            RigidBodies = world.CollisionWorld.DynamicBodies,
+                            MotionVelocities = world.DynamicsWorld.MotionVelocities,
+                            CollisionTolerance = world.CollisionWorld.CollisionTolerance,
+                            TimeStep = timeStep,
+                            Gravity = gravity,
+
+                            LastSystemVersion = lastSystemVersion,
+                        }.ScheduleParallel(dynamicEntityQuery, inputDeps);
+
+                        // @todo: this could go into the tree itself, which could have a reset function with an "is incremental" flag, or just always allocate a small amount
+                        // and clear each time we reset.
+                        var updatedElementLocationDataList =
+                            new NativeList<BoundingVolumeHierarchy.ElementLocationData>(numDynamicBodies,
+                                worldUpdateAllocator);
+                        world.CollisionWorld.Broadphase.DynamicTree.UpdatedElementLocationDataList = updatedElementLocationDataList;
+
+                        world.CollisionWorld.Broadphase.DynamicTree.InsertBodyDataStream = insertDynamicBodyDataStream;
+                    }
+
+                    // Special case: deal with bodies that switched type from dynamic to static when the static broadphase is not incremental.
+                    // In this case we need to remove the corresponding bodies from the dynamic tree ourselves here since we can't
+                    // rely on the static processing to do it, as it isn't run.
+                    if (!incrementalStaticBroadphase && numStaticBodies > 0)
+                    {
+                        var collectSwappedCoherenceInfoHandle = new CollectSwappedTemporalCoherenceInfoJob
+                        {
+                            PhysicsTemporalCoherenceInfoTypeRW = componentHandles.PhysicsTemporalCoherenceInfoTypeRW,
+                            RemoveBodyDataWriter = removeDynamicBodyDataStream.AsWriter(),
+                            BufferOffset = numDynamicEntityChunks,
+                            Static = true
+                        }.ScheduleParallel(staticEntityQuery, inputDeps);
+
+                        collectDynamicCoherenceInfoHandle = JobHandle.CombineDependencies(collectDynamicCoherenceInfoHandle, collectSwappedCoherenceInfoHandle);
+                    }
+                }
+
+                if (incrementalStaticBroadphase)
+                {
+                    if (numStaticBodies > 0)
+                    {
+                        collectStaticCoherenceInfoHandle = new CollectTemporalCoherenceInfoJob
+                        {
+                            PhysicsTemporalCoherenceInfoTypeRW = componentHandles.PhysicsTemporalCoherenceInfoTypeRW,
+                            LocalToWorldType = componentHandles.LocalToWorldType,
+                            LocalTransformType = componentHandles.LocalTransformType,
+                            PhysicsColliderType = componentHandles.PhysicsColliderType,
+#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
+                            PhysicsWorldIndexType = componentHandles.PhysicsWorldIndexType,
+#endif
+                            ChunkBaseEntityIndices = staticBodyChunkBaseEntityIndices,
+                            InsertBodyDataWriter = insertStaticBodyDataStream.AsWriter(),
+                            RemoveBodyDataWriter = removeStaticBodyDataStream.AsWriter(),
+                            RemoveBodyDataWriterOtherTree = removeDynamicBodyDataStream.AsWriter(),
+                            OtherTreeBufferOffset = numDynamicEntityChunks,
+
+                            Nodes = world.CollisionWorld.Broadphase.StaticTree.Nodes,
+                            BodyFilters = world.CollisionWorld.Broadphase.StaticTree.BodyFilters.AsArray(),
+                            RespondsToCollision =
+                                world.CollisionWorld.Broadphase.StaticTree.RespondsToCollision.AsArray(),
+                            RigidBodies = world.CollisionWorld.StaticBodies,
+                            Static = true,
+
+                            LastSystemVersion = lastSystemVersion
+                        }.ScheduleParallel(staticEntityQuery, inputDeps);
+
+                        // @todo: this could go into the tree itself, which could have a reset function with an "is incremental" flag, or just always allocate a small amount
+                        // and clear each time we reset.
+                        var updatedElementLocationDataList =
+                            new NativeList<BoundingVolumeHierarchy.ElementLocationData>(numStaticBodies,
+                                worldUpdateAllocator);
+                        world.CollisionWorld.Broadphase.StaticTree.UpdatedElementLocationDataList = updatedElementLocationDataList;
+
+                        world.CollisionWorld.Broadphase.StaticTree.InsertBodyDataStream = insertStaticBodyDataStream;
+                    }
+
+                    // Special case: deal with bodies that switched type from static to dynamic when the dynamic broadphase is not incremental.
+                    // In this case we need to remove the corresponding bodies from the static tree ourselves here since we can't
+                    // rely on the dynamic processing to do it, as it isn't run.
+                    if (!incrementalDynamicBroadphase && numDynamicBodies > 0)
+                    {
+                        var collectSwappedCoherenceInfoHandle = new CollectSwappedTemporalCoherenceInfoJob
+                        {
+                            PhysicsTemporalCoherenceInfoTypeRW = componentHandles.PhysicsTemporalCoherenceInfoTypeRW,
+                            RemoveBodyDataWriter = removeStaticBodyDataStream.AsWriter(),
+                            BufferOffset = numStaticEntityChunks,
+                            Static = false
+                        }.ScheduleParallel(dynamicEntityQuery, inputDeps);
+
+                        collectDynamicCoherenceInfoHandle = JobHandle.CombineDependencies(collectDynamicCoherenceInfoHandle, collectSwappedCoherenceInfoHandle);
+                    }
+                }
+
+                inputDeps =
+                    JobHandle.CombineDependencies(collectDynamicCoherenceInfoHandle, collectStaticCoherenceInfoHandle);
+            }
+
+            // Note: we do not reset the broadphase here since this is done from within the system that calls this method. This is needed to support incremental broadphase updates.
+            var buildBroadphaseHandle = Broadphase.ScheduleBuildJobs(ref world, timeStep, gravity, buildStaticTree, inputDeps,
+                multiThreaded, reset: false, incrementalDynamicBroadphase, incrementalStaticBroadphase);
+
+            if (incrementalDynamicBroadphase || incrementalStaticBroadphase)
+            {
+                JobHandle updateDynamicCoherenceInfoHandle = buildBroadphaseHandle;
+                JobHandle updateStaticCoherenceInfoHandle = buildBroadphaseHandle;
+
+                if (numDynamicBodies > 0 && incrementalDynamicBroadphase)
+                {
+                    var updateCoherenceInfoJob = new UpdateTemporalCoherenceInfoJob
+                    {
+                        PhysicsTemporalCoherenceInfoLookupRW = componentHandles.PhysicsTemporalCoherenceInfoLookupRW,
+                        TemporalCoherenceDataList =
+                            world.CollisionWorld.Broadphase.DynamicTree.UpdatedElementLocationDataList,
+                        RigidBodies = world.CollisionWorld.DynamicBodies,
+                        Static = false
+                    };
+
+                    updateDynamicCoherenceInfoHandle = updateCoherenceInfoJob.ScheduleByRef(
+                        world.CollisionWorld.Broadphase.DynamicTree.UpdatedElementLocationDataList, 16,
+                        buildBroadphaseHandle);
+                }
+
+                if (numStaticBodies > 0 && incrementalStaticBroadphase)
+                {
+                    var updateCoherenceInfoJob = new UpdateTemporalCoherenceInfoJob
+                    {
+                        PhysicsTemporalCoherenceInfoLookupRW = componentHandles.PhysicsTemporalCoherenceInfoLookupRW,
+                        TemporalCoherenceDataList =
+                            world.CollisionWorld.Broadphase.StaticTree.UpdatedElementLocationDataList,
+                        RigidBodies = world.CollisionWorld.StaticBodies,
+                        Static = true
+                    };
+                    updateStaticCoherenceInfoHandle = updateCoherenceInfoJob.ScheduleByRef(
+                        world.CollisionWorld.Broadphase.StaticTree.UpdatedElementLocationDataList, 16,
+                        buildBroadphaseHandle);
+                }
+
+                buildBroadphaseHandle = JobHandle.CombineDependencies(updateDynamicCoherenceInfoHandle,
+                    updateStaticCoherenceInfoHandle);
+            }
+
+            return buildBroadphaseHandle;
         }
 
         /// <summary>
@@ -199,6 +619,12 @@ namespace Unity.Physics
             JobHandle inputDeps, bool multiThreaded = true)
         {
             return Broadphase.ScheduleFindOverlapsJobs(out dynamicVsDynamicPairsStream, out staticVsDynamicPairsStream, inputDeps, multiThreaded);
+        }
+
+        internal SimulationJobHandles ScheduleFindOverlapsJobsInternal(out NativeStream dynamicVsDynamicPairsStream, out NativeStream staticVsDynamicPairsStream,
+            JobHandle inputDeps, bool multiThreaded, bool incrementalDynamicBroadphase, bool incrementalStaticBroadphase)
+        {
+            return Broadphase.ScheduleFindOverlapsJobs(out dynamicVsDynamicPairsStream, out staticVsDynamicPairsStream, inputDeps, multiThreaded, incrementalDynamicBroadphase, incrementalStaticBroadphase);
         }
 
         /// <summary>   Synchronize the collision world with the dynamics world. </summary>
@@ -332,8 +758,531 @@ namespace Unity.Physics
             public NativeReference<int>.ReadOnly buildStaticTree;
             public void Execute()
             {
-                if(buildStaticTree.Value != 0)
+                if (buildStaticTree.Value != 0)
                     World.CollisionWorld.UpdateStaticTree(ref World);
+            }
+        }
+
+        /// <summary>
+        /// <para>
+        /// Job responsible for collecting information about bodies that have switched between the dynamic and static trees
+        /// since the last frame as part of the incremental broadphase feature.
+        /// </para>
+        /// <para>
+        /// This happens when a dynamic body becomes static or vice versa.
+        /// </para>
+        /// </summary>
+        [BurstCompile]
+        struct CollectSwappedTemporalCoherenceInfoJob : IJobChunk
+        {
+            [NativeDisableContainerSafetyRestriction]
+            public ComponentTypeHandle<PhysicsTemporalCoherenceInfo> PhysicsTemporalCoherenceInfoTypeRW;
+
+            [NativeDisableContainerSafetyRestriction]
+            public NativeStream.Writer RemoveBodyDataWriter;
+            public int BufferOffset;
+
+            [ReadOnly] public bool Static;
+
+            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask,
+                in v128 chunkEnabledMask)
+            {
+                if (!chunk.Has(ref PhysicsTemporalCoherenceInfoTypeRW))
+                {
+                    SafetyChecks.ThrowArgumentException(
+                        "PhysicsTemporalCoherenceInfo component not found on rigid body. This component is required on " +
+                        "all rigid bodies when incremental broadphase is enabled.");
+                    return;
+                }
+
+                RemoveBodyDataWriter.BeginForEachIndex(unfilteredChunkIndex + BufferOffset);
+
+                NativeArray<PhysicsTemporalCoherenceInfo> chunkCoherenceInfos =
+                    chunk.GetNativeArray(ref PhysicsTemporalCoherenceInfoTypeRW);
+
+                var entityEnumerator =
+                    new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+
+                while (entityEnumerator.NextEntityIndex(out int i))
+                {
+                    var coherenceInfo = chunkCoherenceInfos[i];
+                    // The body has switched trees. We need to remove it from the previous tree.
+                    if (coherenceInfo.Valid && coherenceInfo.StaticBvh != Static)
+                    {
+                        SafetyChecks.CheckAreEqualAndThrow(true, coherenceInfo.StaticBvh != Static);
+                        // remove the body from the other tree
+                        RemoveBodyDataWriter.Write(new BoundingVolumeHierarchy.RemovalData
+                        {
+                            NodeIndex = coherenceInfo.LastBvhNodeIndex,
+                            LeafSlotIndex = coherenceInfo.LastBvhLeafSlotIndex
+                        });
+
+                        // invalidate temporal coherence info for clean re-insert next time
+                        chunkCoherenceInfos[i] = PhysicsTemporalCoherenceInfo.Default;
+                    }
+                }
+
+                RemoveBodyDataWriter.EndForEachIndex();
+            }
+        }
+
+        /// <summary>
+        /// <para>
+        /// Job responsible for collecting temporal coherence info for bodies in the simulation as part of
+        /// the incremental broadphase. The job performs updates of internal broadphase data based on the information found.
+        /// </para>
+        /// <para>
+        /// As such, bodies that have not been in the broadphase previously will be detected and added to an insertion list.
+        /// Analogously, bodies that have already been part of broadphase but have changed in ways relevant to the broadphase's
+        /// spatial hashing (transformation change, collider change etc.), will have to be removed and re-inserted. These
+        /// bodies will be added to the removal and insertion lists, and their relevant geometric information in the broadphase
+        /// will be updated, that is, their AABB, and their collision filter and responds to collision flag copies.
+        /// </para>
+        /// </summary>
+        [BurstCompile]
+        struct CollectTemporalCoherenceInfoJob : IJobChunk
+        {
+            [NativeDisableContainerSafetyRestriction]
+            public ComponentTypeHandle<PhysicsTemporalCoherenceInfo> PhysicsTemporalCoherenceInfoTypeRW;
+            [ReadOnly] public ComponentTypeHandle<LocalToWorld> LocalToWorldType;
+            [ReadOnly] public ComponentTypeHandle<LocalTransform> LocalTransformType;
+            [ReadOnly] public ComponentTypeHandle<PhysicsCollider> PhysicsColliderType;
+
+#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
+            [ReadOnly] public SharedComponentTypeHandle<PhysicsWorldIndex> PhysicsWorldIndexType;
+#endif
+
+            [ReadOnly] public NativeArray<int> ChunkBaseEntityIndices;
+
+            [NativeDisableContainerSafetyRestriction]
+            public NativeStream.Writer RemoveBodyDataWriter;
+            [NativeDisableContainerSafetyRestriction]
+            public NativeStream.Writer RemoveBodyDataWriterOtherTree;
+            public NativeStream.Writer InsertBodyDataWriter;
+            public int OtherTreeBufferOffset;
+
+            [NativeDisableContainerSafetyRestriction]
+            public NativeList<BoundingVolumeHierarchy.Node> Nodes;
+            [NativeDisableContainerSafetyRestriction]
+            public NativeArray<CollisionFilter> BodyFilters;
+            [NativeDisableContainerSafetyRestriction]
+            public NativeArray<bool> RespondsToCollision;
+            [ReadOnly] public NativeArray<RigidBody> RigidBodies;
+            [NativeDisableContainerSafetyRestriction]
+            [ReadOnly] public NativeArray<MotionVelocity> MotionVelocities;
+            [ReadOnly] public float CollisionTolerance;
+            [ReadOnly] public float TimeStep;
+            [ReadOnly] public float3 Gravity;
+            [ReadOnly] public bool Static;
+
+            [ReadOnly] public uint LastSystemVersion;
+
+            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask,
+                in v128 chunkEnabledMask)
+            {
+                SafetyChecks.CheckAreEqualAndThrow(false, useEnabledMask);
+
+#if ENABLE_UNITY_COLLECTIONS_CHECKS || UNITY_DOTS_DEBUG
+                if (!chunk.Has(ref PhysicsTemporalCoherenceInfoTypeRW))
+                {
+                    SafetyChecks.ThrowArgumentException("PhysicsTemporalCoherenceInfo component not found on rigid body. This component is required on " +
+                        "all rigid bodies when incremental broadphase is enabled.");
+                    return;
+                }
+#endif
+
+#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
+                // The incremental broadphase feature is only supported in the default world
+                var defaultWorldIndex = new PhysicsWorldIndex();
+                var physicsWorldIndex = chunk.GetSharedComponent(PhysicsWorldIndexType);
+
+                SafetyChecks.CheckAreEqualAndThrow(defaultWorldIndex.Value, physicsWorldIndex.Value);
+#endif
+
+                var transformChangedInChunk =
+                    chunk.DidChange(ref LocalToWorldType, LastSystemVersion) ||
+                    chunk.DidChange(ref LocalTransformType, LastSystemVersion);
+                var colliderChangedInChunk = chunk.DidChange(ref PhysicsColliderType, LastSystemVersion);
+                var temporalCoherenceDataChanged = chunk.DidChange(ref PhysicsTemporalCoherenceInfoTypeRW, LastSystemVersion);
+                var chunkOrderChanged = chunk.DidOrderChange(LastSystemVersion);
+
+
+                var firstEntityIndexInQuery = ChunkBaseEntityIndices[unfilteredChunkIndex];
+
+                unsafe
+                {
+                    // Note: we absolutely need to use pointer access here, so that we can safely write to the
+                    // data array in the leaf node entries in parallel. If we were to use the array's API and read the node
+                    // out, modify the data and then assign it back (see below) we will cause a race condition.
+                    var nodes = Nodes.GetUnsafePtr();
+                    var chunkCoherenceInfos =
+                        chunk.GetComponentDataPtrRW(ref PhysicsTemporalCoherenceInfoTypeRW);
+
+                    // early out in case nothing of relevance for incremental broadphase changed in this chunk
+                    if (!(transformChangedInChunk || colliderChangedInChunk || temporalCoherenceDataChanged || chunkOrderChanged))
+                    {
+                        var entityIter = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+
+                        // Check if the starting index of this chunk changed.
+                        // If not, we can bail out right here.
+                        if (entityIter.NextEntityIndex(out int i))
+                        {
+                            var firstBodyIndex = firstEntityIndexInQuery + i;
+                            var coherenceInfo = chunkCoherenceInfos[i];
+                            var firstBodyIndexLastFrame = coherenceInfo.LastRigidBodyIndex;
+                            SafetyChecks.CheckAreEqualAndThrow(true, coherenceInfo.Valid);
+                            if (firstBodyIndex == firstBodyIndexLastFrame)
+                            {
+                                // starting index did not change, so we can safely bail out here.
+                                return;
+                            }
+                            // else:
+
+                            // Fast path here for only a fixed entity index shift:
+                            // Nothing changed in this chunk, but the starting entity index changed.
+                            // So we have to update internal broadphase data structures:
+                            // 1. update data in BVH node and coherence info
+                            // 2. shift data in RespondsToCollision and CollisionFilter arrays
+
+                            do
+                            {
+                                // 1:
+
+                                var bodyIndex = firstEntityIndexInQuery + i;
+                                coherenceInfo = chunkCoherenceInfos[i];
+                                var lastBodyIndex = coherenceInfo.LastRigidBodyIndex;
+                                SafetyChecks.CheckAreEqualAndThrow(true, coherenceInfo.Valid);
+                                SafetyChecks.CheckAreEqualAndThrow(true, bodyIndex != lastBodyIndex);
+
+                                // last known node index of the body
+                                var nodeIndex = coherenceInfo.LastBvhNodeIndex;
+                                SafetyChecks.CheckAreEqualAndThrow(true, nodeIndex > 0);
+
+                                var node = nodes + nodeIndex;
+                                SafetyChecks.CheckAreEqualAndThrow(true, node->IsLeaf);
+                                // index of the leaf slot the body is located in within its node
+                                var leafSlotIndex = coherenceInfo.LastBvhLeafSlotIndex;
+                                // confirm that we are looking at the leaf slot of the right body
+                                SafetyChecks.CheckAreEqualAndThrow(coherenceInfo.LastRigidBodyIndex,
+                                    node->Data[leafSlotIndex]);
+
+                                // update body index in node
+                                node->Data[leafSlotIndex] = bodyIndex;
+                                // confirm that there is no race condition
+                                SafetyChecks.CheckAreEqualAndThrow(bodyIndex, node->Data[leafSlotIndex]);
+                                // update changed rigid body index also in coherence info
+                                coherenceInfo.LastRigidBodyIndex = bodyIndex;
+
+                                // write out updated coherence info
+                                chunkCoherenceInfos[i] = coherenceInfo;
+
+                                // 2:
+
+                                var collisionFilter = CollisionFilter.Zero;
+                                var respondsToCollision = false;
+                                var body = RigidBodies[bodyIndex];
+                                if (body.Collider.IsCreated)
+                                {
+                                    collisionFilter = body.Collider.Value.GetCollisionFilter();
+                                    respondsToCollision = body.Collider.Value.RespondsToCollision;
+                                }
+
+                                BodyFilters[bodyIndex] = collisionFilter;
+                                RespondsToCollision[bodyIndex] = respondsToCollision;
+                            }
+                            while (entityIter.NextEntityIndex(out i));
+                        }
+
+                        return;
+                    }
+
+                    RemoveBodyDataWriter.BeginForEachIndex(unfilteredChunkIndex);
+                    InsertBodyDataWriter.BeginForEachIndex(unfilteredChunkIndex);
+                    if (OtherTreeBufferOffset != -1)
+                    {
+                        // only needed if the other tree (either static or dynamic) exists and we might need to
+                        // remove bodies from it
+                        RemoveBodyDataWriterOtherTree.BeginForEachIndex(unfilteredChunkIndex + OtherTreeBufferOffset);
+                    }
+
+                    var entityEnumerator =
+                        new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+
+                    var aabbMargin = CollisionTolerance * 0.5f;
+
+                    while (entityEnumerator.NextEntityIndex(out int i))
+                    {
+                        var bodyIndex = firstEntityIndexInQuery + i;
+                        var coherenceInfo = chunkCoherenceInfos[i];
+                        var bodyIndexChanged = !coherenceInfo.Valid || bodyIndex != coherenceInfo.LastRigidBodyIndex;
+                        var anythingChanged = bodyIndexChanged || transformChangedInChunk || colliderChangedInChunk || chunkOrderChanged;
+
+                        if (anythingChanged)
+                        {
+                            bool previouslyInTree = coherenceInfo.Valid &&              // body was previously in some tree
+                                coherenceInfo.StaticBvh == Static;                      // body was previously in this tree
+
+                            // Check if the body was previously present in this tree. Update its data if required.
+                            // If not, we need to insert it for the first time.
+                            if (previouslyInTree)
+                            {
+                                // last known node index of the body
+                                // If > 0, the body has already been in the tree. Otherwise, it needs to be newly inserted.
+                                var nodeIndex = coherenceInfo.LastBvhNodeIndex;
+                                SafetyChecks.CheckAreEqualAndThrow(true, nodeIndex > 0);
+
+                                var node = nodes + nodeIndex;
+                                SafetyChecks.CheckAreEqualAndThrow(true, node->IsLeaf);
+                                // index of the leaf slot the body is located in within its node
+                                var leafSlotIndex = coherenceInfo.LastBvhLeafSlotIndex;
+                                // confirm that we are looking at the leaf slot of the right body
+                                SafetyChecks.CheckAreEqualAndThrow(coherenceInfo.LastRigidBodyIndex, node->Data[leafSlotIndex]);
+
+                                // update body index if required
+                                if (bodyIndexChanged)
+                                {
+                                    node->Data[leafSlotIndex] = bodyIndex;
+                                    // confirm that there is no race condition
+                                    SafetyChecks.CheckAreEqualAndThrow(bodyIndex, node->Data[leafSlotIndex]);
+                                    // update changed rigid body index also in coherence info
+                                    coherenceInfo.LastRigidBodyIndex = bodyIndex;
+                                }
+
+                                var body = RigidBodies[bodyIndex];
+
+                                // check if collider changed
+                                bool colliderChanged = false;
+                                if (colliderChangedInChunk)
+                                {
+                                    // check if the collider version changed for this entity
+                                    var colliderVersion = body.Collider.Value.Version;
+                                    colliderChanged = colliderVersion != coherenceInfo.LastColliderVersion;
+                                    // update collider version in coherence info
+                                    coherenceInfo.LastColliderVersion = colliderVersion;
+                                }
+
+                                // update coherence info if required
+                                if (bodyIndexChanged || colliderChanged)
+                                {
+                                    chunkCoherenceInfos[i] = coherenceInfo;
+                                }
+
+                                var collisionFilter = CollisionFilter.Zero;
+                                var needFilterUpdate = bodyIndexChanged || colliderChanged;
+                                // deal with collision filter and responds to collision flag
+                                if (needFilterUpdate)
+                                {
+                                    // If the body index changed or the collider was modified, we need to update the
+                                    // body's entry in the BodyFilters and RespondsToCollision arrays.
+                                    // If the body index changed, we just need to copy the data to the right location.
+                                    // If the collider was modified, the collision filter or RespondsToCollision flag could have been changed.
+                                    var respondsToCollision = false;
+                                    if (body.Collider.IsCreated)
+                                    {
+                                        collisionFilter = body.Collider.Value.GetCollisionFilter();
+                                        respondsToCollision = body.Collider.Value.RespondsToCollision;
+                                    }
+
+                                    BodyFilters[bodyIndex] = collisionFilter;
+                                    RespondsToCollision[bodyIndex] = respondsToCollision;
+                                }
+
+                                // check if we need to update the AABB in the broadphase
+                                if (transformChangedInChunk || colliderChanged)
+                                {
+                                    // Recompute AABB:
+                                    var aabb = Static ?
+                                        Broadphase.PrepareStaticBodyDataJob.CalculateAabb(ref body, aabbMargin) :
+                                        Broadphase.PrepareDynamicBodyDataJob.CalculateAabb(ref body, aabbMargin, Gravity,
+                                        TimeStep, MotionVelocities[bodyIndex]);
+
+                                    // @todo if we are relatively close to the previous values, we could just issue an aabb update
+                                    // and a refit without removal and re-insertion.
+
+                                    // Unless we need to reinsert anyways since the collider changed in some way,
+                                    // compare new AABB with previous one. If they are different, we need to issue a removal and reinsertion.
+                                    // Note: We don't access the bounds if the collider changed. In this case we need to issue a re-insertion anyways
+                                    bool reinsertRequired = colliderChanged;
+                                    if (!reinsertRequired)
+                                    {
+                                        var previousAabb = node->Bounds.GetAabb(leafSlotIndex);
+                                        const float kEpsilonSq = math.EPSILON;
+                                        reinsertRequired =
+                                            math.distancesq(aabb.Extents, previousAabb.Extents) > kEpsilonSq ||
+                                            math.distancesq(aabb.Center, previousAabb.Center) > kEpsilonSq;
+
+                                        // @todo: to prevent unnecessary re-insertion, we could figure out what changed exactly and then decide if we need to reinsert:
+                                        // - only material changed? no need to reinsert
+                                        // - shape changed but same AABB? no need to reinsert
+                                        // - collision filter changed? no need to reinsert in certain cases, and could do fast update in others.
+                                        //      - filter less permissive than before? Not necessary to update.
+                                        //      - filter more permissive than before? Necessary to update, but could be done with a fast path (recompute filters bottom up similarly to when we remove).
+                                    }
+
+                                    if (reinsertRequired)
+                                    {
+                                        RemoveBodyDataWriter.Write(new BoundingVolumeHierarchy.RemovalData
+                                        {
+                                            NodeIndex = nodeIndex,
+                                            LeafSlotIndex = leafSlotIndex
+                                        });
+
+                                        var point = new BoundingVolumeHierarchy.PointAndIndex
+                                        {
+                                            Index = bodyIndex,
+                                            Position = aabb.Center
+                                        };
+
+                                        if (!needFilterUpdate && body.Collider.IsCreated)
+                                        {
+                                            collisionFilter = body.Collider.Value.GetCollisionFilter();
+                                        }
+
+                                        InsertBodyDataWriter.Write(new Broadphase.InsertionData
+                                        {
+                                            Aabb = aabb, PointAndIndex = point, Filter = collisionFilter
+                                        });
+                                    }
+                                }
+                            }
+                            else // body was not yet in this tree and needs to be newly inserted.
+                            {
+                                // check if the body was previously in the other tree and needs to be removed from there
+                                if (coherenceInfo.Valid)
+                                {
+                                    SafetyChecks.CheckAreEqualAndThrow(true, coherenceInfo.StaticBvh != Static);
+                                    // remove the body from the other tree
+                                    RemoveBodyDataWriterOtherTree.Write(new BoundingVolumeHierarchy.RemovalData
+                                    {
+                                        NodeIndex = coherenceInfo.LastBvhNodeIndex,
+                                        LeafSlotIndex = coherenceInfo.LastBvhLeafSlotIndex
+                                    });
+                                }
+
+                                // Compute AABB:
+                                var body = RigidBodies[bodyIndex];
+                                var aabb = Static ?
+                                    Broadphase.PrepareStaticBodyDataJob.CalculateAabb(ref body, aabbMargin) :
+                                    Broadphase.PrepareDynamicBodyDataJob.CalculateAabb(ref body, aabbMargin, Gravity,
+                                    TimeStep, MotionVelocities[bodyIndex]);
+                                var point = new BoundingVolumeHierarchy.PointAndIndex
+                                {
+                                    Index = bodyIndex,
+                                    Position = aabb.Center
+                                };
+
+                                var collisionFilter = CollisionFilter.Zero;
+                                var respondsToCollision = false;
+                                if (body.Collider.IsCreated)
+                                {
+                                    collisionFilter = body.Collider.Value.GetCollisionFilter();
+                                    respondsToCollision = body.Collider.Value.RespondsToCollision;
+                                }
+
+                                BodyFilters[bodyIndex] = collisionFilter;
+                                RespondsToCollision[bodyIndex] = respondsToCollision;
+
+                                InsertBodyDataWriter.Write(new Broadphase.InsertionData
+                                {
+                                    Aabb = aabb, PointAndIndex = point, Filter = collisionFilter
+                                });
+                            }
+                        }
+                    }
+
+                    RemoveBodyDataWriter.EndForEachIndex();
+                    InsertBodyDataWriter.EndForEachIndex();
+                    if (OtherTreeBufferOffset != -1)
+                    {
+                        RemoveBodyDataWriterOtherTree.EndForEachIndex();
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Job responsible for updating the temporal coherence info for bodies after they have been inserted or moved
+        /// in the broadphase. This job is part of the incremental broadphase.
+        /// </summary>
+        [BurstCompile]
+        struct UpdateTemporalCoherenceInfoJob : IJobParallelForDefer
+        {
+            [NativeDisableContainerSafetyRestriction]
+            public ComponentLookup<PhysicsTemporalCoherenceInfo> PhysicsTemporalCoherenceInfoLookupRW;
+            [ReadOnly] public NativeList<BoundingVolumeHierarchy.ElementLocationData> TemporalCoherenceDataList;
+            [ReadOnly] public NativeArray<RigidBody> RigidBodies;
+            [ReadOnly] public bool Static;
+
+            public void Execute(int index)
+            {
+                var data = TemporalCoherenceDataList[index];
+                var rigidBody = RigidBodies[data.ElementIndex];
+                var colliderVersion = rigidBody.Collider.IsCreated ? rigidBody.Collider.Value.Version : (byte)0;
+                PhysicsTemporalCoherenceInfoLookupRW[rigidBody.Entity] = new PhysicsTemporalCoherenceInfo
+                {
+                    LastRigidBodyIndex = data.ElementIndex,
+                    LastBvhNodeIndex = data.NodeIndex,
+                    LastBvhLeafSlotIndex = data.LeafSlotIndex,
+                    LastColliderVersion = colliderVersion,
+                    StaticBvh = Static
+                };
+            }
+        }
+
+        /// <summary>
+        /// <para>
+        /// Job responsible for collecting information about rigid body entities that that have ceased to be rigid bodies
+        /// since the last frame when the incremental broadphase is ensabled.
+        /// </para>
+        /// <para>
+        /// This happens when a rigid body entity is destroyed or when a component required for a rigid body is removed.
+        /// </para>
+        /// </summary>
+        [BurstCompile]
+        struct CollectInvalidatedTemporalCoherenceInfoJob : IJobChunk
+        {
+            public ComponentTypeHandle<PhysicsTemporalCoherenceInfo> PhysicsTemporalCoherenceInfoTypeRW;
+
+            [NativeDisableContainerSafetyRestriction]
+            public NativeStream.Writer RemoveDynamicBodyDataWriter;
+            [NativeDisableContainerSafetyRestriction]
+            public NativeStream.Writer RemoveStaticBodyDataWriter;
+
+            [ReadOnly] public int DynamicStreamBufferOffset;
+            [ReadOnly] public int StaticStreamBufferOffset;
+
+            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
+            {
+                SafetyChecks.CheckAreEqualAndThrow(true, chunk.Has(ref PhysicsTemporalCoherenceInfoTypeRW));
+
+                RemoveDynamicBodyDataWriter.BeginForEachIndex(unfilteredChunkIndex + DynamicStreamBufferOffset);
+                RemoveStaticBodyDataWriter.BeginForEachIndex(unfilteredChunkIndex + StaticStreamBufferOffset);
+
+                NativeArray<PhysicsTemporalCoherenceInfo> chunkCoherenceInfos =
+                    chunk.GetNativeArray(ref PhysicsTemporalCoherenceInfoTypeRW);
+
+                var entityEnumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);
+                while (entityEnumerator.NextEntityIndex(out int i))
+                {
+                    var coherenceInfo = chunkCoherenceInfos[i];
+                    if (coherenceInfo.Valid)
+                    {
+                        ref var writer = ref coherenceInfo.StaticBvh ?
+                            ref RemoveStaticBodyDataWriter : ref RemoveDynamicBodyDataWriter;
+
+                        writer.Write(new BoundingVolumeHierarchy.RemovalData
+                        {
+                            NodeIndex = coherenceInfo.LastBvhNodeIndex,
+                            LeafSlotIndex = coherenceInfo.LastBvhLeafSlotIndex
+                        });
+                    }
+
+                    // overwrite coherence info with default values which invalidates the data
+                    chunkCoherenceInfos[i] = PhysicsTemporalCoherenceInfo.Default;
+                }
+
+                RemoveDynamicBodyDataWriter.EndForEachIndex();
+                RemoveStaticBodyDataWriter.EndForEachIndex();
             }
         }
 

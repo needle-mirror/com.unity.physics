@@ -96,6 +96,96 @@ namespace Unity.Physics.Tests.Collision.Colliders
 
         #endregion
 
+        #region Modification
+
+        void ValidateGeometryEqual(in CapsuleGeometry expectedGeometry, in CapsuleGeometry actualGeometry)
+        {
+            const float kDelta = 1e-5f;
+            TestUtils.AreEqual(expectedGeometry.Vertex0, actualGeometry.Vertex0, kDelta);
+            TestUtils.AreEqual(expectedGeometry.Vertex1, actualGeometry.Vertex1, kDelta);
+            TestUtils.AreEqual(expectedGeometry.Radius, actualGeometry.Radius, kDelta);
+        }
+
+        /// <summary>
+        /// Modify a <see cref="CapsuleCollider"/> by baking a user-provided transformation matrix,
+        /// containing translation, rotation and scale, into its geometry.
+        /// </summary>
+        [Test]
+        public void TestCapsuleColliderBakeTransformTRS([Values(0, 1, 2)] int axisID)
+        {
+            var geometry = new CapsuleGeometry
+            {
+                Vertex0 = new float3 {[axisID] = 1f},
+                Vertex1 = new float3 {[axisID] = -1f},
+                Radius = 0.5f
+            };
+
+            using var collider = CapsuleCollider.Create(geometry);
+            ref var capsuleCollider = ref collider.As<CapsuleCollider>();
+
+            var translation = new float3(1, 2, 4.2f);
+            var rotation = quaternion.Euler(math.radians(10), math.radians(30), math.radians(42));
+            var scale = new float3(1.5f, 2.5f, 4.2f);
+            var transform = new AffineTransform(translation, rotation, scale);
+            collider.Value.BakeTransform(transform);
+
+            var vertexScale = new float3 {[axisID] = scale[axisID], [Math.Constants.NextAxis[axisID]] = 1f, [Math.Constants.PrevAxis[axisID]] = 1f};
+            var vertexTransform = float4x4.TRS(translation, rotation, vertexScale);
+            var nonAxisScales = new float2(scale[Math.Constants.NextAxis[axisID]], scale[Math.Constants.PrevAxis[axisID]]);
+            var expectedRadius = geometry.Radius * math.cmax(nonAxisScales);
+            var vertexOffset = math.rotate(rotation, new float3 {[axisID] = expectedRadius});
+            var expectedGeometry = new CapsuleGeometry
+            {
+                Vertex0 = math.transform(vertexTransform, geometry.Vertex0 + new float3 {[axisID] = geometry.Radius}) - vertexOffset,
+                Vertex1 = math.transform(vertexTransform, geometry.Vertex1 - new float3 {[axisID] = geometry.Radius}) + vertexOffset,
+                Radius = expectedRadius
+            };
+
+            ValidateGeometryEqual(expectedGeometry, capsuleCollider.Geometry);
+
+            // Test that the mass properties are as expected
+            using var expectedCollider = CapsuleCollider.Create(expectedGeometry);
+            TestUtils.AreEqual(expectedCollider.Value.MassProperties, capsuleCollider.MassProperties, 1e-4f);
+        }
+
+        /// <summary>
+        /// Modify a <see cref="CapsuleCollider"/> by baking a user-provided transformation matrix,
+        /// containing translation and rotation, into its geometry.
+        /// </summary>
+        [Test]
+        public void TestCapsuleColliderBakeTransformTR()
+        {
+            var geometry = new CapsuleGeometry
+            {
+                Vertex0 = new float3(1, 2, 3),
+                Vertex1 = new float3(-2, -3, -5),
+                Radius = 0.5f
+            };
+
+            using var collider = CapsuleCollider.Create(geometry);
+            ref var capsuleCollider = ref collider.As<CapsuleCollider>();
+
+            var translation = new float3(1, 2, 4.2f);
+            var rotation = quaternion.Euler(math.radians(10), math.radians(30), math.radians(42));
+            var transform = new AffineTransform(translation, rotation, 1);
+            collider.Value.BakeTransform(transform);
+
+            var expectedGeometry = new CapsuleGeometry
+            {
+                Vertex0 = math.transform(transform, geometry.Vertex0),
+                Vertex1 = math.transform(transform, geometry.Vertex1),
+                Radius = geometry.Radius
+            };
+
+            ValidateGeometryEqual(expectedGeometry, capsuleCollider.Geometry);
+
+            // Test that the mass properties are as expected
+            using var expectedCollider = CapsuleCollider.Create(expectedGeometry);
+            TestUtils.AreEqual(expectedCollider.Value.MassProperties, capsuleCollider.MassProperties, 1e-4f);
+        }
+
+        #endregion
+
         #region IConvexCollider
 
         /// <summary>

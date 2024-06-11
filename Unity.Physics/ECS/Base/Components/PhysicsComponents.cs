@@ -274,6 +274,40 @@ namespace Unity.Physics
     }
 
     /// <summary>
+    /// Temporal coherence information associated with a rigid body for incremental broadphase updates.
+    /// </summary>
+    public struct PhysicsTemporalCoherenceInfo : ICleanupComponentData
+    {
+        /// <summary>   Last frame's index of this rigid body in the collision world. </summary>
+        public int LastRigidBodyIndex;
+
+        /// <summary>   Last frame's index of the bounding volume hierarchy node this rigid body was referenced in. </summary>
+        public int LastBvhNodeIndex;
+
+        /// <summary>   Last frame's index of the leaf slot in the bounding volume hierarchy node this rigid body was referenced in. </summary>
+        public byte LastBvhLeafSlotIndex;
+
+        /// <summary>   Last frame's collider version </summary>
+        public byte LastColliderVersion;
+
+        /// <summary>   Last frame's bounding volume hierarchy type. </summary>
+        public bool StaticBvh;
+
+        /// <summary>   Checks whether this object contains valid temporal coherence info. </summary>
+        public bool Valid => LastBvhNodeIndex > 0;
+
+        /// <summary>   Default and invalid temporal coherence info (immutable). </summary>
+        public static readonly PhysicsTemporalCoherenceInfo Default = default;
+    }
+
+    /// <summary>
+    /// Tag indicating that a rigid body's temporal coherence is being tracked.
+    /// </summary>
+    public struct PhysicsTemporalCoherenceTag : IComponentData
+    {
+    }
+
+    /// <summary>
     /// Parameters describing how to step the physics world. If none is present in the scene, default
     /// values will be used.
     /// </summary>
@@ -288,7 +322,7 @@ namespace Unity.Physics
         /// <summary>   The solver stabilization heuristic settings. </summary>
         public Solver.StabilizationHeuristicSettings SolverStabilizationHeuristicSettings;
 
-        /// <summary>   The multi threaded. </summary>
+        /// <summary>   Flag indicating whether the simulation will run multi-threaded. </summary>
         public byte MultiThreaded;
 
         /// <summary>
@@ -301,6 +335,22 @@ namespace Unity.Physics
         /// </summary>
         public byte SynchronizeCollisionWorld;
 
+        /// <summary>
+        /// Flag indicating whether the dynamic broadphase is built incrementally.
+        /// Enabling this option will update the dynamic broadphase incrementally whenever changes between simulation steps occur,
+        /// potentially leading to time savings for cases with many dynamic rigid bodies that don't move or otherwise change.
+        /// </summary>
+        public bool IncrementalDynamicBroadphase;
+
+        /// <summary>
+        /// Flag indicating whether the static broadphase is built incrementally.
+        /// <para>
+        /// Enabling this option will update the static broadphase incrementally whenever changes between simulation steps occur,
+        /// potentially leading to time savings for cases with many static rigid bodies that don't move or otherwise change.
+        /// </para>
+        /// </summary>
+        public bool IncrementalStaticBroadphase;
+
         /// <summary>   (Immutable) the default. </summary>
         public static readonly PhysicsStep Default = new PhysicsStep
         {
@@ -309,7 +359,9 @@ namespace Unity.Physics
             SolverIterationCount = 4,
             SolverStabilizationHeuristicSettings = Solver.StabilizationHeuristicSettings.Default,
             MultiThreaded = 1,
-            SynchronizeCollisionWorld = 0
+            SynchronizeCollisionWorld = 0,
+            IncrementalDynamicBroadphase = false,
+            IncrementalStaticBroadphase = false
         };
     }
 

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Unity.Burst;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Physics.Extensions;
@@ -128,10 +129,11 @@ namespace Unity.Physics.Authoring
     [WorldSystemFilter(WorldSystemFilterFlags.BakingSystem)]
     public partial struct RigidbodyBakingSystem : ISystem
     {
-        static SimulationMode k_InvalidSimulationMode = (SimulationMode) ~0;
+        static readonly SimulationMode k_InvalidSimulationMode = (SimulationMode) ~0;
         SimulationMode m_SavedSmulationMode;
         bool m_ProcessSimulationModeChange;
 
+        [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             m_SavedSmulationMode = k_InvalidSimulationMode;
@@ -139,6 +141,7 @@ namespace Unity.Physics.Authoring
             m_ProcessSimulationModeChange = Application.isPlaying;
         }
 
+        [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
             // Unless no legacy physics step data is available, restore previously stored legacy physics simulation mode
@@ -150,6 +153,7 @@ namespace Unity.Physics.Authoring
             }
         }
 
+        [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
             if (m_ProcessSimulationModeChange)
@@ -164,7 +168,7 @@ namespace Unity.Physics.Authoring
             }
 
             // Set world index for bodies with world index baking data
-            var ecb = new EntityCommandBuffer(state.WorldUpdateAllocator);
+            using var ecb = new EntityCommandBuffer(state.WorldUpdateAllocator);
             foreach (var(rigidBodyData, worldIndexData, entity) in
                      SystemAPI.Query<RefRO<RigidbodyBakingData>, RefRO<PhysicsWorldIndexBakingData>>()
                          .WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities).WithEntityAccess())
@@ -193,10 +197,9 @@ namespace Unity.Physics.Authoring
             }
 
             ecb.Playback(state.EntityManager);
-            ecb.Dispose();
         }
 
-        private PhysicsMass CreatePhysicsMass(EntityManager entityManager, in Entity entity,
+        static PhysicsMass CreatePhysicsMass(EntityManager entityManager, in Entity entity,
             in RigidbodyBakingData inBodyData, in MassProperties inMassProperties)
         {
             var massProperties = inMassProperties;

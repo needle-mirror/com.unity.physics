@@ -1,4 +1,3 @@
-using System;
 using Unity.Burst;
 using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine.Assertions;
@@ -27,7 +26,7 @@ namespace Unity.Collections
         public int PeakCount { get; private set; }  // the maximum number of elements allocated so far
         public bool CanAllocate => m_FirstFreeIndex >= 0 || PeakCount < Capacity;
 
-        public unsafe ElementPoolBase(void* userBuffer, int capacity)
+        public ElementPoolBase(void* userBuffer, int capacity)
         {
             m_Elements = userBuffer;
             m_capacity = capacity;
@@ -90,7 +89,7 @@ namespace Unity.Collections
             ((T*)m_Elements)[index] = value;
         }
 
-        public unsafe void CopyFrom<T>(ElementPoolBase other) where T : unmanaged, IPoolElement
+        public void CopyFrom<T>(ElementPoolBase other) where T : unmanaged, IPoolElement
         {
             Assert.IsTrue(other.PeakCount <= Capacity);
             PeakCount = other.PeakCount;
@@ -98,7 +97,7 @@ namespace Unity.Collections
             UnsafeUtility.MemCpy(m_Elements, other.m_Elements, PeakCount * UnsafeUtility.SizeOf<T>());
         }
 
-        public unsafe void CopyFrom<T>(void* buffer, int length) where T : unmanaged, IPoolElement
+        public void CopyFrom<T>(void* buffer, int length) where T : unmanaged, IPoolElement
         {
             Assert.IsTrue(length <= Capacity);
             PeakCount = length;
@@ -109,7 +108,7 @@ namespace Unity.Collections
         // Compacts the pool so that all of the allocated elements are contiguous, and resets PeakCount to the current allocated count.
         // remap may be null or an array of size at least PeakCount, if not null and the return value is true then Compact() sets remap[oldIndex] = newIndex for all allocated elements.
         // Returns true if compact occurred, false if the pool was already compact.
-        public unsafe bool Compact<T>(int* remap) where T : unmanaged, IPoolElement
+        public bool Compact<T>(int* remap) where T : unmanaged, IPoolElement
         {
             if (m_FirstFreeIndex == -1)
             {
@@ -246,11 +245,11 @@ namespace Unity.Collections
 
         public void Set(int index, T value) { ElementPoolBase->Set<T>(index, value); }
 
-        public unsafe void CopyFrom(ElementPool<T> other) { ElementPoolBase->CopyFrom<T>(*other.ElementPoolBase); }
+        public void CopyFrom(ElementPool<T> other) { ElementPoolBase->CopyFrom<T>(*other.ElementPoolBase); }
 
-        public unsafe void CopyFrom(void* buffer, int length) { ElementPoolBase->CopyFrom<T>(buffer, length); }
+        public void CopyFrom(void* buffer, int length) { ElementPoolBase->CopyFrom<T>(buffer, length); }
 
-        public unsafe bool Compact(int* remap) { return ElementPoolBase->Compact<T>(remap); }
+        public bool Compact(int* remap) { return ElementPoolBase->Compact<T>(remap); }
 
         public ElementPoolBase.IndexEnumerable<T> Indices => ElementPoolBase->GetIndices<T>();
         public ElementPoolBase.ElementEnumerable<T> Elements => ElementPoolBase->GetElements<T>();

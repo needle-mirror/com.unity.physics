@@ -168,10 +168,11 @@ namespace Unity.Physics.Tests
             var q = (quaternion)actual;
             var m = new float3x3(q);
             var expected = new float3x3(m_Expected);
-            var cmp =
-                math.lengthsq(m.c0 - expected.c0) < m_ToleranceSq
-                && math.lengthsq(m.c1 - expected.c1) < m_ToleranceSq
-                && math.lengthsq(m.c2 - expected.c2) < m_ToleranceSq;
+            var c0 = math.lengthsq(m.c0 - expected.c0);
+            var c1 = math.lengthsq(m.c1 - expected.c1);
+            var c2 = math.lengthsq(m.c2 - expected.c2);
+
+            var cmp =  c0 < m_ToleranceSq && c1 < m_ToleranceSq && c2 < m_ToleranceSq;
             return new ConstraintResult(this, actual, cmp);
         }
 
@@ -866,6 +867,15 @@ namespace Unity.Physics.Tests.Utils
         {
             AreEqual(a.rot, b.rot, delta);
             AreEqual(a.pos, b.pos, delta);
+        }
+
+        public static void AreEqual(MassProperties a, MassProperties b, float delta = 0.0f)
+        {
+            AreEqual(a.MassDistribution.Transform.pos, b.MassDistribution.Transform.pos, delta);
+            NUnit.Framework.Assert.That(a.MassDistribution.Transform.rot, Is.OrientedEquivalentTo(b.MassDistribution.Transform.rot).EachAxisWithin(delta));
+            AreEqual(a.MassDistribution.InertiaTensor, b.MassDistribution.InertiaTensor, delta);
+            AreEqual(a.AngularExpansionFactor, b.AngularExpansionFactor, delta);
+            AreEqual(a.Volume, b.Volume, delta);
         }
 
         //

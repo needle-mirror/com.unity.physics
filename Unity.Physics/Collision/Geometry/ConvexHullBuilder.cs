@@ -23,7 +23,7 @@ namespace Unity.Physics
         [NoAlias]
         private ElementPoolBase m_Triangles;
 
-        public unsafe ElementPool<Vertex> Vertices
+        public ElementPool<Vertex> Vertices
         {
             get
             {
@@ -34,7 +34,7 @@ namespace Unity.Physics
             }
         }
 
-        public unsafe ElementPool<Triangle> Triangles
+        public ElementPool<Triangle> Triangles
         {
             get
             {
@@ -136,11 +136,11 @@ namespace Unity.Physics
                 Uid = uid;
             }
 
-            public unsafe int GetVertex(int index) { fixed(int* p = &Vertex0) { return p[index]; } }
-            public unsafe void SetVertex(int index, int value) { fixed(int* p = &Vertex0) { p[index] = value; } }
+            public int GetVertex(int index) { fixed(int* p = &Vertex0) { return p[index]; } }
+            public void SetVertex(int index, int value) { fixed(int* p = &Vertex0) { p[index] = value; } }
 
-            public unsafe Edge GetLink(int index) { fixed(Edge* p = &Link0) { return p[index]; } }
-            public unsafe void SetLink(int index, Edge handle) { fixed(Edge* p = &Link0) { p[index] = handle; } }
+            public Edge GetLink(int index) { fixed(Edge* p = &Link0) { return p[index]; } }
+            public void SetLink(int index, Edge handle) { fixed(Edge* p = &Link0) { p[index] = handle; } }
 
             void IPoolElement.MarkFree(int nextFree)
             {
@@ -227,8 +227,8 @@ namespace Unity.Physics
         // vertices must be at least large enough to hold verticesCapacity elements, triangles and planes must be large enough to hold 2 * verticesCapacity elements
         // domain is the AABB of all points that will be added to the hull
         // simplificationTolerance is the sum of tolerances that will be passed to SimplifyVertices() and SimplifyFacesAndShrink()
-        public unsafe ConvexHullBuilder(int verticesCapacity, Vertex* vertices, Triangle* triangles, Plane* planes,
-                                        Aabb domain, float simplificationTolerance, IntResolution intResolution)
+        public ConvexHullBuilder(int verticesCapacity, Vertex* vertices, Triangle* triangles, Plane* planes,
+                                 Aabb domain, float simplificationTolerance, IntResolution intResolution)
         {
             m_Vertices = new ElementPoolBase(vertices, verticesCapacity);
             m_Triangles = new ElementPoolBase(triangles, 2 * verticesCapacity);
@@ -260,8 +260,8 @@ namespace Unity.Physics
         /// <summary>
         /// Copy the content of another convex hull into this one.
         /// </summary>
-        public unsafe ConvexHullBuilder(int verticesCapacity, Vertex* vertices, Triangle* triangles, Plane* planes,
-                                        ConvexHullBuilder other)
+        public ConvexHullBuilder(int verticesCapacity, Vertex* vertices, Triangle* triangles, Plane* planes,
+                                 ConvexHullBuilder other)
         {
             m_Vertices = new ElementPoolBase(vertices, verticesCapacity);
             m_Triangles = new ElementPoolBase(triangles, 2 * verticesCapacity);
@@ -303,7 +303,7 @@ namespace Unity.Physics
         }
 
         //
-        public unsafe void Compact()
+        public void Compact()
         {
             // Compact the vertices array
             NativeArray<int> vertexRemap = new NativeArray<int>(Vertices.PeakCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
@@ -342,13 +342,13 @@ namespace Unity.Physics
         }
 
         /// <summary>
-        /// Add a point the the convex hull.
+        /// Add a point the convex hull.
         /// </summary>
         /// <param name="point">Point to insert.</param>
         /// <param name="userData">User data attached to the new vertex if insertion succeeds.</param>
         /// <param name="force2D">If true, the hull will not grow beyond two dimensions.</param>
         /// <returns>true if the insertion succeeded, false otherwise.</returns>
-        public unsafe bool AddPoint(float3 point, uint userData = 0, bool force2D = false)
+        public bool AddPoint(float3 point, uint userData = 0, bool force2D = false)
         {
             // Reset faces.
             NumFaces = 0;
@@ -657,7 +657,7 @@ namespace Unity.Physics
         // This is used to handle edge cases where very thin 3D hulls become 2D or invalid during simplification.
         // Extremely thin 3D hulls inevitably have nearly parallel faces, which cause problems in collision detection,
         // so the best solution is to flatten them completely.
-        public unsafe void Rebuild2D()
+        public void Rebuild2D()
         {
             Assert.AreEqual(Dimension, 3);
 
@@ -693,7 +693,7 @@ namespace Unity.Physics
         }
 
         // Helper to sort triangles in BuildFaceIndices
-        unsafe struct CompareAreaDescending : IComparer<int>
+        struct CompareAreaDescending : IComparer<int>
         {
             public NativeArray<float> Areas;
             public CompareAreaDescending(NativeArray<float> areas) { Areas = areas; }
@@ -949,8 +949,8 @@ namespace Unity.Physics
 
         #region Simplification
 
-        // Removes vertices that are colinear with two neighbors or coplanar with all neighbors.
-        public unsafe void RemoveRedundantVertices()
+        // Removes vertices that are collinear with two neighbors or coplanar with all neighbors.
+        public void RemoveRedundantVertices()
         {
             const float toleranceSq = 1e-10f;
 
@@ -1112,7 +1112,7 @@ namespace Unity.Physics
             return new double4x4(plane * plane.x, plane * plane.y, plane * plane.z, plane * plane.w);
         }
 
-        // Finds the minimum cost Collapse for a, b using previously computed error matrices.  Returns false if preservFaces = true and there is no collapse that would not
+        // Finds the minimum cost Collapse for a, b using previously computed error matrices.  Returns false if preserveFaces = true and there is no collapse that would not
         // violate a face, true otherwise.
         // faceIndex: if >=0, index of the one multi-triangle face on the collapsing edge. -1 if there are two multi-tri faces, -2 if there are none.
         Collapse GetCollapse(int a, int b, ref NativeArray<double4x4> matrices)
@@ -1151,8 +1151,6 @@ namespace Unity.Physics
                         float vError = (float)Math.Dotxyz1(math.mul(matrix, new double4(v, 1)), v);
                         float xError = (float)math.dot(math.mul(matrix, x), x);
                         cost = math.min(math.min(uError, vError), xError);
-                        float3 point = math.select(u.xyz, v.xyz, cost == vError);
-                        point = math.select(point, x.xyz, cost == xError);
                     }
                     break;
                 }
@@ -1197,7 +1195,7 @@ namespace Unity.Physics
         // introducing error in excess of maxError.
         // Based on QEM, but with contractions only allowed for vertices connected by a triangle edge, and only to be replaced by vertices on the same edge
         // Note, calling this function destroys vertex user data
-        public unsafe void SimplifyVertices(float maxError, int maxVertices)
+        public void SimplifyVertices(float maxError, int maxVertices)
         {
             // Simplification is only possible in 2D / 3D
             if (Dimension < 2)
@@ -1558,7 +1556,7 @@ namespace Unity.Physics
         // Returns - the distance that the faces were moved in by shrinking
         // Merging and shrinking are combined into a single operation because both work on the planes of the hull and require vertices to be rebuilt
         // afterwards.  Rebuilding vertices is the slowest part of hull generation, so best to do it only once.
-        public unsafe float SimplifyFacesAndShrink(float simplificationTolerance, float minAngleBetweenFaces, float shrinkDistance, int maxFaces, int maxVertices)
+        public float SimplifyFacesAndShrink(float simplificationTolerance, float minAngleBetweenFaces, float shrinkDistance, int maxFaces, int maxVertices)
         {
             // Return if merging is not allowed and shrinking is off
             if (simplificationTolerance <= 0.0f && minAngleBetweenFaces <= 0.0f && shrinkDistance <= 0.0f)
@@ -2277,9 +2275,9 @@ namespace Unity.Physics
 
         /// <summary>
         /// Compute the mass properties of the convex hull.
-        /// Note: Inertia computation adapted from S. Melax, http://www.melax.com/volint.
+        /// Note: Inertia computation adapted from S. Melax.
         /// </summary>
-        public unsafe void UpdateHullMassProperties()
+        public void UpdateHullMassProperties()
         {
             var mp = new MassProperties();
             switch (Dimension)
@@ -2307,19 +2305,17 @@ namespace Unity.Physics
                 case 3:
                 {
                     float3 offset = ComputeCentroid();
-                    int numTriangles = 0;
                     float* dets = stackalloc float[Triangles.Capacity];
                     foreach (int i in Triangles.Indices)
                     {
                         float3 v0 = Vertices[Triangles[i].Vertex0].Position - offset;
                         float3 v1 = Vertices[Triangles[i].Vertex1].Position - offset;
                         float3 v2 = Vertices[Triangles[i].Vertex2].Position - offset;
-                        float w = Det(v0, v1, v2);
+                        float w = math.determinant(new float3x3(v0, v1, v2));
                         mp.CenterOfMass += (v0 + v1 + v2) * w;
                         mp.Volume += w;
                         mp.SurfaceArea += math.length(math.cross(v1 - v0, v2 - v0));
                         dets[i] = w;
-                        numTriangles++;
                     }
 
                     mp.CenterOfMass = mp.CenterOfMass / (mp.Volume * 4) + offset;
@@ -2336,11 +2332,10 @@ namespace Unity.Physics
                         offd += (v0.yzx * v1.zxy + v1.yzx * v2.zxy + v2.yzx * v0.zxy +
                             v0.yzx * v2.zxy + v1.yzx * v0.zxy + v2.yzx * v1.zxy +
                             (v0.yzx * v0.zxy + v1.yzx * v1.zxy + v2.yzx * v2.zxy) * 2) * dets[i];
-                        numTriangles++;
                     }
 
-                    diag /= mp.Volume * (60 / 6);
-                    offd /= mp.Volume * (120 / 6);
+                    diag /= mp.Volume * 10f; /* (60 / 6)  */
+                    offd /= mp.Volume * 20f; /* (120 / 6) */
 
                     mp.InertiaTensor.c0 = new float3(diag.y + diag.z, -offd.z, -offd.y);
                     mp.InertiaTensor.c1 = new float3(-offd.z, diag.x + diag.z, -offd.x);
@@ -2410,12 +2405,11 @@ namespace Unity.Physics
                 // abcd coords are 16 bit, k are 35 bit, dot product is 54 bit and fits in long
                 return kx * ad.x + ky * ad.y + kz * ad.z;
             }
-            else
-            {
-                // abcd coords are 30 bit, k are 63 bit, dot product is 96 bit and won't fit in long so use int128
-                Int128 det = Int128.Mul(kx, ad.x) + Int128.Mul(ky, ad.y) + Int128.Mul(kz, ad.z);
-                return (long)(det.High | (det.Low & 1) | (det.Low >> 1));
-            }
+            // else:
+
+            // abcd coords are 30 bit, k are 63 bit, dot product is 96 bit and won't fit in long so use int128
+            Int128 det = Int128.Mul(kx, ad.x) + Int128.Mul(ky, ad.y) + Int128.Mul(kz, ad.z);
+            return (long)(det.High | (det.Low & 1) | (det.Low >> 1));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

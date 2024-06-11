@@ -9,18 +9,24 @@ namespace Unity.Physics.Tests.Dynamics.Jacobians
 {
     class JacobiansTests
     {
-        [Test]
-        public void JacobianUtilitiesCalculateTauAndDampingTest()
+        private static readonly TestCaseData[] k_JacobianCalculateTauAndDampingCases =
         {
-            float springFrequency = 1.0f;
-            float springDampingRatio = 1.0f;
-            float timestep = 1.0f;
-            int iterations = 4;
+            new TestCaseData(1.0f, 1.0f, 1.0f, 4, 0.4774722f, 0.6294564f).SetName("Case 1"),
+            new TestCaseData(1.0f, 0.0f, 0.016f, 4,  0.002510786f, 0.002510786f).SetName("Case 2"),
+            new TestCaseData(0.0f, 1.0f, 0.016f, 4, 0.0f, 0f).SetName("Case 3"),
+            new TestCaseData(0.0f, 0.0f, 0.016f, 4, 0.0f, 0.0f).SetName("Case 4"),
+            new TestCaseData(1500.0f, 0.75f, 0.05f, 1, 0.9968225f, 0.9999955f).SetName("Case 5"),
+            new TestCaseData(1500.0f, 0.75f, 0.05f, 4, 0.9509438f, 0.9539707f).SetName("Case 6"),
+        };
 
-            JacobianUtilities.CalculateConstraintTauAndDamping(springFrequency, springDampingRatio, timestep, iterations, out float tau, out float damping);
+        [TestCaseSource(nameof(k_JacobianCalculateTauAndDampingCases))]
+        public void JacobianUtilitiesCalculateTauAndDampingTest(float springFrequency, float springDampingRatio, float timestep, int iterations, float expectedTau, float expectedDamping)
+        {
+            JacobianUtilities.CalculateConstraintTauAndDamping(springFrequency, springDampingRatio, timestep, iterations,
+                out float tau, out float damping);
 
-            Assert.AreApproximatelyEqual(0.4774722f, tau);
-            Assert.AreApproximatelyEqual(0.6294564f, damping);
+            Assert.AreApproximatelyEqual(expectedTau, tau, $"Expected tau {expectedTau} but got {tau}");
+            Assert.AreApproximatelyEqual(expectedDamping, damping, $"Expected damping {expectedDamping} but got {damping}");
         }
 
         [Test]

@@ -19,6 +19,10 @@ namespace Unity.Physics
             internal static float3 Min3F => new float3(float.MinValue);
             internal static float3 Max3F => new float3(float.MaxValue);
             internal static float3 MaxDisplacement3F => new float3(float.MaxValue * 0.5f);
+            // used for de-skewing basis vectors; default priority assumes primary axis is z, secondary axis is y
+            internal static int3 DefaultAxisPriority => new int3(2, 1, 0);
+            internal static int3 NextAxis => new int3(1, 2, 0);
+            internal static int3 PrevAxis => new int3(2, 0, 1);
 
             /// <summary>
             /// Smallest float such that 1.0 + eps != 1.0 Different from float.Epsilon which is
@@ -86,9 +90,6 @@ namespace Unity.Physics
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static double Dotxyz1(double4 lhs, double3 rhs) => math.dot(lhs, new double4(rhs, 1));
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static float Det(float3 a, float3 b, float3 c) => math.dot(math.cross(a, b), c); // TODO: use math.determinant()?
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static float RSqrtSafe(float v) => math.select(math.rsqrt(v), 0.0f, math.abs(v) < 1e-10f);
@@ -544,7 +545,7 @@ namespace Unity.Physics
         /// <returns>   A world-space RigidTransform as used by physics. </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static RigidTransform DecomposeRigidBodyTransform(in float4x4 localToWorld) =>
-            new RigidTransform(DecomposeRigidBodyOrientation(localToWorld), localToWorld.c3.xyz);
+            new(DecomposeRigidBodyOrientation(localToWorld), localToWorld.c3.xyz);
 
         /// <summary>
         /// Physics internally represents all rigid bodies in world space. If a static body is in a
@@ -565,9 +566,162 @@ namespace Unity.Physics
         /// respectively.
         /// </summary>
         /// <param name="matrix">The 4x4 transformation matrix.</param>
-        /// <returns></returns>
+        /// <returns>The three scale components of the provided transformation matrix.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float3 DecomposeScale(this float4x4 matrix) =>
-            new float3(math.length(matrix.c0.xyz), math.length(matrix.c1.xyz), math.length(matrix.c2.xyz));
+            new(math.length(matrix.c0.xyz), math.length(matrix.c1.xyz), math.length(matrix.c2.xyz));
+
+        /// <summary>
+        /// Obtain 3-dimensional scale vector of the provided affine transformation, the components
+        /// of which represent the lengths of the three orthonormal basis vectors forming the 3x3 rotational sub-matrix,
+        /// respectively.
+        /// </summary>
+        /// <param name="matrix">The affine transformation matrix.</param>
+        /// <returns>The three scale components of the provided affine transformation.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static float3 DecomposeScale(this AffineTransform matrix) =>
+            new(math.length(matrix.rs.c0), math.length(matrix.rs.c1), math.length(matrix.rs.c2));
+
+        // matrix to transform point from shape's local basis into world space
+        internal static float4x4 GetBasisToWorldMatrix(float4x4 localToWorld, float3 center, quaternion orientation, float3 size) =>
+            math.mul(localToWorld, float4x4.TRS(center, orientation, size));
+
+        // priority is determined by length of each size dimension in the shape's basis after applying localToWorld transformation
+        internal static int3 GetBasisAxisPriority(float4x4 basisToWorld)
+        {
+            var basisAxisLengths = basisToWorld.DecomposeScale();
+            var max = math.cmax(basisAxisLengths);
+            var min = math.cmin(basisAxisLengths);
+            if (max == min)
+                return Constants.DefaultAxisPriority;
+
+            var imax = max == basisAxisLengths.x ? 0 : max == basisAxisLengths.y ? 1 : 2;
+
+            basisToWorld[Constants.NextAxis[imax]] = DeskewSecondaryAxis(basisToWorld[imax], basisToWorld[Constants.NextAxis[imax]]);
+            basisToWorld[Constants.PrevAxis[imax]] = DeskewSecondaryAxis(basisToWorld[imax], basisToWorld[Constants.PrevAxis[imax]]);
+
+            basisAxisLengths = basisToWorld.DecomposeScale();
+            min = math.cmin(basisAxisLengths);
+            var imin = min == basisAxisLengths.x ? 0 : min == basisAxisLengths.y ? 1 : 2;
+            if (imin == imax)
+                imin = Constants.NextAxis[imax];
+            var imid = Constants.NextAxis[imax] == imin ? Constants.PrevAxis[imax] : Constants.NextAxis[imax];
+
+            return new int3(imax, imid, imin);
+        }
+
+        static float4 DeskewSecondaryAxis(float4 primaryAxis, float4 secondaryAxis)
+        {
+            var n0 = math.normalizesafe(primaryAxis);
+            var dot = math.dot(secondaryAxis, n0);
+            return secondaryAxis - n0 * dot;
+        }
+
+        internal static void MakeZAxisPrimaryBasis(ref int3 basisPriority)
+        {
+            if (basisPriority[1] == 2)
+                basisPriority = basisPriority.yxz;
+            else if (basisPriority[2] == 2)
+                basisPriority = basisPriority.zxy;
+        }
+
+        internal static void MakeYAxisPrimaryBasis(ref int3 basisPriority)
+        {
+            if (basisPriority[1] == 1)
+                basisPriority = basisPriority.yxz;
+            else if (basisPriority[2] == 1)
+                basisPriority = basisPriority.zxy;
+        }
+
+        // matrix to transform point on a primitive from bake space into space of the shape
+        internal static float4x4 GetPrimitiveBakeToShapeMatrix(
+            float4x4 localToWorld, float4x4 shapeToWorld, ref float3 center, ref quaternion orientation, int3 basisPriority, bool bakeUniformScale = true)
+        {
+            SafetyChecks.CheckValidBasisPriorityAndThrow(basisPriority);
+
+            var localToBasis = float4x4.TRS(center, orientation, 1f);
+
+            float4x4 bakeToShape;
+
+            if (localToWorld.HasNonUniformScale() || localToWorld.HasShear())
+            {
+                var localToBake = math.mul(localToWorld, localToBasis);
+
+                // deskew second longest axis with respect to longest axis
+                localToBake[basisPriority[1]] =
+                    DeskewSecondaryAxis(localToBake[basisPriority[0]], localToBake[basisPriority[1]]);
+
+                // recompute third axes from first two
+                var n2 = math.normalizesafe(
+                    new float4(math.cross(localToBake[basisPriority[0]].xyz, localToBake[basisPriority[1]].xyz), 0f)
+                );
+                localToBake[basisPriority[2]] = n2 * math.dot(localToBake[basisPriority[2]], n2);
+
+                bakeToShape = math.mul(math.inverse(shapeToWorld), localToBake);
+            }
+            else
+            {
+                if (bakeUniformScale)
+                {
+                    var localToBake = math.mul(localToWorld, localToBasis);
+                    bakeToShape = math.mul(math.inverse(shapeToWorld), localToBake);
+                }
+                else
+                {
+                    bakeToShape = localToBasis;
+                }
+            }
+
+            // transform baked center/orientation (i.e. primitive basis) into shape space
+            orientation =
+                quaternion.LookRotationSafe(bakeToShape[basisPriority[0]].xyz, bakeToShape[basisPriority[1]].xyz);
+            center = bakeToShape.c3.xyz;
+
+            return bakeToShape;
+        }
+
+        internal static float4x4 GetBakeToShape(float4x4 localToWorld, float4x4 shapeToWorld, ref float3 center,
+            ref quaternion orientation, bool bakeUniformScale = true, bool makeZAxisPrimaryBasis = false)
+        {
+            var rotationMatrix = float4x4.identity;
+            var basisPriority = Constants.DefaultAxisPriority;
+            var sheared = localToWorld.HasShear();
+            var needsAlignment = localToWorld.HasNonUniformScale() || sheared;
+            if (needsAlignment)
+            {
+                if (sheared)
+                {
+                    var transformScale = localToWorld.DecomposeScale();
+                    var basisToWorld =
+                        GetBasisToWorldMatrix(localToWorld, center, orientation, transformScale);
+                    basisPriority = GetBasisAxisPriority(basisToWorld);
+                }
+
+                if (makeZAxisPrimaryBasis)
+                {
+                    MakeZAxisPrimaryBasis(ref basisPriority);
+                }
+                else
+                {
+                    // align with principal axes
+                    rotationMatrix = new float4x4(
+                        new float4 {[basisPriority[2]] = 1},
+                        new float4 {[basisPriority[1]] = 1},
+                        new float4 {[basisPriority[0]] = 1},
+                        new float4 {[3] = 1}
+                    );
+                }
+            }
+
+            var bakeToShape = GetPrimitiveBakeToShapeMatrix(localToWorld, shapeToWorld, ref center,
+                ref orientation, basisPriority, bakeUniformScale);
+
+            if (needsAlignment && !makeZAxisPrimaryBasis)
+            {
+                bakeToShape = math.mul(bakeToShape, rotationMatrix);
+            }
+
+            return bakeToShape;
+        }
     }
 }
