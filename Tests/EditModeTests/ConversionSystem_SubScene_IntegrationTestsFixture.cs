@@ -37,22 +37,32 @@ namespace Unity.Physics.Tests.Authoring
             EditorSettings.enterPlayModeOptions = EnterPlayModeOptions.DisableDomainReload | EnterPlayModeOptions.DisableSceneReload;
 
             // create folder for temporary assets
-            TemporaryAssetsPath = AssetDatabase.GUIDToAssetPath(AssetDatabase.CreateFolder("Assets", "SubScene_IntegrationTests"));
+            TemporaryAssetsPath = "Assets/SubScene_IntegrationTests";
+            if (!AssetDatabase.IsValidFolder(TemporaryAssetsPath))
+            {
+                TemporaryAssetsPath =
+                    AssetDatabase.GUIDToAssetPath(AssetDatabase.CreateFolder("Assets", "SubScene_IntegrationTests"));
+            }
         }
 
         [OneTimeTearDown]
         protected void OneTimeTearDown()
         {
             // open an empty scene
-            EditorSceneManager.SetActiveScene(EditorSceneManager.NewScene(NewSceneSetup.EmptyScene));
+            SceneManager.SetActiveScene(EditorSceneManager.NewScene(NewSceneSetup.EmptyScene));
 
             // clean up scene dependency cache
-            const string k_SceneDependencyCachePath = "Assets/SceneDependencyCache";
-            if (AssetDatabase.IsValidFolder(k_SceneDependencyCachePath))
-                AssetDatabase.DeleteAsset(k_SceneDependencyCachePath);
+            const string kSceneDependencyCachePath = "Assets/SceneDependencyCache";
+            if (AssetDatabase.DeleteAsset(kSceneDependencyCachePath))
+            {
+                AssetDatabase.DeleteAsset(kSceneDependencyCachePath + ".meta");
+            }
 
             // delete all temporary assets
-            AssetDatabase.DeleteAsset(TemporaryAssetsPath);
+            if (AssetDatabase.DeleteAsset(TemporaryAssetsPath))
+            {
+                AssetDatabase.DeleteAsset(TemporaryAssetsPath + ".meta");
+            }
 
             EditorSettings.enterPlayModeOptionsEnabled = m_EnterPlayModeOptionsEnabled;
             EditorSettings.enterPlayModeOptions = m_EnterPlayModeOptions;
@@ -72,13 +82,16 @@ namespace Unity.Physics.Tests.Authoring
         protected string TestNameWithoutSpecialCharacters =>
             k_NonWords.Replace(TestContext.CurrentContext.Test.Name, string.Empty);
 
-        protected SubScene CreateSubScene(Action createSubSceneObjects)
+        protected void CreateAndLoadSubScene(Action createSubSceneObjects)
         {
+            Assert.IsNull(SubSceneManaged);
+            Assert.AreEqual(Entity.Null, SubSceneEntity);
+
             // create sub-scene with objects
             var subScene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene);
             var subScenePath = $"{TemporaryAssetsPath}/{TestNameWithoutSpecialCharacters}-subScene.unity";
             AssetDatabase.DeleteAsset(subScenePath);
-            createSubSceneObjects.Invoke();
+            createSubSceneObjects?.Invoke();
             EditorSceneManager.SaveScene(subScene, subScenePath);
 
             // create parent scene
@@ -87,28 +100,12 @@ namespace Unity.Physics.Tests.Authoring
             AssetDatabase.DeleteAsset(parentScenePath);
 
             // create GameObject with SubScene component
-            var subSceneMB = new GameObject(subScene.name).AddComponent<SubScene>();
-            Undo.RecordObject(subSceneMB, "Assign sub-scene");
-            subSceneMB.SceneAsset = AssetDatabase.LoadAssetAtPath<SceneAsset>(subScenePath);
-            subSceneMB.AutoLoadScene = true;
+            SubSceneManaged = new GameObject(subScene.name).AddComponent<SubScene>();
+            Undo.RecordObject(SubSceneManaged, "Assign sub-scene");
+            SubSceneManaged.SceneAsset = AssetDatabase.LoadAssetAtPath<SceneAsset>(subScenePath);
+            SubSceneManaged.AutoLoadScene = true;
             EditorSceneManager.SaveScene(parentScene, parentScenePath);
             SceneManager.SetActiveScene(parentScene);
-
-            return subSceneMB;
-        }
-
-        protected void CreateAndLoadSubScene<T>(Action<T> configureSubSceneObject)
-            where T : Component
-        {
-            Assert.IsNull(SubSceneManaged);
-            Assert.AreEqual(Entity.Null, SubSceneEntity);
-
-            // create sub-scene
-            SubSceneManaged = CreateSubScene(() =>
-            {
-                var component = new GameObject(TestNameWithoutSpecialCharacters).AddComponent<T>();
-                configureSubSceneObject(component);
-            });
 
             // convert and load sub-scene
             var world = World.DefaultGameObjectInjectionWorld;
@@ -116,8 +113,19 @@ namespace Unity.Physics.Tests.Authoring
             {
                 Flags = SceneLoadFlags.BlockOnImport | SceneLoadFlags.BlockOnStreamIn
             });
-            // TODO: Editor doesn't update if it doesn't have focus, so we must explicitly update the world to process the load.
+            // Note: Editor doesn't update if it doesn't have focus.
+            // So we must explicitly update the world to process the load.
             world.Update();
+        }
+
+        protected void CreateAndLoadSubScene<T>(Action<T> configureSubSceneObject)
+            where T : Component
+        {
+            CreateAndLoadSubScene(() =>
+            {
+                var component = new GameObject(TestNameWithoutSpecialCharacters).AddComponent<T>();
+                configureSubSceneObject(component);
+            });
         }
     }
 }

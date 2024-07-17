@@ -1065,5 +1065,49 @@ namespace Unity.Physics.Tests.Authoring
                 Assert.That(collisionMask & (1u << excludeLayer2), Is.EqualTo(0));
             });
         }
+
+        struct ColliderKeyEntityPairComparer : IComparer<PhysicsColliderKeyEntityPair>
+        {
+            public int Compare(PhysicsColliderKeyEntityPair x, PhysicsColliderKeyEntityPair y)
+            {
+                return x.Key.CompareTo(y.Key);
+            }
+        }
+
+        [Test]
+        public void ColliderConversionSystem_InCompoundCollider_PhysicsColliderKeyEntityBuffer_IsAsExpected()
+        {
+            CreateHierarchy(new[] {typeof(UnityEngine.Rigidbody), typeof(UnityEngine.BoxCollider)},
+                new[] {typeof(UnityEngine.BoxCollider)},
+                new[] {typeof(UnityEngine.BoxCollider)});
+
+            TestConvertedData<PhysicsCollider>((world, physicsCollider, entity) =>
+            {
+                unsafe
+                {
+                    // We expect one compound collider with the corresponding number of children
+                    Assert.That(physicsCollider.ColliderPtr->Type, Is.EqualTo(ColliderType.Compound));
+                    var compoundCollider = (CompoundCollider*)physicsCollider.ColliderPtr;
+                    Assert.That(compoundCollider->Children.Length, Is.EqualTo(3));
+
+                    // We expect the collider key entity buffer to have the same number of elements as the number of children
+                    Assert.That(world.EntityManager.HasBuffer<PhysicsColliderKeyEntityPair>(entity));
+                    var buffer = world.EntityManager.GetBuffer<PhysicsColliderKeyEntityPair>(entity);
+                    Assert.That(buffer.Length, Is.EqualTo(3));
+
+                    // Make sure we have one entry per collider key, and that the entity is valid
+                    var array = buffer.ToNativeArray(Allocator.Temp);
+                    array.Sort(new ColliderKeyEntityPairComparer());
+                    for (var i = 0; i < compoundCollider->NumChildren; i++)
+                    {
+                        var colliderKey = compoundCollider->ConvertChildIndexToColliderKey(i);
+                        var elementToFind = new PhysicsColliderKeyEntityPair {Key = colliderKey};
+                        var foundElementIndx = array.BinarySearch(elementToFind, new ColliderKeyEntityPairComparer());
+                        Assert.That(foundElementIndx, Is.GreaterThanOrEqualTo(0));
+                        Assert.That(array[foundElementIndx].Entity, Is.Not.EqualTo(Entity.Null));
+                    }
+                }
+            });
+        }
     }
 }

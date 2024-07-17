@@ -3,9 +3,9 @@
   "category": "Unity",
   "description": "Unity's C# stateless physics library.\n\nBuilt on top of the Unity C# ECS framework, Unity Physics is network-ready, completely customizable, and built for performance out of the box. Whether you're building the next mobile hit or a new networked multiplayer console experience, Unity Physics leverages the Burst compiler and Job system to scale across a range of hardware.",
   "dependencies": {
-    "com.unity.burst": "1.8.13",
-    "com.unity.collections": "2.5.0-exp.1",
-    "com.unity.entities": "1.3.0-exp.1",
+    "com.unity.burst": "1.8.16",
+    "com.unity.collections": "2.5.0-pre.2",
+    "com.unity.entities": "1.3.0-pre.4",
     "com.unity.mathematics": "1.3.1",
     "com.unity.test-framework": "1.4.3",
     "com.unity.modules.imgui": "1.0.0",
@@ -18,7 +18,7 @@
   "name": "com.unity.physics",
   "unity": "2022.3",
   "unityRelease": "11f1",
-  "version": "1.3.0-exp.1",
+  "version": "1.3.0-pre.4",
   "samples": [
     {
       "displayName": "Custom Physics Authoring",
@@ -28,15 +28,15 @@
     }
   ],
   "_upm": {
-    "changelog": "### Added\n\n* Motors authored via built-in component, api, or custom component now use spring frequency and the damping ratio to fine-tune the motor behaviour.\n* New `Collider.BakeTransform` function which allows deforming a collider at runtime. This function is implemented for all collider types except the `TerrainCollider` and applies a provided affine transformation to the collider geometry, rotating, translating, scaling and shearing it accordingly. The geometric transformation will be either perfect for mesh types, or approximate for primitives. Specific deformations will be perfect even for primitives depending on the type of deformation and the primitive's parametrization. As such a `BoxCollider` with identity orientation in local space will be uniformly scaled, updating its width, height and length perfectly, if the provided affine transformation is a pure scaling matrix.\n* The broadphase can now be changed to operate incrementally using the `PhysicsStepAuthoring` component (see parameters `Incremental Dynamic Broadphase` and `Incremental Static Broadphase`), and the `PhysicsStep` Entities components. When the feature is enabled, the bounding volume hierarchy inside the broadphase, used for spatial acceleration during collision detection and for collider queries such as ray and collider casts, is no longer built from scratch every frame, but incrementally updated from one frame to the next. This can lead to drastic performance improvements for scenes with large numbers of rigid bodies of which only a very small subset changes between frames, that is, changes to rigid body transformations or colliders are rare. This feature can be enabled for dynamic bodies and static bodies separately, which makes it applicable to large and mostly static worlds with massive numbers of static rigid bodies and a reasonable number of dynamic bodies. By default this feature is disabled.\n* Through the new `CompoundCollider.Update` function, the shape or transformation of children in a compound collider can now be safely modified. By calling the provided function, the compound collider's bounding volume information and optionally also its mass properties are updated in accordance with the modifications of its child colliders, thereby ensuring correct behavior in collision detection and collider queries.\n* Added a new `CollisionWorld.Clone()` function which allows cloning a collision world and deep copying select colliders which otherwise would be shared across clones. Deep copying is important in cases where the collision world clone is used over multiple frames and colliders are modified, which is frequently the case in Netcode environments with lag compensation for physics queries (see `Unity.NetCode.PhysicsWorldHistorySingleton`). For these cases, the colliders which are likely to be modified or deleted (such as colliders in dynamic rigid bodies) can now be deep copied, ensuring independent collision world clones. Without deep copying in these cases, modifying colliders in the original collision world after having cloned it will inadvertently also affect the clone, which can lead to erroneous collision queries and crashes.\n* By setting the \"Provides Contacts\" option in built-in collider authoring components, users can now enable collision event reporting for physically simulated rigid bodies. The collision events can be received by using an `ICollisionEventsJob`.\n\n### Changed\n\n* When baking a built-in hinge joint as a rotation motor, the Joint.Motor.Force parameter must be non-zero. This value is baked into the maximum impulse of the motor.\n* Add missing `[BurstCompile]` attributes in the collider blob systems to ensure maximum performance.\n* In `EnsureUniqueColliderBlobSystem`, prevent extra delay in adding the required unique collider blob cleanup components by using a different ECB system. This change also batches the corresponding commands with the commands coming from other physics systems, preventing an unnecessary extra sync point in the overall simulation.\n\n### Fixed\n\n* Possible race condition in debug displays when modifying the geometry of colliders.\n* Prevent unnecessary memory allocations in builds due to the editor-only debug display.\n* Fixed errors caused by memory corruption when selecting mesh-based custom Physics Shape Authoring components in the editor.\n* Prevent slowdowns caused by physics analytics data gathering through job parallelization and by disabling the analytics jobs when editor analytics are disabled.\n* Prevent crash in debug display caused by dangling system pointer in certain cases.\n* Fully remove any trace of the integrity checks unless we are in the editor or in a development build.\n* Fixed an issue that prevented contacts in the Physics Debug Display to show up when Draw Contacts was enabled."
+    "changelog": "### Added\n\n* The collision tolerance in the `CollisionWorld`, which defines the minimum distance required for creating contacts between rigid bodies, is now configurable. The default value has been changed to a smaller, more performant value of 0.01 meters. If you observe any tunneling issues in your use case, please increase the value via the `PhysicsStepAuthoring` component.\n\n### Changed\n\n* Updated Burst dependency to version 1.8.16\n\n### Fixed\n\n* Prevent `Entity.Null` entries in the `PhysicsColliderKeyEntityPair` buffer of rigid body entities with compound colliders."
   },
   "upmCi": {
-    "footprint": "98432d379186439eb78a0ab07460708462b51de4"
+    "footprint": "fcf8c3b887682c99f01b66000bb5fdaef92730d4"
   },
   "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.physics@1.3/manual/index.html",
   "repository": {
     "url": "https://github.cds.internal.unity3d.com/unity/dots.git",
     "type": "git",
-    "revision": "d5bde5f043ad76defc80bbc6be1f8630d14b108d"
+    "revision": "6b0c8d27a0224c9cf76032c48d1b981e9750f10d"
   }
 }

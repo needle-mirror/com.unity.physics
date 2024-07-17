@@ -170,14 +170,14 @@ namespace Unity.Physics.Systems
 
             float timeStep = SystemAPI.Time.DeltaTime;
 
-            if (!SystemAPI.TryGetSingleton<PhysicsStep>(out PhysicsStep stepComponent))
+            if (!SystemAPI.TryGetSingleton(out PhysicsStep stepComponent))
             {
                 stepComponent = PhysicsStep.Default;
             }
 
             state.Dependency = PhysicsWorldBuilder.SchedulePhysicsWorldBuild(ref state,
                 ref buildPhysicsData.PhysicsData, state.Dependency,
-                timeStep, stepComponent.MultiThreaded > 0,
+                timeStep, stepComponent.CollisionTolerance, stepComponent.MultiThreaded > 0,
                 stepComponent.IncrementalDynamicBroadphase, stepComponent.IncrementalStaticBroadphase,
                 stepComponent.Gravity, state.LastSystemVersion);
 
@@ -589,11 +589,7 @@ namespace Unity.Physics.Systems
             }
             // else:
 
-#if UNITY_2022_2_14F1_OR_NEWER
             int maxThreadCount = JobsUtility.ThreadIndexCount;
-#else
-            int maxThreadCount = JobsUtility.MaxJobThreadCount;
-#endif
 
             var rigidBodyAnalyticsData = CollectionHelper.CreateNativeArray<PhysicsAnalyticsSingleton>(maxThreadCount,
                 state.WorldUpdateAllocator, NativeArrayOptions.ClearMemory);

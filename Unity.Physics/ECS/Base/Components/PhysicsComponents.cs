@@ -326,6 +326,13 @@ namespace Unity.Physics
         public byte MultiThreaded;
 
         /// <summary>
+        /// The collision tolerance specifies the minimum distance required for contacts between rigid bodies
+        /// to be created.<para/>
+        /// This value can be increased if undesired collision tunneling is observed in the simulation.<para/>
+        /// </summary>
+        public float CollisionTolerance;
+
+        /// <summary>
         /// Whether to synchronize collision world after physics step to enable precise query results.
         /// Note that `BuildPhysicsWorld` will do this work on the following frame anyway, so only use
         /// this option when another system must know about the results of the simulation before the end
@@ -359,6 +366,7 @@ namespace Unity.Physics
             SolverIterationCount = 4,
             SolverStabilizationHeuristicSettings = Solver.StabilizationHeuristicSettings.Default,
             MultiThreaded = 1,
+            CollisionTolerance = CollisionWorld.DefaultCollisionTolerance,
             SynchronizeCollisionWorld = 0,
             IncrementalDynamicBroadphase = false,
             IncrementalStaticBroadphase = false

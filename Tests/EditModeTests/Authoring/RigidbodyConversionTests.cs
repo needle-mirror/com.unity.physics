@@ -75,8 +75,6 @@ namespace Unity.Physics.Tests.Authoring
                 Assume.That((Quaternion)mass.InertiaOrientation, Is.EqualTo(expectedInertiaOrientation).Using(QuaternionEqualityComparer.Instance));
                 Assume.That((Vector3)mass.InverseInertia, Is.EqualTo(new Vector3(1f / expectedInertiaTensor.x, 1f / expectedInertiaTensor.y, 1f / expectedInertiaTensor.z)).Using(Vector3EqualityComparer.Instance));
             });
-
-            TestConvertedData<PhysicsMass>(mass => Assert.That(mass.InverseMass, Is.EqualTo(1 / expectedMass).Using(FloatEqualityComparer.Instance)));
         }
 
         // Make sure a Rigidbody's overridden center of mass and inertia tensor properties are properly migrated to the

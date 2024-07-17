@@ -32,6 +32,13 @@ namespace Unity.Physics.Authoring
         public Entity ChildEntity;
         public RigidTransform BodyFromShape;
         public bool IsLeafEntityBody;
+        // Collider reference which ensures that all colliders remain available during incremental baking of
+        // compound colliders via the BuildCompoundColliderBakingSystem. They might otherwise be removed from
+        // the BlobAssetStore since no reference is made to them anymore at the Entities
+        // data level after the compound collider is built.
+        // The PhysicsColliderBakedData component must therefore also be a BakingType and not a TemporaryBakingType,
+        // ensuring that it is not removed after every baking iteration.
+        public BlobAssetReference<Collider> BakedCollider;
     }
 
     internal abstract class BaseColliderBaker<T> : BasePhysicsBaker<T> where T : Component

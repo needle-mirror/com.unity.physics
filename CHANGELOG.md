@@ -4,6 +4,21 @@ uid: unity-physics-changelog
 
 # Changelog
 
+## [1.3.0-pre.4] - 2024-07-17
+
+### Added
+
+* The collision tolerance in the `CollisionWorld`, which defines the minimum distance required for creating contacts between rigid bodies, is now configurable. The default value has been changed to a smaller, more performant value of 0.01 meters. If you observe any tunneling issues in your use case, please increase the value via the `PhysicsStepAuthoring` component.
+
+### Changed
+
+* Updated Burst dependency to version 1.8.16
+
+### Fixed
+
+* Prevent `Entity.Null` entries in the `PhysicsColliderKeyEntityPair` buffer of rigid body entities with compound colliders.
+
+
 ## [1.3.0-exp.1] - 2024-06-11
 
 ### Added
@@ -30,6 +45,8 @@ uid: unity-physics-changelog
 * Prevent crash in debug display caused by dangling system pointer in certain cases.
 * Fully remove any trace of the integrity checks unless we are in the editor or in a development build.
 * Fixed an issue that prevented contacts in the Physics Debug Display to show up when Draw Contacts was enabled.
+* Prevent a `NullReferenceException` during incremental compound collider baking in the editor, by ensuring that the child collider blobs have not been removed by the blob asset store's garbage collection when creating the compound collider.
+
 
 
 ## [1.2.3] - 2024-05-30

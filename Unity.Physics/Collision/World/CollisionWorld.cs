@@ -57,12 +57,18 @@ namespace Unity.Physics
         public NativeArray<RigidBody> DynamicBodies => m_Bodies.GetSubArray(0, NumDynamicBodies);
 
         /// <summary>
-        /// Contacts are always created between rigid bodies if they are closer than this distance
-        /// threshold.
+        /// Sets the collision tolerance.<para/>
+        /// Contacts are always created between rigid bodies if they are closer than this distance threshold. Default
+        /// value is <see cref="DefaultCollisionTolerance"/>.<para/>
         /// </summary>
         ///
         /// <value> The collision tolerance. </value>
-        public float CollisionTolerance => 0.1f;
+        public float CollisionTolerance;
+
+        /// <summary>
+        /// Default <see cref="CollisionTolerance"/> value.
+        /// </summary>
+        public const float DefaultCollisionTolerance = 0.01f;
 
         /// <summary>
         /// Construct a collision world with the given number of uninitialized rigid bodies.
@@ -76,6 +82,7 @@ namespace Unity.Physics
             Broadphase = new Broadphase(numStaticBodies, numDynamicBodies);
             EntityBodyIndexMap = new NativeParallelHashMap<Entity, int>(m_Bodies.Length, Allocator.Persistent);
             m_ColliderDeepCopies = new NativeList<BlobAssetReference<Collider>>();
+            CollisionTolerance = DefaultCollisionTolerance;
         }
 
         /// <summary>   Resets this object. </summary>

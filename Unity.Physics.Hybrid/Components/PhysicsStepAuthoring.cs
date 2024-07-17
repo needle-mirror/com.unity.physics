@@ -81,6 +81,21 @@ namespace Unity.Physics.Authoring
             "Enabling this option will maximize the use of parallelization in the entire simulation pipeline while disabling it will result in minimal thread usage.")]
         bool m_MultiThreaded = Default.MultiThreaded > 0 ? true : false;
 
+        /// <summary>
+        /// Sets the collision tolerance.<para/>
+        /// The collision tolerance specifies the minimum distance required for contacts between rigid bodies to be created.<br/>
+        /// This value can be increased if undesired collision tunneling is observed in the simulation.
+        /// </summary>
+        public float CollisionTolerance
+        {
+            get => m_CollisionTolerance;
+            set => m_CollisionTolerance = value;
+        }
+        [SerializeField]
+        [Tooltip("Sets the collision tolerance.\n" +
+            "The collision tolerance specifies the minimum distance required for contacts between rigid bodies to be created.\n" +
+            "This value can be increased if undesired collision tunneling is observed in the simulation.")]
+        float m_CollisionTolerance = Default.CollisionTolerance;
 
         /// <summary>
         ///     Specifies whether to update the collision world an additional time after the step for more precise collider queries.
@@ -141,6 +156,7 @@ namespace Unity.Physics.Authoring
             } :
             Solver.StabilizationHeuristicSettings.Default,
             MultiThreaded = (byte)(MultiThreaded ? 1 : 0),
+            CollisionTolerance = CollisionTolerance,
             SynchronizeCollisionWorld = (byte)(SynchronizeCollisionWorld ? 1 : 0),
             IncrementalDynamicBroadphase = IncrementalDynamicBroadphase,
             IncrementalStaticBroadphase = IncrementalStaticBroadphase

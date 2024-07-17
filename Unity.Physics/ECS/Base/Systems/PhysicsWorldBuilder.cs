@@ -41,12 +41,12 @@ namespace Unity.Physics.Systems
         }
 
         internal static JobHandle SchedulePhysicsWorldBuild(ref SystemState systemState, ref PhysicsWorldData physicsData,
-            in JobHandle inputDep, float timeStep, bool isBroadphaseBuildMultiThreaded,
+            in JobHandle inputDep, float timeStep, float collisionTolerance, bool isBroadphaseBuildMultiThreaded,
             bool isDynamicBroadphaseIncremental, bool isStaticBroadphaseIncremental, float3 gravity, uint lastSystemVersion)
         {
             physicsData.Update(ref systemState);
             return SchedulePhysicsWorldBuild(ref systemState, ref physicsData.PhysicsWorld, ref physicsData.HaveStaticBodiesChanged, physicsData.ComponentHandles,
-                inputDep, timeStep, isBroadphaseBuildMultiThreaded, isDynamicBroadphaseIncremental, isStaticBroadphaseIncremental, gravity, lastSystemVersion,
+                inputDep, timeStep, collisionTolerance, isBroadphaseBuildMultiThreaded, isDynamicBroadphaseIncremental, isStaticBroadphaseIncremental, gravity, lastSystemVersion,
                 physicsData.DynamicEntityGroup, physicsData.StaticEntityGroup, physicsData.JointEntityGroup, physicsData.InvalidatedTemporalCoherenceInfoGroup);
         }
 
@@ -76,13 +76,13 @@ namespace Unity.Physics.Systems
             EntityQuery dynamicEntityQuery, EntityQuery staticEntityQuery, EntityQuery jointEntityQuery)
         {
             return SchedulePhysicsWorldBuild(ref systemState, ref world, ref haveStaticBodiesChanged, componentHandles,
-                inputDep, timeStep, isBroadphaseBuildMultiThreaded, false, false, gravity, lastSystemVersion,
+                inputDep, timeStep, CollisionWorld.DefaultCollisionTolerance, isBroadphaseBuildMultiThreaded, false, false, gravity, lastSystemVersion,
                 dynamicEntityQuery, staticEntityQuery, jointEntityQuery, default);
         }
 
         static JobHandle SchedulePhysicsWorldBuild(ref SystemState systemState,
             ref PhysicsWorld world, ref NativeReference<int> haveStaticBodiesChanged, in PhysicsWorldData.PhysicsWorldComponentHandles componentHandles,
-            in JobHandle inputDep, float timeStep, bool isBroadphaseBuildMultiThreaded, bool isDynamicBroadphaseIncremental, bool isStaticBroadphaseIncremental, float3 gravity, uint lastSystemVersion,
+            in JobHandle inputDep, float timeStep, float collisionTolerance, bool isBroadphaseBuildMultiThreaded, bool isDynamicBroadphaseIncremental, bool isStaticBroadphaseIncremental, float3 gravity, uint lastSystemVersion,
             EntityQuery dynamicEntityQuery, EntityQuery staticEntityQuery, EntityQuery jointEntityQuery, EntityQuery invalidatedTemporalCoherenceInfoQuery)
         {
             JobHandle finalHandle = inputDep;
@@ -106,6 +106,9 @@ namespace Unity.Physics.Systems
                 numStaticBodies + 1, // +1 for the default static body
                 numDynamicBodies,
                 numJoints);
+
+            // Set the desired collision tolerance
+            world.CollisionWorld.CollisionTolerance = collisionTolerance;
 
             // Determine if the static bodies have changed in any way that will require the static broadphase tree to be rebuilt
             JobHandle staticBodiesCheckHandle = default;
