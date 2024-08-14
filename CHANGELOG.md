@@ -4,6 +4,13 @@ uid: unity-physics-changelog
 
 # Changelog
 
+## [1.2.4] - 2024-08-14
+
+### Changed
+
+* Updated entities packages dependencies
+
+
 ## [1.2.3] - 2024-05-30
 
 ### Changed

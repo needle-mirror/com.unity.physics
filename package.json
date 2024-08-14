@@ -4,8 +4,8 @@
   "description": "Unity's C# stateless physics library.\n\nBuilt on top of the Unity C# ECS framework, Unity Physics is network-ready, completely customizable, and built for performance out of the box. Whether you're building the next mobile hit or a new networked multiplayer console experience, Unity Physics leverages the Burst compiler and Job system to scale across a range of hardware.",
   "dependencies": {
     "com.unity.burst": "1.8.13",
-    "com.unity.collections": "2.4.2",
-    "com.unity.entities": "1.2.3",
+    "com.unity.collections": "2.4.3",
+    "com.unity.entities": "1.2.4",
     "com.unity.mathematics": "1.3.1",
     "com.unity.test-framework": "1.4.3",
     "com.unity.modules.imgui": "1.0.0",
@@ -18,7 +18,7 @@
   "name": "com.unity.physics",
   "unity": "2022.3",
   "unityRelease": "11f1",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "samples": [
     {
       "displayName": "Custom Physics Authoring",
@@ -28,15 +28,15 @@
     }
   ],
   "_upm": {
-    "changelog": "### Changed\n\n* `IntegrityChecks` is now under `ProjectSettings` > `Physics` > `Unity Physics` > `Enable Integrity Checks`.\n* Updated entities packages dependencies"
+    "changelog": "### Changed\n\n* Updated entities packages dependencies"
   },
   "upmCi": {
-    "footprint": "b5c143253934a13a1f275bef5ecc8dd1d494de5a"
+    "footprint": "a09305016d057afdfa24802e4473d9940828f3a8"
   },
   "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.physics@1.2/manual/index.html",
   "repository": {
     "url": "https://github.cds.internal.unity3d.com/unity/dots.git",
     "type": "git",
-    "revision": "0e866f29be5f7742acc14fad89281f547835ef01"
+    "revision": "3229c084d74b90980f151fe926f426ae38a63b44"
   }
 }
