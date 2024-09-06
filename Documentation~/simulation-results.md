@@ -1,6 +1,6 @@
 # Simulation results
 
-After completion of [PhysicsSimulationGroup](physics-pipeline.md), the simulation step is complete.
+After completion of the [PhysicsSimulationGroup](physics-pipeline.md), the simulation step is complete.
 The results of the simulation are:
 - New positions, rotations and velocities of dynamic bodies - stored inside a `PhysicsWorld`.
 - Collision and trigger events - stored internally in `Simulation` streams.
@@ -8,7 +8,7 @@ The results of the simulation are:
 After `PhysicsSimulationGroup` finishes, the final system of the `PhysicsSystemGroup` can update - [ExportPhysicsWorld](physics-pipeline.md).
 Its role is copy the updated body positions, rotations and velocities from `PhysicsWorld` ([physics simulation data](physics-data-types.md)) to ECS data.
 
-# Events
+## Events
 
 In addition to updated positions, rotations and velocities of bodies, the results of simulation also include events.
 Events are stored in streams stored inside the `Simulation` struct.
@@ -19,7 +19,7 @@ Get it using (`SystemBase|SystemAPI|EntityQuery`).GetSingleton<`SimulationSingle
 
 >**Note:** Events are valid after the `PhysicsSimulationGroup` has finished, and up until it starts in the next frame. Using them while `PhysicsSimulationGroup` is updating will lead to undefined behaviour.
 
-## Collision events
+### Collision events
 
 Collision events are raised from colliders that opted in to this behaviour.
 For each collision that involves those colliders, a collision event will be raised.
@@ -59,7 +59,7 @@ public partial struct GetNumCollisionEventsSystem : ISystem
 
 ```
 
-## Trigger events
+### Trigger events
 
 Trigger events are raised from colliders that opted in this behaviour.
 These colliders will not collide with anything, but will instead raise a trigger event once a collision should have happened.

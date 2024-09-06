@@ -1,8 +1,10 @@
-# Physics package concepts
+# Physics engine overview
+
+In this section you will learn how the Unity Physics engine is structured and what data inputs you need to produce to drive a physics simulation. These and more topics are addressed in the following subsections.
 
 | Topic                                                           | Description                                                                                                  |
 |-----------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
-| [Design Philosophy](design.md)                                  | This section describes the design decisions that have been taken with Unity Physics.                         |
-| [Order of physics simulation](concepts-simulation.md)           | Learn how the Unity Physics simulation system works.                                                         |
-| [Simulation setup demonstration](concepts-simulation-set-up.md) | An example workflow which sets up a physics simulation in the Editor.                                        |
-| [Data components](core-components.md)                           | This section describes the data components read by the physics systems to generate inputs to the simulation. |
+| [Design philosophy](design.md)                                  | This section describes the design decisions and intentions behind the Unity Physics engine.                         |
+| [The simulation pipeline](concepts-simulation.md)           | Learn how the Unity Physics simulation pipeline works.                                                         |
+| [Simulation setup demonstration](concepts-simulation-set-up.md) | An example workflow which sets up a physics simulation in the Unity Editor.                                        |
+| [Principal data components](core-components.md)                           | Learn about all the data components required to produce inputs for the Unity Physics engine. |

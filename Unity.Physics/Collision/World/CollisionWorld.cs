@@ -304,6 +304,14 @@ namespace Unity.Physics
             return Broadphase.ScheduleBuildJobs(ref world, timeStep, gravity, buildStaticTree, inputDeps, multiThreaded, reset: true);
         }
 
+        static NativeArray<T> CreateArrayCopy<T>(NativeArray<T> array, Allocator allocator)
+            where T : unmanaged
+        {
+            var arrayCopy = CollectionHelper.CreateNativeArray<T>(array.Length, allocator, NativeArrayOptions.UninitializedMemory);
+            arrayCopy.CopyFrom(array);
+            return arrayCopy;
+        }
+
         internal JobHandle ScheduleBuildBroadphaseJobs(ref PhysicsWorld world, float timeStep, float3 gravity, int numDynamicBodies, int numStaticBodies, NativeReference<int>.ReadOnly buildStaticTree,
             EntityQuery dynamicEntityQuery, EntityQuery staticEntityQuery, EntityQuery invalidatedTemporalCoherenceInfoQuery, NativeArray<int> dynamicBodyChunkBaseEntityIndices, NativeArray<int> staticBodyChunkBaseEntityIndices,
             JobHandle inputDeps, Allocator worldUpdateAllocator, in PhysicsWorldData.PhysicsWorldComponentHandles componentHandles, uint lastSystemVersion,
@@ -320,6 +328,8 @@ namespace Unity.Physics
             int numDynamicOrStaticEntityChunks = 0;
             NativeStream removeDynamicBodyDataStream = default;
             NativeStream removeStaticBodyDataStream = default;
+            NativeStream updateDynamicBodyDataStream = default;
+            NativeStream updateStaticBodyDataStream = default;
             NativeStream insertDynamicBodyDataStream = default;
             NativeStream insertStaticBodyDataStream = default;
             JobHandle removeDynamicBodyStreamHandle = default;
@@ -376,7 +386,12 @@ namespace Unity.Physics
                 var insertDynamicBodyStreamHandle = NativeStream.ScheduleConstruct(
                     out insertDynamicBodyDataStream,
                     numChunksArray, inputDeps, worldUpdateAllocator);
-                jobHandles.Add(insertDynamicBodyStreamHandle);
+
+                var updateDynamicBodyStreamHandle = NativeStream.ScheduleConstruct(
+                    out updateDynamicBodyDataStream,
+                    numChunksArray, inputDeps, worldUpdateAllocator);
+
+                jobHandles.Add(JobHandle.CombineDependencies(insertDynamicBodyStreamHandle, updateDynamicBodyStreamHandle));
             }
 
             if (numStaticBodies > 0 && incrementalStaticBroadphase)
@@ -387,7 +402,12 @@ namespace Unity.Physics
                 var insertStaticBodyStreamHandle = NativeStream.ScheduleConstruct(
                     out insertStaticBodyDataStream,
                     numChunksArray, inputDeps, worldUpdateAllocator);
-                jobHandles.Add(insertStaticBodyStreamHandle);
+
+                var updateStaticBodyStreamHandle = NativeStream.ScheduleConstruct(
+                    out updateStaticBodyDataStream,
+                    numChunksArray, inputDeps, worldUpdateAllocator);
+
+                jobHandles.Add(JobHandle.CombineDependencies(insertStaticBodyStreamHandle, updateStaticBodyStreamHandle));
             }
 
             if (numInvalidatedTemporalCoherenceInfoChunks > 0)
@@ -437,6 +457,9 @@ namespace Unity.Physics
                 {
                     if (numDynamicBodies > 0)
                     {
+                        var bodyFilters = world.CollisionWorld.Broadphase.DynamicTree.BodyFilters.AsArray();
+                        var respondsToCollision = world.CollisionWorld.Broadphase.DynamicTree.RespondsToCollision.AsArray();
+
                         collectDynamicCoherenceInfoHandle = new CollectTemporalCoherenceInfoJob
                         {
                             PhysicsTemporalCoherenceInfoTypeRW = componentHandles.PhysicsTemporalCoherenceInfoTypeRW,
@@ -450,12 +473,14 @@ namespace Unity.Physics
                             InsertBodyDataWriter = insertDynamicBodyDataStream.AsWriter(),
                             RemoveBodyDataWriter = removeDynamicBodyDataStream.AsWriter(),
                             RemoveBodyDataWriterOtherTree = removeStaticBodyDataStream.AsWriter(),
+                            UpdateBodyDataWriter = updateDynamicBodyDataStream.AsWriter(),
                             OtherTreeBufferOffset = numStaticEntityChunks,
 
                             Nodes = world.CollisionWorld.Broadphase.DynamicTree.Nodes,
-                            BodyFilters = world.CollisionWorld.Broadphase.DynamicTree.BodyFilters.AsArray(),
-                            RespondsToCollision =
-                                world.CollisionWorld.Broadphase.DynamicTree.RespondsToCollision.AsArray(),
+                            BodyFilters = bodyFilters,
+                            RespondsToCollision = respondsToCollision,
+                            BodyFiltersLastFrame = CreateArrayCopy(bodyFilters, worldUpdateAllocator),
+                            RespondsToCollisionLastFrame = CreateArrayCopy(respondsToCollision, worldUpdateAllocator),
                             RigidBodies = world.CollisionWorld.DynamicBodies,
                             MotionVelocities = world.DynamicsWorld.MotionVelocities,
                             CollisionTolerance = world.CollisionWorld.CollisionTolerance,
@@ -473,6 +498,7 @@ namespace Unity.Physics
                         world.CollisionWorld.Broadphase.DynamicTree.UpdatedElementLocationDataList = updatedElementLocationDataList;
 
                         world.CollisionWorld.Broadphase.DynamicTree.InsertBodyDataStream = insertDynamicBodyDataStream;
+                        world.CollisionWorld.Broadphase.DynamicTree.UpdateBodyDataStream = updateDynamicBodyDataStream;
                     }
 
                     // Special case: deal with bodies that switched type from dynamic to static when the static broadphase is not incremental.
@@ -496,6 +522,9 @@ namespace Unity.Physics
                 {
                     if (numStaticBodies > 0)
                     {
+                        var bodyFilters = world.CollisionWorld.Broadphase.StaticTree.BodyFilters.AsArray();
+                        var respondsToCollision = world.CollisionWorld.Broadphase.StaticTree.RespondsToCollision.AsArray();
+
                         collectStaticCoherenceInfoHandle = new CollectTemporalCoherenceInfoJob
                         {
                             PhysicsTemporalCoherenceInfoTypeRW = componentHandles.PhysicsTemporalCoherenceInfoTypeRW,
@@ -509,12 +538,14 @@ namespace Unity.Physics
                             InsertBodyDataWriter = insertStaticBodyDataStream.AsWriter(),
                             RemoveBodyDataWriter = removeStaticBodyDataStream.AsWriter(),
                             RemoveBodyDataWriterOtherTree = removeDynamicBodyDataStream.AsWriter(),
+                            UpdateBodyDataWriter = updateStaticBodyDataStream.AsWriter(),
                             OtherTreeBufferOffset = numDynamicEntityChunks,
 
                             Nodes = world.CollisionWorld.Broadphase.StaticTree.Nodes,
-                            BodyFilters = world.CollisionWorld.Broadphase.StaticTree.BodyFilters.AsArray(),
-                            RespondsToCollision =
-                                world.CollisionWorld.Broadphase.StaticTree.RespondsToCollision.AsArray(),
+                            BodyFilters = bodyFilters,
+                            RespondsToCollision = respondsToCollision,
+                            BodyFiltersLastFrame = CreateArrayCopy(bodyFilters, worldUpdateAllocator),
+                            RespondsToCollisionLastFrame = CreateArrayCopy(respondsToCollision, worldUpdateAllocator),
                             RigidBodies = world.CollisionWorld.StaticBodies,
                             Static = true,
 
@@ -529,6 +560,7 @@ namespace Unity.Physics
                         world.CollisionWorld.Broadphase.StaticTree.UpdatedElementLocationDataList = updatedElementLocationDataList;
 
                         world.CollisionWorld.Broadphase.StaticTree.InsertBodyDataStream = insertStaticBodyDataStream;
+                        world.CollisionWorld.Broadphase.StaticTree.UpdateBodyDataStream = updateStaticBodyDataStream;
                     }
 
                     // Special case: deal with bodies that switched type from static to dynamic when the dynamic broadphase is not incremental.
@@ -865,6 +897,7 @@ namespace Unity.Physics
             public NativeStream.Writer RemoveBodyDataWriter;
             [NativeDisableContainerSafetyRestriction]
             public NativeStream.Writer RemoveBodyDataWriterOtherTree;
+            public NativeStream.Writer UpdateBodyDataWriter;
             public NativeStream.Writer InsertBodyDataWriter;
             public int OtherTreeBufferOffset;
 
@@ -874,6 +907,14 @@ namespace Unity.Physics
             public NativeArray<CollisionFilter> BodyFilters;
             [NativeDisableContainerSafetyRestriction]
             public NativeArray<bool> RespondsToCollision;
+
+            [ReadOnly]
+            [NativeDisableContainerSafetyRestriction]
+            public NativeArray<CollisionFilter> BodyFiltersLastFrame;
+            [ReadOnly]
+            [NativeDisableContainerSafetyRestriction]
+            public NativeArray<bool> RespondsToCollisionLastFrame;
+
             [ReadOnly] public NativeArray<RigidBody> RigidBodies;
             [NativeDisableContainerSafetyRestriction]
             [ReadOnly] public NativeArray<MotionVelocity> MotionVelocities;
@@ -887,6 +928,8 @@ namespace Unity.Physics
             public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask,
                 in v128 chunkEnabledMask)
             {
+                // Note: for fast chunk data change checks and fast data migrations,
+                // enabled masks are not supported, analogous to the assumption in the CheckStaticBodyChangesJob.
                 SafetyChecks.CheckAreEqualAndThrow(false, useEnabledMask);
 
 #if ENABLE_UNITY_COLLECTIONS_CHECKS || UNITY_DOTS_DEBUG
@@ -949,7 +992,7 @@ namespace Unity.Physics
                             // Nothing changed in this chunk, but the starting entity index changed.
                             // So we have to update internal broadphase data structures:
                             // 1. update data in BVH node and coherence info
-                            // 2. shift data in RespondsToCollision and CollisionFilter arrays
+                            // 2. shift data in RespondsToCollision and CollisionFilter arrays using memcpy from the last frame's data.
 
                             do
                             {
@@ -982,22 +1025,23 @@ namespace Unity.Physics
 
                                 // write out updated coherence info
                                 chunkCoherenceInfos[i] = coherenceInfo;
-
-                                // 2:
-
-                                var collisionFilter = CollisionFilter.Zero;
-                                var respondsToCollision = false;
-                                var body = RigidBodies[bodyIndex];
-                                if (body.Collider.IsCreated)
-                                {
-                                    collisionFilter = body.Collider.Value.GetCollisionFilter();
-                                    respondsToCollision = body.Collider.Value.RespondsToCollision;
-                                }
-
-                                BodyFilters[bodyIndex] = collisionFilter;
-                                RespondsToCollision[bodyIndex] = respondsToCollision;
                             }
                             while (entityIter.NextEntityIndex(out i));
+
+                            // 2:
+
+                            // Note: this shift operation is safe to do since we know that the chunk order has not changed since last frame,
+                            // and we can use the chunk.Count as indication of the number of rigid body entities, as enabled masks are not supported for rigid bodies.
+                            // See assertion that useEnabledMask is false above.
+                            UnsafeUtility.MemCpy(
+                                (CollisionFilter*)BodyFilters.GetUnsafePtr() + firstBodyIndex,
+                                (CollisionFilter*)BodyFiltersLastFrame.GetUnsafePtr() + firstBodyIndexLastFrame,
+                                sizeof(CollisionFilter) * chunk.Count);
+
+                            UnsafeUtility.MemCpy(
+                                (bool*)RespondsToCollision.GetUnsafePtr() + firstBodyIndex,
+                                (bool*)RespondsToCollisionLastFrame.GetUnsafePtr() + firstBodyIndexLastFrame,
+                                sizeof(bool) * chunk.Count);
                         }
 
                         return;
@@ -1005,6 +1049,8 @@ namespace Unity.Physics
 
                     RemoveBodyDataWriter.BeginForEachIndex(unfilteredChunkIndex);
                     InsertBodyDataWriter.BeginForEachIndex(unfilteredChunkIndex);
+                    UpdateBodyDataWriter.BeginForEachIndex(unfilteredChunkIndex);
+
                     if (OtherTreeBufferOffset != -1)
                     {
                         // only needed if the other tree (either static or dynamic) exists and we might need to
@@ -1075,9 +1121,10 @@ namespace Unity.Physics
                                 }
 
                                 var collisionFilter = CollisionFilter.Zero;
-                                var needFilterUpdate = bodyIndexChanged || colliderChanged;
+                                var needFilterOrResponseUpdate = bodyIndexChanged || colliderChanged;
+                                var collisionFilterChanged = false;
                                 // deal with collision filter and responds to collision flag
-                                if (needFilterUpdate)
+                                if (needFilterOrResponseUpdate)
                                 {
                                     // If the body index changed or the collider was modified, we need to update the
                                     // body's entry in the BodyFilters and RespondsToCollision arrays.
@@ -1090,6 +1137,8 @@ namespace Unity.Physics
                                         respondsToCollision = body.Collider.Value.RespondsToCollision;
                                     }
 
+                                    var previousFilter = BodyFilters[bodyIndex];
+                                    collisionFilterChanged = !previousFilter.Equals(collisionFilter);
                                     BodyFilters[bodyIndex] = collisionFilter;
                                     RespondsToCollision[bodyIndex] = respondsToCollision;
                                 }
@@ -1103,27 +1152,69 @@ namespace Unity.Physics
                                         Broadphase.PrepareDynamicBodyDataJob.CalculateAabb(ref body, aabbMargin, Gravity,
                                         TimeStep, MotionVelocities[bodyIndex]);
 
-                                    // @todo if we are relatively close to the previous values, we could just issue an aabb update
-                                    // and a refit without removal and re-insertion.
+                                    var previousAabb = node->Bounds.GetAabb(leafSlotIndex);
+                                    var previousExtents = previousAabb.Extents;
+                                    var previousCenter = previousAabb.Center;
+                                    var newExtents = aabb.Extents;
+                                    var newCenter = aabb.Center;
+                                    var deltaExtentsSq = math.distancesq(newExtents, previousExtents);
+                                    var deltaCenterSq = math.distancesq(newCenter, previousCenter);
 
-                                    // Unless we need to reinsert anyways since the collider changed in some way,
-                                    // compare new AABB with previous one. If they are different, we need to issue a removal and reinsertion.
-                                    // Note: We don't access the bounds if the collider changed. In this case we need to issue a re-insertion anyways
-                                    bool reinsertRequired = colliderChanged;
-                                    if (!reinsertRequired)
+                                    const float kEpsilonSq = math.EPSILON;
+                                    var aabbChanged =
+                                        deltaExtentsSq > kEpsilonSq ||
+                                        deltaCenterSq > kEpsilonSq;
+
+                                    var reinsertRequired = aabbChanged;
+
+                                    // check if we can prevent reinsertion
+                                    if (aabbChanged)
                                     {
-                                        var previousAabb = node->Bounds.GetAabb(leafSlotIndex);
-                                        const float kEpsilonSq = math.EPSILON;
-                                        reinsertRequired =
-                                            math.distancesq(aabb.Extents, previousAabb.Extents) > kEpsilonSq ||
-                                            math.distancesq(aabb.Center, previousAabb.Center) > kEpsilonSq;
+                                        // if we are relatively close to the previous values, we can just issue an aabb update
+                                        // and a refit without removal and re-insertion.
 
-                                        // @todo: to prevent unnecessary re-insertion, we could figure out what changed exactly and then decide if we need to reinsert:
-                                        // - only material changed? no need to reinsert
-                                        // - shape changed but same AABB? no need to reinsert
-                                        // - collision filter changed? no need to reinsert in certain cases, and could do fast update in others.
-                                        //      - filter less permissive than before? Not necessary to update.
-                                        //      - filter more permissive than before? Necessary to update, but could be done with a fast path (recompute filters bottom up similarly to when we remove).
+                                        var sweptAabb = Aabb.Union(previousAabb, aabb);
+                                        var previousSurfaceArea = previousAabb.SurfaceArea;
+                                        var sweptSurfaceGrowthRatio = sweptAabb.SurfaceArea / previousSurfaceArea;
+                                        var surfaceChangeRatio = aabb.SurfaceArea / previousSurfaceArea;
+
+                                        const float kMaxSweptSurfaceAreaGrowthFactor = 1.2f;
+                                        const float kMinSurfaceAreaGrowthFactor = 0.5f;
+                                        var refit = sweptSurfaceGrowthRatio<kMaxSweptSurfaceAreaGrowthFactor && surfaceChangeRatio> kMinSurfaceAreaGrowthFactor;
+
+                                        if (refit)
+                                        {
+                                            // initiate refit instead of re-insertion
+                                            reinsertRequired = false;
+
+                                            var updateData = new BoundingVolumeHierarchy.UpdateData
+                                            {
+                                                Aabb = aabb,
+                                                NodeIndex = nodeIndex,
+                                                LeafSlotIndex = leafSlotIndex,
+                                                UpdateCommandFlags = (byte)BoundingVolumeHierarchy.UpdateData.CommandFlags.UpdateAabb
+                                            };
+
+                                            // also update collision filter if required
+                                            if (collisionFilterChanged)
+                                            {
+                                                updateData.UpdateCommandFlags |= (byte)BoundingVolumeHierarchy.UpdateData.CommandFlags.UpdateFilter;
+                                            }
+
+                                            UpdateBodyDataWriter.Write(updateData);
+                                        }
+                                    }
+                                    else if (collisionFilterChanged)
+                                    {
+                                        // if the AABB didn't change but the collision filter did, we can just update the filter.
+                                        // @todo: We could decide not to update the filter when the new filter is less permissive than before.
+
+                                        UpdateBodyDataWriter.Write(new BoundingVolumeHierarchy.UpdateData
+                                        {
+                                            NodeIndex = nodeIndex,
+                                            LeafSlotIndex = leafSlotIndex,
+                                            UpdateCommandFlags = (byte)BoundingVolumeHierarchy.UpdateData.CommandFlags.UpdateFilter
+                                        });
                                     }
 
                                     if (reinsertRequired)
@@ -1140,7 +1231,7 @@ namespace Unity.Physics
                                             Position = aabb.Center
                                         };
 
-                                        if (!needFilterUpdate && body.Collider.IsCreated)
+                                        if (!needFilterOrResponseUpdate && body.Collider.IsCreated)
                                         {
                                             collisionFilter = body.Collider.Value.GetCollisionFilter();
                                         }
@@ -1199,6 +1290,7 @@ namespace Unity.Physics
 
                     RemoveBodyDataWriter.EndForEachIndex();
                     InsertBodyDataWriter.EndForEachIndex();
+                    UpdateBodyDataWriter.EndForEachIndex();
                     if (OtherTreeBufferOffset != -1)
                     {
                         RemoveBodyDataWriterOtherTree.EndForEachIndex();

@@ -1,8 +1,8 @@
 # Design philosophy
 
-Unity Physics is a complete deterministic rigid body dynamics and spatial query system, written entirely in high performance C# using ECS best practices. The design of Unity Physics follows from the overall DOTS philosophy of minimal dependencies and complete control.
+Unity Physics is a completely deterministic rigid body dynamics and spatial query system, written entirely in high performance C# using ECS best practices. The design of Unity Physics follows from the overall DOTS philosophy of minimal dependencies and complete control.
 
-Unity Physics is designed to support users who do not necessarily need a full-featured physics package like PhysX or Havok, but instead want a simpler subset of features that they can freely control and customize. The goal of Unity Physics is to provide this in a stable way, without sacrificing on performance in areas where it is critical. This page describes the design decisions that have been taken in order to achieve this goal.
+Unity Physics is designed to support users who do not necessarily need a fully-featured physics package like PhysX or Havok, but instead want a simpler subset of features that they can freely control and customize. The goal of Unity Physics is to provide this in a stable way, without sacrificing on performance in areas where it is critical. This page describes the design decisions that have been taken in order to achieve this goal.
 
 ## Stateless
 

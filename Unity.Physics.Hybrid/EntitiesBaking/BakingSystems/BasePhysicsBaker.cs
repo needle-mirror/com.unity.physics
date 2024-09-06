@@ -55,7 +55,11 @@ namespace Unity.Physics.Authoring
             float4x4 localToWorld = bodyTransform.localToWorldMatrix;
             bool hasShear = localToWorld.HasShear();
             bool hasNonIdentityScale = HasNonIdentityScale(bodyTransform);
-            bool unparent = motionType != BodyMotionType.Static || hasShear || hasNonIdentityScale || !haveParentEntity || haveBakedTransform;
+            // If we have any negative lossy scale, unparent in order to deal with transformations ourselves, since in this case
+            // the TransformBakingSystem assumes a scale despite in certain cases there not being any (e.g., exactly two axes flipped,
+            // leading to a pure rotation and no scale).
+            bool hasNegativeLossyScale = math.cmin(bodyTransform.lossyScale) < 0;
+            bool unparent = motionType != BodyMotionType.Static || hasShear || hasNonIdentityScale || !haveParentEntity || haveBakedTransform || hasNegativeLossyScale;
 
             if (unparent)
             {
@@ -79,7 +83,7 @@ namespace Unity.Physics.Authoring
                 }
                 else
                 {
-                    uniformScale = bodyTransform.lossyScale[0];
+                    uniformScale = math.abs(bodyTransform.lossyScale[0]);
                 }
 
                 LocalTransform transform = LocalTransform.FromPositionRotationScale(rigidBodyTransform.pos,

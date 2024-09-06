@@ -121,7 +121,7 @@ namespace Unity.Physics.Authoring
         }
         [SerializeField]
         [Tooltip("Enables the incremental dynamic broadphase.\n" +
-            "Enabling this option will update the dynamic broadphase incrementally whenever changes between simulation steps occur," +
+            "Enabling this option will update the dynamic broadphase incrementally whenever changes between simulation steps occur, " +
             "potentially leading to time savings for cases with many dynamic rigid bodies that don't move or otherwise change.")]
         bool m_IncrementalDynamicBroadphase = Default.IncrementalDynamicBroadphase;
 
@@ -137,7 +137,7 @@ namespace Unity.Physics.Authoring
         }
         [SerializeField]
         [Tooltip("Enables the incremental static broadphase.\n" +
-            "Enabling this option will update the static broadphase incrementally whenever changes between simulation steps occur," +
+            "Enabling this option will update the static broadphase incrementally whenever changes between simulation steps occur, " +
             "potentially leading to time savings for cases with many static rigid bodies that don't move or otherwise change.")]
         bool m_IncrementalStaticBroadphase = Default.IncrementalStaticBroadphase;
 

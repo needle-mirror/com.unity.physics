@@ -740,7 +740,15 @@ namespace Unity.Physics.Tests.Authoring
             return new[]
             {
                 new Vector3(1, 1, 1),
-                new Vector3(0.8f, 0.8f, 0.8f)
+                new Vector3(1, 1, -1),
+                new Vector3(1, -1, 1),
+                new Vector3(-1, 1, 1),
+                new Vector3(-1, -1, 1),
+                new Vector3(-1, 1, -1),
+                new Vector3(1, -1, -1),
+                new Vector3(0.8f, 0.8f, 0.8f),
+                new Vector3(0.8f, 0.8f, -0.8f),
+                new Vector3(-0.8f, -0.8f, 0.8f)
             };
         }
 

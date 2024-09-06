@@ -25,7 +25,6 @@ To install the package, open the Package Manager window (**Window &gt; Package M
 * Mesh collider types contacting results in a wrong behaviour by getting glued to each other as if they were joints.
 * Mesh collider simplification: if primitive scale is smaller than 0.018f, selecting entities in the scene view throws error.
 * Compound collider gets created even if children are disabled in Editor's game object hierarchy.
-* Moving the child of a game object in a sub scene results in exceptions, when both parent and child have traditional colliders (e.g. box collider component) but no rigidbodies.
 
 ## Additional resources
 

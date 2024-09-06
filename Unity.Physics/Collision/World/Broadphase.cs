@@ -142,7 +142,7 @@ namespace Unity.Physics
         }
 
 #if ENABLE_PROFILER
-        static readonly ProfilerMarker s_RemovalsMarker = new(ProfilerCategory.Physics, "BVH.Removals");
+        static readonly ProfilerMarker s_RemovalsMarker = new(ProfilerCategory.Physics, "BVH.RemovalsAndUpdates");
         static readonly ProfilerMarker s_InsertionsMarker = new(ProfilerCategory.Physics, "BVH.Insertions");
 #endif
 
@@ -471,6 +471,9 @@ namespace Unity.Physics
             NativeStream m_RemoveBodyDataStream;
             [NoAlias]
             [NativeDisableContainerSafetyRestriction]
+            NativeStream m_UpdateBodyDataStream;
+            [NoAlias]
+            [NativeDisableContainerSafetyRestriction]
             NativeStream m_InsertBodyDataStream;
             [NoAlias]
             [NativeDisableContainerSafetyRestriction]
@@ -486,6 +489,17 @@ namespace Unity.Physics
                 get => m_RemoveBodyDataStream;
                 [MethodImpl(MethodImplOptions.AggressiveInlining)]
                 set => m_RemoveBodyDataStream = value;
+            }
+
+            // Data stream representing rigid bodies for which data needs to be updated in the tree, i.e., their
+            // Aabb or collision filter.
+            // Used as part of the incremental broadphase.
+            public NativeStream UpdateBodyDataStream
+            {
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                get => m_UpdateBodyDataStream;
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                set => m_UpdateBodyDataStream = value;
             }
 
             // Data stream representing rigid bodies that need to be inserted into the tree, e.g., due to their creation.
@@ -534,6 +548,7 @@ namespace Unity.Physics
                 BranchCount = new NativeArray<int>(1, allocator, NativeArrayOptions.ClearMemory);
 
                 m_RemoveBodyDataStream = default;
+                m_UpdateBodyDataStream = default;
                 m_InsertBodyDataStream = default;
                 m_UpdatedElementLocationDataList = default;
                 m_IncrementalInsertionContext = new IncrementalInsertionContext(128, allocator);
@@ -547,6 +562,7 @@ namespace Unity.Physics
                 }
 
                 m_RemoveBodyDataStream = default;
+                m_UpdateBodyDataStream = default;
                 m_InsertBodyDataStream = default;
                 m_UpdatedElementLocationDataList = default;
 
@@ -605,6 +621,7 @@ namespace Unity.Physics
                     Ranges = new NativeArray<BoundingVolumeHierarchy.Builder.Range>(Ranges, Allocator),
                     BranchCount = new NativeArray<int>(BranchCount, Allocator),
                     m_RemoveBodyDataStream = default,
+                    m_UpdateBodyDataStream = default,
                     m_InsertBodyDataStream = default,
                     m_UpdatedElementLocationDataList = default,
                     m_IncrementalInsertionContext = new IncrementalInsertionContext(128, Allocator.Persistent)
@@ -650,23 +667,27 @@ namespace Unity.Physics
                     bvh.Clear();
                 }
 
-                if (RemoveBodyDataStream.IsCreated && !RemoveBodyDataStream.IsEmpty())
+                var removalsRequested = RemoveBodyDataStream.IsCreated && !RemoveBodyDataStream.IsEmpty();
+                var updatesRequested = UpdateBodyDataStream.IsCreated && !UpdateBodyDataStream.IsEmpty();
+                if (removalsRequested || updatesRequested)
                 {
-                    var removals = RemoveBodyDataStream.ToNativeArray<RemovalData>(Allocator.Temp);
-                    // remove bodies
-                    if (removals.Length != 0)
+                    var removals = removalsRequested ? RemoveBodyDataStream.ToNativeArray<RemovalData>(Allocator.Temp) : new NativeArray<RemovalData>();
+                    var updates = updatesRequested ? UpdateBodyDataStream.ToNativeArray<UpdateData>(Allocator.Temp) : new NativeArray<UpdateData>();
+                    // remove and update bodies
+                    if (removals.Length + updates.Length != 0)
                     {
 #if ENABLE_PROFILER
                         s_RemovalsMarker.Begin();
 #endif
-                        bvh.Remove(removals, BodyFilters.AsArray());
+                        bvh.RemoveOrUpdate(removals, updates, BodyFilters.AsArray());
 #if ENABLE_PROFILER
                         s_RemovalsMarker.End();
 #endif
                     }
                 }
 
-                if (InsertBodyDataStream.IsCreated && !InsertBodyDataStream.IsEmpty())
+                var insertionsRequested = InsertBodyDataStream.IsCreated && !InsertBodyDataStream.IsEmpty();
+                if (insertionsRequested)
                 {
                     // insert bodies
 #if ENABLE_PROFILER

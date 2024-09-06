@@ -504,8 +504,26 @@ namespace Unity.Physics
         /// <returns>   True if the matrix has non-uniform scale. </returns>
         public static bool HasNonUniformScale(this float4x4 m, float eps = 1e-5f)
         {
+            // In the following, we start by checking if we have non-uniform axes.
+            // - If this is the case, we can immediately return true as this
+            //   means that the scale is definitely non-uniform.
+            // - If however this is not the case, we need to check if one of the axes was flipped, caused
+            //   by a negative scale of one of the axes. This flip leads to the coordinate system no longer being
+            //   left-handed which we use as a check to determine if this negative scale occurred.
+            //   If this is the case, the scale is non-uniform and we return true. Otherwise, we return false.
             var s = new float3(math.lengthsq(m.c0.xyz), math.lengthsq(m.c1.xyz), math.lengthsq(m.c2.xyz));
-            return math.abs(math.cmin(s) - math.cmax(s)) > eps;
+            var nonUniformAxes = math.abs(math.cmin(s) - math.cmax(s)) > eps;
+            if (!nonUniformAxes)
+            {
+                // check if the coordinate system is no longer left-handed.
+                // If this is the case, we have a non-uniform scale despite all axes having equal lengths.
+                var cross = math.cross(m.c0.xyz, m.c1.xyz);
+                var leftHanded = math.dot(cross, m.c2.xyz) > 0;
+                return !leftHanded;
+            }
+            // else:
+
+            return true; // nonUniformAxes == true
         }
 
         /// <summary> Checks if the matrix has non-identity scale. </summary>
@@ -514,7 +532,14 @@ namespace Unity.Physics
         /// <returns>  True if the matrix has non-identity scale. </returns>
         public static bool HasNonIdentityScale(this float4x4 m, float eps = 1e-5f)
         {
-            return math.lengthsq(m.DecomposeScale() - new float3(1f)) > eps;
+            // check if the matrix is left-handed
+            var cross = math.cross(m.c0.xyz, m.c1.xyz);
+            var leftHanded = math.dot(cross, m.c2.xyz) > 0;
+            var scale = leftHanded ? 1.0f : -1.0f;
+
+            var signedScale = new float3(math.length(m.c0.xyz), math.length(m.c1.xyz), scale * math.length(m.c2.xyz));
+
+            return math.lengthsq(signedScale - new float3(1f)) > eps;
         }
 
         /// <summary>   Checks if the matrix has shear. </summary>

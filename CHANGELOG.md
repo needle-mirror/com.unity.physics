@@ -4,6 +4,23 @@ uid: unity-physics-changelog
 
 # Changelog
 
+
+## [1.3.2] - 2024-09-06
+
+### Changed
+* Updated entities packages dependencies
+
+### Changed
+
+* Documentation updates
+* Updated Burst dependency to version 1.8.17
+* Updated Unity Test Framework dependency to version 1.4.5
+
+### Fixed
+
+* Fixed an issue with negative collider scales during baking. Negative scales in GameObjects are now correctly interpreted and can be used to correctly flip GameObjects together with their associated colliders.
+
+
 ## [1.3.0-pre.4] - 2024-07-17
 
 ### Added
@@ -17,6 +34,7 @@ uid: unity-physics-changelog
 ### Fixed
 
 * Prevent `Entity.Null` entries in the `PhysicsColliderKeyEntityPair` buffer of rigid body entities with compound colliders.
+
 
 
 ## [1.3.0-exp.1] - 2024-06-11
@@ -47,6 +65,12 @@ uid: unity-physics-changelog
 * Fixed an issue that prevented contacts in the Physics Debug Display to show up when Draw Contacts was enabled.
 * Prevent a `NullReferenceException` during incremental compound collider baking in the editor, by ensuring that the child collider blobs have not been removed by the blob asset store's garbage collection when creating the compound collider.
 
+
+## [1.2.4] - 2024-08-14
+
+### Changed
+
+* Updated entities packages dependencies
 
 
 ## [1.2.3] - 2024-05-30
@@ -119,7 +143,7 @@ uid: unity-physics-changelog
 
 ### Changed
 
-* Update package `com.unity.mathematics` from `1.2.6` to `1.3.1` version.
+* Update package `com.unity.mathematics` from `1.2.6` to `1.3.2` version.
 * Analytics API update to `SceneSimulationAnalytics.cs` file.
 * collider files renamed to `BoxCollider.cs`, `CapsuleCollider.cs`, `Collider.cs`, `MeshCollider.cs`, `SphereCollider.cs` and `TerrainCollider.cs`.
 * The `EnsureUniqueColliderSystem` now runs first in the `BeforePhysicsSystemGroup` instead of after the `AfterPhysicsSystemGroup`. A system that instantiates prefabs using unique colliders during runtime should run in the `BeforePhysicsSystemGroup` to avoid a bug where colliders would not be unique during prefab instantiation.

@@ -451,16 +451,46 @@ namespace Unity.Physics
             }
         }
 
-        public unsafe void Remove(NativeArray<RemovalData> removals, NativeArray<CollisionFilter> leafFiltersInfo)
+        public struct UpdateData : IComparable<UpdateData>
         {
-            SafetyChecks.CheckAreEqualAndThrow(true, removals.Length > 0);
+            public enum CommandFlags
+            {
+                None = 0,
+                UpdateAabb = 1 << 0,
+                UpdateFilter = 1 << 1
+            }
+
+            public Aabb Aabb;
+            public int NodeIndex;
+            public byte LeafSlotIndex;
+            public byte UpdateCommandFlags;
+
+            public int CompareTo(UpdateData other)
+            {
+                if (NodeIndex == other.NodeIndex)
+                {
+                    return LeafSlotIndex - other.LeafSlotIndex;
+                }
+                // else:
+
+                return NodeIndex - other.NodeIndex;
+            }
+        }
+
+        public void Remove(NativeArray<RemovalData> removals, NativeArray<CollisionFilter> leafFiltersInfo)
+            => RemoveOrUpdate(removals, new NativeArray<UpdateData>(), leafFiltersInfo);
+
+        public unsafe void RemoveOrUpdate(NativeArray<RemovalData> removals, NativeArray<UpdateData> updates, NativeArray<CollisionFilter> leafFiltersInfo)
+        {
+            var elementsToProcess = removals.Length + updates.Length;
+            SafetyChecks.CheckAreEqualAndThrow(true, elementsToProcess > 0);
 
             // For now we support incremental removal only in trees with collision filters.
             SafetyChecks.CheckAreEqualAndThrow(true, m_NodeFilters != null);
 
             var leafFilters = (CollisionFilter*)leafFiltersInfo.GetUnsafeReadOnlyPtr();
-            var nodesToProcess = new NativePriorityHeap<int>(removals.Length, Allocator.Temp, HeapType.Max);
-            var addedNodesSet = new NativeHashSet<int>(removals.Length, Allocator.Temp);
+            var nodesToProcess = new NativePriorityHeap<int>(elementsToProcess, Allocator.Temp, HeapType.Max);
+            var addedNodesSet = new NativeHashSet<int>(elementsToProcess, Allocator.Temp);
 
             // Fill nodesToProcess with parents of removed nodes.
             // Process from back to front assuming that removals array is sorted by increasing node index
@@ -468,11 +498,12 @@ namespace Unity.Physics
             // requiring less sort operations.
             for (int i = removals.Length - 1; i >= 0; --i)
             {
-                var data = removals[i];
-                var slotIndex = data.LeafSlotIndex;
-                var leafNode = m_Nodes + data.NodeIndex;
+                var removalData = removals[i];
+                var slotIndex = removalData.LeafSlotIndex;
+                var leafNode = m_Nodes + removalData.NodeIndex;
                 SafetyChecks.CheckAreEqualAndThrow(true, leafNode->IsLeaf);
                 SafetyChecks.CheckAreEqualAndThrow(true, leafNode->IsChildValid(slotIndex));
+
                 leafNode->ClearLeafData(slotIndex);
                 leafNode->Bounds.SetAabb(slotIndex, Aabb.Empty);
                 SafetyChecks.CheckAreEqualAndThrow(true, leafNode->NumFreeSlotsInLeaf <= 3);
@@ -486,14 +517,14 @@ namespace Unity.Physics
                     nodesToProcess.Push(parentIndex);
                 }
 
-                if (leafNode->NumFreeSlotsInLeaf == 4 && data.NodeIndex == NodeCount - 1)
+                if (leafNode->NumFreeSlotsInLeaf == 4 && removalData.NodeIndex == NodeCount - 1)
                 {
                     // no more entries in leaf and leaf is last node in tree. Free it.
                     --NodeCount;
 
                     // Move up the tree and disconnect removed leaf node
                     var parent = m_Nodes + parentIndex;
-                    var childOffset = parent->FindChildOffset(data.NodeIndex);
+                    var childOffset = parent->FindChildOffset(removalData.NodeIndex);
                     SafetyChecks.CheckAreEqualAndThrow(true, childOffset != -1);
                     parent->ClearInternalData(childOffset);
                 }
@@ -502,10 +533,42 @@ namespace Unity.Physics
                     // update combined collision filter for this node
 
                     // Note: we are aware that we are recalculating the combined collision filters for the leaf nodes here
-                    // potentially multiple times. However, the calculation is fast enough that the potential duplication of work
-                    // does not matter, assuming that we obtain good cache locality when accessing the leaf node filters due
-                    // to the sorting above.
-                    var nodeFilter = m_NodeFilters + data.NodeIndex;
+                    // potentially multiple times. However, the processing and memory access cost is hopefully low enough that
+                    // the potential duplication of work does not matter.
+                    var nodeFilter = m_NodeFilters + removalData.NodeIndex;
+                    *nodeFilter = BuildCombinedCollisionFilterForLeafNode(leafFilters, leafNode);
+                }
+            }
+
+            // Fill nodesToProcess with parents of updated nodes.
+            for (int i = updates.Length - 1; i >= 0; --i)
+            {
+                var updateData = updates[i];
+                SafetyChecks.CheckAreEqualAndThrow(true, updateData.UpdateCommandFlags != (byte)UpdateData.CommandFlags.None);
+                var slotIndex = updateData.LeafSlotIndex;
+                var leafNode = m_Nodes + updateData.NodeIndex;
+                SafetyChecks.CheckAreEqualAndThrow(true, leafNode->IsLeaf);
+                SafetyChecks.CheckAreEqualAndThrow(true, leafNode->IsChildValid(slotIndex));
+
+                var parentIndex = leafNode->Parent;
+                if (addedNodesSet.Add(parentIndex))
+                {
+                    nodesToProcess.Push(parentIndex);
+                }
+
+                if ((updateData.UpdateCommandFlags & (byte)UpdateData.CommandFlags.UpdateAabb) != 0)
+                {
+                    leafNode->Bounds.SetAabb(slotIndex, updateData.Aabb);
+                }
+
+                if ((updateData.UpdateCommandFlags & (byte)UpdateData.CommandFlags.UpdateFilter) != 0)
+                {
+                    // update combined collision filter for this node
+
+                    // Note: we are aware that we are recalculating the combined collision filters for the leaf nodes here
+                    // potentially multiple times. However, the processing and memory access cost is hopefully low enough that
+                    // the potential duplication of work does not matter.
+                    var nodeFilter = m_NodeFilters + updateData.NodeIndex;
                     *nodeFilter = BuildCombinedCollisionFilterForLeafNode(leafFilters, leafNode);
                 }
             }
@@ -639,7 +702,7 @@ namespace Unity.Physics
             }
         }
 
-        public unsafe InsertionResult Insert(Aabb aabb, PointAndIndex point, CollisionFilter filter, int startNodeIndex = 1)
+        public unsafe InsertionResult Insert(Aabb aabb, PointAndIndex point, CollisionFilter filter)
         {
             // For now we only support incremental insertion in trees with collision filters.
             SafetyChecks.CheckAreEqualAndThrow(true, m_NodeFilters != null);
@@ -650,8 +713,11 @@ namespace Unity.Physics
             int nodeIndexStackCount = 0;
 
             const float kNoFreeSlotPenaltyFactor = 1.618f;
-            var currentNode = m_Nodes + startNodeIndex;
-            var currentNodeIndex = startNodeIndex;
+            // Always start at the root since the way we update the AABBs and other data
+            // elements along the path to the leaf requires it.
+            const int kStartNodeIndex = 1;
+            var currentNode = m_Nodes + kStartNodeIndex;
+            var currentNodeIndex = kStartNodeIndex;
 
             var insertionData = stackalloc NodeInsertionData[4];
             NodeInsertionData bestNodeData = default;

@@ -8,12 +8,12 @@ uid: simulation-modification
 You can usually consider the physics simulation as a monolithic process whose inputs are components described in [core components](core-components.md) and outputs are updated `LocalTransform` and `PhysicsVelocity` components. However, internally, the Physics step is actually broken down into smaller subsections, the output of each becomes the input to the next. Unity Physics currently gives you the ability to read and modify this data, if it is necessary for your gameplay use cases.
 
 You can do that in two ways:
-- Directly modify 'PhysicsWorld'
-- Modify simulation results at specific points
+- Directly modify the `PhysicsWorld`
+- Modify simulation results at specific points in the pipeline
 
 Regardless of the way you wish to use, to modify intermediate simulation results, your system needs to update after [PhysicsInitializeGroup](physics-pipeline.md) and before [PhysicsSimulationGroup](physics-pipeline.md) (your system needs `[UpdateAfter(typeof(PhysicsInitializeGroup))] [UpdateBefore(PhysicsSimulationGroup)]`), or it needs to update in [PhysicsSimulationGroup](physics-pipeline.md).
 
-# Directly modifying 'PhysicsWorld'
+# Directly modifying the PhysicsWorld
 
 After [PhysicsInitializeGroup](physics-pipeline.md) has finished, you are free to modify the resulting `PhysicsWorld`. Note that for modification purposes, you should retrieve the world using (`SystemBase|SystemAPI|EntityQuery`).GetSingletonRW<`PhysicsWorldSingleton`>(), instead of just (`SystemBase|SystemAPI|EntityQuery`).GetSingleton<`PhysicsWorldSingleton`>(), since the latter is the read-only version.
 This is a suitable place to modify simulation data to implement additional simulation features (driving the car, custom friction...).

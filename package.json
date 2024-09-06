@@ -3,11 +3,11 @@
   "category": "Unity",
   "description": "Unity's C# stateless physics library.\n\nBuilt on top of the Unity C# ECS framework, Unity Physics is network-ready, completely customizable, and built for performance out of the box. Whether you're building the next mobile hit or a new networked multiplayer console experience, Unity Physics leverages the Burst compiler and Job system to scale across a range of hardware.",
   "dependencies": {
-    "com.unity.burst": "1.8.16",
-    "com.unity.collections": "2.5.0-pre.2",
-    "com.unity.entities": "1.3.0-pre.4",
-    "com.unity.mathematics": "1.3.1",
-    "com.unity.test-framework": "1.4.3",
+    "com.unity.burst": "1.8.17",
+    "com.unity.collections": "2.5.1",
+    "com.unity.entities": "1.3.2",
+    "com.unity.mathematics": "1.3.2",
+    "com.unity.test-framework": "1.4.5",
     "com.unity.modules.imgui": "1.0.0",
     "com.unity.modules.jsonserialize": "1.0.0"
   },
@@ -18,7 +18,7 @@
   "name": "com.unity.physics",
   "unity": "2022.3",
   "unityRelease": "11f1",
-  "version": "1.3.0-pre.4",
+  "version": "1.3.2",
   "samples": [
     {
       "displayName": "Custom Physics Authoring",
@@ -28,15 +28,15 @@
     }
   ],
   "_upm": {
-    "changelog": "### Added\n\n* The collision tolerance in the `CollisionWorld`, which defines the minimum distance required for creating contacts between rigid bodies, is now configurable. The default value has been changed to a smaller, more performant value of 0.01 meters. If you observe any tunneling issues in your use case, please increase the value via the `PhysicsStepAuthoring` component.\n\n### Changed\n\n* Updated Burst dependency to version 1.8.16\n\n### Fixed\n\n* Prevent `Entity.Null` entries in the `PhysicsColliderKeyEntityPair` buffer of rigid body entities with compound colliders."
+    "changelog": "### Changed\n* Updated entities packages dependencies\n\n### Changed\n\n* Documentation updates\n* Updated Burst dependency to version 1.8.17\n* Updated Unity Test Framework dependency to version 1.4.5\n\n### Fixed\n\n* Fixed an issue with negative collider scales during baking. Negative scales in GameObjects are now correctly interpreted and can be used to correctly flip GameObjects together with their associated colliders."
   },
   "upmCi": {
-    "footprint": "fcf8c3b887682c99f01b66000bb5fdaef92730d4"
+    "footprint": "70f9ba958b4d3f813986dc911a2e2969c8c57ac3"
   },
   "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.physics@1.3/manual/index.html",
   "repository": {
     "url": "https://github.cds.internal.unity3d.com/unity/dots.git",
     "type": "git",
-    "revision": "6b0c8d27a0224c9cf76032c48d1b981e9750f10d"
+    "revision": "921920e681054c59b440cc1e2aef10f781dc4124"
   }
 }

@@ -598,7 +598,7 @@ namespace Unity.Physics.Systems
 
                 public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
                 {
-                    Assert.IsFalse(useEnabledMask);
+                    SafetyChecks.CheckAreEqualAndThrow(false, useEnabledMask);
                     bool didBatchChange =
                         chunk.DidChange(ref LocalToWorldType, m_LastSystemVersion)       ||
                         chunk.DidChange(ref LocalTransformType, m_LastSystemVersion)     ||
