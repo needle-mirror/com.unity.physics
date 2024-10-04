@@ -124,6 +124,49 @@ namespace Unity.Physics
             }
         }
 
+        // Update the MotionData of the Jacobians when substepping. This is used when there are more than one substeps,
+        // prior to solver stepping and is needed so that the Jacobian Solve methods have access to up-to-date motion data.
+        public void Update(in MotionData motionDataA, in MotionData motionDataB)
+        {
+            if (Enabled)
+            {
+                switch (Type)
+                {
+                    case JacobianType.Contact:
+                        break;
+                    case JacobianType.Trigger:
+                        break;
+                    case JacobianType.LinearLimit:
+                        AccessBaseJacobian<LinearLimitJacobian>().Update(in motionDataA, in motionDataB);
+                        break;
+                    case JacobianType.AngularLimit1D:
+                        AccessBaseJacobian<AngularLimit1DJacobian>().Update(in motionDataA, in motionDataB);
+                        break;
+                    case JacobianType.AngularLimit2D:
+                        AccessBaseJacobian<AngularLimit2DJacobian>().Update(in motionDataA, in motionDataB);
+                        break;
+                    case JacobianType.AngularLimit3D:
+                        AccessBaseJacobian<AngularLimit3DJacobian>().Update(in motionDataA, in motionDataB);
+                        break;
+                    case JacobianType.RotationMotor:
+                        AccessBaseJacobian<RotationMotorJacobian>().Update(in motionDataA, in motionDataB);
+                        break;
+                    case JacobianType.AngularVelocityMotor:
+                        AccessBaseJacobian<AngularVelocityMotorJacobian>().Update(in motionDataA, in motionDataB);
+                        break;
+                    case JacobianType.PositionMotor:
+                        AccessBaseJacobian<PositionMotorJacobian>().Update(in motionDataA, in motionDataB);
+                        break;
+                    case JacobianType.LinearVelocityMotor:
+                        AccessBaseJacobian<LinearVelocityMotorJacobian>().Update(in motionDataA, in motionDataB);
+                        break;
+                    default:
+                        SafetyChecks.ThrowNotImplementedException();
+                        return;
+                }
+            }
+        }
+
         // Solve the Jacobian
         public void Solve([NoAlias] ref MotionVelocity velocityA, [NoAlias] ref MotionVelocity velocityB, Solver.StepInput stepInput,
             [NoAlias] ref NativeStream.Writer collisionEventsWriter, [NoAlias] ref NativeStream.Writer triggerEventsWriter,
@@ -154,16 +197,16 @@ namespace Unity.Physics
                         AccessBaseJacobian<AngularLimit3DJacobian>().Solve(ref this, ref velocityA, ref velocityB, stepInput, ref impulseEventsWriter);
                         break;
                     case JacobianType.RotationMotor:
-                        AccessBaseJacobian<RotationMotorJacobian>().Solve(ref velocityA, ref velocityB, stepInput);
+                        AccessBaseJacobian<RotationMotorJacobian>().Solve(ref this, ref velocityA, ref velocityB, stepInput);
                         break;
                     case JacobianType.AngularVelocityMotor:
-                        AccessBaseJacobian<AngularVelocityMotorJacobian>().Solve(ref velocityA, ref velocityB, stepInput);
+                        AccessBaseJacobian<AngularVelocityMotorJacobian>().Solve(ref this, ref velocityA, ref velocityB, stepInput);
                         break;
                     case JacobianType.PositionMotor:
-                        AccessBaseJacobian<PositionMotorJacobian>().Solve(ref velocityA, ref velocityB, stepInput);
+                        AccessBaseJacobian<PositionMotorJacobian>().Solve(ref this, ref velocityA, ref velocityB, stepInput);
                         break;
                     case JacobianType.LinearVelocityMotor:
-                        AccessBaseJacobian<LinearVelocityMotorJacobian>().Solve(ref velocityA, ref velocityB, stepInput);
+                        AccessBaseJacobian<LinearVelocityMotorJacobian>().Solve(ref this, ref velocityA, ref velocityB, stepInput);
                         break;
                     default:
                         SafetyChecks.ThrowNotImplementedException();
@@ -503,6 +546,41 @@ namespace Unity.Physics
                 return;
             }
             constraintTau = hhww / denom * constraintDamping;
+        }
+
+        // Calculates the spring frequency from the spring constant and mass for a simple mass-spring system.
+        //
+        // Useful for built-in to Unity Physics spring parameter conversion.
+        // - built-in joints use a spring constant parameterization
+        // - Unity Physics joints use a spring frequency parameterization
+        public static float CalculateSpringFrequencyFromSpringConstant(float springConstant, float mass = 1.0f)
+        {
+            if (springConstant < Math.Constants.Eps) return 0.0f;
+
+            // f = (1 / 2pi) * sqrt(k / m)
+            return math.sqrt(springConstant / mass) * Math.Constants.OneOverTau;
+        }
+
+        // Calculates the damping ratio from the spring constant, damping coefficient and mass for a simple
+        // mass-spring-damper system.
+        //
+        // Useful for built-in to Unity Physics spring-damper parameter conversion.
+        //
+        // Note that the spring constant is required as input. For cases where a spring constant isn't available, e.g.,
+        // purely viscous motors, the provided damping coefficient is returned here as an approximation.
+        public static float CalculateDampingRatio(float springConstant, float dampingCoefficient, float mass = 1.0f)
+        {
+            if (dampingCoefficient < Math.Constants.Eps) return 0.0f;
+
+            var tmp = springConstant * mass;
+            if (tmp < Math.Constants.Eps)
+            {
+                // Can not compute damping ratio. Just use damping coefficient as an approximation.
+                return dampingCoefficient;
+            }
+
+            // Calculation: damping ratio = damping coefficient / (2 * sqrt(k * m))
+            return dampingCoefficient / (2 * math.sqrt(tmp)); // damping coefficient / critical damping coefficient
         }
 
         // Returns x - clamp(x, min, max)

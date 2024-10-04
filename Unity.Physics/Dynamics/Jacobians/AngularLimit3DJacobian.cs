@@ -36,23 +36,30 @@ namespace Unity.Physics
             MotionData motionA, MotionData motionB,
             Constraint constraint, float tau, float damping)
         {
-            BFromA = math.mul(math.inverse(motionB.WorldFromMotion.rot), motionA.WorldFromMotion.rot);
             RefBFromA = new quaternion(math.mul(bFromConstraint.Rotation, aFromConstraint.InverseRotation));
             MinAngle = constraint.Min;
             MaxAngle = constraint.Max;
             Tau = tau;
             Damping = damping;
 
+            Update(motionA, motionB);
+        }
+
+        public void Update(in MotionData motionA, in MotionData motionB)
+        {
+            BFromA = math.mul(math.inverse(motionB.WorldFromMotion.rot), motionA.WorldFromMotion.rot);
+
             quaternion jointOrientation = math.mul(math.inverse(RefBFromA), BFromA);
             float initialAngle = math.asin(math.length(jointOrientation.value.xyz)) * 2.0f;
             InitialError = JacobianUtilities.CalculateError(initialAngle, MinAngle, MaxAngle);
         }
 
-        public void Solve(ref JacobianHeader jacHeader, ref MotionVelocity velocityA, ref MotionVelocity velocityB, Solver.StepInput stepInput,
-            ref NativeStream.Writer impulseEventsWriter)
+        public void Solve(ref JacobianHeader jacHeader, ref MotionVelocity velocityA, ref MotionVelocity velocityB,
+            Solver.StepInput stepInput, ref NativeStream.Writer impulseEventsWriter)
         {
             // Predict the relative orientation at the end of the step
-            quaternion futureBFromA = JacobianUtilities.IntegrateOrientationBFromA(BFromA, velocityA.AngularVelocity, velocityB.AngularVelocity, stepInput.Timestep);
+            quaternion futureBFromA = JacobianUtilities.IntegrateOrientationBFromA(BFromA,
+                velocityA.AngularVelocity, velocityB.AngularVelocity, stepInput.Timestep);
 
             // Find the future axis and angle of rotation between the free axes
             float3 jacA0, jacA1, jacA2, jacB0, jacB1, jacB2;

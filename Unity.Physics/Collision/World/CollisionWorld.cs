@@ -57,9 +57,9 @@ namespace Unity.Physics
         public NativeArray<RigidBody> DynamicBodies => m_Bodies.GetSubArray(0, NumDynamicBodies);
 
         /// <summary>
-        /// Sets the collision tolerance.<para/>
-        /// Contacts are always created between rigid bodies if they are closer than this distance threshold. Default
-        /// value is <see cref="DefaultCollisionTolerance"/>.<para/>
+        /// <para>Sets the collision tolerance.</para>
+        /// <para>Contacts are always created between rigid bodies if they are closer than this distance threshold. Default
+        /// value is <see cref="DefaultCollisionTolerance"/>.</para>
         /// </summary>
         ///
         /// <value> The collision tolerance. </value>

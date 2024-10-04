@@ -165,7 +165,10 @@ namespace Unity.Physics.Tests.Motors
 
             motionB = new MotionData //use default other than this position
             {
-                WorldFromMotion = worldFromB
+                WorldFromMotion = worldFromB,
+                BodyFromMotion = RigidTransform.identity,
+                LinearDamping = 0.0f,
+                AngularDamping = 0.0f
             };
         }
     }
@@ -236,10 +239,18 @@ namespace Unity.Physics.Tests.Motors
             Constraints = joint.m_Constraints
         };
 
+        internal enum JointType
+        {
+            PositionMotor = 0,
+            RotationMotor = 1,
+            LinearVelocityMotor = 2,
+            AngularVelocityMotor = 3
+        }
+
         // For the given test configuration and motor types, simulate the motor
         // Returns: accumulated angular velocity, accumulated linear velocity, velocityA, velocityB, motionA, motionB
         // Verifies 2 values: the impulse applied to the linear velocity, the impulse applied to the angular velocity
-        internal static void TestSimulateMotor(string testName, ref Joint jointData,
+        internal static void TestSimulateMotor(string testName, ref Joint jointData, JointType jointType,
             ref MotionVelocity velocityA, ref MotionVelocity velocityB, ref MotionData motionA, ref MotionData motionB,
             bool useGravity, float maxImpulse, float3 motorOrientation,
             in int numIterations, in int numSteps, in int numStabilizingSteps,
@@ -275,19 +286,29 @@ namespace Unity.Physics.Tests.Motors
                 SolveSingleJoint(jointData, numIterations, Timestep,
                     ref velocityA, ref velocityB, ref motionA, ref motionB, out NativeStream jacobians);
 
-                // Verify that the angular maxImpulse for the motor is never exceeded
-                var v1Ang = velocityA.AngularVelocity;
-                var motorImpulseAng = math.length((v1Ang - v0Ang) / velocityA.InverseInertia);
-                var impulseMarginAng = math.abs(motorImpulseAng) - maxImpulse;
-                failureMessage = $"{testName}: Angular Motor impulse {motorImpulseAng} exceeded maximum ({maxImpulse})";
-                Assert.LessOrEqual(impulseMarginAng, impulseThreshold, failureMessage);
+                if (jointType == JointType.AngularVelocityMotor || jointType == JointType.RotationMotor)
+                {
+                    // Verify that the angular maxImpulse for the motor is never exceeded
+                    var v1Ang = velocityA.AngularVelocity;
+                    var undoApplyAngularImpulse = (v1Ang - v0Ang) / velocityA.InverseInertia;
+                    var motorImpulse = math.lengthsq(undoApplyAngularImpulse);
+                    var impulseMarginAng = motorImpulse - (maxImpulse * maxImpulse);
+                    failureMessage =
+                        $"{testName}: Angular Motor impulse {motorImpulse} exceeded maximum ({maxImpulse})";
+                    Assert.LessOrEqual(impulseMarginAng, impulseThreshold, failureMessage);
+                }
 
-                // Verify that the linear maxImpulse for the motor is never exceeded, but only consider directions that the motor is acting on
-                var v1Lin = velocityA.LinearVelocity * motorOrientation;
-                var motorImpulseLin = math.length((v1Lin - v0Lin) / velocityA.InverseMass);
-                var impulseMarginLin = math.abs(motorImpulseLin) - maxImpulse;
-                failureMessage = $"{testName}: Linear Motor impulse {motorImpulseLin} exceeded maximum ({maxImpulse})";
-                Assert.LessOrEqual(impulseMarginLin, impulseThreshold, failureMessage);
+
+                if (jointType == JointType.LinearVelocityMotor || jointType == JointType.PositionMotor)
+                {
+                    // Verify that the linear maxImpulse for the motor is never exceeded, but only consider directions
+                    // that the motor is acting on
+                    var v1Lin = velocityA.LinearVelocity * motorOrientation;
+                    var motorImpulseLin = math.length((v1Lin - v0Lin) / velocityA.InverseMass);
+                    var impulseMarginLin = math.abs(motorImpulseLin) - maxImpulse;
+                    failureMessage = $"{testName}: Linear Motor impulse {motorImpulseLin} exceeded maximum ({maxImpulse})";
+                    Assert.LessOrEqual(impulseMarginLin, impulseThreshold, failureMessage);
+                }
 
                 // Only start to accumulate after a stabilizing velocity has been achieved
                 if (iStep > numStabilizingSteps - 1)

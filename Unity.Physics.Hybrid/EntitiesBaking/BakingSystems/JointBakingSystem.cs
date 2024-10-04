@@ -62,26 +62,10 @@ namespace Unity.Physics.Authoring
             {
                 // Case: k!=0, c=0: Calculate for k and use damping ratio as 0
                 // Case: k!=0, c!=0: Calculate both terms
-                outSpringFrequency = CalculateSpringFrequencyFromSpringConstant(inSpringConstant, inConstrainedMass);
+                outSpringFrequency = JacobianUtilities.CalculateSpringFrequencyFromSpringConstant(inSpringConstant, inConstrainedMass);
                 outDampingRatio = inDampingCoefficient <= threshold ?
-                    0.0f : CalculateDampingRatio(inSpringConstant, inDampingCoefficient, inConstrainedMass);
+                    0.0f : JacobianUtilities.CalculateDampingRatio(inSpringConstant, inDampingCoefficient, inConstrainedMass);
             }
-        }
-
-        /// <summary>
-        /// Calculates the spring frequency from the spring constant and mass for Built-in -> Unity Physics conversion
-        /// f = (1 / 2pi) * sqrt(k / m)
-        /// - Built-in uses spring as a spring constant
-        /// - Unity Physics uses spring as a spring frequency
-        /// </summary>
-        /// <param name="springConstant"></param>
-        /// <param name="mass"></param>
-        /// <returns></returns>
-        protected float CalculateSpringFrequencyFromSpringConstant(float springConstant, float mass = 1.0f)
-        {
-            if (springConstant < Math.Constants.Eps) return 0.0f;
-
-            return math.sqrt(springConstant / mass) * Math.Constants.OneOverTau;
         }
 
         /// <summary>
@@ -99,30 +83,6 @@ namespace Unity.Physics.Authoring
 
             var tauXFrequency = Math.Constants.Tau * springFrequency;
             return tauXFrequency * tauXFrequency * mass;
-        }
-
-        /// <summary>
-        /// Calculates the damping ratio from the spring constant, damping coefficient and mass for
-        /// Built-in -> Unity Physics conversion. Note that the spring *constant* is required as input. For cases where a
-        /// spring constant isn't required (ex: motors), the dampingCoefficient is used directly as an approximation.
-        /// Calculation: damping ratio = damping coefficient / [2 * sqrt(k * m)]
-        /// </summary>
-        /// <param name="springConstant"></param>
-        /// <param name="dampingCoefficient"></param>
-        /// <param name="mass"></param>
-        /// <returns></returns>
-        protected float CalculateDampingRatio(float springConstant, float dampingCoefficient, float mass = 1.0f)
-        {
-            if (dampingCoefficient < Math.Constants.Eps) return 0.0f;
-
-            var tmp = springConstant * mass;
-            if (tmp < Math.Constants.Eps)
-            {
-                // Can not compute damping ratio. Just use damping coefficient as an approximation.
-                return dampingCoefficient;
-            }
-
-            return dampingCoefficient / (2 * math.sqrt(tmp)); // damping coefficient / critical damping coefficient
         }
 
         protected PhysicsConstrainedBodyPair GetConstrainedBodyPair(in UnityEngine.Joint joint) =>
@@ -149,6 +109,25 @@ namespace Unity.Physics.Authoring
             }
 
             return mass > 0 ? mass : 1.0f;
+        }
+
+        protected float GetConstrainedBodyInertia(in UnityEngine.Joint joint)
+        {
+            var rigidBody = GetComponent<Rigidbody>(joint.gameObject);
+            var connectedBody = joint.connectedBody;
+            float approxInertia = 0;
+
+            if (rigidBody != null && !rigidBody.isKinematic)
+            {
+                approxInertia += 1f / 3f * (rigidBody.inertiaTensor.x + rigidBody.inertiaTensor.y + rigidBody.inertiaTensor.z);
+            }
+
+            if (connectedBody != null && !connectedBody.isKinematic)
+            {
+                approxInertia += 1f / 3f * (connectedBody.inertiaTensor.x + connectedBody.inertiaTensor.y + connectedBody.inertiaTensor.z);
+            }
+
+            return approxInertia > 0 ? approxInertia : 1.0f;
         }
 
         protected struct CombinedJoint
@@ -789,20 +768,21 @@ namespace Unity.Physics.Authoring
             var limits = math.radians(new FloatRange(joint.limits.min, joint.limits.max).Sorted());
 
             // Convert spring-damper settings
-            ConvertSpringDamperSettings(joint.spring.spring, joint.spring.damper, GetConstrainedBodyMass(joint),
+            ConvertSpringDamperSettings(joint.spring.spring, joint.spring.damper, GetConstrainedBodyInertia(joint),
                 out var springFrequency, out var dampingRatio);
 
             // Create different types of joints based on: are there limits, is there a motor?
             PhysicsJoint jointData;
-            var maxImpulseOfMotor = joint.motor.force * Time.fixedDeltaTime;
             if (joint.useSpring && !joint.useMotor) //a rotational motor if Use Spring = T, Spring: Spring, Damper, Target Position are set AND Motor.Force !=0
             {
+                var maxImpulseOfMotor = joint.breakTorque * Time.fixedDeltaTime;
                 var target = math.radians(joint.spring.targetPosition);
-                jointData = PhysicsJoint.CreateRotationalMotor(bodyAFromJoint, bodyBFromJoint,
-                    target, maxImpulseOfMotor, springFrequency, dampingRatio);
+                jointData = joint.useLimits ? PhysicsJoint.CreateRotationalMotor(bodyAFromJoint, bodyBFromJoint, target, limits, maxImpulseOfMotor, springFrequency, dampingRatio)
+                    : PhysicsJoint.CreateRotationalMotor(bodyAFromJoint, bodyBFromJoint, target, maxImpulseOfMotor, springFrequency, dampingRatio);
             }
             else if (joint.useMotor) //an angular velocity motor if use Motor = T, Motor: Target Velocity is set
             {
+                var maxImpulseOfMotor = joint.motor.force * Time.fixedDeltaTime;
                 var targetSpeedInRadians = math.radians(joint.motor.targetVelocity);
                 jointData = PhysicsJoint.CreateAngularVelocityMotor(bodyAFromJoint, bodyBFromJoint,
                     targetSpeedInRadians, maxImpulseOfMotor, springFrequency, dampingRatio);
@@ -850,8 +830,8 @@ namespace Unity.Physics.Authoring
             var distanceRange = new FloatRange(joint.minDistance, joint.maxDistance).Sorted();
             var mass = GetConstrainedBodyMass(joint);
             var impulseEventThreshold = joint.breakForce * Time.fixedDeltaTime;
-            var springFrequency = CalculateSpringFrequencyFromSpringConstant(joint.spring, GetConstrainedBodyMass(joint));
-            var dampingRatio = CalculateDampingRatio(joint.spring, joint.damper, mass);
+            var springFrequency = JacobianUtilities.CalculateSpringFrequencyFromSpringConstant(joint.spring, GetConstrainedBodyMass(joint));
+            var dampingRatio = JacobianUtilities.CalculateDampingRatio(joint.spring, joint.damper, mass);
 
             var jointData = PhysicsJoint.CreateLimitedDistance(jointAnchorA, jointAnchorB, distanceRange, impulseEventThreshold, springFrequency, dampingRatio);
 

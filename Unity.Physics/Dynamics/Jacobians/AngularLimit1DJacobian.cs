@@ -51,16 +51,24 @@ namespace Unity.Physics
             MaxAngle = constraint.Max;
             Tau = tau;
             Damping = damping;
-            MotionBFromA = math.mul(math.inverse(motionB.WorldFromMotion.rot), motionA.WorldFromMotion.rot);
+
             MotionAFromJoint = new quaternion(aFromConstraint.Rotation);
             MotionBFromJoint = new quaternion(bFromConstraint.Rotation);
+
+            Update(motionA, motionB);
+        }
+
+        public void Update(in MotionData motionA, in MotionData motionB)
+        {
+            MotionBFromA = math.mul(math.inverse(motionB.WorldFromMotion.rot), motionA.WorldFromMotion.rot);
 
             // Calculate the current error
             InitialError = CalculateError(MotionBFromA);
         }
 
         // Solve the Jacobian
-        public void Solve(ref JacobianHeader jacHeader, ref MotionVelocity velocityA, ref MotionVelocity velocityB, Solver.StepInput stepInput, ref NativeStream.Writer impulseEventsWriter)
+        public void Solve(ref JacobianHeader jacHeader, ref MotionVelocity velocityA, ref MotionVelocity velocityB,
+            Solver.StepInput stepInput, ref NativeStream.Writer impulseEventsWriter)
         {
             // Predict the relative orientation at the end of the step
             quaternion futureMotionBFromA = JacobianUtilities.IntegrateOrientationBFromA(MotionBFromA, velocityA.AngularVelocity, velocityB.AngularVelocity, stepInput.Timestep);

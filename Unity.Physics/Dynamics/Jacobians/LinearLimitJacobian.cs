@@ -27,6 +27,8 @@ namespace Unity.Physics
         // If the constraint limits 3 DOF, this is unused and set to float3.zero
         public float3 AxisInB;
 
+        public bool3 ConstrainedAxes;
+
         // True if the jacobian limits one degree of freedom
         public bool Is1D;
 
@@ -46,20 +48,34 @@ namespace Unity.Physics
             MotionData motionA, MotionData motionB,
             Constraint constraint, float tau, float damping)
         {
-            WorldFromA = motionA.WorldFromMotion;
-            WorldFromB = motionB.WorldFromMotion;
+            MinDistance = constraint.Min;
+            MaxDistance = constraint.Max;
+            ConstrainedAxes = constraint.ConstrainedAxes;
+
+            Tau = tau;
+            Damping = damping;
+
+            AxisInB = float3.zero;
 
             BodyFromConstraintA = aFromConstraint;
             BodyFromConstraintB = bFromConstraint;
 
-            AxisInB = float3.zero;
             Is1D = false;
+            if (!math.all(ConstrainedAxes)) Is1D = ConstrainedAxes.x ^ ConstrainedAxes.y ^ ConstrainedAxes.z;
 
-            MinDistance = constraint.Min;
-            MaxDistance = constraint.Max;
+            Update(in motionA, in motionB);
+        }
 
-            Tau = tau;
-            Damping = damping;
+        private static void ApplyImpulse(in float3 impulse, in float3 ang0, in float3 ang1, in float3 ang2, ref MotionVelocity velocity)
+        {
+            velocity.ApplyLinearImpulse(impulse);
+            velocity.ApplyAngularImpulse(impulse.x * ang0 + impulse.y * ang1 + impulse.z * ang2);
+        }
+
+        public void Update(in MotionData motionA, in MotionData motionB)
+        {
+            WorldFromA = motionA.WorldFromMotion;
+            WorldFromB = motionB.WorldFromMotion;
 
             // TODO.ma - this code is not always correct in its choice of pivotB.
             // The constraint model is asymmetrical.  B is the master, and the constraint feature is defined in B-space as a region affixed to body B.
@@ -73,41 +89,31 @@ namespace Unity.Physics
             // static master body, or a stiff spring, then there's no problem.  However, I think it should eventually be fixed.  The min and max limits have different projections, so
             // probably the best solution is to make two jacobians whenever min != max.  My assumption is that 99% of these are ball and sockets with min = max = 0, so I would rather have
             // some waste in the min != max case than generalize this code to deal with different pivots and effective masses depending on which limit is hit.
-
-            if (!math.all(constraint.ConstrainedAxes))
+            if (!math.all(ConstrainedAxes))
             {
-                Is1D = constraint.ConstrainedAxes.x ^ constraint.ConstrainedAxes.y ^ constraint.ConstrainedAxes.z;
-
                 // Project pivot A onto the line or plane in B that it is attached to
                 RigidTransform bFromA = math.mul(math.inverse(WorldFromB), WorldFromA);
                 float3 pivotAinB = math.transform(bFromA, BodyFromConstraintA.Translation);
                 float3 diff = pivotAinB - BodyFromConstraintB.Translation;
                 for (int i = 0; i < 3; i++)
                 {
-                    float3 column = bFromConstraint.Rotation[i];
-                    AxisInB = math.select(column, AxisInB, Is1D ^ constraint.ConstrainedAxes[i]);
+                    float3 column = BodyFromConstraintB.Rotation[i];
+                    AxisInB = math.select(column, AxisInB, Is1D ^ ConstrainedAxes[i]);
 
-                    float3 dot = math.select(math.dot(column, diff), 0.0f, constraint.ConstrainedAxes[i]);
+                    float3 dot = math.select(math.dot(column, diff), 0.0f, ConstrainedAxes[i]);
                     BodyFromConstraintB.Translation += column * dot;
                 }
             }
 
-            // Calculate the current error
             InitialError = CalculateError(
                 new MTransform(WorldFromA.rot, WorldFromA.pos),
                 new MTransform(WorldFromB.rot, WorldFromB.pos),
                 out float3 directionUnused);
         }
 
-        private static void ApplyImpulse(in float3 impulse, in float3 ang0, in float3 ang1, in float3 ang2, ref MotionVelocity velocity)
-        {
-            velocity.ApplyLinearImpulse(impulse);
-            velocity.ApplyAngularImpulse(impulse.x * ang0 + impulse.y * ang1 + impulse.z * ang2);
-        }
-
         // Solve the Jacobian
-        public void Solve(ref JacobianHeader jacHeader, ref MotionVelocity velocityA, ref MotionVelocity velocityB, Solver.StepInput stepInput,
-            ref NativeStream.Writer impulseEventsWriter)
+        public void Solve(ref JacobianHeader jacHeader, ref MotionVelocity velocityA, ref MotionVelocity velocityB,
+            Solver.StepInput stepInput, ref NativeStream.Writer impulseEventsWriter)
         {
             // Predict the motions' transforms at the end of the step
             MTransform futureWorldFromA;
@@ -130,20 +136,30 @@ namespace Unity.Physics
             {
                 // Calculate the inverse effective mass matrix
                 float3 invEffectiveMassDiag = new float3(
-                    JacobianUtilities.CalculateInvEffectiveMassDiag(angA0, velocityA.InverseInertia, velocityA.InverseMass,
+                    JacobianUtilities.CalculateInvEffectiveMassDiag(
+                        angA0, velocityA.InverseInertia, velocityA.InverseMass,
                         angB0, velocityB.InverseInertia, velocityB.InverseMass),
-                    JacobianUtilities.CalculateInvEffectiveMassDiag(angA1, velocityA.InverseInertia, velocityA.InverseMass,
+                    JacobianUtilities.CalculateInvEffectiveMassDiag(
+                        angA1, velocityA.InverseInertia, velocityA.InverseMass,
                         angB1, velocityB.InverseInertia, velocityB.InverseMass),
-                    JacobianUtilities.CalculateInvEffectiveMassDiag(angA2, velocityA.InverseInertia, velocityA.InverseMass,
+                    JacobianUtilities.CalculateInvEffectiveMassDiag(
+                        angA2, velocityA.InverseInertia, velocityA.InverseMass,
                         angB2, velocityB.InverseInertia, velocityB.InverseMass));
 
                 float3 invEffectiveMassOffDiag = new float3(
-                    JacobianUtilities.CalculateInvEffectiveMassOffDiag(angA0, angA1, velocityA.InverseInertia, angB0, angB1, velocityB.InverseInertia),
-                    JacobianUtilities.CalculateInvEffectiveMassOffDiag(angA0, angA2, velocityA.InverseInertia, angB0, angB2, velocityB.InverseInertia),
-                    JacobianUtilities.CalculateInvEffectiveMassOffDiag(angA1, angA2, velocityA.InverseInertia, angB1, angB2, velocityB.InverseInertia));
+                    JacobianUtilities.CalculateInvEffectiveMassOffDiag(
+                        angA0, angA1, velocityA.InverseInertia,
+                        angB0, angB1, velocityB.InverseInertia),
+                    JacobianUtilities.CalculateInvEffectiveMassOffDiag(
+                        angA0, angA2, velocityA.InverseInertia,
+                        angB0, angB2, velocityB.InverseInertia),
+                    JacobianUtilities.CalculateInvEffectiveMassOffDiag(
+                        angA1, angA2, velocityA.InverseInertia,
+                        angB1, angB2, velocityB.InverseInertia));
 
                 // Invert to get the effective mass matrix
-                JacobianUtilities.InvertSymmetricMatrix(invEffectiveMassDiag, invEffectiveMassOffDiag, out effectiveMassDiag, out effectiveMassOffDiag);
+                JacobianUtilities.InvertSymmetricMatrix(invEffectiveMassDiag, invEffectiveMassOffDiag,
+                    out effectiveMassDiag, out effectiveMassOffDiag);
             }
 
             // Predict error at the end of the step and calculate the impulse to correct it
@@ -221,14 +237,14 @@ namespace Unity.Physics
             {
                 // We have to convert our impulse into constraint space to match what havok is returning from their impulses
                 // currently the linear motions are calculated in world space, therefore we need to convert it into constraint space
-                RigidTransform bFromA = math.mul(math.inverse(WorldFromB), WorldFromA);
-                // Project pivot A on the same plane as pivot B (same world space as body B) and calculate the diff between the two
-                float3 pivotAinB = BodyFromConstraintB.Translation - math.transform(bFromA, BodyFromConstraintA.Translation);
-                //Inverse the rotation of world space B on the pivot diff
-                pivotAinB = math.mul(BodyFromConstraintB.InverseRotation, pivotAinB);
-                float3 normal = math.normalize(pivotAinB);
-                // Move accumulated impulse into constraint space by multiplying with the direction vector
-                float3 constraintSpaceImpulse = normal * math.length(impulseEventData.AccumulatedImpulse);
+
+                // Calculate constraint B in World-space
+                var constraintBinWorld = math.mul(WorldFromB,
+                    new RigidTransform(BodyFromConstraintB.Rotation, BodyFromConstraintB.Translation));
+
+                // Move accumulated impulse (which is in world space) into constraint space
+                var constraintSpaceImpulse =
+                    math.rotate(math.inverse(constraintBinWorld), impulseEventData.AccumulatedImpulse);
 
                 impulseEventsWriter.Write(new ImpulseEventData
                 {

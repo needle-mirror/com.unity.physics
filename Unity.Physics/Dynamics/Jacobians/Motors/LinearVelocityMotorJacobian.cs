@@ -51,9 +51,6 @@ namespace Unity.Physics
             MotionData motionA, MotionData motionB,
             Constraint constraint, float tau, float damping)
         {
-            WorldFromA = motionA.WorldFromMotion;
-            WorldFromB = motionB.WorldFromMotion;
-
             // Motor drive is independent of bodyA rotation, which drives relative to orientation of bodyB
             PivotAinA = aFromConstraint.Translation;
             PivotBinB = bFromConstraint.Translation;
@@ -69,6 +66,14 @@ namespace Unity.Physics
 
             MaxImpulseOfMotor = math.abs(constraint.MaxImpulse.x); //using as magnitude, y&z components are unused
             AccumulatedImpulsePerAxis = float3.zero;
+
+            Update(motionA, motionB);
+        }
+
+        public void Update(in MotionData motionA, in MotionData motionB)
+        {
+            WorldFromA = motionA.WorldFromMotion;
+            WorldFromB = motionB.WorldFromMotion;
         }
 
         private static void ApplyImpulse(float3 impulse, float3 ang0, float3 ang1, float3 ang2, ref MotionVelocity velocity)
@@ -79,7 +84,8 @@ namespace Unity.Physics
 
         // Solve the Jacobian
         // Predict error at the end of the step and calculate the impulse to correct it
-        public void Solve(ref MotionVelocity velocityA, ref MotionVelocity velocityB, Solver.StepInput stepInput)
+        public void Solve(ref JacobianHeader jacHeader, ref MotionVelocity velocityA, ref MotionVelocity velocityB,
+            Solver.StepInput stepInput)
         {
             // Predict the motions' transforms at the end of the step
             MTransform futureWorldFromA;

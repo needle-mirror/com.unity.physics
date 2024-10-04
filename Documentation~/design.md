@@ -28,7 +28,6 @@ Unity Physics keeps data compatibility with the Havok Physics Integration (HPI) 
 |------------|----------------------------------------------------------------------------------------------------|
 | Base       | Containers and Math used throughout Unity.Physics.                                                 |
 | Collision  | Contains all code for collision detection and spatial queries.                                     |
-| DFG        | Contains all code for DataFlowGraph that performs Collider and Ray Cast query on a CollisionWorld. |
 | Dynamics   | Contains all code for integration, constraint solving and world stepping.                          |
 | ECS        | Contains the components and systems for exposing Unity Physics to ECS.                             |
 | Extensions | Optional components for characters, vehicles, debugging helpers etc.                               |

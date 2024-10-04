@@ -25,7 +25,7 @@ namespace Unity.Physics.Tests.Motors
             var rotation0 = motionA.WorldFromMotion.rot;
             var motorOrientation = math.normalizesafe(targetPosition); //to only consider direction the motor is acting on
 
-            MotorTestRunner.TestSimulateMotor(testName, ref jointData,
+            MotorTestRunner.TestSimulateMotor(testName, ref jointData, MotorTestRunner.JointType.PositionMotor,
                 ref velocityA, ref velocityB, ref motionA, ref motionB,
                 useGravity, maxImpulse, motorOrientation, numIterations, numSteps, numStabilizingSteps,
                 out float3 accumulateAngularVelocity, out float3 accumulateLinearVelocity);

@@ -1,10 +1,13 @@
 using Unity.Burst;
-using Unity.Collections;
 using Unity.Entities;
-using Unity.Transforms;
 
 namespace Unity.Physics.Authoring
 {
+    /// <summary>
+    /// Baking system which ensures that baked rigid body entities that have to be processed incrementally during
+    /// the broadphase contain the critical <see cref="PhysicsTemporalCoherenceTag"/> component whenever
+    /// incremental broadphase updates are enabled in the <see cref="PhysicsStep"/> component.
+    /// </summary>
     [RequireMatchingQueriesForUpdate]
     [UpdateAfter(typeof(EndColliderBakingSystem))]
     [WorldSystemFilter(WorldSystemFilterFlags.BakingSystem)]

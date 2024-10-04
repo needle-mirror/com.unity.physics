@@ -45,10 +45,6 @@ namespace Unity.Physics
             MotionData motionA, MotionData motionB,
             Constraint constraint, float tau, float damping)
         {
-            // In World Space
-            WorldFromA = motionA.WorldFromMotion;
-            WorldFromB = motionB.WorldFromMotion;
-
             // In Constraint Space
             PivotAinA = aFromConstraint.Translation; //anchor of bodyA in bodyA space
             PivotBinB = bFromConstraint.Translation; //anchorA offset in bodyB space (anchor shared with bodyA)
@@ -63,6 +59,15 @@ namespace Unity.Physics
 
             MaxImpulseOfMotor = math.abs(constraint.MaxImpulse.x); //using as magnitude, y&z components are unused
             AccumulatedImpulsePerAxis = float3.zero;
+
+            Update(motionA, motionB);
+        }
+
+        public void Update(in MotionData motionA, in MotionData motionB)
+        {
+            // In World Space
+            WorldFromA = motionA.WorldFromMotion;
+            WorldFromB = motionB.WorldFromMotion;
 
             // Calculate the initial distance between bodyA and bodyB, in world-space
             InitialError = CalculateError(
@@ -79,7 +84,8 @@ namespace Unity.Physics
 
         // Solve the Jacobian
         // Predict error at the end of the step and calculate the impulse to correct it
-        public void Solve(ref MotionVelocity velocityA, ref MotionVelocity velocityB, Solver.StepInput stepInput)
+        public void Solve(ref JacobianHeader jacHeader, ref MotionVelocity velocityA, ref MotionVelocity velocityB,
+            Solver.StepInput stepInput)
         {
             // Predict the motions' transforms at the end of the step
             MTransform futureWorldFromA;

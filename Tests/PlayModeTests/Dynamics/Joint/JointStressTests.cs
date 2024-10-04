@@ -11,7 +11,7 @@ namespace Unity.Physics.Tests.Joints
     /// Passing test does not necessarily mean good-looking joint behavior or stability for systems of multiple constraints, but the test
     /// will catch a lot of basic mathematical errors in the solver.
     /// </summary>
-    class JointTests
+    class JointStressTests
     {
         //
         // Tiny simulation for a single body pair and joint, used by all of the tests

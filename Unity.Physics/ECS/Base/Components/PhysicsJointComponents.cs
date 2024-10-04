@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -51,7 +50,7 @@ namespace Unity.Physics
     /// A buffer element to indicate additional entities in a complex joint configuration. Most joint
     /// types can be described with a single <see cref="PhysicsJoint"/>, but complex setups like
     /// ragdoll joints require more than one joint to stabilize. This component allows you to locate
-    /// all of the other joints in such setups to facilitate group destruction, deactivation, and so
+    /// all the other joints in such setups to facilitate group destruction, deactivation, and so
     /// on. Each joint entity in the group should have this component, with one element for each
     /// other joint in the group.
     /// </summary>
@@ -59,8 +58,8 @@ namespace Unity.Physics
     public struct PhysicsJointCompanion : IBufferElementData
     {
         /// <summary>
-        /// Another entity presumed to have <see cref="PhysicsConstrainedBodyPair"/> and <see cref="PhysicsJoint"/>
-        /// , as well as <see cref="PhysicsJointCompanion"/> with at least one element whose value
+        /// Another entity presumed to have <see cref="PhysicsConstrainedBodyPair"/> and <see cref="PhysicsJoint"/>,
+        /// as well as <see cref="PhysicsJointCompanion"/> with at least one element whose value
         /// matches the entity to which this buffer is added. The <see cref="PhysicsConstrainedBodyPair"/>
         /// of this other entity is further presumed to have the same value as that for the entity to
         /// which this buffer is added.
@@ -557,12 +556,12 @@ namespace Unity.Physics
         ///  The Axis should be calculated as math.mul(bFromA.rot, axis), where axis is the Axis of bodyAFromJoint. This
         ///   is the translation of the Axis relative to the Connected Body. Value must be normalized.
         ///  The Perpendicular Axis should be calculated as perpendicular to Axis (for bodyB). Value must be normalized. </param>
-        /// <param name="target">The target rotation around Joint's Axis, in radians.</param>
+        /// <param name="target">The target rotation about the joint's axis, in radians.</param>
         /// <param name="maxImpulseOfMotor">The magnitude of the max impulse that a motor constraint can exert in a single
         /// step. This is a motor specific usage that does not represent the impulse threshold to break the motor.</param>
         /// <param name="springFrequency">The spring frequency.</param>
         /// <param name="springDamping">The spring damping.</param>
-        /// <returns>   A Constraint. </returns>
+        /// <returns>   The created joint. </returns>
         public static PhysicsJoint CreateRotationalMotor(
             BodyFrame bodyAFromJoint, BodyFrame bodyBFromJoint,
             float target,
@@ -579,6 +578,56 @@ namespace Unity.Physics
             {
                 Length = 3,
                 A = Constraint.MotorTwist(target, math.abs(maxImpulseOfMotor), springFrequency, springDamping),
+                B = Constraint.Hinge(0),
+                C = Constraint.BallAndSocket()
+            }
+        };
+
+        /// <summary>
+        /// Create a <see cref="JointType.RotationalMotor"/> joint. This is an angular motor that will drive towards
+        /// the specified target angle, about an axis, while limiting the motion to a specified range.
+        /// </summary>
+        /// <param name="bodyAFromJoint">Specifies the pivot point and axis of rotation in the space of body A.
+        ///  This is the body that has the motor. The BodyFrame parameters should be set as follows:
+        ///  The Position should be set to the pivot position. The Pivot Position is an offset from the center of the
+        ///   body with the motor (bodyA).
+        ///  The Axis is the axis that bodyA will pivot about. Value must be normalized.
+        ///  The Perpendicular Axis must be perpendicular to Axis. Value must be normalized. </param>
+        /// <param name="bodyBFromJoint">Specifies the pivot point and axis of alignment in the space of bodyB.
+        ///  This is the Connected Body. If no body is connected, then bodyB is the World and data should be in world-space. It is
+        ///  recommended to 'Auto Set Connected' this body to bodyA such that they share a pivot point (code is not
+        ///  supported for this not to be enabled) and should be calculated using the following transformation:
+        ///  RigidTransform bFromA = math.mul(math.inverse(worldFromB), worldFromA). The BodyFrame parameters should be
+        ///  set as follows:
+        ///  The Position should be calculated as math.transform(bFromA, PivotPosition); where PivotPosition is the
+        ///   translation in bodyAFromJoint. This is the position of the Pivot relative to the Connected Body.
+        ///  The Axis should be calculated as math.mul(bFromA.rot, axis), where axis is the Axis of bodyAFromJoint. This
+        ///   is the translation of the Axis relative to the Connected Body. Value must be normalized.
+        ///  The Perpendicular Axis should be calculated as perpendicular to Axis (for bodyB). Value must be normalized. </param>
+        /// <param name="target">The target rotation about the joint's axis, in radians.</param>
+        /// <param name="angleRange">The minimum required and maximum possible angle of rotation about the joint's axis, in radians.</param>
+        /// <param name="maxImpulseOfMotor">The magnitude of the max impulse that a motor constraint can exert in a single
+        /// step. This is a motor specific usage that does not represent the impulse threshold to break the motor.</param>
+        /// <param name="springFrequency">The spring frequency.</param>
+        /// <param name="springDamping">The spring damping.</param>
+        /// <returns>   The created joint. </returns>
+        public static PhysicsJoint CreateRotationalMotor(
+            BodyFrame bodyAFromJoint, BodyFrame bodyBFromJoint,
+            float target,
+            FloatRange angleRange,
+            float maxImpulseOfMotor,
+            float springFrequency,
+            float springDamping
+        ) =>
+            new PhysicsJoint
+        {
+            BodyAFromJoint = bodyAFromJoint,
+            BodyBFromJoint = bodyBFromJoint,
+            m_JointType = JointType.RotationalMotor,
+            m_Constraints = new ConstraintBlock3
+            {
+                Length = 3,
+                A = Constraint.MotorTwist(target, angleRange, math.abs(maxImpulseOfMotor), springFrequency, springDamping),
                 B = Constraint.Hinge(0),
                 C = Constraint.BallAndSocket()
             }
@@ -610,7 +659,7 @@ namespace Unity.Physics
         /// step. This is a motor specific usage that does not represent the impulse threshold to break the motor.</param>
         /// <param name="springFrequency">The spring frequency.</param>
         /// <param name="springDamping">The spring damping.</param>
-        /// <returns>   A Constraint. </returns>
+        /// <returns>   The created joint. </returns>
         public static PhysicsJoint CreateAngularVelocityMotor(
             BodyFrame bodyAFromJoint, BodyFrame bodyBFromJoint,
             float targetVelocity,
@@ -638,7 +687,7 @@ namespace Unity.Physics
         /// <param name="bodyAFromJoint">Specifies the anchor point and axis of rotation in the space of body A.</param>
         /// <param name="bodyBFromJoint">Specifies the target point and axis of alignment in the space of body B.</param>
         /// <param name="distanceOnAxis">The minimum required and maximum possible distance between the two anchor points along their aligned axes.</param>
-        /// <returns>   A Constraint. </returns>
+        /// <returns>   The created joint. </returns>
         public static PhysicsJoint CreatePrismatic(
             BodyFrame bodyAFromJoint, BodyFrame bodyBFromJoint, FloatRange distanceOnAxis
         ) =>
@@ -683,7 +732,7 @@ namespace Unity.Physics
         /// step. This is a motor specific usage that does not represent the impulse threshold to break the motor.</param>
         /// <param name="springFrequency">The spring frequency.</param>
         /// <param name="springDamping">The spring damping.</param>
-        /// <returns>   A Constraint. </returns>
+        /// <returns>   The created joint. </returns>
         public static PhysicsJoint CreatePositionMotor(
             BodyFrame bodyAFromJoint, BodyFrame bodyBFromJoint,
             float target,
@@ -733,7 +782,7 @@ namespace Unity.Physics
         /// step. This is a motor specific usage that does not represent the impulse threshold to break the motor.</param>
         /// <param name="springFrequency">The spring frequency.</param>
         /// <param name="springDamping">The spring damping.</param>
-        /// <returns>   A Constraint. </returns>
+        /// <returns>   The created joint. </returns>
         public static PhysicsJoint CreateLinearVelocityMotor(
             BodyFrame bodyAFromJoint, BodyFrame bodyBFromJoint,
             float target,

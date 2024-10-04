@@ -385,7 +385,8 @@ namespace Unity.Physics
                 var impulseEventsWriter = simulationContext.ImpulseEventDataStream.AsWriter();
                 Solver.StabilizationData solverStabilizationData = new Solver.StabilizationData(input, simulationContext);
                 Solver.SolveJacobians(ref jacobiansReader, input.World.DynamicsWorld.MotionVelocities,
-                    input.TimeStep, input.NumSolverIterations, ref collisionEventsWriter, ref triggerEventsWriter, ref impulseEventsWriter, solverStabilizationData);
+                    input.TimeStep, input.NumSolverIterations, ref collisionEventsWriter, ref triggerEventsWriter,
+                    ref impulseEventsWriter, solverStabilizationData);
             }
 
             // Integrate motions
@@ -565,7 +566,9 @@ namespace Unity.Physics
             // Different dispose logic for single threaded simulation compared to "standard" threading (multi threaded)
             if (!multiThreaded)
             {
+                // Note: In the multithreaded case, StepContext.PhasedDispatchPairs is disposed in Solver.ScheduleBuildJacobiansJobs().
                 m_StepHandles.FinalDisposeHandle = StepContext.PhasedDispatchPairs.Dispose(m_StepHandles.FinalExecutionHandle);
+
                 m_StepHandles.FinalDisposeHandle = StepContext.Contacts.Dispose(m_StepHandles.FinalDisposeHandle);
                 m_StepHandles.FinalDisposeHandle = StepContext.Jacobians.Dispose(m_StepHandles.FinalDisposeHandle);
                 m_StepHandles.FinalDisposeHandle = StepContext.SolverSchedulerInfo.ScheduleDisposeJob(m_StepHandles.FinalDisposeHandle);

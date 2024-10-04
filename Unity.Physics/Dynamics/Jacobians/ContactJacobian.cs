@@ -367,9 +367,8 @@ namespace Unity.Physics
         public EntityPair Entities;
 
         // Solve the Jacobian
-        public void Solve(
-            ref JacobianHeader jacHeader, ref MotionVelocity velocityA, ref MotionVelocity velocityB, Solver.StepInput stepInput,
-            ref NativeStream.Writer triggerEventsWriter)
+        public void Solve(ref JacobianHeader jacHeader, ref MotionVelocity velocityA, ref MotionVelocity velocityB,
+            Solver.StepInput stepInput, ref NativeStream.Writer triggerEventsWriter)
         {
             // Export trigger events only in last iteration
             if (!stepInput.IsLastIteration)

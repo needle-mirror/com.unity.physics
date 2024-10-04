@@ -94,12 +94,12 @@ namespace Unity.Physics
         /// <summary>
         /// Indicates whether this compound collider contains shared child colliders, that is, two or more
         /// child colliders within this compound collider share the same collider blob.
-        ///
+        /// </summary>
         /// <remarks>
         /// This situation occurs if during <see cref="Create">compound collider creation</see> the provided array of
         /// child collider blobs contains duplicate entries (identical collider blob pointers).
         /// </remarks>
-        /// </summary>
+        /// <returns>True if this compound collider contains shared child colliders, false otherwise.</returns>
         public bool HasSharedChildColliders()
         {
             unsafe
@@ -135,6 +135,7 @@ namespace Unity.Physics
         /// Automatically <see cref="Update">updates</see> the bounding volume information and mass properties of the
         /// compound collider after the transformation has been applied.
         /// </para>
+        /// </summary>
         ///
         /// <remarks>
         /// This function will do nothing when called on compound colliders that have
@@ -145,7 +146,6 @@ namespace Unity.Physics
         /// collider blobs.
         /// </remarks>
         ///
-        /// </summary>
         /// <param name="transform"> The affine transformation to apply. </param>
         public void BakeTransform(AffineTransform transform)
         {
@@ -187,18 +187,18 @@ namespace Unity.Physics
         /// For correct behavior in collision detection and collider queries, this function must be called after the
         /// shape or transformation of the compound collider's <see cref="Children">children</see> have been modified.
         /// </para>
+        /// </summary>
         ///
-        /// <remark>
+        /// <remarks>
         /// Note that this function only performs a refit of the compound collider's bounding volume hierarchy,
         /// which is a very efficient way to ensure its proper function in the collision detection and in
         /// collider queries. However, a refit likely leaves the bounding hierarchy in a suboptimal state, specifically
         /// if substantial changes have been made to the compound collider's <see cref="Children">children</see>.
         /// This can lead to performance reductions in collision detection and collider queries. In such cases,
         /// consider <see cref="Create">recreating</see> the compound collider from scratch instead.
-        /// </remark>
+        /// </remarks>
         ///
         /// <param name="updateMassProperties"> If true, also updates the mass properties of the compound collider.</param>
-        /// </summary>
         public void Update(bool updateMassProperties = true)
         {
             m_Header.Version++;

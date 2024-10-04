@@ -326,9 +326,9 @@ namespace Unity.Physics
         public byte MultiThreaded;
 
         /// <summary>
-        /// The collision tolerance specifies the minimum distance required for contacts between rigid bodies
-        /// to be created.<para/>
-        /// This value can be increased if undesired collision tunneling is observed in the simulation.<para/>
+        /// <para>The collision tolerance specifies the minimum distance required for contacts between rigid bodies
+        /// to be created.</para>
+        /// <para>This value can be increased if undesired collision tunneling is observed in the simulation.</para>
         /// </summary>
         public float CollisionTolerance;
 
@@ -350,11 +350,9 @@ namespace Unity.Physics
         public bool IncrementalDynamicBroadphase;
 
         /// <summary>
-        /// Flag indicating whether the static broadphase is built incrementally.
-        /// <para>
-        /// Enabling this option will update the static broadphase incrementally whenever changes between simulation steps occur,
-        /// potentially leading to time savings for cases with many static rigid bodies that don't move or otherwise change.
-        /// </para>
+        /// <para>Flag indicating whether the static broadphase is built incrementally.</para>
+        /// <para>Enabling this option will update the static broadphase incrementally whenever changes between simulation steps occur,
+        /// potentially leading to time savings for cases with many static rigid bodies that don't move or otherwise change.</para>
         /// </summary>
         public bool IncrementalStaticBroadphase;
 

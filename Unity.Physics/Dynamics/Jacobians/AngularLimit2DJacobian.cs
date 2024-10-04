@@ -34,6 +34,8 @@ namespace Unity.Physics
         // Fraction of the velocity error to correct per step
         public float Damping;
 
+        public int FreeIndex;
+
         // Build the Jacobian
         public void Build(
             MTransform aFromConstraint, MTransform bFromConstraint,
@@ -42,15 +44,24 @@ namespace Unity.Physics
             Constraint constraint, float tau, float damping)
         {
             // Copy the constraint data
-            int freeIndex = constraint.FreeAxis2D;
-            AxisAinA = aFromConstraint.Rotation[freeIndex];
-            AxisBinB = bFromConstraint.Rotation[freeIndex];
-            ConstraintIndexX = (freeIndex + 1) % 3;
-            ConstraintIndexY = (freeIndex + 2) % 3;
+            FreeIndex = constraint.FreeAxis2D;
+            ConstraintIndexX = (FreeIndex + 1) % 3;
+            ConstraintIndexY = (FreeIndex + 2) % 3;
+
             MinAngle = constraint.Min;
             MaxAngle = constraint.Max;
+
             Tau = tau;
             Damping = damping;
+
+            AxisAinA = aFromConstraint.Rotation[FreeIndex];
+            AxisBinB = bFromConstraint.Rotation[FreeIndex];
+
+            Update(motionA, motionB);
+        }
+
+        public void Update(in MotionData motionA, in MotionData motionB)
+        {
             BFromA = math.mul(math.inverse(motionB.WorldFromMotion.rot), motionA.WorldFromMotion.rot);
 
             // Calculate the initial error
@@ -64,11 +75,12 @@ namespace Unity.Physics
         }
 
         // Solve the Jacobian
-        public void Solve(ref JacobianHeader jacHeader, ref MotionVelocity velocityA, ref MotionVelocity velocityB, Solver.StepInput stepInput,
-            ref NativeStream.Writer impulseEventsWriter)
+        public void Solve(ref JacobianHeader jacHeader, ref MotionVelocity velocityA, ref MotionVelocity velocityB,
+            Solver.StepInput stepInput,  ref NativeStream.Writer impulseEventsWriter)
         {
             // Predict the relative orientation at the end of the step
-            quaternion futureBFromA = JacobianUtilities.IntegrateOrientationBFromA(BFromA, velocityA.AngularVelocity, velocityB.AngularVelocity, stepInput.Timestep);
+            quaternion futureBFromA = JacobianUtilities.IntegrateOrientationBFromA(
+                BFromA, velocityA.AngularVelocity, velocityB.AngularVelocity, stepInput.Timestep);
 
             // Calculate the jacobian axis and angle
             float3 axisAinB = math.mul(futureBFromA, AxisAinA);

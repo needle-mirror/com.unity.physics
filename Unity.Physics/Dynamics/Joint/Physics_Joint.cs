@@ -469,7 +469,7 @@ namespace Unity.Physics
             };
         }
 
-        /// <summary>   Constrains angular motion about about one axis within the specified range. </summary>
+        /// <summary>   Constrains angular motion about one axis within the specified range. </summary>
         ///
         /// <param name="limitedAxis">      The axis around which the bodies' rotation is restricted. </param>
         /// <param name="angularRange">     The minimum required angle and maximum possible angle of
@@ -481,7 +481,7 @@ namespace Unity.Physics
         public static Constraint Twist(int limitedAxis, FloatRange angularRange, float springFrequency = DefaultSpringFrequency, float dampingRatio = DefaultDampingRatio)
             => Twist(limitedAxis, angularRange, DefaultMaxImpulse, springFrequency, dampingRatio);
 
-        /// <summary>   Constrains angular motion about about one axis within the specified range. </summary>
+        /// <summary>   Constrains angular motion about one axis within the specified range. </summary>
         ///
         /// <param name="limitedAxis">      The axis around which the bodies' rotation is restricted. </param>
         /// <param name="angularRange">     The minimum required angle and maximum possible angle of
@@ -510,7 +510,7 @@ namespace Unity.Physics
         }
 
         /// <summary>
-        /// Constrains angular motion about one axis and drives towards the specified target rotation.
+        /// Constrains angular motion about one axis and locks the angle at the specified target rotation.
         /// </summary>
         /// <param name="target">The target rotation around Joint's Axis the motor is driving towards, in radians.</param>
         /// <param name="maxImpulseOfMotor">The magnitude of the max impulse that a motor constraint can exert in a single
@@ -520,14 +520,29 @@ namespace Unity.Physics
         /// <param name="dampingRatio">     The damping ratio used to relax this constraint. </param>
         /// <returns>A constraint.</returns>
         public static Constraint MotorTwist(float target, float maxImpulseOfMotor = DefaultMaxImpulse, float springFrequency = DefaultSpringFrequency, float dampingRatio = DefaultDampingRatio)
+            => MotorTwist(target, new FloatRange(-math.INFINITY, math.INFINITY), maxImpulseOfMotor, springFrequency, dampingRatio);
+
+        /// <summary>
+        /// Constrains angular motion about one axis and locks the angle at the specified target rotation while limiting the motion range.
+        /// </summary>
+        /// <param name="target">The target rotation around Joint's Axis the motor is driving towards, in radians.</param>
+        /// <param name="angleRange">The minimum required angle and maximum possible angle of rotation of the constrained bodies
+        /// about the constraint's axis, in radians.</param>
+        /// <param name="maxImpulseOfMotor">The magnitude of the max impulse that a motor constraint can exert in a single
+        /// step. Must be positive.
+        /// This is a motor specific usage that does not represent the impulse threshold for event reporting.</param>
+        /// <param name="springFrequency">  The spring frequency used to relax this constraint. </param>
+        /// <param name="dampingRatio">     The damping ratio used to relax this constraint. </param>
+        /// <returns>A constraint.</returns>
+        public static Constraint MotorTwist(float target, FloatRange angleRange, float maxImpulseOfMotor = DefaultMaxImpulse, float springFrequency = DefaultSpringFrequency, float dampingRatio = DefaultDampingRatio)
         {
             SafetyChecks.CheckInRangeAndThrow(maxImpulseOfMotor, new float2(0f, float.PositiveInfinity), "maxImpulseOfMotor");
             return new Constraint
             {
                 ConstrainedAxes = new bool3(true, false, false),
                 Type = ConstraintType.RotationMotor,
-                Min = 0.0f,
-                Max = 0.0f,
+                Min = angleRange.Min,
+                Max = angleRange.Max,
                 SpringFrequency = springFrequency,
                 DampingRatio = dampingRatio,
                 MaxImpulse = new float3(maxImpulseOfMotor, 0f, 0f), //reusing this field for the motor max impulse since breaking is done on other constraints

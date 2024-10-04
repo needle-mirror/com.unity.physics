@@ -4,6 +4,26 @@ uid: unity-physics-changelog
 
 # Changelog
 
+## [1.3.5] - 2024-10-04
+
+### Added
+
+* Motor Jacobians have access to the Jacobian header in the Solve methods now
+
+### Changed
+
+* Documentation updates
+* Updated Burst dependency to version 1.8.18
+* Updated Unity Test Framework dependency to version 1.4.5
+* Updated Mathematics dependency to version 1.3.2
+* Updated entities packages dependencies
+
+### Fixed
+
+* The "Use Spring" feature in the built-in `HingeJoint` now works correctly. Both the joint force values and the constraint relaxation parameters are set to the appropriate values in the underlying engine and the Unity Physics simulation behavior now closely matches the behavior in built-in physics.
+* Fixed a case that could lead to invalid data in the impulse handling within the LinearLimitJacobian
+* Limits in Hinge Joint authoring components, enabled via the "Use Limits" option, are now respected when the "Use Spring" option is also enabled.
+
 
 ## [1.3.2] - 2024-09-06
 
@@ -19,6 +39,7 @@ uid: unity-physics-changelog
 ### Fixed
 
 * Fixed an issue with negative collider scales during baking. Negative scales in GameObjects are now correctly interpreted and can be used to correctly flip GameObjects together with their associated colliders.
+
 
 
 ## [1.3.0-pre.4] - 2024-07-17
@@ -143,7 +164,7 @@ uid: unity-physics-changelog
 
 ### Changed
 
-* Update package `com.unity.mathematics` from `1.2.6` to `1.3.2` version.
+* Update package `com.unity.mathematics` from `1.2.6` to `1.3.1` version.
 * Analytics API update to `SceneSimulationAnalytics.cs` file.
 * collider files renamed to `BoxCollider.cs`, `CapsuleCollider.cs`, `Collider.cs`, `MeshCollider.cs`, `SphereCollider.cs` and `TerrainCollider.cs`.
 * The `EnsureUniqueColliderSystem` now runs first in the `BeforePhysicsSystemGroup` instead of after the `AfterPhysicsSystemGroup`. A system that instantiates prefabs using unique colliders during runtime should run in the `BeforePhysicsSystemGroup` to avoid a bug where colliders would not be unique during prefab instantiation.

@@ -16,17 +16,20 @@ namespace Unity.Physics
         // Index of the limited axis
         public int AxisIndex;
 
-        // Relative orientation of the motions before solving
+        // Relative orientation of the motions before solving. Needs to be updated at start of each substep
         public quaternion MotionBFromA;
 
         // Maximum impulse that can be applied to the motor before it caps out (not a breaking impulse)
         public float MaxImpulseOfMotor;
 
-        // Accumulated impulse applied over the number of solver iterations
+        // Accumulated impulse applied over the number of solver iterations. Is updated during Solve
         public float AccumulatedImpulse;
 
         // Fraction of the velocity error to correct per step
         public float Damping;
+
+        // Error before solving
+        public float VelocityError;
 
         // Build the Jacobian
         public void Build(
@@ -42,11 +45,17 @@ namespace Unity.Physics
             MaxImpulseOfMotor = math.abs(constraint.MaxImpulse.x); // using as magnitude, y and z components are unused
             AccumulatedImpulse = 0.0f;
 
+            Update(motionA, motionB);
+        }
+
+        public void Update(in MotionData motionA, in MotionData motionB)
+        {
             MotionBFromA = math.mul(math.inverse(motionB.WorldFromMotion.rot), motionA.WorldFromMotion.rot);
         }
 
         // Solve the Jacobian
-        public void Solve(ref MotionVelocity velocityA, ref MotionVelocity velocityB, Solver.StepInput stepInput)
+        public void Solve(ref JacobianHeader jacHeader, ref MotionVelocity velocityA, ref MotionVelocity velocityB,
+            Solver.StepInput stepInput)
         {
             // Predict the relative orientation at the end of the step
             quaternion futureMotionBFromA = JacobianUtilities.IntegrateOrientationBFromA(MotionBFromA,
@@ -66,8 +75,8 @@ namespace Unity.Physics
                 math.dot(velocityB.AngularVelocity, axisInMotionB);
 
             // Compute the error between the target relative velocity and the current relative velocity
-            float velocityError = Target - relativeVelocity;
-            float velocityCorrection = velocityError * Damping;
+            VelocityError = Target - relativeVelocity;
+            float velocityCorrection = VelocityError * Damping;
 
             float impulse = math.mul(effectiveMass, velocityCorrection);
             impulse = JacobianUtilities.CapImpulse(impulse, ref AccumulatedImpulse, MaxImpulseOfMotor);

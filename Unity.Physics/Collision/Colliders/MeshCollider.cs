@@ -259,6 +259,7 @@ namespace Unity.Physics
         /// Applies the transformation to the mesh collider in local space, consequently scaling, shearing, rotating
         /// and translating its geometry according to the provided transformation.
         /// </para>
+        /// </summary>
         ///
         /// <remarks>
         /// The transformation is applied to all the mesh's vertices individually, leaving its topology intact
@@ -269,7 +270,6 @@ namespace Unity.Physics
         /// <see cref="Create(NativeArray&lt;float3&gt;, NativeArray&lt;int3&gt;)">recreate the mesh collider from
         /// scratch</see> instead.
         /// </remarks>
-        /// </summary>
         /// <param name="transform"> The affine transformation to apply. </param>
         public void BakeTransform(AffineTransform transform)
         {

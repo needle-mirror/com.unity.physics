@@ -6,8 +6,8 @@ using static Unity.Physics.PhysicsStep;
 namespace Unity.Physics.Authoring
 {
     /// <summary>
-    ///     Parameters describing how to step the physics simulation.<para/>
-    ///     If this component is not present, default values will be used.
+    ///     <para>Parameters describing how to step the physics simulation.</para>
+    ///     <para>If this component is not present, default values will be used.</para>
     /// </summary>
     [AddComponentMenu("Entities/Physics/Physics Step")]
     [DisallowMultipleComponent]
@@ -41,8 +41,8 @@ namespace Unity.Physics.Authoring
         float3 m_Gravity = Default.Gravity;
 
         /// <summary>
-        ///     Specifies the number of solver iterations the physics engine will perform.<para/>
-        ///     Higher values mean more stability, but also worse performance.
+        ///     <para>Specifies the number of solver iterations the physics engine will perform.</para>
+        ///     <para>Higher values mean more stability, but also worse performance.</para>
         /// </summary>
         public int SolverIterationCount
         {
@@ -68,8 +68,8 @@ namespace Unity.Physics.Authoring
         bool m_EnableSolverStabilizationHeuristic = Default.SolverStabilizationHeuristicSettings.EnableSolverStabilization;
 
         /// <summary>
-        ///     Enables multi-threaded processing.<para/>
-        ///     Enabling this option will maximize the use of parallelization in the entire simulation pipeline while disabling it will result in minimal thread usage.
+        ///     <para>Enables multi-threaded processing.</para>
+        ///     <para>Enabling this option will maximize the use of parallelization in the entire simulation pipeline while disabling it will result in minimal thread usage.</para>
         /// </summary>
         public bool MultiThreaded
         {
@@ -82,9 +82,9 @@ namespace Unity.Physics.Authoring
         bool m_MultiThreaded = Default.MultiThreaded > 0 ? true : false;
 
         /// <summary>
-        /// Sets the collision tolerance.<para/>
-        /// The collision tolerance specifies the minimum distance required for contacts between rigid bodies to be created.<br/>
-        /// This value can be increased if undesired collision tunneling is observed in the simulation.
+        /// <para>Sets the collision tolerance.</para>
+        /// <para>The collision tolerance specifies the minimum distance required for contacts between rigid bodies to be created.<br/>
+        /// This value can be increased if undesired collision tunneling is observed in the simulation.</para>
         /// </summary>
         public float CollisionTolerance
         {
@@ -110,9 +110,9 @@ namespace Unity.Physics.Authoring
         bool m_SynchronizeCollisionWorld = Default.SynchronizeCollisionWorld > 0 ? true : false;
 
         /// <summary>
-        /// Enables the incremental dynamic broadphase. <para/>
-        /// Enabling this option will update the dynamic broadphase incrementally whenever changes between simulation steps occur,
-        /// potentially leading to time savings for cases with many dynamic rigid bodies that don't move or otherwise change."
+        /// <para>Enables the incremental dynamic broadphase.</para>
+        /// <para>Enabling this option will update the dynamic broadphase incrementally whenever changes between simulation steps occur,
+        /// potentially leading to time savings for cases with many dynamic rigid bodies that don't move or otherwise change.</para>
         /// </summary>
         public bool IncrementalDynamicBroadphase
         {
@@ -126,9 +126,9 @@ namespace Unity.Physics.Authoring
         bool m_IncrementalDynamicBroadphase = Default.IncrementalDynamicBroadphase;
 
         /// <summary>
-        /// Enables the incremental static broadphase. <para/>
-        /// Enabling this option will update the static broadphase incrementally whenever changes between simulation steps occur,
-        /// potentially leading to time savings for cases with many static rigid bodies that don't move or otherwise change."
+        /// <para>Enables the incremental static broadphase.</para>
+        /// <para>Enabling this option will update the static broadphase incrementally whenever changes between simulation steps occur,
+        /// potentially leading to time savings for cases with many static rigid bodies that don't move or otherwise change.</para>
         /// </summary>
         public bool IncrementalStaticBroadphase
         {

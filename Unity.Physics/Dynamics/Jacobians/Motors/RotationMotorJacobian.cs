@@ -13,6 +13,9 @@ namespace Unity.Physics
         public float3 AxisInMotionA;
         public float Target;
 
+        public float MinAngle;
+        public float MaxAngle;
+
         // Index of the limited axis
         public int AxisIndex;
 
@@ -47,20 +50,30 @@ namespace Unity.Physics
             AxisIndex = constraint.ConstrainedAxis1D;
             AxisInMotionA = math.normalize(aFromConstraint.Rotation[AxisIndex]);
             Target = constraint.Target[AxisIndex];
+            MinAngle = constraint.Min;
+            MaxAngle = constraint.Max;
             Tau = tau;
             Damping = damping;
             MaxImpulseOfMotor = math.abs(constraint.MaxImpulse.x); //using as magnitude, y&z components are unused
             AccumulatedImpulse = 0.0f;
-            MotionBFromA = math.mul(math.inverse(motionB.WorldFromMotion.rot), motionA.WorldFromMotion.rot);
+
             MotionAFromJoint = new quaternion(aFromConstraint.Rotation);
             MotionBFromJoint = new quaternion(bFromConstraint.Rotation);
 
+            Update(motionA, motionB);
+        }
+
+        public void Update(in MotionData motionA, in MotionData motionB)
+        {
+            MotionBFromA = math.mul(math.inverse(motionB.WorldFromMotion.rot), motionA.WorldFromMotion.rot);
+
             // Calculate the current error
-            InitialError = CalculateError(MotionBFromA);
+            InitialError = CalculateError(MotionBFromA, out float tmp);
         }
 
         // Solve the Jacobian
-        public void Solve(ref MotionVelocity velocityA, ref MotionVelocity velocityB, Solver.StepInput stepInput)
+        public void Solve(ref JacobianHeader jacHeader, ref MotionVelocity velocityA, ref MotionVelocity velocityB,
+            Solver.StepInput stepInput)
         {
             // Predict the relative orientation at the end of the step
             quaternion futureMotionBFromA = JacobianUtilities.IntegrateOrientationBFromA(MotionBFromA,
@@ -76,29 +89,38 @@ namespace Unity.Physics
             }
 
             // Calculate the error, adjust by tau and damping, and apply an impulse to correct it
-            float futureError = CalculateError(futureMotionBFromA);
-            float solveError = JacobianUtilities.CalculateCorrection(futureError, InitialError, Tau, Damping);
+            float futureError = CalculateError(futureMotionBFromA, out float currentAngle);
+            float correction = JacobianUtilities.CalculateCorrection(futureError, InitialError, Tau, Damping);
 
-            float impulse = math.mul(effectiveMass, -solveError) * stepInput.InvTimestep;
+            float impulse = math.mul(effectiveMass, -correction) * stepInput.InvTimestep;
             impulse = JacobianUtilities.CapImpulse(impulse, ref AccumulatedImpulse, MaxImpulseOfMotor);
+
+            // check if we hit a limit
+            var correctedAngle = currentAngle - correction;
+            var limitError = JacobianUtilities.CalculateError(correctedAngle, MinAngle, MaxAngle);
+            if (math.abs(limitError) > 0)
+            {
+                impulse += math.mul(effectiveMass, -limitError) * stepInput.InvTimestep;
+            }
 
             velocityA.ApplyAngularImpulse(impulse * AxisInMotionA);
             velocityB.ApplyAngularImpulse(impulse * axisInMotionB);
         }
 
         // Helper function
-        private float CalculateError(quaternion motionBFromA)
+        private float CalculateError(quaternion motionBFromA, out float currentAngle)
         {
             // Calculate the relative joint frame rotation
             quaternion jointBFromA = math.mul(math.mul(math.inverse(MotionBFromJoint), motionBFromA), MotionAFromJoint);
 
             // extract current axis and angle between the two joint frames
-            ((Quaternion)jointBFromA).ToAngleAxis(out var angle, out var axis);
+            ((Quaternion)jointBFromA).ToAngleAxis(out var angleDeg, out var axis);
             // filter out any "out of rotation axis" components between the joint frames and make sure we are accounting
             // for a potential axis flip in the to-angle-axis calculation.
-            angle *= axis[AxisIndex];
+            angleDeg *= axis[AxisIndex];
 
-            return math.radians(angle) - Target;
+            currentAngle = math.radians(angleDeg);
+            return currentAngle - Target;
         }
     }
 }
