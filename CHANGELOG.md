@@ -4,6 +4,19 @@ uid: unity-physics-changelog
 
 # Changelog
 
+## [1.3.8] - 2024-11-08
+
+
+### Removed
+
+* removing various material assets within unity/physics (PhysicsDynamicDebugMaterial.mat and Material.mat (HullGeneration scene)).
+
+### Fixed
+
+* Prevent collision instabilities with thin boxes through better choice of bevel radius when baking `Unity.Physics.BoxColliders` from built-in `BoxCollider` authoring components. Previously, the baked box could have collapsed to a quad due to excessive bevel radii, causing vibrations in the collision resolution.
+* Fixed an issue with collisions not getting re-enabled in Havok when deleting a joint that was disabling collisions between the affected rigid body pair.
+
+
 ## [1.3.5] - 2024-10-04
 
 ### Added

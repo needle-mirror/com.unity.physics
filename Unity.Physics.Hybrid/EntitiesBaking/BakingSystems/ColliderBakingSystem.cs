@@ -266,7 +266,7 @@ namespace Unity.Physics.Authoring
             res.ShapeType = ShapeType.Box;
 
             var shapeLocalToWorld = shape.transform.localToWorldMatrix;
-            var bakeToShape = GetColliderBakeMatrix(shapeLocalToWorld, bodyTransform.localToWorldMatrix);
+            var bakeToShape = GetColliderBakeMatrix(shapeLocalToWorld, bodyTransform.localToWorldMatrix, out float bodyUniformScale);
 
             var center = math.transform(bakeToShape, shape.center);
 
@@ -278,7 +278,8 @@ namespace Unity.Physics.Authoring
 
             geometry.Size = math.abs(shape.size * (float3)bakeToShape.lossyScale);
 
-            geometry.BevelRadius = math.min(ConvexHullGenerationParameters.Default.BevelRadius, math.cmin(geometry.Size) * 0.5f);
+            // Note: set bevel radius to a reasonable value, ensuring it can not collapse to a quad, while considering the uniform scale of the baked rigid body which will be applied to the collider at runtime.
+            geometry.BevelRadius = math.min(ConvexHullGenerationParameters.Default.BevelRadius / bodyUniformScale, math.cmin(geometry.Size) * 0.1f);
 
             res.BoxProperties = geometry;
 
@@ -294,7 +295,7 @@ namespace Unity.Physics.Authoring
             res.ShapeType = ShapeType.Sphere;
 
             var shapeLocalToWorld = shape.transform.localToWorldMatrix;
-            var bakeToShape = GetColliderBakeMatrix(shapeLocalToWorld, bodyTransform.localToWorldMatrix);
+            var bakeToShape = GetColliderBakeMatrix(shapeLocalToWorld, bodyTransform.localToWorldMatrix, out float bodyUniformScale);
 
             var center = math.transform(bakeToShape, shape.center);
             var radius = shape.radius * math.cmax(math.abs(bakeToShape.lossyScale));
@@ -313,7 +314,7 @@ namespace Unity.Physics.Authoring
 
             res.ShapeType = ShapeType.Capsule;
 
-            var bakeToShape = GetColliderBakeMatrix(shape.transform.localToWorldMatrix, bodyTransform.localToWorldMatrix);
+            var bakeToShape = GetColliderBakeMatrix(shape.transform.localToWorldMatrix, bodyTransform.localToWorldMatrix, out float bodyUniformScale);
             var lossyScale = math.abs(bakeToShape.lossyScale);
 
             // the capsule axis corresponds to the local axis specified by the direction index.
@@ -384,7 +385,7 @@ namespace Unity.Physics.Authoring
             {
                 Convex = shape.convex,
                 Mesh = mesh,
-                BakeFromShape = GetColliderBakeMatrix(shape.transform.localToWorldMatrix, bodyTransform.localToWorldMatrix),
+                BakeFromShape = GetColliderBakeMatrix(shape.transform.localToWorldMatrix, bodyTransform.localToWorldMatrix, out float bodyUniformScale),
                 MeshBounds = mesh.bounds,
                 ChildToShape = float4x4.identity
             };

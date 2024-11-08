@@ -5,7 +5,7 @@
   "dependencies": {
     "com.unity.burst": "1.8.18",
     "com.unity.collections": "2.5.1",
-    "com.unity.entities": "1.3.5",
+    "com.unity.entities": "1.3.8",
     "com.unity.mathematics": "1.3.2",
     "com.unity.test-framework": "1.4.5",
     "com.unity.modules.imgui": "1.0.0",
@@ -18,7 +18,7 @@
   "name": "com.unity.physics",
   "unity": "2022.3",
   "unityRelease": "11f1",
-  "version": "1.3.5",
+  "version": "1.3.8",
   "samples": [
     {
       "displayName": "Custom Physics Authoring",
@@ -28,15 +28,15 @@
     }
   ],
   "_upm": {
-    "changelog": "### Added\n\n* Motor Jacobians have access to the Jacobian header in the Solve methods now\n\n### Changed\n\n* Documentation updates\n* Updated Burst dependency to version 1.8.18\n* Updated Unity Test Framework dependency to version 1.4.5\n* Updated Mathematics dependency to version 1.3.2\n* Updated entities packages dependencies\n\n### Fixed\n\n* The \"Use Spring\" feature in the built-in `HingeJoint` now works correctly. Both the joint force values and the constraint relaxation parameters are set to the appropriate values in the underlying engine and the Unity Physics simulation behavior now closely matches the behavior in built-in physics.\n* Fixed a case that could lead to invalid data in the impulse handling within the LinearLimitJacobian\n* Limits in Hinge Joint authoring components, enabled via the \"Use Limits\" option, are now respected when the \"Use Spring\" option is also enabled."
+    "changelog": "### Removed\n\n* removing various material assets within unity/physics (PhysicsDynamicDebugMaterial.mat and Material.mat (HullGeneration scene)).\n\n### Fixed\n\n* Prevent collision instabilities with thin boxes through better choice of bevel radius when baking `Unity.Physics.BoxColliders` from built-in `BoxCollider` authoring components. Previously, the baked box could have collapsed to a quad due to excessive bevel radii, causing vibrations in the collision resolution.\n* Fixed an issue with collisions not getting re-enabled in Havok when deleting a joint that was disabling collisions between the affected rigid body pair."
   },
   "upmCi": {
-    "footprint": "f53fa285467154258569559bdd2d14765ccf9ed4"
+    "footprint": "e0b9315133d4bfa5abc01623e32ecb035e396476"
   },
   "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.physics@1.3/manual/index.html",
   "repository": {
     "url": "https://github.cds.internal.unity3d.com/unity/dots.git",
     "type": "git",
-    "revision": "f9f023a1661a1a7a17264c9907b75c9b46434416"
+    "revision": "3ea543f9dd8be902be20c6f04e900cb913436f36"
   }
 }
