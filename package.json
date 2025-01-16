@@ -4,8 +4,8 @@
   "description": "Unity's C# stateless physics library.\n\nBuilt on top of the Unity C# ECS framework, Unity Physics is network-ready, completely customizable, and built for performance out of the box. Whether you're building the next mobile hit or a new networked multiplayer console experience, Unity Physics leverages the Burst compiler and Job system to scale across a range of hardware.",
   "dependencies": {
     "com.unity.burst": "1.8.18",
-    "com.unity.collections": "2.5.1",
-    "com.unity.entities": "1.3.8",
+    "com.unity.collections": "2.5.2",
+    "com.unity.entities": "1.3.9",
     "com.unity.mathematics": "1.3.2",
     "com.unity.test-framework": "1.4.5",
     "com.unity.modules.imgui": "1.0.0",
@@ -18,7 +18,7 @@
   "name": "com.unity.physics",
   "unity": "2022.3",
   "unityRelease": "11f1",
-  "version": "1.3.8",
+  "version": "1.3.9",
   "samples": [
     {
       "displayName": "Custom Physics Authoring",
@@ -28,15 +28,15 @@
     }
   ],
   "_upm": {
-    "changelog": "### Removed\n\n* removing various material assets within unity/physics (PhysicsDynamicDebugMaterial.mat and Material.mat (HullGeneration scene)).\n\n### Fixed\n\n* Prevent collision instabilities with thin boxes through better choice of bevel radius when baking `Unity.Physics.BoxColliders` from built-in `BoxCollider` authoring components. Previously, the baked box could have collapsed to a quad due to excessive bevel radii, causing vibrations in the collision resolution.\n* Fixed an issue with collisions not getting re-enabled in Havok when deleting a joint that was disabling collisions between the affected rigid body pair."
+    "changelog": "### Added\n\n* Added function `PhysicsVelocity.ApplyAngularImpulseWorldSpace` for applying angular impulse in world space\n\n### Changed\n\n* New ConfigurableJoint baking code that is capable of converting motors about all axes, not just X\n* ConfigurableJoint baking won't create empty UnityJoint (with no constraints) for unlocked linear and angular degrees of freedom\n\n### Fixed\n\n* The `Enable Integrity Checks` setting in the `Project Settings` under `Physics -> Unity Physics` now correctly reflects whether the integrity checks are enabled or disabled. Previously, the setting indicated the opposite."
   },
   "upmCi": {
-    "footprint": "e0b9315133d4bfa5abc01623e32ecb035e396476"
+    "footprint": "b3ccf25f5fd2af34450af9f907546a42ac82f220"
   },
   "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.physics@1.3/manual/index.html",
   "repository": {
     "url": "https://github.cds.internal.unity3d.com/unity/dots.git",
     "type": "git",
-    "revision": "3ea543f9dd8be902be20c6f04e900cb913436f36"
+    "revision": "05bb8b738d908a2d757d25ca253ed16f35bdc78d"
   }
 }

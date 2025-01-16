@@ -13,7 +13,7 @@ namespace Unity.Physics.Tests.Authoring
             new object[] { typeof(UnityEngine.FixedJoint), 1 },
             new object[] { typeof(UnityEngine.SpringJoint), 1 },
             new object[] { typeof(UnityEngine.CharacterJoint), 2 },
-            new object[] { typeof(UnityEngine.ConfigurableJoint), 2 },
+            new object[] { typeof(UnityEngine.ConfigurableJoint), 1 },
         };
 
         static object[] MultiJointTestCases =
@@ -22,14 +22,28 @@ namespace Unity.Physics.Tests.Authoring
             new object[] { typeof(UnityEngine.FixedJoint), 2 },
             new object[] { typeof(UnityEngine.SpringJoint), 2 },
             new object[] { typeof(UnityEngine.CharacterJoint), 4 },
-            new object[] { typeof(UnityEngine.ConfigurableJoint), 4 },
+            new object[] { typeof(UnityEngine.ConfigurableJoint), 2 },
         };
+
+        // By default, ConfigurableJoint is unlocked in all dofs, so it makes no sense to create a Unity.Physics joint for it
+        // However, we have tests down below that works for multiple joint types, and only the ConfigurableJoint is like that.
+        // So instead of duplicating the said tests for ConfigurableJoint, we lock a single dof so that the tests can verify their logic.
+        private void LockXIfConfigurableJoint(UnityEngine.Joint joint)
+        {
+            if (typeof(ConfigurableJoint) != joint.GetType())
+                return;
+
+            var thisJoint = joint as ConfigurableJoint;
+            thisJoint.xMotion = ConfigurableJointMotion.Locked;
+        }
 
         [TestCaseSource(nameof(JointTestCases))]
         public void ConversionSystems_WhenGOHasJoint_IsEnableCollisionFlagSet(Type jointType, int count)
         {
             CreateHierarchy(new[] { jointType }, Array.Empty<Type>(), Array.Empty<Type>());
-            Root.GetComponent<UnityEngine.Joint>().enableCollision = true;
+            var joint = Root.GetComponent<UnityEngine.Joint>();
+            joint.enableCollision = true;
+            LockXIfConfigurableJoint(joint);
 
             TestConvertedData<PhysicsConstrainedBodyPair>(pair =>
             {
@@ -44,6 +58,7 @@ namespace Unity.Physics.Tests.Authoring
             CreateHierarchy(new[] { jointType }, Array.Empty<Type>(), Array.Empty<Type>());
             var joint = Root.GetComponent<UnityEngine.Joint>();
             joint.breakForce = 1.0f;
+            LockXIfConfigurableJoint(joint);
 
             TestConvertedData<PhysicsJoint>(joints =>
             {
@@ -68,6 +83,7 @@ namespace Unity.Physics.Tests.Authoring
             CreateHierarchy(new[] { jointType }, Array.Empty<Type>(), Array.Empty<Type>());
             var joint = Root.GetComponent<UnityEngine.Joint>();
             joint.breakTorque = 1.0f;
+            LockXIfConfigurableJoint(joint);
 
             TestConvertedData<PhysicsJoint>(joints =>
             {
@@ -90,6 +106,9 @@ namespace Unity.Physics.Tests.Authoring
         public void ConversionSystems_WhenGOHasJoint_AndHasInfinityBreakValues_ImpulseEventFlagIsDisabled(Type jointType, int count)
         {
             CreateHierarchy(new[] { jointType }, Array.Empty<Type>(), Array.Empty<Type>());
+            var joint = Root.GetComponent<UnityEngine.Joint>();
+            LockXIfConfigurableJoint(joint);
+
             TestConvertedData<PhysicsJoint>(joints =>
             {
                 for (int i = 0; i < joints.Length; ++i)
@@ -350,7 +369,7 @@ namespace Unity.Physics.Tests.Authoring
             joint.angularYMotion = ConfigurableJointMotion.Free;
             joint.angularZMotion = ConfigurableJointMotion.Free;
 
-            TestConvertedData<PhysicsJoint>(j => Assert.That(j[0].GetConstraints().Length, Is.EqualTo(0), "Unlimited ConfigurableJoint should produce no constraints"), 2);
+            TestConvertedData<PhysicsJoint>(j => {}, 0);
         }
 
         [Test]
@@ -367,8 +386,7 @@ namespace Unity.Physics.Tests.Authoring
 
             TestConvertedData<PhysicsJoint>(j =>
             {
-                Assume.That(j[0].GetConstraints().Length, Is.EqualTo(2), "Limited & Locked ConfigurableJoint should produce 2 linear constraints");
-                Assume.That(j[1].GetConstraints().Length, Is.EqualTo(3), "Limited & Locked ConfigurableJoint should produce 3 angular constraints");
+                Assume.That(j[0].GetConstraints().Length + j[1].GetConstraints().Length, Is.EqualTo(5), "There should be 5 constraints in total for this joint: two linear and three angular.");
             }, 2);
         }
 
@@ -399,7 +417,7 @@ namespace Unity.Physics.Tests.Authoring
                 Assume.That(j[0].GetConstraints().Length, Is.EqualTo(1), "ConfigurableJoint with uniform limits on a single axis should produce exactly 1 constraint");
                 var expectedConstrainedAxes = new bool3(expectedConstrainedX, expectedConstrainedY, expectedConstrainedZ);
                 Assert.That(j[0][0].ConstrainedAxes, Is.EqualTo(expectedConstrainedAxes));
-            }, 2);
+            }, 1);
         }
 
         [TestCase(ConfigurableJointMotion.Locked, ConfigurableJointMotion.Free, ConfigurableJointMotion.Free, true, false, false, TestName = "Angular locked (x)")]
@@ -425,10 +443,10 @@ namespace Unity.Physics.Tests.Authoring
 
             TestConvertedData<PhysicsJoint>(j =>
             {
-                Assume.That(j[1].GetConstraints().Length, Is.EqualTo(1), "ConfigurableJoint with limits on only one axis should produce exactly 1 constraint");
+                Assume.That(j[0].GetConstraints().Length, Is.EqualTo(1), "ConfigurableJoint with limits on only one axis should produce exactly 1 constraint");
                 var expectedConstrainedAxes = new bool3(expectedConstrainedX, expectedConstrainedY, expectedConstrainedZ);
-                Assert.That(j[1][0].ConstrainedAxes, Is.EqualTo(expectedConstrainedAxes));
-            }, 2);
+                Assert.That(j[0][0].ConstrainedAxes, Is.EqualTo(expectedConstrainedAxes));
+            }, 1);
         }
 
         [Test]
@@ -445,15 +463,51 @@ namespace Unity.Physics.Tests.Authoring
 
             TestConvertedData<PhysicsJoint>(joints =>
             {
-                Assume.That(joints[0].GetConstraints().Length, Is.EqualTo(0), "ConfigurableJoint with free linear on all axes should produce exactly 0 constraints");
-                Assume.That(joints[1].GetConstraints().Length, Is.EqualTo(3), "ConfigurableJoint with angular limits on all axes should produce exactly 3 constraints");
-                Assert.That(joints[1][0].ConstrainedAxes, Is.EqualTo(new bool3(true, false, false)));
-                Assert.That(joints[1][1].ConstrainedAxes, Is.EqualTo(new bool3(false, true, false)));
-                Assert.That(joints[1][2].ConstrainedAxes, Is.EqualTo(new bool3(false, false, true)));
-            }, 2);
+                Assume.That(joints[0].GetConstraints().Length, Is.EqualTo(3), "ConfigurableJoint with angular limits on all axes should produce exactly 3 constraints");
+                Assert.That(joints[0][0].ConstrainedAxes, Is.EqualTo(new bool3(true, false, false)));
+                Assert.That(joints[0][1].ConstrainedAxes, Is.EqualTo(new bool3(false, true, false)));
+                Assert.That(joints[0][2].ConstrainedAxes, Is.EqualTo(new bool3(false, false, true)));
+            }, 1);
         }
 
-        // TODO: test to verify ConfigurableJoint linear limit converts properly
+        static object[] LinearLimitsTestCases =
+        {
+            new object[] { new bool3(true, false, false), 1 },
+            new object[] { new bool3(false, true, false), 2 },
+            new object[] { new bool3(false, false, true), 3 },
+            new object[] { new bool3(false, true, true), 4 },
+            new object[] { new bool3(true, true, true), 5 },
+            new object[] { new bool3(true, true, false), 6 },
+        };
+
+        [TestCaseSource(nameof(LinearLimitsTestCases))]
+        public void ConversionSystems_ConfigurableJoint_LinearLimits(bool3 limitFlags, float limit)
+        {
+            CreateHierarchy(new[] { typeof(UnityEngine.ConfigurableJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
+
+            var joint = Root.GetComponent<UnityEngine.ConfigurableJoint>();
+
+            if (limitFlags.x)
+                joint.xMotion = ConfigurableJointMotion.Limited;
+
+            if (limitFlags.y)
+                joint.yMotion = ConfigurableJointMotion.Limited;
+
+            if (limitFlags.z)
+                joint.zMotion = ConfigurableJointMotion.Limited;
+
+            joint.linearLimit  = new SoftJointLimit { limit = limit };
+
+            TestConvertedData<PhysicsJoint>(joints =>
+            {
+                var constraint = joints[0].GetConstraints()[0];
+
+                Assume.That(constraint.Type, Is.EqualTo(ConstraintType.Linear), "Conversion is expected to produce a single linear constraint.");
+                Assume.That(constraint.ConstrainedAxes, Is.EqualTo(limitFlags), "Conversion should produce a joint with the correct constrained bits set.");
+                Assume.That(constraint.Min, Is.EqualTo(0), "Conversion should produce a joint with min set to zero.");
+                Assume.That(constraint.Max, Is.EqualTo(limit), "Conversion should produce a joint with the correct max set.");
+            }, 1);
+        }
 
         // TODO: verify proper ordering of angular constraints for optimal stability
         [Test]
@@ -475,9 +529,8 @@ namespace Unity.Physics.Tests.Authoring
 
             TestConvertedData<PhysicsJoint>(joints =>
             {
-                Assume.That(joints[0].GetConstraints().Length, Is.EqualTo(0), "ConfigurableJoint with no linear limits on any axis should produce exactly 0 constraints");
-                Assume.That(joints[1].GetConstraints().Length, Is.EqualTo(1), "ConfigurableJoint with limits on only x angular axis should produce exactly 1 constraint");
-                var angularConstraint = joints[1][0];
+                Assume.That(joints[0].GetConstraints().Length, Is.EqualTo(1), "ConfigurableJoint with limits on only x angular axis should produce exactly 1 constraint");
+                var angularConstraint = joints[0][0];
                 angularConstraint.DampingRatio = angularConstraint.SpringFrequency = 0f; // ignore spring settings
                 angularConstraint.MaxImpulse = 0f; // ignore impulse settings
                 var expectedLimits = -math.radians(limits).yx;
@@ -491,7 +544,7 @@ namespace Unity.Physics.Tests.Authoring
                         Max = expectedLimits.y
                     })
                 );
-            }, 2);
+            }, 1);
         }
 
         [Test]
@@ -509,13 +562,11 @@ namespace Unity.Physics.Tests.Authoring
             joint.lowAngularXLimit = new SoftJointLimit { limit = 0f };
             joint.highAngularXLimit = new SoftJointLimit { limit = 0f };
             joint.angularYLimit = new SoftJointLimit { limit = limit };
-            joint.angularZLimit = new SoftJointLimit { limit = 0f };
 
             TestConvertedData<PhysicsJoint>(joints =>
             {
-                Assume.That(joints[0].GetConstraints().Length, Is.EqualTo(0), "ConfigurableJoint with no linear limits on any axis should produce exactly 0 constraints");
-                Assume.That(joints[1].GetConstraints().Length, Is.EqualTo(1), "ConfigurableJoint with limits on only y angular axis should produce exactly 1 constraint");
-                var angularConstraint = joints[1][0];
+                Assume.That(joints[0].GetConstraints().Length, Is.EqualTo(1), "ConfigurableJoint with limits on only y angular axis should produce exactly 1 constraint");
+                var angularConstraint = joints[0][0];
                 angularConstraint.DampingRatio = angularConstraint.SpringFrequency = 0f; // ignore spring settings
                 angularConstraint.MaxImpulse = 0f; // ignore impulse settings
                 var expectedLimits = new float2(-math.radians(limit), math.radians(limit));
@@ -529,7 +580,7 @@ namespace Unity.Physics.Tests.Authoring
                         Max = expectedLimits.y
                     })
                 );
-            }, 2);
+            }, 1);
         }
 
         [Test]
@@ -546,14 +597,12 @@ namespace Unity.Physics.Tests.Authoring
             const float limit = 45f;
             joint.lowAngularXLimit = new SoftJointLimit { limit = 0f };
             joint.highAngularXLimit = new SoftJointLimit { limit = 0f };
-            joint.angularYLimit = new SoftJointLimit { limit = 0f };
             joint.angularZLimit = new SoftJointLimit { limit = limit };
 
             TestConvertedData<PhysicsJoint>(joints =>
             {
-                Assume.That(joints[0].GetConstraints().Length, Is.EqualTo(0), "ConfigurableJoint with no linear limits on any axis should produce exactly 0 constraints");
-                Assume.That(joints[1].GetConstraints().Length, Is.EqualTo(1), "ConfigurableJoint with limits on only z angular axis should produce exactly 1 constraint");
-                var angularConstraint = joints[1][0];
+                Assume.That(joints[0].GetConstraints().Length, Is.EqualTo(1), "ConfigurableJoint with limits on only z angular axis should produce exactly 1 constraint");
+                var angularConstraint = joints[0][0];
                 angularConstraint.DampingRatio = angularConstraint.SpringFrequency = 0f; // ignore spring settings
                 angularConstraint.MaxImpulse = 0f; // ignore impulse settings
                 var expectedLimits = new float2(-math.radians(limit), math.radians(limit));
@@ -567,13 +616,17 @@ namespace Unity.Physics.Tests.Authoring
                         Max = expectedLimits.y
                     })
                 );
-            }, 2);
+            }, 1);
         }
 
         [TestCaseSource(nameof(MultiJointTestCases))]
         public void ConversionSystems_WhenGameObjectHasMultipleJointComponents_CreatesMultipleJoints(Type jointType, int assumeCount)
         {
             CreateHierarchy(new[] { jointType, jointType }, Array.Empty<Type>(), Array.Empty<Type>());
+
+            // Default ConfigurableJoint doesn't produce a PhysicsJoint any, so we lock a dof to actually get an instance of PhysicsJoint for the test
+            foreach (var joint in Root.GetComponents<UnityEngine.Joint>())
+                LockXIfConfigurableJoint(joint);
 
             TestConvertedData<PhysicsJoint>(joints => Assert.That(joints, Has.Length.EqualTo(assumeCount).And.All.Not.EqualTo(default(PhysicsJoint))), assumeCount);
         }
@@ -602,6 +655,72 @@ namespace Unity.Physics.Tests.Authoring
                 var joint = joints[0];
                 Assume.That(joint.BodyAFromJoint.Position, Is.PrettyCloseTo(expectedScaledAnchorOffset));
                 Assume.That(joint.BodyBFromJoint.Position, Is.PrettyCloseTo(expectedScaledAnchorOffset));
+            }, 1);
+        }
+
+        static object[] LinearMotorsTestCases =
+        {
+            new object[] { 0, new Vector3(1, 0, 0), new Vector3(0, 0, 0), ConstraintType.PositionMotor },
+            new object[] { 1, new Vector3(0, 1, 0), new Vector3(0, 0, 0), ConstraintType.PositionMotor },
+            new object[] { 2, new Vector3(0, 0, 1), new Vector3(0, 0, 0), ConstraintType.PositionMotor },
+
+            new object[] { 0, new Vector3(0, 0, 0), new Vector3(1, 0, 0), ConstraintType.LinearVelocityMotor },
+            new object[] { 1, new Vector3(0, 0, 0), new Vector3(0, 1, 0), ConstraintType.LinearVelocityMotor },
+            new object[] { 2, new Vector3(0, 0, 0), new Vector3(0, 0, 1), ConstraintType.LinearVelocityMotor },
+        };
+
+        [TestCaseSource(nameof(LinearMotorsTestCases))]
+        public void ConversionSystems_ConfigurableJointMotor_Linear(int axis, Vector3 targetPosition, Vector3 targetVelocity, ConstraintType constraintType)
+        {
+            CreateHierarchy(new[] { typeof(UnityEngine.ConfigurableJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
+
+            var joint = Root.GetComponent<UnityEngine.ConfigurableJoint>();
+
+            JointDrive[] drives = {joint.xDrive, joint.yDrive, joint.zDrive};
+
+            drives[axis].positionSpring = 10;
+            drives[axis].positionDamper = 10;
+
+            joint.targetPosition = targetPosition;
+            joint.targetVelocity = targetVelocity;
+
+            TestConvertedData<PhysicsJoint>(joints =>
+            {
+                Assume.That(joints[0].GetConstraints().Length, Is.EqualTo(1), "ConfigurableJoint with a single axis linear motor should produce a single constraint.");
+                Assume.That(joints[0].GetConstraints()[0].Type, Is.EqualTo(constraintType), "Conversion is expected to produce the correct constraint type.");
+            }, 1);
+        }
+
+        static object[] AngularMotorsTestCases =
+        {
+            new object[] { 0, Quaternion.Euler(90, 0, 0), new Vector3(0, 0, 0), ConstraintType.RotationMotor },
+            new object[] { 1, Quaternion.Euler(0, 90, 0), new Vector3(0, 0, 0), ConstraintType.RotationMotor },
+            new object[] { 2, Quaternion.Euler(0, 0, 90), new Vector3(0, 0, 0), ConstraintType.RotationMotor },
+
+            new object[] { 0, Quaternion.Euler(0, 0, 0), new Vector3(3, 0, 0), ConstraintType.AngularVelocityMotor },
+            new object[] { 1, Quaternion.Euler(0, 0, 0), new Vector3(0, 3, 0), ConstraintType.AngularVelocityMotor },
+            new object[] { 2, Quaternion.Euler(0, 0, 0), new Vector3(0, 0, 3), ConstraintType.AngularVelocityMotor },
+        };
+
+        [TestCaseSource(nameof(AngularMotorsTestCases))]
+        public void ConversionSystems_ConfigurableJointMotor_Angular(int axis, Quaternion targetRotation, Vector3 targetAngularVelocity, ConstraintType constraintType)
+        {
+            CreateHierarchy(new[] { typeof(UnityEngine.ConfigurableJoint) }, Array.Empty<Type>(), Array.Empty<Type>());
+
+            var joint = Root.GetComponent<UnityEngine.ConfigurableJoint>();
+
+            JointDrive[] drives = {joint.angularXDrive, joint.angularYZDrive, joint.angularYZDrive};
+
+            drives[axis].positionSpring = 10;
+            drives[axis].positionDamper = 10;
+
+            joint.targetRotation = targetRotation;
+            joint.targetAngularVelocity = targetAngularVelocity;
+
+            TestConvertedData<PhysicsJoint>(joints =>
+            {
+                Assume.That(joints[0].GetConstraints().Length, Is.EqualTo(1), "ConfigurableJoint with a single axis angular motor should produce a single constraint.");
+                Assume.That(joints[0].GetConstraints()[0].Type, Is.EqualTo(constraintType), "Conversion is expected to produce the correct constraint type.");
             }, 1);
         }
 

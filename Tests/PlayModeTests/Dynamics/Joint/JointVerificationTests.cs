@@ -30,15 +30,21 @@ namespace Unity.Physics.Tests.Joints
             joints[m_JointIndex] = joint;
 
             var context = new SimulationContext();
-
-            context.Reset(m_StepInput);
-            for (var i = 0; i < numSteps; ++i)
+            try
             {
-                Simulation.StepImmediate(m_StepInput, ref context);
+                context.Reset(m_StepInput);
+                for (var i = 0; i < numSteps; ++i)
+                {
+                    Simulation.StepImmediate(m_StepInput, ref context);
 #if DEBUG_PRINT_BODY_POSITION
-                if (i % 10 == 0)
-                    Debug.Log(m_World.DynamicsWorld.MotionDatas[m_DynamicBodyIndex].WorldFromMotion.pos);
+                    if (i % 10 == 0)
+                        Debug.Log(m_World.DynamicsWorld.MotionDatas[m_DynamicBodyIndex].WorldFromMotion.pos);
 #endif
+                }
+            }
+            finally
+            {
+                context.Dispose();
             }
         }
 

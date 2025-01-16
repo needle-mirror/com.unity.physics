@@ -25,14 +25,13 @@ public static class Preferences
             keywords = new[] { "Unity Physics", "Physics", "Enable Integrity Checks", "Disable Integrity Checks" },
             guiHandler = (searchContext) =>
             {
-                bool oldIntegrityChecks = IntegrityChecksDisabled;
-                bool newIntegrityChecks = EditorGUILayout.Toggle(new GUIContent("Enable Integrity Checks",
+                bool oldEnableIntegrityChecks = !IntegrityChecksDisabled;
+                bool newEnableIntegrityChecks = EditorGUILayout.Toggle(new GUIContent("Enable Integrity Checks",
                     "Integrity checks should be disabled when measuring performance. Integrity checks should be enabled when checking simulation quality and behaviour."),
-                    IntegrityChecksDisabled);
-                if (newIntegrityChecks != oldIntegrityChecks)
+                    oldEnableIntegrityChecks);
+                if (newEnableIntegrityChecks != oldEnableIntegrityChecks)
                 {
-                    IntegrityChecksDisabled = newIntegrityChecks;
-                    UpdateDefine(k_DisableIntegrityDefine, IntegrityChecksDisabled);
+                    IntegrityChecksDisabled = !newEnableIntegrityChecks;
                 }
             }
         };

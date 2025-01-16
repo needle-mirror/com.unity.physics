@@ -65,10 +65,10 @@ The General Rotation Motor Example is modified in the steps below to get around 
    - `Axis` = (0, 0, -1). The axis that the pivot will rotate about. This data is baked into the `BodyFrame` axis of bodyA.
    - `Auto Configure Connected Anchor` = True. This is always baked as if True. The `BodyFrame` of bodyB (the `Connected Body`) will be automatically calculated from the `Axis` and `Anchor` of bodyA. If it is not enabled, the baking pipeline will calculate the `BodyFrame` for the `Connected Body` as if it were enabled. This setting takes the Anchor and Axis and calculates the position of the Connected Body relative to the body with the motor on it. If a design requires this to be false then the motor API method must be used  (see section on Authoring via the C# API).
    - `Secondary Axis` = (0, 1, 0). This could also be (1, 0, 0), but it does need to be perpendicular to `Axis` (A check is done internally to verify this). This data is used by the baking pipeline to set up `BodyFrame` data.
-   - `X / Y / Z Motion` = Locked. For an angular motor, these must be locked. Required by the baking pipeline.
-   - `Angular X Motion` = Free. The baking pipeline currently requires this to be Free. (Applies to the primary `Axis` field).
-   - `Angular Y Motion` = Locked. The baking pipeline currently requires this to be Locked. (Applies to the `Secondary Axis` field).
-   - `Angular Z Motion` = Locked. The baking pipeline currently requires this to be Locked. (Applies to the axis perpendicular to both `Axis` and `Secondary Axis` field).
+   - `X / Y / Z Motion` = Locked. For an angular motor, these must be locked. 
+   - `Angular X Motion` = Free. (Applies to the primary `Axis` field).
+   - `Angular Y Motion` = Locked. (Applies to the `Secondary Axis` field).
+   - `Angular Z Motion` = Locked. (Applies to the axis perpendicular to both `Axis` and `Secondary Axis` field).
    - `Angular X Drive`:
      - `Position Spring` = 987. This is the spring constant of the motor. It describes how 'bouncy' a motor will be when it converges to its target angle. This value will be baked and used by the solver.
      - `Position Damper` = 44. This is the damping coefficient of the motor. This value will be baked and used by the solver.
@@ -77,9 +77,9 @@ The General Rotation Motor Example is modified in the steps below to get around 
    - `Break Force` = Infinity. This value is multiplied by 'fixedDeltaTime' to get an impulse. It is baked into 'MaxImpulse' for breakable events and applies only to linear non-motorized constraints.
    - `Break Torque` = Infinity. This value is multiplied by 'fixedDeltaTime' to get an impulse. It is baked into 'MaxImpulse' for breakable events and applies only to angular non-motorized constraints.
 
-**Important!** Due to the complexity of the `Configurable Joint`component, the baking pipeline is only supporting a simplified use-case when authoring a rotational motor. It is only possible to apply a drive to the primary `Axis`. When selecting the DOF options, `X/Y/Z Motion` must each be set to Locked, `Angular Y/Z Motion` must be set to Locked and `Angular X Motion` must be set to Free. 
-
-Any other settings will result in an error message in the Console and the `Configurable Joint` baking will fail. The baking will not proceed until all errors have been resolved. To change the rotation direction of the motor, the `Axis` field must be used. Any drive settings in the Inspector that were not listed in the step-by-step instructions will not be baked. The `Target Rotation` field will only use the x-component data. If a joint is driven on either the secondary or tertiary axis, then it is advised to add another component to create that drive separately. Note that depending on the configuration, this may lead to unstable simulation.
+The `ConfigurableJoint` baking method supports locking, limiting and motorizing all of the individual degrees of freedom (such as about `Axis`, `Secondary Axis` and the remaining axis), as well as combining those in various ways. However, there are a few limitations that are worth noting:
+- Currently `Unity.Physics` doesn’t allow motorizing two or more linear velocity targets at the same time. If you set that up, they are still converted, but an error message is shown in the console and you will see the effect of the linear velocity motor that was added last.
+- The slerp rotational drive is not supported. When set, an error message is printed to the console, and the twist-swing motors are used instead. 
 
 ### Authoring via the C# API
 The C# API to author a Rotation Motor is

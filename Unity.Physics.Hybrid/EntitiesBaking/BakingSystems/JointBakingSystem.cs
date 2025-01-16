@@ -136,7 +136,7 @@ namespace Unity.Physics.Authoring
             public PhysicsJoint AngularJoint;
         }
 
-        private void SetupBodyFrames(quaternion jointFrameOrientation, UnityEngine.Joint joint, ref BodyFrame bodyAFromJoint, ref BodyFrame bodyBFromJoint)
+        protected void SetupBodyFrames(quaternion jointFrameOrientation, UnityEngine.Joint joint, ref BodyFrame bodyAFromJoint, ref BodyFrame bodyBFromJoint)
         {
             RigidTransform worldFromBodyA = Math.DecomposeRigidBodyTransform(joint.transform.localToWorldMatrix);
             RigidTransform worldFromBodyB = joint.connectedBody == null
@@ -418,171 +418,230 @@ namespace Unity.Physics.Authoring
 
     class ConfigurableBaker : BaseJointBaker<ConfigurableJoint>
     {
+        private void CreateJointEntityBlocks(UnityEngine.ConfigurableJoint joint, quaternion jointFrameOrientation, FixedList512Bytes<Constraint> constraints)
+        {
+            if (constraints.IsEmpty)
+                return; // don't create empty joints
+
+            var bodyAFromJoint = new BodyFrame {};
+            var bodyBFromJoint = new BodyFrame {};
+            SetupBodyFrames(jointFrameOrientation, joint, ref bodyAFromJoint, ref bodyBFromJoint);
+
+            var block = new FixedList512Bytes<Constraint>();
+
+            // A block can have up to three constraints, so that's why we're grouping in three.
+            for (int i = 0; i < constraints.Length; i += 3)
+            {
+                block.Clear();
+
+                int countInBlock = math.min(constraints.Length - i, 3);
+
+                for (int j = i; j < i + countInBlock; ++j)
+                    block.Add(constraints[j]);
+
+                var thisJoint = new PhysicsJoint();
+                thisJoint.SetConstraints(block);
+                thisJoint.BodyAFromJoint = bodyAFromJoint;
+                thisJoint.BodyBFromJoint = bodyBFromJoint;
+
+                thisJoint.SetImpulseEventThresholdAllConstraints(
+                    joint.breakForce * Time.fixedDeltaTime,
+                    joint.breakTorque * Time.fixedDeltaTime
+                );
+
+                uint worldIndex = GetWorldIndex(joint);
+                CreateJointEntity(worldIndex, GetConstrainedBodyPair(joint), thisJoint);
+            }
+        }
+
+        void ConvertLinearDofs(UnityEngine.ConfigurableJoint joint, float constrainedMass, quaternion jointFrameOrientation, ref FixedList512Bytes<Constraint> constraints)
+        {
+            var linearLocks = GetAxesWithMotionType(ConfigurableJointMotion.Locked, joint.xMotion, joint.yMotion, joint.zMotion);
+            var linearLimited = GetAxesWithMotionType(ConfigurableJointMotion.Limited, joint.xMotion, joint.yMotion, joint.zMotion);
+
+            IdentifyIfLinearMotor(joint, out bool3 isPositionMotor, out bool3 isLinearVelocityMotor, out float3 maxForceForLinearMotor);
+
+            Assert.IsTrue(math.csum(new int3(isLinearVelocityMotor)) <= 1, $"Unity.Physics doesn't fully support double and triple motorization of linear velocity at the moment, only one of those motors will work, game object {joint.name}");
+
+            if (math.any(linearLocks))
+            {
+                constraints.Add(new Constraint
+                {
+                    ConstrainedAxes = linearLocks,
+                    Type = ConstraintType.Linear,
+                    Min = 0, // if it's locked, then it's locked at zero
+                    Max = 0,
+                    SpringFrequency = Constraint.DefaultSpringFrequency,
+                    DampingRatio = Constraint.DefaultDampingRatio,
+                    MaxImpulse = joint.breakForce * Time.fixedDeltaTime
+                });
+            }
+
+            if (math.any(linearLimited))
+            {
+                ConvertSpringDamperSettings(joint.linearLimitSpring.spring, joint.linearLimitSpring.damper, constrainedMass, out float springFrequency, out float dampingRatio);
+
+                constraints.Add(new Constraint
+                {
+                    ConstrainedAxes = linearLimited,
+                    Type = ConstraintType.Linear,
+                    Min = 0,
+                    Max = joint.linearLimit.limit,
+                    SpringFrequency = springFrequency,
+                    DampingRatio = dampingRatio,
+                    MaxImpulse = joint.breakForce * Time.fixedDeltaTime
+                });
+            }
+
+            float3 linearStiffness = new float3(joint.xDrive.positionSpring, joint.yDrive.positionSpring, joint.zDrive.positionSpring);
+            float3 linearDamping = new float3(joint.xDrive.positionDamper, joint.yDrive.positionDamper, joint.zDrive.positionDamper);
+
+            for (int axis = 0; axis < 3; ++axis)
+            {
+                if (!isPositionMotor[axis] && !isLinearVelocityMotor[axis])
+                    continue; // skip axis if no position and no velocity drive either
+
+                if (linearLocks[axis])
+                    continue; // skip if this axis is locked
+
+                ConvertSpringDamperSettings(linearStiffness[axis], linearDamping[axis], constrainedMass, out float motorFrequency, out float motorDampingRatio);
+
+                constraints.Add(new Constraint
+                {
+                    ConstrainedAxes = new bool3(axis == 0, axis == 1, axis == 2),
+                    Type = isPositionMotor[axis] ? ConstraintType.PositionMotor : ConstraintType.LinearVelocityMotor,
+                    Min = -math.INFINITY, // looks like the limits should be enforced by the limit spring instead of the hard limit here
+                    Max = math.INFINITY,
+                    SpringFrequency = motorFrequency,
+                    DampingRatio = motorDampingRatio,
+                    MaxImpulse = maxForceForLinearMotor * Time.fixedDeltaTime,
+                    Target = isPositionMotor[axis] ? -joint.targetPosition : -joint.targetVelocity,
+                });
+            }
+        }
+
+        void ConvertAngularDofs(UnityEngine.ConfigurableJoint joint, float constrainedMass, quaternion jointFrameOrientation, ref FixedList512Bytes<Constraint> constraints)
+        {
+            var angularLocks = GetAxesWithMotionType(ConfigurableJointMotion.Locked, joint.angularXMotion, joint.angularYMotion, joint.angularZMotion);
+            var angularLimited = GetAxesWithMotionType(ConfigurableJointMotion.Limited, joint.angularXMotion, joint.angularYMotion, joint.angularZMotion);
+
+            IdentifyIfAngularMotor(joint, out bool3 isRotationMotor, out bool3 isAngularVelocityMotor, out float3 maxForceForAngularMotor);
+
+            Assert.IsTrue(joint.rotationDriveMode != RotationDriveMode.Slerp, $"Slerp drive mode is not supported by the conversion at the moment, defaulting to twist and swing instead, game object {joint.name}");
+
+            if (math.any(angularLocks))
+            {
+                constraints.Add(new Constraint
+                {
+                    ConstrainedAxes = angularLocks,
+                    Type = ConstraintType.Angular,
+                    Min = 0, // if it's locked, then it's locked at zero
+                    Max = 0,
+                    SpringFrequency = Constraint.DefaultSpringFrequency,
+                    DampingRatio = Constraint.DefaultDampingRatio,
+                    MaxImpulse = joint.breakForce * Time.fixedDeltaTime
+                });
+            }
+
+            if (math.any(angularLimited))
+            {
+                // have to do angular limits per axis, unfortunately, because of the twist-swing thing that is asymmetric
+                if (angularLimited.x)
+                {
+                    ConvertSpringDamperSettings(joint.angularXLimitSpring.spring, joint.angularXLimitSpring.damper, constrainedMass, out float springFrequencyX, out float dampingRatioX);
+
+                    constraints.Add(new Constraint
+                    {
+                        ConstrainedAxes = new bool3(true, false, false),
+                        Type = ConstraintType.Angular,
+                        Min = -math.radians(joint.highAngularXLimit.limit),
+                        Max = -math.radians(joint.lowAngularXLimit.limit),
+                        SpringFrequency = springFrequencyX,
+                        DampingRatio = dampingRatioX,
+                        MaxImpulse = joint.breakForce * Time.fixedDeltaTime
+                    });
+                }
+
+                if (angularLimited.y)
+                {
+                    ConvertSpringDamperSettings(joint.angularYZLimitSpring.spring, joint.angularYZLimitSpring.damper, constrainedMass, out float springFrequencyYZ, out float dampingRatioYZ);
+
+                    constraints.Add(new Constraint
+                    {
+                        ConstrainedAxes = new bool3(false, true, false),
+                        Type = ConstraintType.Angular,
+                        Min = -math.radians(joint.angularYLimit.limit),
+                        Max = math.radians(joint.angularYLimit.limit),
+                        SpringFrequency = springFrequencyYZ,
+                        DampingRatio = dampingRatioYZ,
+                        MaxImpulse = joint.breakForce * Time.fixedDeltaTime
+                    });
+                }
+
+                if (angularLimited.z)
+                {
+                    ConvertSpringDamperSettings(joint.angularYZLimitSpring.spring, joint.angularYZLimitSpring.damper, constrainedMass, out float springFrequencyYZ, out float dampingRatioYZ);
+
+                    constraints.Add(new Constraint
+                    {
+                        ConstrainedAxes = new bool3(false, false, true),
+                        Type = ConstraintType.Angular,
+                        Min = -math.radians(joint.angularZLimit.limit),
+                        Max = math.radians(joint.angularZLimit.limit),
+                        SpringFrequency = springFrequencyYZ,
+                        DampingRatio = dampingRatioYZ,
+                        MaxImpulse = joint.breakForce * Time.fixedDeltaTime
+                    });
+                }
+            }
+
+            // the above branch creates up to three constraints, despite having constraint creation in four spots
+            // proof: assume an axis is locked, then it can't be limited at the same time
+
+            float3 angularStiffness = new float3(joint.angularXDrive.positionSpring, joint.angularYZDrive.positionSpring, joint.angularYZDrive.positionSpring);
+            float3 angularDamping = new float3(joint.angularXDrive.positionDamper, joint.angularYZDrive.positionDamper, joint.angularYZDrive.positionDamper);
+
+            for (int axis = 0; axis < 3; ++axis)
+            {
+                if (!isRotationMotor[axis] && !isAngularVelocityMotor[axis])
+                    continue; // skip axis if no position and no velocity drive either
+
+                if (angularLocks[axis])
+                    continue; // skip if this axis is locked
+
+                ConvertSpringDamperSettings(angularStiffness[axis], angularDamping[axis], constrainedMass, out float motorFrequency, out float motorDampingRatio);
+
+                constraints.Add(new Constraint
+                {
+                    ConstrainedAxes = new bool3(axis == 0, axis == 1, axis == 2),
+                    Type = isRotationMotor[axis] ? ConstraintType.RotationMotor : ConstraintType.AngularVelocityMotor,
+                    Min = -math.INFINITY,
+                    Max = math.INFINITY,
+                    SpringFrequency = motorFrequency,
+                    DampingRatio = motorDampingRatio,
+                    MaxImpulse = maxForceForAngularMotor * Time.fixedDeltaTime,
+                    Target = isRotationMotor[axis] ? -math.radians(joint.targetRotation.eulerAngles) : joint.targetAngularVelocity,
+                });
+            }
+        }
+
         void ConvertConfigurableJoint(UnityEngine.ConfigurableJoint joint)
         {
-            var linearLocks =
-                GetAxesWithMotionType(ConfigurableJointMotion.Locked, joint.xMotion, joint.yMotion, joint.zMotion);
-            var linearLimited =
-                GetAxesWithMotionType(ConfigurableJointMotion.Limited, joint.xMotion, joint.yMotion, joint.zMotion);
-            var angularFree =
-                GetAxesWithMotionType(ConfigurableJointMotion.Free, joint.angularXMotion, joint.angularYMotion, joint.angularZMotion);
-            var angularLocks =
-                GetAxesWithMotionType(ConfigurableJointMotion.Locked, joint.angularXMotion, joint.angularYMotion, joint.angularZMotion);
-            var angularLimited =
-                GetAxesWithMotionType(ConfigurableJointMotion.Limited, joint.angularXMotion, joint.angularYMotion, joint.angularZMotion);
-
             var jointFrameOrientation = GetJointFrameOrientation(joint.axis, joint.secondaryAxis);
 
-            // Determine if a motor is present:
-            bool requiredDoF_forLinearMotors = math.any(linearLocks) && math.all(angularLocks) && math.all(!linearLimited);
-            bool requiredDoF_forAngularMotors = math.all(linearLocks) && math.any(angularLocks) && math.all(!linearLimited);
+            // Let's run some estimations.
+            // 1. The worst case for linear dofs is all three limited, and all three driven, this results in 1 + 3 constraints.
+            // 2. The worst case for angular dofs is all three limited, and all three driven too. This results in 3 + 3 constraints.
+            // 3. Thus, in total we can have up to 4 + 6 = 10 constraints.
+            // 4. sizeof(Constraint) is 44 bytes aligned as float, so a fixed size list can hold up to 11 constraints max.
+            // 5. Conclude that one fixed list is enough for the worst case.
+            var allConstraints = new FixedList512Bytes<Constraint>();
 
-            // Motor authoring ONLY on X Drive (primary Axis aligned). Drive settings on Y Drive or Z Drive will not function.
-            IdentifyIfLinearMotor(joint.xDrive, joint.yDrive, joint.zDrive, joint.name,
-                joint.targetPosition, joint.targetVelocity,
-                out bool3 isPositionMotor, out bool3 isLinearVelocityMotor, out float3 maxForceForLinearMotor);
+            ConvertLinearDofs(joint, GetConstrainedBodyMass(joint), jointFrameOrientation, ref allConstraints);
+            ConvertAngularDofs(joint, GetConstrainedBodyInertia(joint), jointFrameOrientation, ref allConstraints);
 
-            // Motor authoring ONLY on Angular X Drive (primary Axis aligned). Drive settings on Angular YZ Drive will not function.
-            JointDrive angularXDrive;
-            JointDrive angularYZDrive;
-            if (joint.rotationDriveMode == RotationDriveMode.XYAndZ)
-            {
-                angularXDrive = joint.angularXDrive;
-                angularYZDrive = joint.angularYZDrive;
-            }
-            else
-            {
-                angularXDrive = angularYZDrive = joint.slerpDrive;
-            }
-            IdentifyIfAngularMotor(angularXDrive, angularYZDrive, joint.name,
-                joint.targetRotation, joint.targetAngularVelocity,
-                out bool3 isRotationMotor, out bool3 isAngularVelocityMotor, out float3 maxForceForAngularMotor);
-
-            // If any motor is present, bake as a motor. Otherwise bake as a joint.
-            PhysicsJoint motorJointData;
-            uint worldIndex;
-            bool isMotor = false;
-            if (math.any(isPositionMotor))
-            {
-                isMotor = true;
-                // To simplify conversion require: X Motion = Free. Y&Z Motion = Locked. Angular X/Y/Z = Locked. Axis field determines rotation
-                if (requiredDoF_forLinearMotors)
-                {
-                    Assert.IsTrue(linearLocks.y && linearLocks.z,
-                        $"Configurable Joint Baking Failed for {joint.name}: Baking Motor as Position Motor requires that both Y Drive = Locked, Z Drive = Locked");
-                    var maxImpulseForLinearMotor = math.length((int3)isPositionMotor * maxForceForLinearMotor) * Time.fixedDeltaTime;
-                    float3 targetVector = (int3)isPositionMotor * (float3)joint.targetPosition;
-                    var target = targetVector.x * -1; //need -1: PhysX sets target as offset from the target, whereas ECS Physics targets target as where to go
-
-                    var bakedSpring = joint.xDrive.positionSpring;
-                    var bakedDamper = joint.xDrive.positionDamper;
-
-                    motorJointData = ConvertMotor(jointFrameOrientation, joint, JacobianType.PositionMotor, target,
-                        maxImpulseForLinearMotor, bakedSpring, bakedDamper);
-                    motorJointData.SetImpulseEventThresholdAllConstraints(
-                        joint.breakForce * Time.fixedDeltaTime,
-                        joint.breakTorque * Time.fixedDeltaTime);
-
-                    worldIndex = GetWorldIndex(joint);
-                    CreateJointEntity(worldIndex, GetConstrainedBodyPair(joint), motorJointData);
-                }
-            }
-
-            if (math.any(isLinearVelocityMotor))
-            {
-                isMotor = true;
-                // To simplify conversion require: X Motion = Free. Y&Z Motion = Locked. Angular X/Y/Z = Locked. Axis field determines rotation
-                if (requiredDoF_forLinearMotors)
-                {
-                    Assert.IsTrue(linearLocks.y && linearLocks.z,
-                        $"Configurable Joint Baking Failed for {joint.name}: Baking Motor as Linear Velocity Motor requires that both Y Drive = Locked, Z Drive = Locked");
-
-                    var maxImpulseForLinearMotor = math.length((int3)isLinearVelocityMotor * maxForceForLinearMotor) * Time.fixedDeltaTime;
-                    float3 targetVector = (int3)isLinearVelocityMotor * (float3)joint.targetVelocity;
-                    var target = targetVector.x * -1; //need -1: PhysX sets target as offset from the target, whereas ECS Physics targets target as where to go
-
-                    var bakedSpring = joint.xDrive.positionSpring;
-                    var bakedDamper = joint.xDrive.positionDamper;
-
-                    motorJointData = ConvertMotor(jointFrameOrientation, joint, JacobianType.LinearVelocityMotor, target,
-                        maxImpulseForLinearMotor, bakedSpring, bakedDamper);
-                    motorJointData.SetImpulseEventThresholdAllConstraints(
-                        joint.breakForce * Time.fixedDeltaTime,
-                        joint.breakTorque * Time.fixedDeltaTime);
-
-                    worldIndex = GetWorldIndex(joint);
-                    CreateJointEntity(worldIndex, GetConstrainedBodyPair(joint), motorJointData);
-                }
-            }
-
-            if (math.any(isRotationMotor))
-            {
-                isMotor = true;
-                // To simplify conversion require: Angular X Motion = Free. Angular Y&Z = Locked. X/Y/Z Motion = Locked.  Axis field determines rotation
-                if (requiredDoF_forAngularMotors)
-                {
-                    Assert.IsTrue(angularLocks.y && angularLocks.z,
-                        $"Configurable Joint Baking Failed for {joint.name}: Baking Motor as Rotation Motor requires that both Angular Y Drive = Locked, Angular Z Drive = Locked");
-
-                    var maxImpulseForAngularMotor = math.length((int3)isRotationMotor * maxForceForAngularMotor) * Time.fixedDeltaTime;
-                    float3 targetVector = (int3)isRotationMotor * (float3)joint.targetRotation.eulerAngles; //in degrees, targetRotation a Quaternion
-                    var target = math.radians(targetVector.x) * -1; //need -1: PhysX sets target as offset from the target, whereas ECS Physics targets target as where to go
-
-                    var bakedSpring = joint.angularXDrive.positionSpring;
-                    var bakedDamper = joint.angularXDrive.positionDamper;
-                    motorJointData = ConvertMotor(jointFrameOrientation, joint, JacobianType.RotationMotor, target,
-                        maxImpulseForAngularMotor, bakedSpring, bakedDamper);
-
-                    motorJointData.SetImpulseEventThresholdAllConstraints(
-                        joint.breakForce * Time.fixedDeltaTime,
-                        joint.breakTorque * Time.fixedDeltaTime);
-
-                    worldIndex = GetWorldIndex(joint);
-                    CreateJointEntity(worldIndex, GetConstrainedBodyPair(joint), motorJointData);
-                }
-            }
-
-            if (math.any(isAngularVelocityMotor))
-            {
-                isMotor = true;
-                // To simplify conversion require: Angular X Motion = Free. Angular Y&Z = Locked. X/Y/Z Motion = Locked.  Axis field determines rotation
-                if (requiredDoF_forAngularMotors)
-                {
-                    Assert.IsTrue(angularLocks.y && angularLocks.z,
-                        $"Configurable Joint Baking Failed for {joint.name}: Baking Motor as Angular Velocity Motor requires that both Angular Y Drive = Locked, Angular Z Drive = Locked");
-
-                    var maxImpulseForAngularMotor = math.length((int3)isAngularVelocityMotor * maxForceForAngularMotor) * Time.fixedDeltaTime;
-                    float3 targetVector = (int3)isAngularVelocityMotor * (float3)joint.targetAngularVelocity; //target in radian/s
-                    var target = targetVector.x;
-
-                    var bakedSpring = joint.angularXDrive.positionSpring;
-                    var bakedDamper = joint.angularXDrive.positionDamper;
-                    motorJointData = ConvertMotor(jointFrameOrientation, joint, JacobianType.AngularVelocityMotor, target,
-                        maxImpulseForAngularMotor, bakedSpring, bakedDamper);
-
-                    motorJointData.SetImpulseEventThresholdAllConstraints(
-                        joint.breakForce * Time.fixedDeltaTime,
-                        joint.breakTorque * Time.fixedDeltaTime);
-
-                    worldIndex = GetWorldIndex(joint);
-                    CreateJointEntity(worldIndex, GetConstrainedBodyPair(joint), motorJointData);
-                }
-            }
-
-            if (!isMotor)
-            {
-                var jointData = CreateConfigurableJoint(jointFrameOrientation, joint, linearLocks, linearLimited,
-                    joint.linearLimit, joint.linearLimitSpring, angularFree, angularLocks, angularLimited,
-                    joint.lowAngularXLimit, joint.highAngularXLimit, joint.angularXLimitSpring, joint.angularYLimit,
-                    joint.angularZLimit, joint.angularYZLimitSpring);
-
-                worldIndex = GetWorldIndex(joint);
-                using (var joints = new NativeArray<PhysicsJoint>(2, Allocator.Temp) { [0] = jointData.LinearJoint, [1] = jointData.AngularJoint })
-                using (var jointEntities = new NativeList<Entity>(2, Allocator.Temp))
-                {
-                    CreateJointEntities(worldIndex, GetConstrainedBodyPair(joint), joints, jointEntities);
-                }
-            }
+            // Once constraints are ready, we group them in minimal amount of blocks
+            CreateJointEntityBlocks(joint, jointFrameOrientation, allConstraints);
         }
 
         public override void Bake(UnityEngine.ConfigurableJoint authoring)
@@ -590,42 +649,45 @@ namespace Unity.Physics.Authoring
             ConvertConfigurableJoint(authoring);
         }
 
-        private void IdentifyIfLinearMotor(JointDrive xDrive, JointDrive yDrive, JointDrive zDrive,
-            string name, float3 targetPosition, float3 targetVelocity,
-            out bool3 isPositionMotor, out bool3 isLinearVelocityMotor, out float3 maxForceForLinearMotor)
+        private void IdentifyIfLinearMotor(UnityEngine.ConfigurableJoint joint, out bool3 isPositionMotor, out bool3 isLinearVelocityMotor, out float3 maxForceForLinearMotor)
         {
+            // shortcuts for the code below
+            float3 targetPosition = joint.targetPosition;
+            float3 targetVelocity = joint.targetVelocity;
+            var xDrive = joint.xDrive;
+            var yDrive = joint.yDrive;
+            var zDrive = joint.zDrive;
+            var name = joint.name;
+
             CheckPerAxis(targetPosition.x, targetVelocity.x, xDrive.positionSpring, xDrive.positionDamper, xDrive.maximumForce, name,
                 out isPositionMotor.x, out isLinearVelocityMotor.x);
 
-            //CheckPerAxis(targetPosition.y, targetVelocity.y, yDrive.positionSpring, yDrive.positionDamper, yDrive.maximumForce, name,
-            //    out isPositionMotor.y, out isVelocityMotor.y);
-            isPositionMotor.y = false;
-            isLinearVelocityMotor.y = false;
+            CheckPerAxis(targetPosition.y, targetVelocity.y, yDrive.positionSpring, yDrive.positionDamper, yDrive.maximumForce, name,
+                out isPositionMotor.y, out isLinearVelocityMotor.y);
 
-            //CheckPerAxis(targetPosition.z, targetVelocity.z, zDrive.positionSpring, zDrive.positionDamper, zDrive.maximumForce, name,
-            //    out isPositionMotor.z, out isVelocityMotor.z);
-            isPositionMotor.z = false;
-            isLinearVelocityMotor.z = false;
+            CheckPerAxis(targetPosition.z, targetVelocity.z, zDrive.positionSpring, zDrive.positionDamper, zDrive.maximumForce, name,
+                out isPositionMotor.z, out isLinearVelocityMotor.z);
 
             maxForceForLinearMotor = new float3(xDrive.maximumForce, yDrive.maximumForce, zDrive.maximumForce);
         }
 
-        private void IdentifyIfAngularMotor(JointDrive xDrive, JointDrive yzDrive,
-            string name, quaternion targetPosition, float3 targetVelocity,
-            out bool3 isPositionMotor, out bool3 isVelocityMotor, out float3 maxForceForMotor)
+        private void IdentifyIfAngularMotor(UnityEngine.ConfigurableJoint joint, out bool3 isPositionMotor, out bool3 isVelocityMotor, out float3 maxForceForMotor)
         {
-            CheckPerAxis(targetPosition.value.x, targetVelocity.x, xDrive.positionSpring, xDrive.positionDamper, xDrive.maximumForce, name,
+            // shortcuts for the code below
+            quaternion targetRotation = joint.targetRotation;
+            float3 targetVelocity = joint.targetAngularVelocity;
+            var xDrive = joint.angularXDrive;
+            var yzDrive = joint.angularYZDrive;
+            var name = joint.name;
+
+            CheckPerAxis(targetRotation.value.x, targetVelocity.x, xDrive.positionSpring, xDrive.positionDamper, xDrive.maximumForce, name,
                 out isPositionMotor.x, out isVelocityMotor.x);
 
-            //CheckPerAxis(targetPosition.y, targetVelocity.y, yzDrive.positionSpring, yzDrive.positionDamper, yzDrive.maximumForce, name,
-            //    out isPositionMotor.y, out isVelocityMotor.y);
-            isPositionMotor.y = false;
-            isVelocityMotor.y = false;
+            CheckPerAxis(targetRotation.value.y, targetVelocity.y, yzDrive.positionSpring, yzDrive.positionDamper, yzDrive.maximumForce, name,
+                out isPositionMotor.y, out isVelocityMotor.y);
 
-            //CheckPerAxis(targetPosition.z, targetVelocity.z, yzDrive.positionSpring, yzDrive.positionDamper, yzDrive.maximumForce, name,
-            //    out isPositionMotor.z, out isVelocityMotor.z);
-            isPositionMotor.z = false;
-            isVelocityMotor.z = false;
+            CheckPerAxis(targetRotation.value.z, targetVelocity.z, yzDrive.positionSpring, yzDrive.positionDamper, yzDrive.maximumForce, name,
+                out isPositionMotor.z, out isVelocityMotor.z);
 
             maxForceForMotor = new float3(xDrive.maximumForce, yzDrive.maximumForce, yzDrive.maximumForce);
         }

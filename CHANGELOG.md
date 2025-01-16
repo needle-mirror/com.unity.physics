@@ -4,6 +4,23 @@ uid: unity-physics-changelog
 
 # Changelog
 
+## [1.3.9] - 2025-01-16
+
+### Added
+
+* Added function `PhysicsVelocity.ApplyAngularImpulseWorldSpace` for applying angular impulse in world space
+
+### Changed
+
+* New ConfigurableJoint baking code that is capable of converting motors about all axes, not just X
+* ConfigurableJoint baking won't create empty UnityJoint (with no constraints) for unlocked linear and angular degrees of freedom
+
+### Fixed
+
+* The `Enable Integrity Checks` setting in the `Project Settings` under `Physics -> Unity Physics` now correctly reflects whether the integrity checks are enabled or disabled. Previously, the setting indicated the opposite.
+
+
+
 ## [1.3.8] - 2024-11-08
 
 
@@ -15,6 +32,7 @@ uid: unity-physics-changelog
 
 * Prevent collision instabilities with thin boxes through better choice of bevel radius when baking `Unity.Physics.BoxColliders` from built-in `BoxCollider` authoring components. Previously, the baked box could have collapsed to a quad due to excessive bevel radii, causing vibrations in the collision resolution.
 * Fixed an issue with collisions not getting re-enabled in Havok when deleting a joint that was disabling collisions between the affected rigid body pair.
+
 
 
 ## [1.3.5] - 2024-10-04

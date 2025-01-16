@@ -10,7 +10,7 @@ namespace Unity.Physics.Tests.Systems
 {
     class BuildBroadphase_UnitTests
     {
-        void BuildPhysicsWorld(SystemHandle buildPhysicsWorld, World world)
+        static void BuildPhysicsWorld(SystemHandle buildPhysicsWorld, World world)
         {
             buildPhysicsWorld.Update(world.Unmanaged);
             var jobHandle = world.Unmanaged.ResolveSystemStateRef(buildPhysicsWorld).Dependency;
@@ -18,10 +18,10 @@ namespace Unity.Physics.Tests.Systems
             Assert.IsTrue(jobHandle.IsCompleted);
         }
 
-        NativeArray<Entity> CreateRigidBodies(World world, int numGroups, BlobAssetReference<Collider> collider,
+        static NativeArray<Entity> CreateRigidBodies(World world, int numGroups, BlobAssetReference<Collider> collider,
             bool injectTemporalCoherenceData)
         {
-            var entities = new NativeArray<Entity>(numGroups * 3, Allocator.Persistent);
+            var entities = new NativeArray<Entity>(numGroups * 3, Allocator.Temp);
             // create distinct groups of three overlapping rigid bodies, one static and two dynamic.
             for (int i = 0; i < numGroups; ++i)
             {
@@ -55,12 +55,12 @@ namespace Unity.Physics.Tests.Systems
             return entities;
         }
 
-        unsafe void ValidateTree(Broadphase.Tree tree, int numExpectedElements)
+        static unsafe void ValidateTree(Broadphase.Tree tree, int numExpectedElements)
         {
             tree.BoundingVolumeHierarchy.CheckIntegrity(numExpectedElements, tree.BodyFilters.GetUnsafePtr());
         }
 
-        void ValidateBroadphase(Broadphase broadphase, int numGroups, bool incrementalStatic)
+        static void ValidateBroadphase(Broadphase broadphase, int numGroups, bool incrementalStatic)
         {
             int numDynamicBodies = numGroups * 2;
             ValidateTree(broadphase.DynamicTree, numDynamicBodies);
