@@ -307,7 +307,7 @@ namespace Unity.Physics
 
         public bool AddHit(T hit)
         {
-            if ((m_IgnoreTriggers && (hit.Material.CollisionResponse == CollisionResponsePolicy.RaiseTriggerEvents)) || (hit.Entity == m_EntityToIgnore))
+            if ((m_IgnoreTriggers && (hit.Material.CollisionResponse == CollisionResponsePolicy.RaiseTriggerEvents)) || (m_EntityToIgnore != Entity.Null && hit.Entity == m_EntityToIgnore))
             {
                 return false;
             }

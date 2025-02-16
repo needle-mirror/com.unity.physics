@@ -4,6 +4,22 @@ uid: unity-physics-changelog
 
 # Changelog
 
+## [1.4.5] - 2025-02-16
+
+### Added
+
+
+### Changed
+
+* Updated `com.unity.burst` dependency to version `1.8.27`
+
+### Fixed
+
+* Make sure the `Collider` query functions `CheckSphere`, `CheckBox` and `CheckCapsule` work properly when using `QueryInteraction.IgnoreTriggers` as query interaction.
+
+### Security
+
+
 ## [1.4.4] - 2025-12-16
 
 

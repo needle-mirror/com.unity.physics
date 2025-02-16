@@ -1,5 +1,7 @@
+using System;
 using System.Diagnostics;
 using Unity.Burst;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
 using static Unity.Physics.Math;
 
@@ -17,7 +19,6 @@ namespace Unity.Physics
 
             public const uint InvalidSimplexVertex = 0xffffffff;
 
-            public bool Valid => math.all(ClosestPoints.NormalInA == new float3(0));
             public int SimplexDimension => Simplex.z == InvalidSimplexVertex ? (Simplex.y == InvalidSimplexVertex ? 1 : 2) : 3;
 
             public int SimplexVertexA(int index) => (int)(Simplex[index] >> 16);
@@ -450,10 +451,7 @@ namespace Unity.Physics
                     Plane closestPlane = new Plane();
                     float stopThreshold = 1e-4f;
                     uint* uidsCache = stackalloc uint[triangleCapacity];
-                    for (int i = 0; i < triangleCapacity; i++)
-                    {
-                        uidsCache[i] = 0;
-                    }
+                    UnsafeUtility.MemClear(uidsCache, sizeof(uint) * triangleCapacity);
                     float* distancesCache = stackalloc float[triangleCapacity];
                     do
                     {

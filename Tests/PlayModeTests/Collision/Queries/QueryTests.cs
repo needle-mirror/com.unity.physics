@@ -1038,5 +1038,39 @@ namespace Unity.Physics.Tests.Collision.Queries
             var contacts = contactStream.ToNativeArray<ContactHeader>(Allocator.Temp);
             Assert.Greater(contacts.Length, 0);
         }
+
+        [Test]
+        public void ColliderCheckSphereTest([Values] ColliderType colliderType, [Values] QueryInteraction queryInteraction)
+        {
+            var random = new Random(42);
+            using var collider = TestUtils.GenerateRandomCollider(ref random, colliderType);
+            var bounds = collider.Value.CalculateAabb();
+
+            var hit = collider.Value.CheckSphere(bounds.Center, math.cmax(bounds.Extents), CollisionFilter.Default, queryInteraction);
+            Assert.IsTrue(hit);
+        }
+
+        [Test]
+        public void ColliderCheckBoxTest([Values] ColliderType colliderType, [Values] QueryInteraction queryInteraction)
+        {
+            var random = new Random(42);
+            using var collider = TestUtils.GenerateRandomCollider(ref random, colliderType);
+            var bounds = collider.Value.CalculateAabb();
+
+            var hit = collider.Value.CheckBox(center: bounds.Center, orientation: quaternion.identity, halfExtents: bounds.Extents / 2f, CollisionFilter.Default, queryInteraction);
+            Assert.IsTrue(hit);
+        }
+
+        [Test]
+        public void ColliderCheckCapsuleTest([Values] ColliderType colliderType, [Values] QueryInteraction queryInteraction)
+        {
+            var random = new Random(42);
+            using var collider = TestUtils.GenerateRandomCollider(ref random, colliderType);
+            var bounds = collider.Value.CalculateAabb();
+
+            var axis = bounds.Extents / 2f;
+            var hit = collider.Value.CheckCapsule(bounds.Center - axis, bounds.Center + axis, math.cmax(bounds.Extents), CollisionFilter.Default, queryInteraction);
+            Assert.IsTrue(hit);
+        }
     }
 }

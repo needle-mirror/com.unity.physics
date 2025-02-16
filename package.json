@@ -3,9 +3,9 @@
   "category": "Unity",
   "description": "Unity's C# stateless physics library.\n\nBuilt on top of the Unity C# ECS framework, Unity Physics is network-ready, completely customizable, and built for performance out of the box. Whether you're building the next mobile hit or a new networked multiplayer console experience, Unity Physics leverages the Burst compiler and Job system to scale across a range of hardware.",
   "dependencies": {
-    "com.unity.burst": "1.8.25",
-    "com.unity.collections": "2.6.4",
-    "com.unity.entities": "1.4.4",
+    "com.unity.burst": "1.8.27",
+    "com.unity.collections": "2.6.5",
+    "com.unity.entities": "1.4.5",
     "com.unity.mathematics": "1.3.2",
     "com.unity.test-framework": "1.4.6",
     "com.unity.modules.imgui": "1.0.0",
@@ -18,7 +18,7 @@
   "name": "com.unity.physics",
   "unity": "2022.3",
   "unityRelease": "20f1",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "samples": [
     {
       "displayName": "Custom Physics Authoring",
@@ -28,15 +28,15 @@
     }
   ],
   "_upm": {
-    "changelog": "### Changed\n\n* Updated the Burst dependency to version 1.8.25\n* Updated the `com.unity.entities` dependency to version `1.4.4`\n\n### Fixed\n\n* `CollisionFilter.IsEmpty` now correctly accounts for the `CollisionFilter.GroupIndex` value.\n* Fixed a bug when calling StepImmediate while using a SimulationStepInput struct which did not specify NumSubsteps would result in incorrect simulation. This would be observed for a project using StepImmediate that was created pre v1.4\n* Correctly set Connected Anchor of built-in joints in baked entity prefabs when Auto Configure Connected Anchor is enabled.\n* The `BoxCollider.BakeTransform` method now correctly limits the box bevel radius to half the minimum size of the new box, preventing invalid box collider properties.\n* Ensure that `PhysicsColliders` are unique when they are baked from unique `Physics Shape` or built-in `Collider` authoring components that are located within `GameObject` prefab instances. This fix addresses a regression introduced in a recent 1.4.x version, which caused baked colliders in this case to not be unique unexpectedly.\n* Make sure that the static broadphase in custom physics worlds is now updated correctly when the \"Shared Static Colliders\" option is used and static colliders are modified (see constructor `CustomPhysicsSystemGroup(uint worldIndex, bool shareStaticColliders)`). Prior to this fix, when moving or modifying the geometry of a static collider, collisions with static colliders would get missed in custom physics worlds.\n* The mass properties of compound colliders containing only polygon colliders now no longer contain NaN values."
+    "changelog": "### Added\n\n\n### Changed\n\n* Updated `com.unity.burst` dependency to version `1.8.27`\n\n### Fixed\n\n* Make sure the `Collider` query functions `CheckSphere`, `CheckBox` and `CheckCapsule` work properly when using `QueryInteraction.IgnoreTriggers` as query interaction.\n\n### Security"
   },
   "upmCi": {
-    "footprint": "17c31552f62309477006520a436828a2363f97ae"
+    "footprint": "51d6c112d18e2c043cb22429ca6d2cc6a99c026e"
   },
   "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.physics@1.4/manual/index.html",
   "repository": {
     "url": "https://github.cds.internal.unity3d.com/unity/dots.git",
     "type": "git",
-    "revision": "57e44ce5b0bcde27ee6efefec8150a8a9726b461"
+    "revision": "9ce7aaae63152f48e04b260300df3a0f662ce2b5"
   }
 }

@@ -1248,6 +1248,22 @@ namespace Unity.Physics.Tests.Utils
             return GenerateRandomCompound(ref rnd, scale); // 2.5% compound
         }
 
+        public static BlobAssetReference<Collider> GenerateRandomCollider(ref Random rnd, ColliderType colliderType)
+        {
+            var scale = 1f;
+            switch (colliderType)
+            {
+                case ColliderType.Mesh:
+                    return GenerateRandomMesh(ref rnd, scale);
+                case ColliderType.Terrain:
+                    return GenerateRandomTerrain(ref rnd, scale);
+                case ColliderType.Compound:
+                    return GenerateRandomCompound(ref rnd, scale);
+                default:
+                    return GenerateRandomConvex(ref rnd, scale);
+            }
+        }
+
         public static unsafe PhysicsWorld GenerateRandomWorld(ref Random rnd, int numBodies, float size, int numThreadsHint)
         {
             // Create the world
