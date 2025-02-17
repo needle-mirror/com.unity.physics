@@ -323,8 +323,11 @@ namespace Unity.Physics.Authoring
             // the baked radius is the user-specified shape radius times the maximum of the scale of the two axes orthogonal to the capsule axis.
             var radius = shape.radius * math.cmax(new float3(lossyScale) { [shape.direction] = 0f });
 
+            // Ensure the capsule height is at least twice the radius to prevent inversion
+            var height = math.max(shape.height * lossyScale[shape.direction], 2f * radius);
+
             // the capsule vertex offset points from the center of the capsule to the top of the capsule's cylindrical center part.
-            var vertexOffset = capsuleAxis * (0.5f * shape.height * lossyScale[shape.direction] - radius);
+            var vertexOffset = capsuleAxis * (0.5f * height - radius);
 
             // finish baking the vertex offset by rotating it with the bake matrix
             vertexOffset = math.rotate(bakeToShape.rotation, vertexOffset);

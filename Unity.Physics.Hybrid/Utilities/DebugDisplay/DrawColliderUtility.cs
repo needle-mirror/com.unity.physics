@@ -237,14 +237,13 @@ namespace Unity.Physics.Authoring
             }
         }
 
-        public static void DrawPrimitiveCapsuleEdges(float radius, float height, float3 center, Quaternion orientation, RigidTransform wfc, ref ColliderGeometry capsuleGeometry, float uniformScale)
+        public static void DrawPrimitiveCapsuleEdges(float radius, float height, float3 center, Quaternion orientation, RigidTransform wfc, float uniformScale)
         {
             var edgesColor = ColorIndex.Green;
-            var shapeScale = new float3(2.0f * radius, height, 2.0f * radius);
-            var capsuleTransform = float4x4.TRS(center * uniformScale, orientation, shapeScale * uniformScale);
+            var capsuleTransform = float4x4.TRS(center * uniformScale, orientation, uniformScale);
             var worldTransform = math.mul(new float4x4(wfc), capsuleTransform);
 
-            var capsuleEdges = capsuleGeometry.EdgesArray;
+            var capsuleEdges = CreateCapsuleWireFrame(Allocator.Temp, radius, height);
             var lineVertices = new NativeArray<float3>(capsuleEdges.Length, Allocator.Temp);
             try
             {
@@ -396,10 +395,8 @@ namespace Unity.Physics.Authoring
         // Create a wireframe capsule with a default orientation along the y-axis. Use the general method of DrawWireArc
         // declared in GizmoUtil.cpp and with CapsuleBoundsHandle.DrawWireframe(). Output is an array that comprises
         // pairs of vertices to be used in the drawing of Capsule Collider Edges.
-        static NativeArray<Vector3> CreateCapsuleWireFrame(Allocator allocator)
+        static NativeArray<Vector3> CreateCapsuleWireFrame(Allocator allocator, float radius = 0.5f, float height = 2.0f)
         {
-            const float radius = 0.5f;
-            const float height = 2.0f;
             const int mHeightAxis = 1; //corresponds to the y-axis
             var center = new float3(0, 0, 0);
 

@@ -4,6 +4,15 @@ uid: unity-physics-changelog
 
 # Changelog
 
+## [1.3.10] - 2025-02-17
+
+### Fixed
+
+* Incorrect vertex orientation during baking process in `Unity.Physics.CapsuleCollider` where vertices were unexpectedly flipped in certain conditions.
+* Visual artifacts in `PhysicsDebugDisplay` where capsule edges were incorrectly rendered when Height < (2 * Radius).
+* Capsule edge stretching in `PhysicsDebugDisplay` that occurred with non-default height-to-radius ratios.
+
+
 ## [1.3.9] - 2025-01-16
 
 ### Added
@@ -20,9 +29,7 @@ uid: unity-physics-changelog
 * The `Enable Integrity Checks` setting in the `Project Settings` under `Physics -> Unity Physics` now correctly reflects whether the integrity checks are enabled or disabled. Previously, the setting indicated the opposite.
 
 
-
 ## [1.3.8] - 2024-11-08
-
 
 ### Removed
 

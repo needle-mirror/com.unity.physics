@@ -149,8 +149,8 @@ namespace Unity.Physics.Authoring
                         center = -0.5f * (vertex1 - vertex0) + vertex1;
                         var axis = vertex1 - vertex0; //axis in wfc-space
                         var colliderOrientation = Quaternion.FromToRotation(Vector3.up, -axis);
-                        height = 0.5f * math.length(axis) + radius;
-                        DrawColliderUtility.DrawPrimitiveCapsuleEdges(radius, height, center, colliderOrientation, worldFromConvex, ref geometries.CapsuleGeometry, uniformScale);
+                        height = math.length(axis) + 2 * radius;
+                        DrawColliderUtility.DrawPrimitiveCapsuleEdges(radius, height, center, colliderOrientation, worldFromConvex, uniformScale);
                         break;
 
                     case ColliderType.Cylinder:

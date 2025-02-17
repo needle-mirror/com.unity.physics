@@ -35,3 +35,5 @@
 * [Modifying simulation behavior](simulation-modification.md)
 * [Simulation results](simulation-results.md)
 * [Glossary](glossary.md)
+* [Troubleshooting](troubleshooting.md)
+  * [Ghost collision](ghost-collision.md)
