@@ -4,6 +4,28 @@ uid: unity-physics-changelog
 
 # Changelog
 
+## [1.4.0-exp.2] - 2025-03-07
+
+### Added
+
+* Added: The Physics Debug Display, previously only supported in the Editor, can now also be enabled in Player builds via the `Physics -> Unity Physics -> Enable Player Debug Display` project setting, or by directly adding the `ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY` scripting define symbol to your Player configuration. This will help debugging physics behavior directly in-game if required.
+
+### Changed
+
+* Updated the `com.unity.burst` dependency to version `1.8.19`
+* RigidBodyAspect and ColliderAspect marked as obsolete along with IAspect.  In order to consolidate our API and improve iteration time, we have decided to remove Aspects in a future major release of Entities. Component and EntityQuery APIs should be used directly in the future instead of Aspects.  Both Entities.ForEach and Aspects will remain supported in 1.x packages of Entities.
+* Updated the `com.unity.test-framework dependency` to version `1.4.6`
+* `PhysicsShapeAuthoring` now enforces a minimum height of 2 * radius for capsule colliders to prevent geometry inversion.
+
+### Removed
+
+* removing various material assets within unity/physics (PhysicsDynamicDebugMaterial.mat and Material.mat (HullGeneration scene)).
+
+### Fixed
+
+* Incorrect capsule debug visualization when using non-default proportions in `PhysicsDebugDisplay`.
+
+
 ## [1.3.10] - 2025-02-17
 
 ### Fixed
@@ -39,7 +61,6 @@ uid: unity-physics-changelog
 
 * Prevent collision instabilities with thin boxes through better choice of bevel radius when baking `Unity.Physics.BoxColliders` from built-in `BoxCollider` authoring components. Previously, the baked box could have collapsed to a quad due to excessive bevel radii, causing vibrations in the collision resolution.
 * Fixed an issue with collisions not getting re-enabled in Havok when deleting a joint that was disabling collisions between the affected rigid body pair.
-
 
 
 ## [1.3.5] - 2024-10-04

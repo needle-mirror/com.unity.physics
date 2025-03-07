@@ -590,6 +590,7 @@ namespace Unity.Physics
         #endregion
 
         #region IAspectQueryable implementation
+        #pragma warning disable CS0618 // Disable Aspects obsolete warnings
 
         /// <summary>   Cast another collider aspect against this <see cref="RigidBody"/>. </summary>
         ///
@@ -705,6 +706,7 @@ namespace Unity.Physics
             }
         }
 
+        #pragma warning restore CS0618
         #endregion
 
         #region private

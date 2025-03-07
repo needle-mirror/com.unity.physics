@@ -1,6 +1,5 @@
 using Unity.Burst;
 using Unity.Collections;
-using Unity.Entities;
 using Unity.Mathematics;
 using static Unity.Physics.Math;
 
@@ -181,7 +180,7 @@ namespace Unity.Physics
 
             if ((jacHeader.Flags & JacobianFlags.EnableImpulseEvents) != 0)
             {
-                HandleImpulseEvent(ref jacHeader, impulse, stepInput.IsLastIteration, ref impulseEventsWriter);
+                HandleImpulseEvent(ref jacHeader, impulse, stepInput.IsLastSubstepAndLastSolverIteration, ref impulseEventsWriter);
             }
         }
 

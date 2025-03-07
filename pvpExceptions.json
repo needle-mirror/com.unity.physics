@@ -61,6 +61,7 @@
       "errors": [
         "Preferences: undocumented",
         "Preferences: IntegrityChecksDisabled: undocumented",
+        "Preferences: DebugDisplayRuntimeEnabled: undocumented",
         "Unity.Physics.Authoring.PhysicsDebugDisplayMode: PreIntegration: undocumented",
         "Unity.Physics.Authoring.PhysicsDebugDisplayMode: PostIntegration: undocumented",
         "Unity.Physics.Systems.PhysicsWorldBuilder: JobHandle ScheduleUpdateMotionData(ref SystemState, ref PhysicsWorldData, JobHandle): missing <returns>"

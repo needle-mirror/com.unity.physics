@@ -1,4 +1,4 @@
-#if UNITY_EDITOR
+#if UNITY_EDITOR || ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY
 
 using UnityEngine;
 using Unity.Collections.LowLevel.Unsafe;
@@ -192,9 +192,11 @@ namespace Unity.DebugDisplay
         internal static float FractionalCellsWide => (float)PixelsWide / kPixelsWide;
         internal static float FractionalCellsTall => (float)PixelsTall / kPixelsTall;
 
-#if UNITY_EDITOR
+#if UNITY_EDITOR || ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY
         internal static string debugDirName =
             "Packages/com.unity.physics/Unity.Physics.Hybrid/Assets/DebugDisplay/DebugDisplayResources/";
+        internal static string lineMaterialFileName = "LineMaterial";
+        internal static string meshMaterialFileName = "MeshMaterial";
 #endif
 
 
@@ -203,10 +205,13 @@ namespace Unity.DebugDisplay
             Unmanaged.Instance.Data.Initialize();
 
 #if UNITY_EDITOR
-            resources.lineMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(debugDirName, "LineMaterial.mat"));
-            resources.meshMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(debugDirName, "MeshMaterial.mat"));
+            resources.lineMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(debugDirName, $"{lineMaterialFileName}.mat"));
+            resources.meshMaterial = AssetDatabase.LoadAssetAtPath<Material>(Path.Combine(debugDirName, $"{meshMaterialFileName}.mat"));
 
             EditorApplication.wantsToQuit += OnEditorApplicationWantsToQuit;
+#elif ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY
+            resources.lineMaterial = Resources.Load<Material>(lineMaterial);
+            resources.meshMaterial = Resources.Load<Material>(meshMaterial);
 #endif
             AppDomain.CurrentDomain.DomainUnload += OnDomainUnload;
         }
@@ -228,7 +233,7 @@ namespace Unity.DebugDisplay
 
         private void UpdateDynamicColorsData()
         {
-#if ENABLE_PHYSICS && UNITY_EDITOR
+#if (ENABLE_PHYSICS && UNITY_EDITOR) || ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY
             // Update ColorData for meshes
             Unmanaged.Instance.Data.m_ColorData[ColorIndex.DynamicMesh.value] = new float4(
                 PhysicsVisualizationSettings.rigidbodyColor.r,
@@ -254,11 +259,14 @@ namespace Unity.DebugDisplay
 
         internal void CopyFromCpuToGpu()
         {
+#if UNITY_EDITOR || ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY
+            if (resources.meshMaterial == null || resources.lineMaterial == null)
+                return;
+
             const string colorBufferString = "colorBuffer";
             const string positionBufferString = "positionBuffer";
             const string meshBufferString = "meshBuffer";
             const string scalesString = "scales";
-
             // Recreate compute buffer if needed.
 
             // Color Buffer
@@ -297,6 +305,7 @@ namespace Unity.DebugDisplay
             var scales = new float4(1.0f / FractionalCellsWide, 1.0f / FractionalCellsTall, 1.0f / PixelsWide, 1.0f / PixelsTall);
             resources.lineMaterial.SetVector(scalesString, scales);
             resources.meshMaterial.SetVector(scalesString, scales);
+#endif
         }
 
         private bool RecreateBuffer<T>(ref ComputeBuffer computeBuffer, int expectedLength) where T : struct
@@ -325,10 +334,15 @@ namespace Unity.DebugDisplay
 
         internal void Render()
         {
+#if UNITY_EDITOR || ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY
+            if (resources.meshMaterial == null || resources.lineMaterial == null)
+                return;
+
             resources.meshMaterial.SetPass(0);
             Graphics.DrawProceduralNow(MeshTopology.Triangles, m_NumTrianglesToDraw * 3, 1);
             resources.lineMaterial.SetPass(0);
             Graphics.DrawProceduralNow(MeshTopology.Lines, m_NumLinesToDraw * 2, 1);
+#endif
         }
 
         int m_NumLinesToDraw = 0;

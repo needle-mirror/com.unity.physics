@@ -8,6 +8,7 @@ using UnityEngine;
 public static class Preferences
 {
     const string k_DisableIntegrityDefine = "UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS";
+    const string k_EnableDebugDisplayAtRuntime = "ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY";
     const char k_defineSeparator = ';';
 
     public static bool IntegrityChecksDisabled
@@ -16,8 +17,14 @@ public static class Preferences
         set => UpdateDefine(k_DisableIntegrityDefine, value);
     }
 
+    public static bool DebugDisplayRuntimeEnabled
+    {
+        get => DefineExists(k_EnableDebugDisplayAtRuntime, BuildPipeline.GetBuildTargetGroup(EditorUserBuildSettings.activeBuildTarget));
+        set => UpdateDefine(k_EnableDebugDisplayAtRuntime, value);
+    }
+
     [SettingsProvider]
-    private static SettingsProvider IntegrityChecksMenuItem()
+    private static SettingsProvider PhysicsChecksMenuItem()
     {
         var provider = new SettingsProvider("Project/Physics/Unity Physics", SettingsScope.Project)
         {
@@ -25,6 +32,8 @@ public static class Preferences
             keywords = new[] { "Unity Physics", "Physics", "Enable Integrity Checks", "Disable Integrity Checks" },
             guiHandler = (searchContext) =>
             {
+                EditorGUIUtility.labelWidth = 180;
+
                 bool oldEnableIntegrityChecks = !IntegrityChecksDisabled;
                 bool newEnableIntegrityChecks = EditorGUILayout.Toggle(new GUIContent("Enable Integrity Checks",
                     "Integrity checks should be disabled when measuring performance. Integrity checks should be enabled when checking simulation quality and behaviour."),
@@ -32,6 +41,15 @@ public static class Preferences
                 if (newEnableIntegrityChecks != oldEnableIntegrityChecks)
                 {
                     IntegrityChecksDisabled = !newEnableIntegrityChecks;
+                }
+
+                bool oldEnableDebugDisplay = DebugDisplayRuntimeEnabled;
+                bool newEnableDebugDisplay = EditorGUILayout.Toggle(new GUIContent("Enable Player Debug Display",
+                    "Allows debugging physics directly in the Player build. Enable to inspect behavior in-game. Disable for better performance."),
+                    oldEnableDebugDisplay);
+                if (newEnableDebugDisplay != oldEnableDebugDisplay)
+                {
+                    DebugDisplayRuntimeEnabled = newEnableDebugDisplay;
                 }
             }
         };
@@ -89,9 +107,9 @@ public static class Preferences
         }
     }
 
-    private static bool DefineExists(string define)
+    private static bool DefineExists(string define, BuildTargetGroup buildTargetGroup = BuildTargetGroup.Standalone)
     {
-        var fromBuildTargetGroup = NamedBuildTarget.FromBuildTargetGroup(BuildTargetGroup.Standalone);
+        var fromBuildTargetGroup = NamedBuildTarget.FromBuildTargetGroup(buildTargetGroup);
         var defines = PlayerSettings.GetScriptingDefineSymbols(fromBuildTargetGroup);
         return defines.Contains(define);
     }

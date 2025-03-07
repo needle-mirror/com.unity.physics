@@ -6,7 +6,7 @@ using Unity.Burst;
 
 namespace Unity.Physics.Authoring
 {
-#if UNITY_EDITOR
+#if UNITY_EDITOR || ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY
 
     /// Create and dispatch a DisplayMassPropertiesJob
     [UpdateInGroup(typeof(PhysicsDebugDisplayGroup))]

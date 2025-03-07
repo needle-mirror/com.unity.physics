@@ -9,7 +9,7 @@ using Unity.Transforms;
 
 namespace Unity.Physics.Authoring
 {
-#if UNITY_EDITOR
+#if UNITY_EDITOR || ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY
 
     /// <summary>
     /// A component system group that contains the physics debug display systems.
@@ -53,7 +53,7 @@ namespace Unity.Physics.Authoring
     /// </summary>
     public abstract partial class PhysicsDebugDisplaySystem : SystemBase
     {
-#if UNITY_EDITOR
+#if UNITY_EDITOR || ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY
         GameObject m_DrawComponentGameObject;
 #endif
         class DrawComponent : MonoBehaviour
@@ -66,19 +66,35 @@ namespace Unity.Physics.Authoring
                 Unity.DebugDisplay.DebugDisplay.Render();
 #endif
             }
+
+            private void OnRenderObject()
+            {
+#if ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY
+                System?.CompleteDisplayDataDependencies();
+                Unity.DebugDisplay.DebugDisplay.Render();
+#endif
+            }
+
+            private void OnDestroy()
+            {
+#if ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY
+                //Clearing data in the player.
+                Unity.DebugDisplay.DebugDisplay.Dispose();
+#endif
+            }
         }
 
         protected override void OnCreate()
         {
             RequireForUpdate<PhysicsDebugDisplayData>();
-#if UNITY_EDITOR
+#if UNITY_EDITOR || ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY
             Unity.DebugDisplay.DebugDisplay.Instantiate();
 #endif
         }
 
         protected override void OnStartRunning()
         {
-#if UNITY_EDITOR
+#if UNITY_EDITOR || ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY
             if (m_DrawComponentGameObject == null)
             {
                 m_DrawComponentGameObject = new GameObject("PhysicsDebugDisplaySystem")
@@ -112,7 +128,7 @@ namespace Unity.Physics.Authoring
 
         protected override void OnStopRunning()
         {
-#if UNITY_EDITOR
+#if UNITY_EDITOR || ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY
             if (m_DrawComponentGameObject != null)
             {
                 var drawComponent = m_DrawComponentGameObject.GetComponentInChildren<DrawComponent>();

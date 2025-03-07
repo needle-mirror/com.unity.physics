@@ -10,7 +10,7 @@ using Vector3 = UnityEngine.Vector3;
 
 namespace Unity.Physics.Authoring
 {
-#if UNITY_EDITOR
+#if UNITY_EDITOR || ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY
 
     internal readonly struct ColliderGeometry : IDisposable
     {
@@ -39,6 +39,8 @@ namespace Unity.Physics.Authoring
         internal ColliderGeometry BoxGeometry;
         internal ColliderGeometry CylinderGeometry;
         internal ColliderGeometry SphereGeometry;
+        internal ColliderGeometry OpenHemisphere;
+        internal ColliderGeometry OpenCylinder;
 
         public void Dispose()
         {
@@ -46,6 +48,8 @@ namespace Unity.Physics.Authoring
             BoxGeometry.Dispose();
             CylinderGeometry.Dispose();
             SphereGeometry.Dispose();
+            OpenHemisphere.Dispose();
+            OpenCylinder.Dispose();
         }
     }
 
@@ -161,6 +165,8 @@ namespace Unity.Physics.Authoring
 
         internal static void CreateGeometries(out PrimitiveColliderGeometries primitiveColliderGeometries)
         {
+            CreateGeometryArray(MeshType.OpenCylinder, out var openCylinderGeometry);
+            CreateGeometryArray(MeshType.OpenHemisphere, out var openHemisphereGeometry);
             CreateGeometryArray(MeshType.Capsule, out var capsuleGeometry);
             CreateGeometryArray(MeshType.Cube, out var boxGeometry);
             CreateGeometryArray(MeshType.Cylinder, out var cylinderGeometry);
@@ -171,7 +177,9 @@ namespace Unity.Physics.Authoring
                 CapsuleGeometry = capsuleGeometry,
                 BoxGeometry = boxGeometry,
                 CylinderGeometry = cylinderGeometry,
-                SphereGeometry = sphereGeometry
+                SphereGeometry = sphereGeometry,
+                OpenHemisphere = openHemisphereGeometry,
+                OpenCylinder = openCylinderGeometry
             };
         }
 
@@ -261,25 +269,54 @@ namespace Unity.Physics.Authoring
             }
         }
 
-        public static void DrawPrimitiveCapsuleFaces(float radius, float height, float3 center, Quaternion orientation, RigidTransform wfc, ref ColliderGeometry capsuleGeometry, ColorIndex color, float uniformScale)
+        public static void DrawPrimitiveCapsuleFaces(float radius, float cylinderHeight, float3 center, Quaternion orientation, RigidTransform wfc, ref ColliderGeometry cylinderGeometry, ref ColliderGeometry hemisphereGeometry, ColorIndex color, float uniformScale)
         {
-            var shapeScale = new float3(2.0f * radius, height, 2.0f * radius);
-            var capsuleTransform = float4x4.TRS(center, orientation, uniformScale * shapeScale);
-            var worldTransform = math.mul(new float4x4(wfc), capsuleTransform);
+            // Cylinder
+            var cylinderShapeScale = new float3(2.0f * radius, cylinderHeight, 2.0f * radius);
+            var cylinderTransform = float4x4.TRS(center, orientation, uniformScale * cylinderShapeScale);
+            var cylinderWorldTransform = math.mul(new float4x4(wfc), cylinderTransform);
+            var cylinderVerticesWorld = new NativeArray<float3>(cylinderGeometry.VerticesArray.Length, Allocator.Temp);
 
-            var capsuleVerticesWorld = new NativeArray<float3>(capsuleGeometry.VerticesArray.Length, Allocator.Temp);
+            // Hemispheres at the ends
+            var hemisphereShapeScale = new float3(radius * 2.0f) * uniformScale;
+            var halfHeight = math.rotate(orientation, new float3(0, cylinderHeight * 0.5f, 0));
+
+            // Top hemisphere
+            var topHemisphereTransform = float4x4.TRS(center + halfHeight, orientation, hemisphereShapeScale);
+            var topHemisphereWorldTransform = math.mul(new float4x4(wfc), topHemisphereTransform);
+            var topHemisphereVerticesWorld = new NativeArray<float3>(hemisphereGeometry.VerticesArray.Length, Allocator.Temp);
+
+            // Bottom hemisphere
+            var bottomHemisphereTransform = float4x4.TRS(center - halfHeight, math.mul(orientation, quaternion.RotateX(math.PI)), hemisphereShapeScale);
+            var bottomHemisphereWorldTransform = math.mul(new float4x4(wfc), bottomHemisphereTransform);
+            var bottomHemisphereVerticesWorld = new NativeArray<float3>(hemisphereGeometry.VerticesArray.Length, Allocator.Temp);
+
             try
             {
-                for (int i = 0; i < capsuleVerticesWorld.Length; ++i)
+                for (int i = 0; i < cylinderVerticesWorld.Length; ++i)
                 {
-                    capsuleVerticesWorld[i] = math.transform(worldTransform, capsuleGeometry.VerticesArray[i]);
+                    cylinderVerticesWorld[i] = math.transform(cylinderWorldTransform, cylinderGeometry.VerticesArray[i]);
                 }
 
-                PhysicsDebugDisplaySystem.Triangles(capsuleVerticesWorld, capsuleGeometry.IndicesArray, color);
+                for (int i = 0; i < topHemisphereVerticesWorld.Length; ++i)
+                {
+                    topHemisphereVerticesWorld[i] = math.transform(topHemisphereWorldTransform, hemisphereGeometry.VerticesArray[i]);
+                }
+
+                for (int i = 0; i < bottomHemisphereVerticesWorld.Length; ++i)
+                {
+                    bottomHemisphereVerticesWorld[i] = math.transform(bottomHemisphereWorldTransform, hemisphereGeometry.VerticesArray[i]);
+                }
+
+                PhysicsDebugDisplaySystem.Triangles(cylinderVerticesWorld, cylinderGeometry.IndicesArray, color);
+                PhysicsDebugDisplaySystem.Triangles(topHemisphereVerticesWorld, hemisphereGeometry.IndicesArray, color);
+                PhysicsDebugDisplaySystem.Triangles(bottomHemisphereVerticesWorld, hemisphereGeometry.IndicesArray, color);
             }
             finally
             {
-                capsuleVerticesWorld.Dispose();
+                cylinderVerticesWorld.Dispose();
+                topHemisphereVerticesWorld.Dispose();
+                bottomHemisphereVerticesWorld.Dispose();
             }
         }
 

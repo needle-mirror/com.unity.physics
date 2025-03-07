@@ -587,6 +587,7 @@ namespace Unity.Physics
         #endregion
 
         #region Aspect query impl
+        #pragma warning disable CS0618 // Disable Aspects obsolete warnings
 
         /// <summary>   Cast an aspect against this <see cref="PhysicsWorld"/>. </summary>
         ///
@@ -681,6 +682,7 @@ namespace Unity.Physics
         public bool CalculateDistance<T>(in ColliderAspect colliderAspect, float maxDistance, ref T collector, QueryInteraction queryInteraction = QueryInteraction.Default) where T : struct, ICollector<DistanceHit>
             => CollisionWorld.CalculateDistance(colliderAspect, maxDistance, ref collector, queryInteraction);
 
+        #pragma warning restore CS0618
         #endregion
 
         #endregion

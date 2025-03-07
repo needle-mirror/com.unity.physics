@@ -1,0 +1,11 @@
+{
+    "name": "Unity.Numerics.Memory",
+    "references": [
+        "Unity.Mathematics",
+        "Unity.Burst",
+        "Unity.Collections"
+        ],
+    "allowUnsafeCode": true,
+    "includePlatforms": [],
+    "excludePlatforms": []
+}

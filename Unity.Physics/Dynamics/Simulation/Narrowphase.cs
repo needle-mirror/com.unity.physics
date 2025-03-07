@@ -12,15 +12,18 @@ namespace Unity.Physics
         /// </summary>
         ///
         /// <param name="world">            [in,out] The world. </param>
+        /// <param name="inputVelocities"> [in] The velocity prediction at the end of the frame. </param>
         /// <param name="dispatchPairs">    The dispatch pairs. </param>
-        /// <param name="timeStep">         The time step. </param>
+        /// <param name="timeStep">         The time step for the full frame. </param>
         /// <param name="contactsWriter">   [in,out] The contacts writer. </param>
-        internal static void CreateContacts(ref PhysicsWorld world, NativeArray<DispatchPairSequencer.DispatchPair> dispatchPairs, float timeStep,
+        internal static void CreateContacts(ref PhysicsWorld world, NativeArray<Velocity> inputVelocities,
+            NativeArray<DispatchPairSequencer.DispatchPair> dispatchPairs, float timeStep,
             ref NativeStream.Writer contactsWriter)
         {
             contactsWriter.BeginForEachIndex(0);
 
-            ParallelCreateContactsJob.ExecuteImpl(ref world, timeStep, dispatchPairs, 0, dispatchPairs.Length, ref contactsWriter);
+            ParallelCreateContactsJob.ExecuteImpl(ref world, inputVelocities, timeStep, dispatchPairs,
+                0, dispatchPairs.Length, ref contactsWriter);
 
             contactsWriter.EndForEachIndex();
         }
@@ -30,8 +33,9 @@ namespace Unity.Physics
         /// them.
         /// </summary>
         ///
-        /// <param name="world">                [in,out] The world. </param>
-        /// <param name="timeStep">             The time step. </param>
+        /// <param name="world">                [in,out] The physics world. </param>
+        /// <param name="timeStep">             The full frame time step. </param>
+        /// <param name="inputVelocities">      A NativeArray of Linear and Angular velocities expected at end of the frame if only gravity integration is considered. </param>
         /// <param name="contacts">             [in,out] The contacts. </param>
         /// <param name="jacobians">            [in,out] The jacobians. </param>
         /// <param name="dispatchPairs">        [in,out] The dispatch pairs. </param>
@@ -41,8 +45,9 @@ namespace Unity.Physics
         ///
         /// <returns>   The SimulationJobHandles. </returns>
         internal static SimulationJobHandles ScheduleCreateContactsJobs(ref PhysicsWorld world, float timeStep,
-            ref NativeStream contacts, ref NativeStream jacobians, ref NativeList<DispatchPairSequencer.DispatchPair> dispatchPairs,
-            JobHandle inputDeps, ref DispatchPairSequencer.SolverSchedulerInfo solverSchedulerInfo, bool multiThreaded = true)
+            NativeArray<Velocity> inputVelocities, ref NativeStream contacts, ref NativeStream jacobians,
+            ref NativeList<DispatchPairSequencer.DispatchPair> dispatchPairs, JobHandle inputDeps,
+            ref DispatchPairSequencer.SolverSchedulerInfo solverSchedulerInfo, bool multiThreaded = true)
         {
             SimulationJobHandles returnHandles = default;
 
@@ -53,6 +58,7 @@ namespace Unity.Physics
                 returnHandles.FinalExecutionHandle = new CreateContactsJob
                 {
                     World = world,
+                    InputVelocities = inputVelocities,
                     TimeStep = timeStep,
                     DispatchPairs = dispatchPairs.AsDeferredJobArray(),
                     ContactsWriter = contacts.AsWriter()
@@ -67,6 +73,7 @@ namespace Unity.Physics
                 var processHandle = new ParallelCreateContactsJob
                 {
                     World = world,
+                    InputVelocities = inputVelocities,
                     TimeStep = timeStep,
                     DispatchPairs = dispatchPairs.AsDeferredJobArray(),
                     SolverSchedulerInfo = solverSchedulerInfo,
@@ -83,7 +90,8 @@ namespace Unity.Physics
         struct ParallelCreateContactsJob : IJobParallelForDefer
         {
             [NoAlias, ReadOnly] public PhysicsWorld World;
-            [ReadOnly] public float TimeStep;
+            [ReadOnly] public float TimeStep; //Full frame timestep
+            [ReadOnly] public NativeArray<Velocity> InputVelocities;
             [ReadOnly] public NativeArray<DispatchPairSequencer.DispatchPair> DispatchPairs;
             [NoAlias] public NativeStream.Writer ContactsWriter;
             [NoAlias, ReadOnly] public DispatchPairSequencer.SolverSchedulerInfo SolverSchedulerInfo;
@@ -94,13 +102,14 @@ namespace Unity.Physics
 
                 ContactsWriter.BeginForEachIndex(workItemIndex);
 
-                ExecuteImpl(ref World, TimeStep, DispatchPairs, dispatchPairReadOffset, numPairsToRead, ref ContactsWriter);
+                ExecuteImpl(ref World, InputVelocities, TimeStep, DispatchPairs, dispatchPairReadOffset, numPairsToRead, ref ContactsWriter);
 
                 ContactsWriter.EndForEachIndex();
             }
 
-            internal static unsafe void ExecuteImpl(ref PhysicsWorld world, float timeStep,
-                NativeArray<DispatchPairSequencer.DispatchPair> dispatchPairs,
+            // timestep needs to be for full frame
+            internal static unsafe void ExecuteImpl(ref PhysicsWorld world, NativeArray<Velocity> inputVelocities,
+                float timeStep, NativeArray<DispatchPairSequencer.DispatchPair> dispatchPairs,
                 int dispatchPairReadOffset, int numPairsToRead, ref NativeStream.Writer contactWriter)
             {
                 for (int i = 0; i < numPairsToRead; i++)
@@ -122,10 +131,45 @@ namespace Unity.Physics
                             RigidBody rigidBodyA = world.Bodies[pair.BodyIndexA];
                             RigidBody rigidBodyB = world.Bodies[pair.BodyIndexB];
 
-                            MotionVelocity motionVelocityA = pair.BodyIndexA < world.MotionVelocities.Length ?
-                                world.MotionVelocities[pair.BodyIndexA] : MotionVelocity.Zero;
-                            MotionVelocity motionVelocityB = pair.BodyIndexB < world.MotionVelocities.Length ?
-                                world.MotionVelocities[pair.BodyIndexB] : MotionVelocity.Zero;
+                            MotionVelocity motionVelocityA;
+                            if (pair.BodyIndexA < world.MotionVelocities.Length)
+                            {
+                                var motionVelocity = world.MotionVelocities[pair.BodyIndexA];
+                                motionVelocityA = new MotionVelocity()
+                                {
+                                    InverseInertia = motionVelocity.InverseInertia,
+                                    InverseMass = motionVelocity.InverseMass,
+                                    AngularExpansionFactor = motionVelocity.AngularExpansionFactor,
+                                    GravityFactor = motionVelocity.GravityFactor,
+
+                                    AngularVelocity = inputVelocities[pair.BodyIndexA].Angular,
+                                    LinearVelocity = inputVelocities[pair.BodyIndexA].Linear // end frame velocity prediction
+                                };
+                            }
+                            else
+                            {
+                                motionVelocityA = MotionVelocity.Zero;
+                            }
+
+                            MotionVelocity motionVelocityB;
+                            if (pair.BodyIndexB < world.MotionVelocities.Length)
+                            {
+                                var motionVelocity = world.MotionVelocities[pair.BodyIndexB];
+                                motionVelocityB = new MotionVelocity()
+                                {
+                                    InverseInertia = motionVelocity.InverseInertia,
+                                    InverseMass = motionVelocity.InverseMass,
+                                    AngularExpansionFactor = motionVelocity.AngularExpansionFactor,
+                                    GravityFactor = motionVelocity.GravityFactor,
+
+                                    AngularVelocity = inputVelocities[pair.BodyIndexB].Angular,
+                                    LinearVelocity = inputVelocities[pair.BodyIndexB].Linear // end frame velocity prediction
+                                };
+                            }
+                            else
+                            {
+                                motionVelocityB = MotionVelocity.Zero;
+                            }
 
                             ManifoldQueries.BodyBody(rigidBodyA, rigidBodyB, motionVelocityA, motionVelocityB,
                                 world.CollisionWorld.CollisionTolerance, timeStep, pair, ref contactWriter);
@@ -140,13 +184,14 @@ namespace Unity.Physics
         struct CreateContactsJob : IJob
         {
             [NoAlias, ReadOnly] public PhysicsWorld World;
-            [ReadOnly] public float TimeStep;
+            [ReadOnly] public float TimeStep; //Full frame timestep
+            [ReadOnly] public NativeArray<Velocity> InputVelocities;
             [ReadOnly] public NativeArray<DispatchPairSequencer.DispatchPair> DispatchPairs;
             [NoAlias] public NativeStream.Writer ContactsWriter;
 
             public void Execute()
             {
-                CreateContacts(ref World, DispatchPairs, TimeStep, ref ContactsWriter);
+                CreateContacts(ref World, InputVelocities, DispatchPairs, TimeStep, ref ContactsWriter);
             }
         }
     }

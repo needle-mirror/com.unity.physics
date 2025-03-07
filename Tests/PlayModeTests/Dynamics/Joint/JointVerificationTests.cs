@@ -68,6 +68,7 @@ namespace Unity.Physics.Tests.Joints
             {
                 World = m_World,
                 Gravity = new float3(0, -9.81f, 0),
+                NumSubsteps = 1,
                 NumSolverIterations = 4,
                 TimeStep = 1 / 60f,
                 SynchronizeCollisionWorld = false // we don't need any collisions in these tests
@@ -153,8 +154,8 @@ namespace Unity.Physics.Tests.Joints
             var inertia = math.rcp(dynMotionVelocity.InverseInertia);
             var springFrequency = JacobianUtilities.CalculateSpringFrequencyFromSpringConstant(requiredStiffnessCoefficient, inertia.x);
 
-            var rotationalMotor = PhysicsJoint.CreateRotationalMotor(jointAnchor, jointAnchor, targetAngle, float.MaxValue,
-                springFrequency, dampingRatio);
+            var rotationalMotor = PhysicsJoint.CreateRotationalMotor(jointAnchor, jointAnchor,
+                targetAngle, float.MaxValue, springFrequency, dampingRatio);
             Simulate(rotationalMotor, 600);
 
             // check that body is at expected angle

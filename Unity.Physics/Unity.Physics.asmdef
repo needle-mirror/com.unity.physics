@@ -6,6 +6,12 @@
         "Unity.Collections",
         "Unity.Entities",
         "Unity.Mathematics",
+        "Unity.Numerics.Memory",
+        "Unity.Numerics.Random",
+        "Unity.Numerics.Linear",
+        "Unity.Numerics.Linear.Dense",
+        "Unity.Numerics.Linear.Sparse",
+        "Unity.Numerics.Linear.Solvers.Lowlevel",
         "Unity.Profiling.Core",
         "Unity.Transforms"
     ],

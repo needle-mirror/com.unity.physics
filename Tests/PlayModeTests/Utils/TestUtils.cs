@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Text;
 using NUnit.Framework.Constraints;
+using Unity.Burst;
 using Unity.Mathematics;
 using Assert = UnityEngine.Assertions.Assert;
 using Unity.Entities;
@@ -11,6 +12,24 @@ using Random = Unity.Mathematics.Random;
 
 namespace Unity.Physics.Tests
 {
+    [BurstCompile]
+    static class BurstHelper
+    {
+        [BurstDiscard]
+        static void TestBurstCompiled(ref bool falseIfNot)
+        {
+            falseIfNot = false;
+        }
+
+        [BurstCompile(CompileSynchronously = true)]
+        public static bool IsBurstEnabled()
+        {
+            bool burstCompiled = true;
+            TestBurstCompiled(ref burstCompiled);
+            return burstCompiled;
+        }
+    }
+
     static class TestExtensions
     {
         public static string ToReadableString(this EntityQueryDesc query)

@@ -1,8 +1,6 @@
 # The *PhysicsCollider* component
 
-This is the most important component for the simulation of physics. By adding this component to an entity, you declare that this body will participate in the physics simulation and collision queries (though you also need transform components: `LocalTransform` for dynamic bodies, `LocalTransform`, and/or `LocalToWorld` for static bodies). This component decides what the collision geometry "looks" like to the physics simulation. It is analogous to a mesh in a rendering system.
-
-For performance reasons, you should try to avoid using a mesh during physics – use specialized primitive types when possible, which greatly simplifies the process of determining collisions between two Colliders. For example, if a collision geometry can be represented by a sphere, you can write collision tests which only need to consider the sphere center and radius; with a mesh wrapping the same sphere, you would need to consider every triangle in the mesh.
+The `PhysicsCollider` component is the most important component for simulation with Unity Physics. By adding this component to an entity, you declare this entity as a rigid body which will participate in the physics simulation and in collision queries, such as ray casts and collider casts. This component determines what the body's collision geometry "looks" like in the physics simulation. It is analogous to a mesh in a rendering system. For placement of a rigid body it also needs transform components: a `LocalTransform` for dynamic bodies, and a `LocalTransform` and/or `LocalToWorld` for static bodies.
 
 The most important property of a `PhysicsCollider` is a [`BlobAssetReference`](xref:Unity.Entities.BlobAssetReference`1) to the Collider data used by the physics simulation (which is in a format optimized for collision queries). If you aren't familiar with blob assets, we recommend you review the [available documentation](xref:blobassets). Each of the Collider types implement an `ICollider` interface, and for each Collider type, there is a static `Create()` function, which takes parameters specific to the shape. For example, a `SphereCollider` is built from a position and a radius, while a `ConvexCollider` is built from a point cloud.
 
@@ -23,6 +21,9 @@ Various collider types are supported in Unity Physics. The collider type of ever
 | Mesh            | `MeshCollider`     | A collider representing a mesh comprised of triangles and quads.                                                                      |
 | Compound        | `CompoundCollider` | A collider regrouping a set of other colliders. See the [Compound Collider](concepts-compound.md) section for more details.           |
 | Terrain         | `TerrainCollider`  | A collider representing a terrain described by a uniform grid of height samples.                                                      |
+
+>[!NOTE]
+> For performance reasons, you should try to avoid using mesh colliders. Instead, use primitive types whenever possible, as this greatly reduces the calculations required in determining collisions between colliders. For example, if a collision geometry can be represented by a sphere, collision calculations only need to consider the sphere's center and its radius. With a mesh collider, however, every triangle in the mesh needs to be considered.
 
 ## Working with collider data in the editor
 

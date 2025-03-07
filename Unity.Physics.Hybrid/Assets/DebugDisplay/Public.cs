@@ -1,4 +1,4 @@
-#if UNITY_EDITOR
+#if UNITY_EDITOR || ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY
 
 using System;
 using Unity.Burst;
@@ -305,6 +305,12 @@ namespace Unity.DebugDisplay
         {
             if (Managed.Instance == null)
                 Managed.Instance = new Managed();
+        }
+
+        internal static void Dispose()
+        {
+            if (Managed.Instance == null)
+                Managed.Instance.Dispose();
         }
     }
 }

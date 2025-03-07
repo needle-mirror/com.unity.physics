@@ -125,15 +125,25 @@ namespace Unity.Physics
         }
 
         // Update the MotionData of the Jacobians when substepping. This is used when there are more than one substeps,
-        // prior to solver stepping and is needed so that the Jacobian Solve methods have access to up-to-date motion data.
-        public void Update(in MotionData motionDataA, in MotionData motionDataB)
+        // prior to solver iteration and is needed so that the Jacobian Solve methods have access to up-to-date motion data.
+        public void UpdateContact(in MotionVelocity velocityA, in MotionVelocity velocityB, in Math.MTransform worldFromA,
+            in Math.MTransform worldFromB, Solver.StepInput stepInput)
+        {
+            SafetyChecks.CheckAreEqualAndThrow(true, Type == JacobianType.Contact);
+            if (Enabled)
+            {
+                AccessBaseJacobian<ContactJacobian>().Update(ref this, in velocityA, in velocityB,
+                    in worldFromA, in worldFromB, stepInput);
+            }
+        }
+
+        public void UpdateJoints(in MotionData motionDataA, in MotionData motionDataB)
         {
             if (Enabled)
             {
                 switch (Type)
                 {
                     case JacobianType.Contact:
-                        break;
                     case JacobianType.Trigger:
                         break;
                     case JacobianType.LinearLimit:

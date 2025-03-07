@@ -1,3 +1,4 @@
+using System;
 using Unity.Entities;
 using Unity.Physics;
 using Unity.Transforms;
@@ -7,7 +8,9 @@ using Unity.Physics.Extensions;
 
 namespace Unity.Physics.Aspects
 {
-/// <summary>   A collider aspect. Contains transform data and a collider. </summary>
+
+    /// <summary>   A collider aspect. Contains transform data and a collider. </summary>
+    [Obsolete("ColliderAspect is now deprecated.  Please use component and query APIs directly.")]
     public readonly partial struct ColliderAspect : IAspect, IAspectQueryable, ICollidable
     {
         internal readonly RefRW<LocalTransform> m_Transform;

@@ -534,6 +534,7 @@ namespace Unity.Physics
         bool CapsuleCastCustom<T>(float3 point1, float3 point2, float radius, float3 direction, float maxDistance, ref T collector, CollisionFilter filter, QueryInteraction queryInteraction = QueryInteraction.Default) where T : struct, ICollector<ColliderCastHit>;
     }
 
+#pragma warning disable CS0618 // Disable Aspects obsolete warnings
     /// <summary>   Interface for objects that can be hit by aspect queries. </summary>
     public interface IAspectQueryable
     {
@@ -621,6 +622,7 @@ namespace Unity.Physics
         /// <returns>   True if there is a hit, false otherwise. </returns>
         bool CalculateDistance<T>(in ColliderAspect colliderAspect, float maxDistance, ref T collector, QueryInteraction queryInteraction = QueryInteraction.Default) where T : struct, ICollector<DistanceHit>;
     }
+#pragma warning restore CS0618
 
     /// <summary>
     /// Used as a way to provide queries with more filtering options, without creating collectors At
@@ -1296,6 +1298,7 @@ namespace Unity.Physics
         #endregion
 
         #region IAspectQueryable
+        #pragma warning disable CS0618 // Disable Aspects obsolete warnings
 
         #region Collider cast
 
@@ -1395,6 +1398,7 @@ namespace Unity.Physics
             }
         }
 
+        #pragma warning restore CS0618
         #endregion
 
         #endregion

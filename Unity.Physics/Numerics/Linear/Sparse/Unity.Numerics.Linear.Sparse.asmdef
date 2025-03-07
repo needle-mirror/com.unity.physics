@@ -1,0 +1,14 @@
+{
+    "name": "Unity.Numerics.Linear.Sparse",
+    "references": [
+        "Unity.Mathematics",
+        "Unity.Burst",
+        "Unity.Collections",
+        "Unity.Numerics.Linear",
+        "Unity.Numerics.Linear.Dense",
+        "Unity.Numerics.Random"
+        ],
+    "allowUnsafeCode": true,
+    "includePlatforms": [],
+    "excludePlatforms": []
+}

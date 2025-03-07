@@ -1,6 +1,5 @@
 using Unity.Burst;
 using Unity.Collections;
-using Unity.Entities;
 using Unity.Mathematics;
 using static Unity.Physics.Math;
 
@@ -76,7 +75,7 @@ namespace Unity.Physics
 
         // Solve the Jacobian
         public void Solve(ref JacobianHeader jacHeader, ref MotionVelocity velocityA, ref MotionVelocity velocityB,
-            Solver.StepInput stepInput,  ref NativeStream.Writer impulseEventsWriter)
+            Solver.StepInput stepInput, ref NativeStream.Writer impulseEventsWriter)
         {
             // Predict the relative orientation at the end of the step
             quaternion futureBFromA = JacobianUtilities.IntegrateOrientationBFromA(
@@ -121,12 +120,13 @@ namespace Unity.Physics
             float futureError = JacobianUtilities.CalculateError(futureAngle, MinAngle, MaxAngle);
             float solveError = JacobianUtilities.CalculateCorrection(futureError, InitialError, Tau, Damping);
             float2 impulse = -effectiveMass * solveError * stepInput.InvTimestep;
+
             velocityA.ApplyAngularImpulse(impulse.x * jacA0 + impulse.y * jacA1);
             velocityB.ApplyAngularImpulse(impulse.x * jacB0 + impulse.y * jacB1);
 
             if ((jacHeader.Flags & JacobianFlags.EnableImpulseEvents) != 0)
             {
-                HandleImpulseEvent(ref jacHeader, impulse, stepInput.IsLastIteration, ref impulseEventsWriter);
+                HandleImpulseEvent(ref jacHeader, impulse, stepInput.IsLastSubstepAndLastSolverIteration, ref impulseEventsWriter);
             }
         }
 

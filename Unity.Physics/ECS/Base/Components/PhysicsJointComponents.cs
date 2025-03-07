@@ -675,9 +675,9 @@ namespace Unity.Physics
             m_Constraints = new ConstraintBlock3
             {
                 Length = 3,
-                A = Constraint.AngularVelocityMotor(targetVelocity, math.abs(maxImpulseOfMotor), springFrequency, springDamping),
+                A = Constraint.BallAndSocket(),
                 B = Constraint.Hinge(0),
-                C = Constraint.BallAndSocket()
+                C = Constraint.AngularVelocityMotor(targetVelocity, math.abs(maxImpulseOfMotor), springFrequency, springDamping)
             }
         };
 

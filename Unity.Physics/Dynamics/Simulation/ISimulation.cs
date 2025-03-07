@@ -29,13 +29,18 @@ namespace Unity.Physics
     /// <summary>   Parameters for a simulation step. </summary>
     public struct SimulationStepInput
     {
+        int m_NumSubsteps;
+
         /// <summary>   Physics world to be stepped. </summary>
         public PhysicsWorld World;
-        /// <summary>   Portion of time to step the physics world for. </summary>
+        /// <summary>   Portion of time to step the physics world for. This is the frame timestep. </summary>
         public float TimeStep;
-        /// <summary>   Gravity in the physics world. </summary>
+        /// <summary>   Gravity in the physics world, a vector in m/s^2. </summary>
         public float3 Gravity;
-        /// <summary>   Number of iterations to perform while solving constraints. </summary>
+        /// <summary>   Number of substep iterations to perform while solving constraints. No substepping will occur when set to 1. </summary>
+        public int NumSubsteps { get => m_NumSubsteps; set => m_NumSubsteps = value <= 0 ? 1 : value; }
+
+        /// <summary>   Number of Gauss-Seidel iterations to perform while solving constraints. </summary>
         public int NumSolverIterations;
 
         /// <summary>
@@ -46,6 +51,9 @@ namespace Unity.Physics
         public Solver.StabilizationHeuristicSettings SolverStabilizationHeuristicSettings;
         /// <summary>   Used for optimization of static body synchronization. </summary>
         public NativeReference<int>.ReadOnly HaveStaticBodiesChanged;
+
+        /// <summary>   Time step used by the Jacobians during build and solve for substepping. </summary>
+        public float SubstepTimeStep => TimeStep / NumSubsteps;
     }
 
     /// <summary>   Result of ISimulation.ScheduleStepJobs() </summary>

@@ -185,17 +185,13 @@ namespace Unity.Physics.Tests.Motors
 
         // Solves a joint, using a set number of iterations, and integrates the motions
         // Input timestep needs to be an inverse timestep
-        internal unsafe static void SolveSingleJoint(Joint jointData, int numIterations, float timestep,
+        internal unsafe static void SolveSingleJoint(Joint jointData, Solver.StepInput stepInput,
             ref MotionVelocity velocityA, ref MotionVelocity velocityB, ref MotionData motionA, ref MotionData motionB,
             out NativeStream jacobiansOut)
         {
-            var stepInput = new Solver.StepInput
-            {
-                IsLastIteration = false,
-                InvNumSolverIterations = 1.0f / numIterations,
-                Timestep = timestep,
-                InvTimestep = timestep > 0.0f ? 1.0f / timestep : 0.0f //calculate the frequency
-            };
+            // Integrate gravity
+            MotorTestUtility.ApplyGravity(ref velocityA, stepInput.Gravity, stepInput.Timestep);
+            MotorTestUtility.ApplyGravity(ref velocityB, stepInput.Gravity, stepInput.Timestep);
 
             // Build jacobians
             jacobiansOut = new NativeStream(1, Allocator.Temp);
@@ -203,32 +199,51 @@ namespace Unity.Physics.Tests.Motors
                 NativeStream.Writer jacobianWriter = jacobiansOut.AsWriter();
                 jacobianWriter.BeginForEachIndex(0);
                 Solver.BuildJointJacobian(jointData, velocityA, velocityB, motionA, motionB, stepInput.Timestep,
-                    numIterations, ref jacobianWriter);
+                    stepInput.NumSolverIterations, ref jacobianWriter);
                 jacobianWriter.EndForEachIndex();
             }
 
-            var eventWriter = new NativeStream.Writer(); // no events expected
-
-            // Solve the joint, using numIterations
-            for (int iIteration = 0; iIteration < numIterations; iIteration++)
+            for (var i = 0; i < stepInput.NumSubsteps; i++)
             {
-                stepInput.IsLastIteration = (iIteration == numIterations - 1);
-                NativeStream.Reader jacobianReader = jacobiansOut.AsReader();
-                var jacIterator = new JacobianIterator(jacobianReader, 0);
-                while (jacIterator.HasJacobiansLeft())
-                {
-                    ref JacobianHeader header = ref jacIterator.ReadJacobianHeader();
-                    header.Solve(ref velocityA, ref velocityB, stepInput,
-                        ref eventWriter, ref eventWriter,
-                        ref eventWriter, false,
-                        Solver.MotionStabilizationInput.Default,
-                        Solver.MotionStabilizationInput.Default);
-                }
-            }
+                stepInput.CurrentSubstep = i;
+                var eventWriter = new NativeStream.Writer(); // no events expected
 
-            // After solving, integrate motions
-            MotorTestUtility.Integrate(ref velocityA, ref motionA, stepInput.Timestep);
-            MotorTestUtility.Integrate(ref velocityB, ref motionB, stepInput.Timestep);
+                if (i > 0) // First substep will be covered by the Jacobians.Build stage
+                {
+                    // Integrate gravity
+                    MotorTestUtility.ApplyGravity(ref velocityA, stepInput.Gravity, stepInput.Timestep);
+                    MotorTestUtility.ApplyGravity(ref velocityB, stepInput.Gravity, stepInput.Timestep);
+
+                    var jacobianReader = jacobiansOut.AsReader();
+                    var jacIterator = new JacobianIterator(jacobianReader, 0);
+                    while (jacIterator.HasJacobiansLeft())
+                    {
+                        ref JacobianHeader header = ref jacIterator.ReadJacobianHeader();
+                        header.UpdateJoints(in motionA, in motionB);
+                    }
+                }
+
+                // Solve the joint, using numSolverIterations
+                for (int iIteration = 0; iIteration < stepInput.NumSolverIterations; iIteration++)
+                {
+                    stepInput.CurrentSolverIteration = iIteration;
+                    NativeStream.Reader jacobianReader = jacobiansOut.AsReader();
+                    var jacIterator = new JacobianIterator(jacobianReader, 0);
+                    while (jacIterator.HasJacobiansLeft())
+                    {
+                        ref JacobianHeader header = ref jacIterator.ReadJacobianHeader();
+                        header.Solve(ref velocityA, ref velocityB, stepInput,
+                            ref eventWriter, ref eventWriter, ref eventWriter,
+                            false,
+                            Solver.MotionStabilizationInput.Default,
+                            Solver.MotionStabilizationInput.Default);
+                    }
+                }
+
+                // integrate motions
+                MotorTestUtility.Integrate(ref velocityA, ref motionA, stepInput.Timestep);
+                MotorTestUtility.Integrate(ref velocityB, ref motionB, stepInput.Timestep);
+            }
         }
 
         // Configures a new Joint based on input constraints between two Bodies
@@ -253,8 +268,8 @@ namespace Unity.Physics.Tests.Motors
         internal static void TestSimulateMotor(string testName, ref Joint jointData, JointType jointType,
             ref MotionVelocity velocityA, ref MotionVelocity velocityB, ref MotionData motionA, ref MotionData motionB,
             bool useGravity, float maxImpulse, float3 motorOrientation,
-            in int numIterations, in int numSteps, in int numStabilizingSteps,
-            out float3 accumulateAngularVelocity, out float3 accumulateLinearVelocity)
+            in int numSubsteps, in int numSolverIterations, in int numFrames, in int numStabilizingSteps,
+            out float3 accumulateAngularVelocity, out float3 accumulateLinearVelocity, bool isException = false)
         {
             string failureMessage;
             var impulseThreshold = math.EPSILON;
@@ -267,23 +282,31 @@ namespace Unity.Physics.Tests.Motors
 
             var rotation0 = motionA.WorldFromMotion.rot;
 
-            // Simulate
-            for (int iStep = 0; iStep < numSteps + numStabilizingSteps; iStep++)
+            float timeStep = Timestep / numSubsteps;
+
+            var stepInput = new Solver.StepInput()
             {
-                if (iStep == numStabilizingSteps - 1)
+                Gravity = gravity,
+                Timestep = timeStep,
+                InvTimestep = Solver.CalculateInvTimeStep(timeStep),
+                InvNumSolverIterations = 1.0f / numSolverIterations,
+                NumSubsteps = numSubsteps,
+                NumSolverIterations = numSolverIterations,
+                CurrentSubstep = 0,
+                CurrentSolverIteration = -1
+            };
+
+            // Simulate frames
+            for (int iFrame = 0; iFrame < numFrames + numStabilizingSteps; iFrame++)
+            {
+                if (iFrame == numStabilizingSteps - 1)
                     rotation0 = motionA.WorldFromMotion.rot; //save rotation once motion stabilizes a bit
 
                 var v0Ang = velocityA.AngularVelocity;
                 var v0Lin = velocityA.LinearVelocity * motorOrientation;
 
-                // Before solving, apply gravity
-                MotorTestUtility.ApplyGravity(ref velocityA, gravity, Timestep);
-                MotorTestUtility.ApplyGravity(ref velocityB, gravity, Timestep);
-
-                //NOTE: Position motor tests for y-aligned motors require v0Lin be measured here to pass if not using motorOrientation
-
                 // Solve and integrate
-                SolveSingleJoint(jointData, numIterations, Timestep,
+                SolveSingleJoint(jointData, stepInput,
                     ref velocityA, ref velocityB, ref motionA, ref motionB, out NativeStream jacobians);
 
                 if (jointType == JointType.AngularVelocityMotor || jointType == JointType.RotationMotor)
@@ -292,26 +315,43 @@ namespace Unity.Physics.Tests.Motors
                     var v1Ang = velocityA.AngularVelocity;
                     var undoApplyAngularImpulse = (v1Ang - v0Ang) / velocityA.InverseInertia;
                     var motorImpulse = math.lengthsq(undoApplyAngularImpulse);
-                    var impulseMarginAng = motorImpulse - (maxImpulse * maxImpulse);
-                    failureMessage =
-                        $"{testName}: Angular Motor impulse {motorImpulse} exceeded maximum ({maxImpulse})";
-                    Assert.LessOrEqual(impulseMarginAng, impulseThreshold, failureMessage);
+                    var impulseMarginAng = motorImpulse - maxImpulse * maxImpulse;
+                    if (isException) //then there is movement due to gravity and no motor impulse is applied
+                    {
+                        failureMessage =
+                            $"{testName}: Angular Motor with impulse {math.sqrt(motorImpulse)} did not move when it should have)";
+                        Assert.GreaterOrEqual(impulseMarginAng, impulseThreshold, failureMessage);
+                    }
+                    else
+                    {
+                        failureMessage =
+                            $"{testName}: Angular Motor impulse {math.sqrt(motorImpulse)} exceeded maximum ({maxImpulse})";
+                        Assert.LessOrEqual(impulseMarginAng, impulseThreshold, failureMessage);
+                    }
                 }
-
 
                 if (jointType == JointType.LinearVelocityMotor || jointType == JointType.PositionMotor)
                 {
                     // Verify that the linear maxImpulse for the motor is never exceeded, but only consider directions
                     // that the motor is acting on
                     var v1Lin = velocityA.LinearVelocity * motorOrientation;
-                    var motorImpulseLin = math.length((v1Lin - v0Lin) / velocityA.InverseMass);
-                    var impulseMarginLin = math.abs(motorImpulseLin) - maxImpulse;
-                    failureMessage = $"{testName}: Linear Motor impulse {motorImpulseLin} exceeded maximum ({maxImpulse})";
-                    Assert.LessOrEqual(impulseMarginLin, impulseThreshold, failureMessage);
+                    var motorImpulseLin = math.lengthsq((v1Lin - v0Lin) / velocityA.InverseMass);
+                    var impulseMarginLin = motorImpulseLin - maxImpulse * maxImpulse;
+                    if (isException) //then there is movement due to gravity and no motor impulse is applied
+                    {
+                        failureMessage =
+                            $"{testName}: Linear Motor with impulse {math.sqrt(motorImpulseLin)} did not move when it should have)";
+                        Assert.GreaterOrEqual(impulseMarginLin, impulseThreshold, failureMessage);
+                    }
+                    else
+                    {
+                        failureMessage = $"{testName}: Linear Motor impulse {math.sqrt(motorImpulseLin)} exceeded maximum ({maxImpulse})";
+                        Assert.LessOrEqual(impulseMarginLin, impulseThreshold, failureMessage);
+                    }
                 }
 
                 // Only start to accumulate after a stabilizing velocity has been achieved
-                if (iStep > numStabilizingSteps - 1)
+                if (iFrame > numStabilizingSteps - 1)
                 {
                     accumulateAngularVelocity += velocityA.AngularVelocity;
                     accumulateLinearVelocity += velocityA.LinearVelocity;
@@ -355,24 +395,37 @@ namespace Unity.Physics.Tests.Motors
                 {
                     // Build input
                     const float frequency = 50.0f;
-                    float timestep = 1 / frequency;
-                    const int numIterations = 4;
-                    const int numSteps = 15;
+                    float timestep50Hz = 1 / frequency;
+
+                    const int numFrames = 15;
+                    const int numSubsteps = 1;
+                    const int numSolverIterations = 4;
+
                     float3 gravity = new float3(0.0f, -9.81f, 0.0f);
 
-                    // Simulate
-                    for (int iStep = 0; iStep < numSteps; iStep++)
-                    {
-                        // Before solving, apply gravity
-                        MotorTestUtility.ApplyGravity(ref velocityA, gravity, timestep);
-                        MotorTestUtility.ApplyGravity(ref velocityB, gravity, timestep);
+                    float timeStep = timestep50Hz / numSubsteps;
 
+                    var stepInput = new Solver.StepInput()
+                    {
+                        Gravity = gravity,
+                        Timestep = timeStep,
+                        InvTimestep = Solver.CalculateInvTimeStep(timeStep),
+                        InvNumSolverIterations = 1.0f / numSolverIterations,
+                        NumSubsteps = numSubsteps,
+                        NumSolverIterations = numSolverIterations,
+                        CurrentSubstep = 0,
+                        CurrentSolverIteration = -1
+                    };
+
+                    // Simulate
+                    for (int iFrame = 0; iFrame < numFrames; iFrame++)
+                    {
                         // Solve and integrate
-                        SolveSingleJoint(jointData, numIterations, timestep,
+                        SolveSingleJoint(jointData, stepInput,
                             ref velocityA, ref velocityB, ref motionA, ref motionB, out NativeStream jacobians);
 
                         // Last step, check the joint error
-                        if (iStep == numSteps - 1)
+                        if (iFrame == numFrames - 1)
                         {
                             NativeStream.Reader jacobianReader = jacobians.AsReader();
                             var jacIterator = new JacobianIterator(jacobianReader, 0);

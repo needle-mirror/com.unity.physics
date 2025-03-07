@@ -41,8 +41,24 @@ namespace Unity.Physics.Authoring
         float3 m_Gravity = Default.Gravity;
 
         /// <summary>
-        ///     <para>Specifies the number of solver iterations the physics engine will perform.</para>
-        ///     <para>Higher values mean more stability, but also worse performance.</para>
+        ///     Specifies the number of substep iterations the physics engine will perform.
+        ///     Higher values mean more stability.
+        /// </summary>
+        public int SubstepCount
+        {
+            get => m_SubstepCount;
+            set => m_SubstepCount = value;
+        }
+        [SerializeField]
+        [Tooltip("Specifies the number of substep iterations the physics engine will perform.\n" +
+            "Higher values mean smaller timesteps will be taken per frame. This can be more \n" +
+            "stable up to a point where the timestep becomes so small computational numerical " +
+            "errors can be introduced.")]
+        int m_SubstepCount = Default.SubstepCount;
+
+        /// <summary>
+        ///     Specifies the number of solver iterations the physics engine will perform.<para/>
+        ///     Higher values mean more stability, but also worse performance.
         /// </summary>
         public int SolverIterationCount
         {
@@ -53,7 +69,6 @@ namespace Unity.Physics.Authoring
         [Tooltip("Specifies the number of solver iterations the physics engine will perform.\n" +
             "Higher values mean more stability, but also worse performance.")]
         int m_SolverIterationCount = Default.SolverIterationCount;
-
 
         /// <summary>
         ///    Enables the contact solver stabilization heuristic.
@@ -145,6 +160,7 @@ namespace Unity.Physics.Authoring
         {
             SimulationType = SimulationType,
             Gravity = Gravity,
+            SubstepCount = SubstepCount,
             SolverIterationCount = SolverIterationCount,
             SolverStabilizationHeuristicSettings = EnableSolverStabilizationHeuristic ?
                 new Solver.StabilizationHeuristicSettings
@@ -164,6 +180,7 @@ namespace Unity.Physics.Authoring
 
         void OnValidate()
         {
+            SubstepCount = math.max(1, SubstepCount);
             SolverIterationCount = math.max(1, SolverIterationCount);
         }
     }

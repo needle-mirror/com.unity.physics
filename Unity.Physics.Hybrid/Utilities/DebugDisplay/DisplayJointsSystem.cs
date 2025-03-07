@@ -8,7 +8,7 @@ using static Unity.Physics.Math;
 
 namespace Unity.Physics.Authoring
 {
-#if UNITY_EDITOR
+#if UNITY_EDITOR || ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY
 
     /// Job which draws every joint
     [BurstCompile]

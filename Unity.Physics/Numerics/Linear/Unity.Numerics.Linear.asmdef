@@ -1,0 +1,12 @@
+{
+    "name": "Unity.Numerics.Linear",
+    "references": [
+        "Unity.Mathematics",
+        "Unity.Burst",
+        "Unity.Collections",
+        "Unity.Numerics.Random"
+        ],
+    "allowUnsafeCode": true,
+    "includePlatforms": [],
+    "excludePlatforms": []
+}

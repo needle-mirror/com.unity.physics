@@ -3,11 +3,11 @@
   "category": "Unity",
   "description": "Unity's C# stateless physics library.\n\nBuilt on top of the Unity C# ECS framework, Unity Physics is network-ready, completely customizable, and built for performance out of the box. Whether you're building the next mobile hit or a new networked multiplayer console experience, Unity Physics leverages the Burst compiler and Job system to scale across a range of hardware.",
   "dependencies": {
-    "com.unity.burst": "1.8.18",
-    "com.unity.collections": "2.5.3",
-    "com.unity.entities": "1.3.10",
+    "com.unity.burst": "1.8.19",
+    "com.unity.collections": "2.6.0-exp.2",
+    "com.unity.entities": "1.4.0-exp.2",
     "com.unity.mathematics": "1.3.2",
-    "com.unity.test-framework": "1.4.5",
+    "com.unity.test-framework": "1.4.6",
     "com.unity.modules.imgui": "1.0.0",
     "com.unity.modules.jsonserialize": "1.0.0"
   },
@@ -18,7 +18,7 @@
   "name": "com.unity.physics",
   "unity": "2022.3",
   "unityRelease": "11f1",
-  "version": "1.3.10",
+  "version": "1.4.0-exp.2",
   "samples": [
     {
       "displayName": "Custom Physics Authoring",
@@ -28,15 +28,15 @@
     }
   ],
   "_upm": {
-    "changelog": "### Fixed\n\n* Incorrect vertex orientation during baking process in `Unity.Physics.CapsuleCollider` where vertices were unexpectedly flipped in certain conditions.\n* Visual artifacts in `PhysicsDebugDisplay` where capsule edges were incorrectly rendered when Height < (2 * Radius).\n* Capsule edge stretching in `PhysicsDebugDisplay` that occurred with non-default height-to-radius ratios."
+    "changelog": "### Added\n\n* Added: The Physics Debug Display, previously only supported in the Editor, can now also be enabled in Player builds via the `Physics -> Unity Physics -> Enable Player Debug Display` project setting, or by directly adding the `ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY` scripting define symbol to your Player configuration. This will help debugging physics behavior directly in-game if required.\n\n### Changed\n\n* Updated the `com.unity.burst` dependency to version `1.8.19`\n* RigidBodyAspect and ColliderAspect marked as obsolete along with IAspect.  In order to consolidate our API and improve iteration time, we have decided to remove Aspects in a future major release of Entities. Component and EntityQuery APIs should be used directly in the future instead of Aspects.  Both Entities.ForEach and Aspects will remain supported in 1.x packages of Entities.\n* Updated the `com.unity.test-framework dependency` to version `1.4.6`\n* `PhysicsShapeAuthoring` now enforces a minimum height of 2 * radius for capsule colliders to prevent geometry inversion.\n\n### Removed\n\n* removing various material assets within unity/physics (PhysicsDynamicDebugMaterial.mat and Material.mat (HullGeneration scene)).\n\n### Fixed\n\n* Incorrect capsule debug visualization when using non-default proportions in `PhysicsDebugDisplay`."
   },
   "upmCi": {
-    "footprint": "65ed6f1551bc43425254dd6dd6ace845bd7c9f60"
+    "footprint": "4061bae0d11253b856b3de8704c5a3c8e32dbeb5"
   },
-  "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.physics@1.3/manual/index.html",
+  "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.physics@1.4/manual/index.html",
   "repository": {
     "url": "https://github.cds.internal.unity3d.com/unity/dots.git",
     "type": "git",
-    "revision": "893d3250e4978302326a812dde13aa126dbcd775"
+    "revision": "1c507bcdc4eaebca77bc8a6d4eac199cdcbb391e"
   }
 }

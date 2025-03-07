@@ -8,7 +8,7 @@ using Unity.Transforms;
 
 namespace Unity.Physics.Authoring
 {
-#if UNITY_EDITOR
+#if UNITY_EDITOR || ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY
     /// Job to iterate over all the bodies in a scene, for any
     /// which have a collider, calculate the bounding box and
     /// display it.

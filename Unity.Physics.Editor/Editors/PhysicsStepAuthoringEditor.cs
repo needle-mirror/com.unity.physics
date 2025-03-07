@@ -20,6 +20,7 @@ namespace Unity.Physics.Editor
 #pragma warning disable 649
         [AutoPopulate] SerializedProperty m_SimulationType;
         [AutoPopulate] SerializedProperty m_Gravity;
+        [AutoPopulate] SerializedProperty m_SubstepCount;
         [AutoPopulate] SerializedProperty m_SolverIterationCount;
         [AutoPopulate] SerializedProperty m_EnableSolverStabilizationHeuristic;
         [AutoPopulate] SerializedProperty m_MultiThreaded;
@@ -41,12 +42,19 @@ namespace Unity.Physics.Editor
             {
                 EditorGUILayout.PropertyField(m_Gravity);
 
+#if HAVOK_PHYSICS_EXISTS
+                bool havokPhysics = m_SimulationType.intValue == (int)SimulationType.HavokPhysics;
+                using (new EditorGUI.DisabledScope(havokPhysics))
+                {
+                    EditorGUILayout.PropertyField(m_SubstepCount);
+                }
+#else
+                EditorGUILayout.PropertyField(m_SubstepCount);
+#endif
                 EditorGUILayout.PropertyField(m_SolverIterationCount);
-
                 EditorGUILayout.PropertyField(m_MultiThreaded);
 
 #if HAVOK_PHYSICS_EXISTS
-                bool havokPhysics = m_SimulationType.intValue == (int)SimulationType.HavokPhysics;
                 using (new EditorGUI.DisabledScope(havokPhysics))
                 {
 #endif

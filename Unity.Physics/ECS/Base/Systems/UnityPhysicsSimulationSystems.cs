@@ -184,12 +184,15 @@ namespace Unity.Physics.Systems
             var buildPhysicsData = state.EntityManager.GetComponentData<BuildPhysicsWorldData>(bpw);
 
             bool multiThreaded = stepComponent.MultiThreaded > 0;
+            float timeStep = SystemAPI.Time.DeltaTime;
+
             SimulationStepInput stepInput = new SimulationStepInput()
             {
                 World = SystemAPI.GetSingletonRW<PhysicsWorldSingleton>().ValueRW.PhysicsWorld,
-                TimeStep = SystemAPI.Time.DeltaTime,
+                TimeStep = timeStep,
                 Gravity = stepComponent.Gravity,
                 SynchronizeCollisionWorld = stepComponent.SynchronizeCollisionWorld > 0,
+                NumSubsteps = stepComponent.SubstepCount,
                 NumSolverIterations = stepComponent.SolverIterationCount,
                 SolverStabilizationHeuristicSettings = stepComponent.SolverStabilizationHeuristicSettings,
                 HaveStaticBodiesChanged = buildPhysicsData.PhysicsData.HaveStaticBodiesChanged
@@ -230,7 +233,8 @@ namespace Unity.Physics.Systems
 
             unsafe
             {
-                state.Dependency = simSingleton.AsSimulationPtr()->ScheduleNarrowphaseJobs(stepInputSingleton.StepInput, state.Dependency, stepInputSingleton.MultiThreaded).FinalExecutionHandle;
+                state.Dependency = simSingleton.AsSimulationPtr()->ScheduleNarrowphaseJobs(
+                    stepInputSingleton.StepInput, state.Dependency, stepInputSingleton.MultiThreaded).FinalExecutionHandle;
             }
         }
     }
@@ -259,7 +263,8 @@ namespace Unity.Physics.Systems
 
             unsafe
             {
-                state.Dependency = simSingleton.AsSimulationPtr()->ScheduleCreateJacobiansJobs(stepInputSingleton.StepInput, state.Dependency, stepInputSingleton.MultiThreaded).FinalExecutionHandle;
+                state.Dependency = simSingleton.AsSimulationPtr()->ScheduleCreateJacobiansJobs(
+                    stepInputSingleton.StepInput, state.Dependency, stepInputSingleton.MultiThreaded).FinalExecutionHandle;
             }
         }
     }
@@ -288,7 +293,8 @@ namespace Unity.Physics.Systems
 
             unsafe
             {
-                state.Dependency = simSingleton.AsSimulationPtr()->ScheduleSolveAndIntegrateJobs(stepInputSingleton.StepInput, state.Dependency, stepInputSingleton.MultiThreaded).FinalExecutionHandle;
+                state.Dependency = simSingleton.AsSimulationPtr()->ScheduleSolveAndIntegrateJobs(
+                    stepInputSingleton.StepInput, state.Dependency, stepInputSingleton.MultiThreaded).FinalExecutionHandle;
             }
         }
     }

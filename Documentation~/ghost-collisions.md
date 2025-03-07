@@ -1,12 +1,12 @@
-# Ghost Collision
-Ghost collisions are a well documented issue in game physics systems. They occur when dynamic objects moving across a surface bump into unintended collisions at the boundaries or connections between adjacent physics shapes. These collisions arise due to the discrete nature of collision detection and the way physics systems calculate the interaction between shapes.
+# Ghost Collisions
+Ghost collisions are a well documented issue in game physics systems. They occur when dynamic objects moving across a surface bump into unintended collisions at the boundaries or connections between adjacent physics colliders. These collisions arise due to the discrete nature of collision detection and the way most physics engines calculate the interaction between colliders.
 
-Instead of moving smoothly across a surface, the object might **"catch"** on the edge of a shape as a result of this separating force, leading to unnatural behavior such as bouncing or stopping abruptly.
+Ghost collisions can lead to undesired collision forces being applied to bodies. As a result, bodies might **catch** on other colliders, which manifests in implausible behavior such as bodies bouncing or stopping abruptly. Likewise, ghost collisions also cause collision events to be issued unexpectedly.
 
-This issue typically does not occur on continuous surfaces but becomes prominent when:
+This issue is most likely to occur when rigid bodies move at high speeds relative to the size of the colliders they interact with. Additionally, ghost collision issue is not exclusive to specific collider types but is more likely to occur when:
 
-- Shapes are composed of multiple connected elements, like triangles in a mesh.
-- Shapes are convex and overlap with adjacent edges or vertices.
+- Colliders are composed of multiple connected elements, like triangles in a mesh.
+- Colliders are convex and overlap with adjacent edges or vertices.
 
 A classic example of ghost collisions can be seen in a box sliding across two connected edges. As it transitions from one edge to the next, the physics system might interpret the connection as a collision and generate a response force that blocks or redirects the box's movement. As the image illustrates in the following scenario, a box falls from the top of a sloped mesh surface. 
 
@@ -15,32 +15,32 @@ Instead of sliding smoothly, the box collides with every segment of the mesh. Th
 ![collision_ghost](images/collision-ghost-example.gif)
 
 ## Possible causes
-- **Edge Connections:** Adjacent shapes, such as triangles or line segments, share vertices or edges. The physics engine calculates interactions per **shape independently**.
+- **Edge Connections:** Adjacent colliders, such as triangles or line segments, share vertices or edges. The physics engine calculates interactions per **shape independently**.
 
 - **Separating Planes:** In collision detection, a separating plane is defined to prevent objects from overlapping each other. When the plane is misaligned due to edge transitions, the object might collide with it unnecessarily.
 
 - **Discrete Time Steps:** Physics engines operate in discrete simulation steps. If an object moves rapidly between frames, it might erroneously interact with shapes it shouldn't have encountered in a continuous simulation.
 
-- **Shape Complexity:** More complex shapes, such as those with high triangle counts or multiple shared vertices, increase the likelihood of ghost collisions.
+- **Shape Complexity:** More complex colliders, such as those with high triangle counts or multiple shared vertices, increase the likelihood of ghost collisions.
 
 ## To mitigate ghost collisions, try techniques such as:
 
-- **Narrowphase Contact Modification:** Narrowphase modifies collision predictions by smoothing the interaction between connected shapes. It ensures that contact points across adjacent shapes are treated as part of a continuous surface rather than separate elements. [Checkout Unity Physics Samples for more details](#narrow-phase-contacts-solution).
+- **Narrowphase Contact Modification:** Narrowphase modifies collision predictions by smoothing the interaction between connected colliders. It ensures that contact points across adjacent colliders are treated as part of a continuous surface rather than separate elements. [Checkout Unity Physics Samples for more details](#narrow-phase-contacts-solution).
 
-- **Reducing Shape Complexity:** Simplifying collision shapes by reducing triangle counts or using convex hull approximations minimizes the potential for ghost collisions.
+- **Reducing Shape Complexity:** Simplifying collision colliders by reducing triangle counts or using convex hull approximations minimizes the potential for ghost collisions.
 
 - **Smaller Time Steps:** Reducing the simulation's delta time enhances collision detection accuracy, minimizing the likelihood of ghost collisions. However, keep in mind that while a smaller time step increases precision, it can also impact performance, so it's important to balance accuracy with computational efficiency.
 
 - **Voronoi Regions (Optional custom solution):** A Voronoi region defines the valid range of collision normals for an edge. If a calculated collision normal lies outside this range, it is ignored or adjusted to align with the nearest valid normal.
 
-- **Shape Chains (Optional custom solution):** For static geometry to provide context about neighboring shapes, enabling the system to eliminate ghost collisions by leveraging ghost vertices for smoother transitions.
+- **Shape Chains (Optional custom solution):** For static geometry to provide context about neighboring colliders, enabling the system to eliminate ghost collisions by leveraging ghost vertices for smoother transitions.
 
 ## Practical Examples
 - **Mesh Colliders:** Ghost collisions frequently appear in mesh colliders where the dynamic body interacts with individual triangles. For example, a car driving over a terrain mesh might bounce unexpectedly at triangle edges.
 
-- **Vehicles:** Representing a car as a single convex hull (excluding wheels) can significantly reduce ghost collision artifacts. By avoiding multiple small shapes, the physics engine treats the vehicle as a single entity, ensuring smoother interactions.
+- **Vehicles:** Representing a car as a single convex hull (excluding wheels) can significantly reduce ghost collision artifacts. By avoiding multiple small colliders, the physics engine treats the vehicle as a single entity, ensuring smoother interactions.
 
-- **Game Worlds:** For large, complex levels, using chain shapes or composite colliders in **"outline"** mode can create continuous surfaces that minimize ghost collisions.
+- **Game Worlds:** For large, complex levels, using chain colliders or composite colliders in **"outline"** mode can create continuous surfaces that minimize ghost collisions.
 
 ## Narrow Phase Contacts solution
 

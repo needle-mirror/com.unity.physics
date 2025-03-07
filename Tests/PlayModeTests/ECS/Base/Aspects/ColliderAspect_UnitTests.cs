@@ -1,3 +1,4 @@
+#pragma warning disable CS0618 // Disable Aspects obsolete warnings
 using NUnit.Framework;
 using System;
 using Unity.Collections;

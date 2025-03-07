@@ -1,0 +1,14 @@
+{
+    "name": "Unity.Numerics.Linear.Dense",
+    "references": [
+        "Unity.Mathematics",
+        "Unity.Burst",
+        "Unity.Collections",
+        "Unity.Numerics.Random",
+        "Unity.Numerics.Linear",
+        "Unity.Numerics.Memory"
+        ],
+    "allowUnsafeCode": true,
+    "includePlatforms": [],
+    "excludePlatforms": []
+}

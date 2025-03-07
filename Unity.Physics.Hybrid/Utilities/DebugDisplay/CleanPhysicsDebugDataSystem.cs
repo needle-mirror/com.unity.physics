@@ -3,7 +3,7 @@ using Unity.Physics.Systems;
 
 namespace Unity.Physics.Authoring
 {
-#if UNITY_EDITOR
+#if UNITY_EDITOR || ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY
 
     /// <summary>
     /// A system which cleans physics debug display data from the previous frame while in play mode.

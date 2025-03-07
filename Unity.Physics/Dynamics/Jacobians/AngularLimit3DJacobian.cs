@@ -133,7 +133,8 @@ namespace Unity.Physics
 
             if ((jacHeader.Flags & JacobianFlags.EnableImpulseEvents) != 0)
             {
-                HandleImpulseEvent(ref jacHeader, solveVelocity * jointOrientation.value.xyz, stepInput.IsLastIteration, ref impulseEventsWriter);
+                HandleImpulseEvent(ref jacHeader, solveVelocity * jointOrientation.value.xyz,
+                    stepInput.IsLastSubstepAndLastSolverIteration, ref impulseEventsWriter);
             }
         }
 

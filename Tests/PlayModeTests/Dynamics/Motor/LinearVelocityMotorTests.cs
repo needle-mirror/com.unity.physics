@@ -14,14 +14,13 @@ namespace Unity.Physics.Tests.Motors
         // 3) Verifies that the position of bodyA after one rotation matches the initial position
         // 4) Verifies that the maxImpulse is never exceeded
         // 5) Verifies that the variance in the average angular velocity is within a threshold
-        void TestSimulateLinearVelocityMotor_ConstantSpeed(string testName, Joint jointData,
+        void TestSimulateLinearVelocityMotor_ConstantSpeed(string testName, Joint jointData, int numSubsteps, int numSolverIterations,
             MotionVelocity velocityA, MotionVelocity velocityB, MotionData motionA, MotionData motionB,
             bool useGravity, float3 targetVelocity, float maxImpulse)
         {
             string failureMessage;
 
-            int numIterations = 4;
-            int numSteps = 61; //duration 1.0s to get full rotation
+            int numFrames = 61; //duration 1.0s to get full rotation
             int numStabilizingSteps = 0; //initializing test at target velocity
 
             var motorOrientation = math.normalizesafe(targetVelocity); //to only consider direction the motor is acting on
@@ -31,90 +30,111 @@ namespace Unity.Physics.Tests.Motors
 
             MotorTestRunner.TestSimulateMotor(testName, ref jointData, MotorTestRunner.JointType.LinearVelocityMotor,
                 ref velocityA, ref velocityB, ref motionA, ref motionB,
-                useGravity, maxImpulse, motorOrientation, numIterations, numSteps, numStabilizingSteps,
+                useGravity, maxImpulse, motorOrientation, numSubsteps, numSolverIterations, numFrames, numStabilizingSteps,
                 out float3 accumulateAngularVelocity, out float3 accumulateLinearVelocity);
 
-            // Testing thresholds:
-            const float thresholdFinalAngularVelocity = 0.0001f;    // Angular velocity after simulation
-            const float thresholdFinalPosition = 0.0001f;           // Position threshold after simulation
-            const float thresholdFinalRotation = 0.0001f;           // Rotation threshold after simulation
-            const float thresholdConstantAngularVelocity = 0.0001f; // Averaged angular velocity over numSteps, in rad/s
-            const float thresholdConstantLinearVelocity = 0.0001f;  // Averaged linear velocity over numSteps, in m/s
+            const float threshold = 0.0001f;
 
             // After simulation, Angular speed should be zero:
             var compareToTarget = math.abs(velocityA.AngularVelocity);
             failureMessage = $"{testName}: Final angular velocity failed test with angular velocity {velocityA.AngularVelocity}. Target: 0";
-            Assert.Less(compareToTarget.x, thresholdFinalAngularVelocity, failureMessage);
-            Assert.Less(compareToTarget.y, thresholdFinalAngularVelocity, failureMessage);
-            Assert.Less(compareToTarget.z, thresholdFinalAngularVelocity, failureMessage);
+            Assert.Less(compareToTarget.x, threshold, failureMessage);
+            Assert.Less(compareToTarget.y, threshold, failureMessage);
+            Assert.Less(compareToTarget.z, threshold, failureMessage);
 
             // After simulation, the position should be at d2 = d1 + vt:
-            var expectedPosition = position0 + targetVelocity * numSteps * MotorTestRunner.Timestep;
+            var expectedPosition = position0 + targetVelocity * numFrames * MotorTestRunner.Timestep;
             var positionChange = math.abs(motionA.WorldFromMotion.pos - expectedPosition);
             failureMessage = $"{testName}: Position after simulation {motionA.WorldFromMotion.pos} doesn't match expected position: {expectedPosition}";
-            Assert.Less(positionChange.x, thresholdFinalPosition, failureMessage);
-            Assert.Less(positionChange.y, thresholdFinalPosition, failureMessage);
-            Assert.Less(positionChange.z, thresholdFinalPosition, failureMessage);
+            Assert.Less(positionChange.x, threshold, failureMessage);
+            Assert.Less(positionChange.y, threshold, failureMessage);
+            Assert.Less(positionChange.z, threshold, failureMessage);
 
             // After simulation, the rotation should be unchanged:
             var orientationDifference = math.mul(motionA.WorldFromMotion.rot, rotation0).ToEulerAngles();
             failureMessage = $"{testName}: Rotation after simulation {motionA.WorldFromMotion.rot.ToEulerAngles()} should be unchanged: {rotation0.ToEulerAngles()}";
-            Assert.Less(orientationDifference.x, thresholdFinalRotation, failureMessage);
-            Assert.Less(orientationDifference.y, thresholdFinalRotation, failureMessage);
-            Assert.Less(orientationDifference.z, thresholdFinalRotation, failureMessage);
+            Assert.Less(orientationDifference.x, threshold, failureMessage);
+            Assert.Less(orientationDifference.y, threshold, failureMessage);
+            Assert.Less(orientationDifference.z, threshold, failureMessage);
 
             // [Units rad/s] The motor should maintain a constant velocity over many iterations:
-            var meanAngularVelocity = accumulateAngularVelocity / numSteps;
+            var meanAngularVelocity = accumulateAngularVelocity / numFrames;
             compareToTarget = math.abs(meanAngularVelocity); //target = 0.0 rad/s
             failureMessage = $"{testName}: Averaged angular velocity failed test with mean {meanAngularVelocity}. Target: 0";
-            Assert.Less(compareToTarget.x, thresholdConstantAngularVelocity, failureMessage);
-            Assert.Less(compareToTarget.y, thresholdConstantAngularVelocity, failureMessage);
-            Assert.Less(compareToTarget.z, thresholdConstantAngularVelocity, failureMessage);
+            Assert.Less(compareToTarget.x, threshold, failureMessage);
+            Assert.Less(compareToTarget.y, threshold, failureMessage);
+            Assert.Less(compareToTarget.z, threshold, failureMessage);
 
             // After one full rotation, averaged linear velocity should be zero
-            var meanLinearVelocity = accumulateLinearVelocity / numSteps;
+            var meanLinearVelocity = accumulateLinearVelocity / numFrames;
             compareToTarget = math.abs(meanLinearVelocity - targetVelocity);
             failureMessage = $"{testName}: Averaged linear velocity failed test with mean {meanLinearVelocity}. Target: {targetVelocity}";
-            Assert.Less(compareToTarget.x, thresholdConstantLinearVelocity, failureMessage);
-            Assert.Less(compareToTarget.y, thresholdConstantLinearVelocity, failureMessage);
-            Assert.Less(compareToTarget.z, thresholdConstantLinearVelocity, failureMessage);
+            Assert.Less(compareToTarget.x, threshold, failureMessage);
+            Assert.Less(compareToTarget.y, threshold, failureMessage);
+            Assert.Less(compareToTarget.z, threshold, failureMessage);
         }
 
         // Vary the direction of motion with/without gravity
         private static readonly TestCaseData[] k_LVM_ConstantVelocityTestCases =
         {
             // Arguments: direction of motion, using gravity
-            new TestCaseData(new float3(-1f, 0f, 0f), false).SetName("Axis Aligned -x, gravity off"),
-            new TestCaseData(new float3(0f, -1f, 0f), false).SetName("Axis Aligned -y, gravity off"),
-            new TestCaseData(new float3(0f, 0f, -1f), false).SetName("Axis Aligned -z, gravity off"),
+            new TestCaseData(1, 4, new float3(-1f, 0f, 0f), false).SetName("1/4: Axis Aligned -x, gravity off"),
+            new TestCaseData(1, 4, new float3(0f, -1f, 0f), false).SetName("1/4: Axis Aligned -y, gravity off"),
+            new TestCaseData(1, 4, new float3(0f, 0f, -1f), false).SetName("1/4: Axis Aligned -z, gravity off"),
 
-            new TestCaseData(new float3(1f, 0f, 0f), false).SetName("Axis Aligned +x, gravity off"),
-            new TestCaseData(new float3(0f, 1f, 0f), false).SetName("Axis Aligned +y, gravity off"),
-            new TestCaseData(new float3(0f, 0f, 1f), false).SetName("Axis Aligned +z, gravity off"),
+            new TestCaseData(1, 4, new float3(1f, 0f, 0f), false).SetName("1/4: Axis Aligned +x, gravity off"),
+            new TestCaseData(1, 4, new float3(0f, 1f, 0f), false).SetName("1/4: Axis Aligned +y, gravity off"),
+            new TestCaseData(1, 4, new float3(0f, 0f, 1f), false).SetName("1/4: Axis Aligned +z, gravity off"),
 
-            new TestCaseData(new float3(-1f, 0f, 0f), true).SetName("Axis Aligned -x, gravity on"),
-            new TestCaseData(new float3(0f, -1f, 0f), true).SetName("Axis Aligned -y, gravity on"),
-            new TestCaseData(new float3(0f, 0f, -1f), true).SetName("Axis Aligned -z, gravity on"),
+            new TestCaseData(1, 4, new float3(-1f, 0f, 0f), true).SetName("1/4: Axis Aligned -x, gravity on"),
+            new TestCaseData(1, 4, new float3(0f, -1f, 0f), true).SetName("1/4: Axis Aligned -y, gravity on"),
+            new TestCaseData(1, 4, new float3(0f, 0f, -1f), true).SetName("1/4: Axis Aligned -z, gravity on"),
 
-            new TestCaseData(new float3(1f, 0f, 0f), true).SetName("Axis Aligned +x, gravity on"),
-            new TestCaseData(new float3(0f, 1f, 0f), true).SetName("Axis Aligned +y, gravity on"),
-            new TestCaseData(new float3(0f, 0f, 1f), true).SetName("Axis Aligned +z, gravity on"),
+            new TestCaseData(1, 4, new float3(1f, 0f, 0f), true).SetName("1/4: Axis Aligned +x, gravity on"),
+            new TestCaseData(1, 4, new float3(0f, 1f, 0f), true).SetName("1/4: Axis Aligned +y, gravity on"),
+            new TestCaseData(1, 4, new float3(0f, 0f, 1f), true).SetName("1/4: Axis Aligned +z, gravity on"),
 
-            new TestCaseData(new float3(-1f, -1f, 0f), false).SetName("Off-Axis -x/-y, gravity off"),
-            new TestCaseData(new float3(-1f, -1f, -1f), false).SetName("Off-Axis -x/-y/-z, gravity off"),
-            new TestCaseData(new float3(0f, -1f, 1f), false).SetName("Off-Axis -y/+z, gravity off"),
-            new TestCaseData(new float3(1f, 0f, 1f), false).SetName("Off-Axis +x/+z, gravity off"),
+            new TestCaseData(1, 4, new float3(-1f, -1f, 0f), false).SetName("1/4: Off-Axis -x/-y, gravity off"),
+            new TestCaseData(1, 4, new float3(-1f, -1f, -1f), false).SetName("1/4: Off-Axis -x/-y/-z, gravity off"),
+            new TestCaseData(1, 4, new float3(0f, -1f, 1f), false).SetName("1/4: Off-Axis -y/+z, gravity off"),
+            new TestCaseData(1, 4, new float3(1f, 0f, 1f), false).SetName("1/4: Off-Axis +x/+z, gravity off"),
 
-            new TestCaseData(new float3(-1f, -1f, 0f), true).SetName("Off-Axis -x/-y, gravity on"),
-            new TestCaseData(new float3(-1f, -1f, -1f), true).SetName("Off-Axis -x/-y/-z, gravity on"),
-            new TestCaseData(new float3(0f, -1f, 1f), true).SetName("Off-Axis -y/+z, gravity on"),
-            new TestCaseData(new float3(1f, 0f, 1f), true).SetName("Off-Axis +x/+z, gravity on"),
+            new TestCaseData(1, 4, new float3(-1f, -1f, 0f), true).SetName("1/4: Off-Axis -x/-y, gravity on"),
+            new TestCaseData(1, 4, new float3(-1f, -1f, -1f), true).SetName("1/4: Off-Axis -x/-y/-z, gravity on"),
+            new TestCaseData(1, 4, new float3(0f, -1f, 1f), true).SetName("1/4: Off-Axis -y/+z, gravity on"),
+            new TestCaseData(1, 4, new float3(1f, 0f, 1f), true).SetName("1/4: Off-Axis +x/+z, gravity on"),
+
+            new TestCaseData(4, 1, new float3(-1f, 0f, 0f), false).SetName("4/1: Axis Aligned -x, gravity off"),
+            new TestCaseData(4, 1, new float3(0f, -1f, 0f), false).SetName("4/1: Axis Aligned -y, gravity off"),
+            new TestCaseData(4, 1, new float3(0f, 0f, -1f), false).SetName("4/1: Axis Aligned -z, gravity off"),
+
+            new TestCaseData(4, 1, new float3(1f, 0f, 0f), false).SetName("4/1: Axis Aligned +x, gravity off"),
+            new TestCaseData(4, 1, new float3(0f, 1f, 0f), false).SetName("4/1: Axis Aligned +y, gravity off"),
+            new TestCaseData(4, 1, new float3(0f, 0f, 1f), false).SetName("4/1: Axis Aligned +z, gravity off"),
+
+            new TestCaseData(4, 1, new float3(-1f, 0f, 0f), true).SetName("4/1: Axis Aligned -x, gravity on"),
+            new TestCaseData(4, 1, new float3(0f, -1f, 0f), true).SetName("4/1: Axis Aligned -y, gravity on"),
+            new TestCaseData(4, 1, new float3(0f, 0f, -1f), true).SetName("4/1: Axis Aligned -z, gravity on"),
+
+            new TestCaseData(4, 1, new float3(1f, 0f, 0f), true).SetName("4/1: Axis Aligned +x, gravity on"),
+            new TestCaseData(4, 1, new float3(0f, 1f, 0f), true).SetName("4/1: Axis Aligned +y, gravity on"),
+            new TestCaseData(4, 1, new float3(0f, 0f, 1f), true).SetName("4/1: Axis Aligned +z, gravity on"),
+
+            new TestCaseData(4, 1, new float3(-1f, -1f, 0f), false).SetName("4/1: Off-Axis -x/-y, gravity off"),
+            new TestCaseData(4, 1, new float3(-1f, -1f, -1f), false).SetName("4/1: Off-Axis -x/-y/-z, gravity off"),
+            new TestCaseData(4, 1, new float3(0f, -1f, 1f), false).SetName("4/1: Off-Axis -y/+z, gravity off"),
+            new TestCaseData(4, 1, new float3(1f, 0f, 1f), false).SetName("4/1: Off-Axis +x/+z, gravity off"),
+
+            new TestCaseData(4, 1, new float3(-1f, -1f, 0f), true).SetName("4/1: Off-Axis -x/-y, gravity on"),
+            new TestCaseData(4, 1, new float3(-1f, -1f, -1f), true).SetName("4/1: Off-Axis -x/-y/-z, gravity on"),
+            new TestCaseData(4, 1, new float3(0f, -1f, 1f), true).SetName("4/1: Off-Axis -y/+z, gravity on"),
+            new TestCaseData(4, 1, new float3(1f, 0f, 1f), true).SetName("4/1: Off-Axis +x/+z, gravity on"),
         };
 
         // Purpose of this test is for bodyA to make a full rotation in the expected amount of time and arrive back at its
         // starting point after one full rotation.
         [TestCaseSource(nameof(k_LVM_ConstantVelocityTestCases))]
-        public void ConstantVelocityTest_LVM(float3 directionOfMovement, bool useGravity)
+        public void ConstantVelocityTest_LVM(int numSubsteps, int numSolverIterations, float3 directionOfMovement, bool useGravity)
         {
             // Constants: BodyB is resting below BodyA
             RigidTransform worldFromA = new RigidTransform(quaternion.identity, float3.zero);
@@ -136,7 +156,7 @@ namespace Unity.Physics.Tests.Motors
             Joint joint = MotorTestRunner.CreateTestMotor(
                 PhysicsJoint.CreateLinearVelocityMotor(jointFrameA, jointFrameB, targetSpeed, maxImpulseForMotor));
 
-            TestSimulateLinearVelocityMotor_ConstantSpeed("Constant Velocity Tests (LVM)", joint,
+            TestSimulateLinearVelocityMotor_ConstantSpeed("Constant Velocity Tests (LVM)", joint, numSubsteps, numSolverIterations,
                 velocityA, velocityB, motionA, motionB, useGravity, targetVelocity, maxImpulseForMotor);
         }
 
@@ -148,12 +168,11 @@ namespace Unity.Physics.Tests.Motors
         // 3) Verifies that the maxImpulse is never exceeded
         // 4) Verifies that the variance in the average linear velocity is within a threshold
         // 5) Verifies that the variance in the average angular velocity is within a threshold
-        void TestSimulateLinearVelocityMotor(string testName, Joint jointData,
+        void TestSimulateLinearVelocityMotor(string testName, Joint jointData, int numSubsteps, int numSolverIterations,
             MotionVelocity velocityA, MotionVelocity velocityB, MotionData motionA, MotionData motionB,
             bool useGravity, float3 targetVelocity, float maxImpulse)
         {
-            int numIterations = 4;
-            int numSteps = 6;  // duration = 0.1s
+            int numFrames = 6;  // duration = 0.1s
             int numStabilizingSteps = 0; //takes some iterations to reach the target velocity
 
             var angularVelocity0 = velocityA.AngularVelocity;
@@ -162,14 +181,14 @@ namespace Unity.Physics.Tests.Motors
 
             MotorTestRunner.TestSimulateMotor(testName, ref jointData, MotorTestRunner.JointType.LinearVelocityMotor,
                 ref velocityA, ref velocityB, ref motionA, ref motionB,
-                useGravity, maxImpulse, motorOrientation, numIterations, numSteps, numStabilizingSteps,
+                useGravity, maxImpulse, motorOrientation, numSubsteps, numSolverIterations, numFrames, numStabilizingSteps,
                 out float3 accumulateAngularVelocity, out float3 accumulateLinearVelocity);
 
             // Note: off-axis tests require the *10 to pass
             var testThreshold = 1e-6;
 
-            var meanAngular = accumulateAngularVelocity / numSteps;
-            var meanLinear = accumulateLinearVelocity / numSteps;
+            var meanAngular = accumulateAngularVelocity / numFrames;
+            var meanLinear = accumulateLinearVelocity / numFrames;
 
             // The motor should maintain a constant velocity over many iterations. Verify variance is within threshold:
             var compareToTarget = math.abs(meanLinear - targetVelocity);
@@ -240,6 +259,12 @@ namespace Unity.Physics.Tests.Motors
             new float2(Constraint.DefaultSpringFrequency, 0.75f)
         };
 
+        private static readonly int2[] k_LVM_Steps =
+        {
+            new int2(1, 4),
+            new int2(4, 1)
+        };
+
         // Test Case Input: direction of movement vector, if gravity is enabled/disabled, if we initialize the test
         // at 0 or at the target velocity, vary spring & damping.
         // Checking for direction of movements that are axis-aligned with permutations of the other input data
@@ -247,23 +272,25 @@ namespace Unity.Physics.Tests.Motors
         private static TestCaseData[] MakePermutations()
         {
             int count = 0;
-            int length = k_LVM_UseGravity.Length * k_LVM_DirectionOfMovement.Length * k_LVM_InitAtTargetVelocity.Length *
-                k_LVM_SpringFrequencyAndDampingRatio.Length;
+            int length = k_LVM_Steps.Length * k_LVM_UseGravity.Length * k_LVM_DirectionOfMovement.Length *
+                k_LVM_InitAtTargetVelocity.Length * k_LVM_SpringFrequencyAndDampingRatio.Length;
             TestCaseData[] testList = new TestCaseData[length];
-
-            foreach (bool iGravity in k_LVM_UseGravity)
+            foreach (int2 iStep in k_LVM_Steps)
             {
-                foreach (float3 iDirection in k_LVM_DirectionOfMovement)
+                foreach (bool iGravity in k_LVM_UseGravity)
                 {
-                    foreach (bool iTarget in k_LVM_InitAtTargetVelocity)
+                    foreach (float3 iDirection in k_LVM_DirectionOfMovement)
                     {
-                        foreach (float2 iSpringAndDamping in k_LVM_SpringFrequencyAndDampingRatio)
+                        foreach (bool iTarget in k_LVM_InitAtTargetVelocity)
                         {
-                            var name =
-                                $"Test {count}: gravity:{iGravity}, direction:{iDirection}, initAtTarget:{iTarget}, springF:{iSpringAndDamping.x}, dampingR:{iSpringAndDamping.y}";
-                            testList[count] = new TestCaseData(iDirection, iGravity, iTarget,
-                                iSpringAndDamping.x, iSpringAndDamping.y).SetName(name);
-                            count++;
+                            foreach (float2 iSpringAndDamping in k_LVM_SpringFrequencyAndDampingRatio)
+                            {
+                                var name =
+                                    $"[{iStep.x}/{iStep.y}] Test {count}: gravity:{iGravity}, direction:{iDirection}, initAtTarget:{iTarget}, springF:{iSpringAndDamping.x}, dampingR:{iSpringAndDamping.y}";
+                                testList[count] = new TestCaseData(iStep.x, iStep.y, iDirection, iGravity, iTarget,
+                                    iSpringAndDamping.x, iSpringAndDamping.y).SetName(name);
+                                count++;
+                            }
                         }
                     }
                 }
@@ -276,8 +303,8 @@ namespace Unity.Physics.Tests.Motors
         // the initial velocity is zero or not. The constant orientation of bodyA and bodyB is such that bodyB is static
         // and bodyA is located directly under bodyB. These tests use a maxImpulse of infinity.
         [TestCaseSource(nameof(k_LVM_Permutations))]
-        public void OrientationTests_LVM(float3 directionOfMovement, bool useGravity, bool initAtTargetVelocity,
-            float springFrequency, float dampingRatio)
+        public void OrientationTests_LVM(int numSubsteps, int numSolverIterations, float3 directionOfMovement,
+            bool useGravity, bool initAtTargetVelocity, float springFrequency, float dampingRatio)
         {
             // Constants: BodyB is resting above BodyA
             RigidTransform worldFromA = new RigidTransform(quaternion.identity, new float3(-0.5f, 5f, -4f));
@@ -301,7 +328,7 @@ namespace Unity.Physics.Tests.Motors
             Joint joint = MotorTestRunner.CreateTestMotor(
                 PhysicsJoint.CreateLinearVelocityMotor(jointFrameA, jointFrameB, targetSpeed, maxImpulse, springFrequency, dampingRatio));
 
-            TestSimulateLinearVelocityMotor("Orientation Tests (LVM)", joint,
+            TestSimulateLinearVelocityMotor("Orientation Tests (LVM)", joint, numSubsteps, numSolverIterations,
                 velocityA, velocityB, motionA, motionB, useGravity, targetVelocity, maxImpulse);
         }
 
@@ -310,18 +337,25 @@ namespace Unity.Physics.Tests.Motors
         // Checking for direction of movements that are axis-aligned or off-axis with permutations of the other input data
         private static readonly TestCaseData[] k_LVM_maxImpulseTestCases =
         {
-            new TestCaseData(new float3(0f, 0f, -1f), false, false).SetName("On-Axis maxImpulse, gravity off, v0=0"),
-            new TestCaseData(new float3(1f, 1f, -1f), false, false).SetName("Off-Axis maxImpulse, gravity off, v0=0"),
+            new TestCaseData(1, 4, new float3(0f, 0f, -1f), false, false).SetName("1/4: On-Axis maxImpulse, gravity off, v0=0"),
+            new TestCaseData(1, 4, new float3(1f, 1f, -1f), false, false).SetName("1/4: Off-Axis maxImpulse, gravity off, v0=0"),
 
-            new TestCaseData(new float3(0f, 0f, -1f), true, false).SetName("On-Axis maxImpulse, gravity on, v0=0"),
-            new TestCaseData(new float3(1f, 1f, -1f), true, false).SetName("Off-Axis maxImpulse, gravity on, v0=0"),
+            new TestCaseData(1, 4, new float3(0f, 0f, -1f), true, false).SetName("1/4: On-Axis maxImpulse, gravity on, v0=0"),
+            new TestCaseData(1, 4, new float3(1f, 1f, -1f), true, false).SetName("1/4: Off-Axis maxImpulse, gravity on, v0=0"),
+
+            new TestCaseData(4, 1, new float3(0f, 0f, -1f), false, false).SetName("4/1: On-Axis maxImpulse, gravity off, v0=0"),
+            new TestCaseData(4, 1, new float3(1f, 1f, -1f), false, false).SetName("4/1: Off-Axis maxImpulse, gravity off, v0=0"),
+
+            new TestCaseData(4, 1, new float3(0f, 0f, -1f), true, false).SetName("4/1: On-Axis maxImpulse, gravity on, v0=0"),
+            new TestCaseData(4, 1, new float3(1f, 1f, -1f), true, false).SetName("4/1: Off-Axis maxImpulse, gravity on, v0=0"),
         };
 
         // For a given target speed and impulse, the test case vary the direction of movement, if gravity is used and if
         // the initial velocity is zero or not. The constant orientation of bodyA and bodyB is such that bodyB is static
         // and bodyA is located directly under bodyB.
         [TestCaseSource(nameof(k_LVM_maxImpulseTestCases))]
-        public void MaxImpulseTests_LVM(float3 directionOfMovement, bool useGravity, bool initAtTargetVelocity)
+        public void MaxImpulseTests_LVM(int numSubsteps, int numSolverIterations, float3 directionOfMovement,
+            bool useGravity, bool initAtTargetVelocity)
         {
             // Constants: BodyB is resting above BodyA
             RigidTransform worldFromA = new RigidTransform(quaternion.identity, new float3(-0.5f, 5f, -4f));
@@ -345,8 +379,8 @@ namespace Unity.Physics.Tests.Motors
             Joint joint = MotorTestRunner.CreateTestMotor(
                 PhysicsJoint.CreateLinearVelocityMotor(jointFrameA, jointFrameB, targetSpeed, maxImpulse));
 
-            TestSimulateLinearVelocityMotor("Max Impulse Tests (LVM)",
-                joint, velocityA, velocityB, motionA, motionB, useGravity, targetVelocity, maxImpulse);
+            TestSimulateLinearVelocityMotor("Max Impulse Tests (LVM)", joint, numSubsteps, numSolverIterations,
+                velocityA, velocityB, motionA, motionB, useGravity, targetVelocity, maxImpulse);
         }
     }
 }

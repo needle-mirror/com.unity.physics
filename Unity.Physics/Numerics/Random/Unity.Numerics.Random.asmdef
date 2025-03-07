@@ -1,0 +1,11 @@
+{
+    "name": "Unity.Numerics.Random",
+    "references": [
+        "Unity.Mathematics",
+        "Unity.Burst",
+        "Unity.Collections"
+        ],
+    "allowUnsafeCode": true,
+    "includePlatforms": [],
+    "excludePlatforms": []
+}

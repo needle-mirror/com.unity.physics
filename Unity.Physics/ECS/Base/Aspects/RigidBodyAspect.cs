@@ -14,10 +14,11 @@ namespace Unity.Physics.Aspects
         public static readonly float k_MinInertiaComponentValue = 0.0001f;
     }
 
-/// <summary>
-/// A rigid body aspect. Contatins transform data, mass, mass overide, velocity, damping and
-/// gravity factor information.
-/// </summary>
+    /// <summary>
+    /// A rigid body aspect. Contatins transform data, mass, mass overide, velocity, damping and
+    /// gravity factor information.
+    /// </summary>
+    [Obsolete("RigidBodyAspect is now deprecated.  Please use component and query APIs directly.")]
     public readonly partial struct RigidBodyAspect : IAspect
     {
         internal readonly RefRW<LocalTransform> m_Transform;

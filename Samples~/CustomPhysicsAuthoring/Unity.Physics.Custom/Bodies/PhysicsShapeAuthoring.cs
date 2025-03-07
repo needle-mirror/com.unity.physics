@@ -617,7 +617,7 @@ namespace Unity.Physics.Authoring
             m_PrimitiveOrientation = geometry.OrientationEuler;
 
             var radius = math.max(0f, geometry.Radius);
-            var height = math.max(0f, geometry.Height);
+            var height = math.max(radius * 2f, geometry.Height);
             m_PrimitiveSize = new float3(radius * 2f, radius * 2f, height);
 
             SyncCapsuleProperties();

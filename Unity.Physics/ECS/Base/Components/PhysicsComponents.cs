@@ -317,9 +317,11 @@ namespace Unity.Physics
         public SimulationType SimulationType;
         /// <summary>   The gravity. </summary>
         public float3 Gravity;
-        /// <summary>   Number of solver iterations. </summary>
+        /// <summary>   Number of substeps. </summary>
+        public int SubstepCount;
+        /// <summary>   Number of Gauss-Seidel solver iterations. </summary>
         public int SolverIterationCount;
-        /// <summary>   The solver stabilization heuristic settings. </summary>
+        /// <summary>   The global solver stabilization heuristic settings. </summary>
         public Solver.StabilizationHeuristicSettings SolverStabilizationHeuristicSettings;
 
         /// <summary>   Flag indicating whether the simulation will run multi-threaded. </summary>
@@ -361,6 +363,7 @@ namespace Unity.Physics
         {
             SimulationType = SimulationType.UnityPhysics,
             Gravity = -9.81f * math.up(),
+            SubstepCount = 1,
             SolverIterationCount = 4,
             SolverStabilizationHeuristicSettings = Solver.StabilizationHeuristicSettings.Default,
             MultiThreaded = 1,
@@ -983,6 +986,7 @@ namespace Unity.Physics
         #endregion
 
         #region IAspectQueryable
+        #pragma warning disable CS0618 // Disable Aspects obsolete warnings
 
         /// <summary>   Cast an aspect against this <see cref="PhysicsWorldSingleton"/>. </summary>
         ///
@@ -1078,6 +1082,8 @@ namespace Unity.Physics
         public bool CalculateDistance<T>(in ColliderAspect colliderAspect, float maxDistance, ref T collector, QueryInteraction queryInteraction = QueryInteraction.Default)
             where T : struct, ICollector<DistanceHit>
             => PhysicsWorld.CalculateDistance(in colliderAspect, maxDistance, ref collector, queryInteraction);
+
+        #pragma warning restore CS0618
         #endregion
     }
 

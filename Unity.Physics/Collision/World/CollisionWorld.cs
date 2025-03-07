@@ -1542,6 +1542,7 @@ namespace Unity.Physics
         }
 
         #region Aspect query impl
+        #pragma warning disable CS0618 // Disable Aspects obsolete warnings
 
         /// <summary>   Cast a collider aspect against this <see cref="CollisionWorld"/>. </summary>
         ///
@@ -1647,6 +1648,7 @@ namespace Unity.Physics
             return CalculateDistance(input, ref interactionCollector);
         }
 
+        #pragma warning restore CS0618
         #endregion
 
         #region GO API Queries
