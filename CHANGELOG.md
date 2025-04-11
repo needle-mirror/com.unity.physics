@@ -2,7 +2,20 @@
 uid: unity-physics-changelog
 ---
 
-# Changelog
+
+## [1.3.14] - 2025-04-11
+
+### Changed
+
+* Updated the `com.unity.entities` dependency to version `1.3.14`
+* Updated the `com.unity.burst` dependency to version `1.8.19`
+* Updated the `com.unity.test-framework dependency` to version `1.4.6`
+* The minimum supported editor version is now 2022.3.20f1
+
+### Fixed
+
+* Incorrect capsule debug visualization when using non-default proportions in `PhysicsDebugDisplay`.
+
 
 ## [1.3.10] - 2025-02-17
 

@@ -286,14 +286,23 @@ namespace Unity.Physics.Authoring
         /// <param name="vertices"> An array of vertices. </param>
         /// <param name="triangleIndices"> An array of triangle indices pointing into the vertices array. A triangle is drawn from every triplet of triangle indices. </param>
         /// <param name="color"> Color. </param>
-        public static void Triangles(in NativeArray<float3> vertices, in NativeArray<int> triangleIndices, ColorIndex color)
+        public static void Triangles(in NativeArray<float3> vertices, in NativeArray<int> triangleIndices, ColorIndex color) => Triangles(vertices, triangleIndices, color, false);
+
+        /// <summary>
+        /// Draws multiple triangles from the provided data arrays.
+        /// </summary>
+        /// <param name="vertices"> An array of vertices. </param>
+        /// <param name="triangleIndices"> An array of triangle indices pointing into the vertices array. A triangle is drawn from every triplet of triangle indices. </param>
+        /// <param name="color"> Color. </param>
+        /// <param name="reverseWinding"> If true, the winding order of the triangles is reversed. </param>
+        internal static void Triangles(in NativeArray<float3> vertices, in NativeArray<int> triangleIndices, ColorIndex color, bool reverseWinding)
         {
             var triangles = new Triangles(triangleIndices.Length / 3);
             for (int i = 0; i < triangleIndices.Length; i += 3)
             {
                 var v0 = vertices[triangleIndices[i]];
-                var v1 = vertices[triangleIndices[i + 1]];
-                var v2 = vertices[triangleIndices[i + 2]];
+                var v1 = vertices[triangleIndices[i + (reverseWinding ? 2 : 1)]];
+                var v2 = vertices[triangleIndices[i + (reverseWinding ? 1 : 2)]];
 
                 float3 normal = math.normalize(math.cross(v1 - v0, v2 - v0));
                 triangles.Draw(v0, v1, v2, normal, color);

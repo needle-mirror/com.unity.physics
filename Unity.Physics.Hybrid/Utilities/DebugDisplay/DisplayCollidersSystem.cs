@@ -91,17 +91,14 @@ namespace Unity.Physics.Authoring
 
                 case ColliderType.Capsule:
                     radius = ((CapsuleCollider*)collider)->Radius;
-
                     var vertex0 = ((CapsuleCollider*)collider)->Vertex0;
                     var vertex1 = ((CapsuleCollider*)collider)->Vertex1;
                     var axis = vertex1 - vertex0; //axis in wfc-space
-
-                    height = 0.5f * math.length(axis) + radius;
-
-                    colliderPosition = (vertex1 + vertex0) / 2.0f; //axis in wfc-space
+                    height = math.length(axis); // cylinder height
+                    colliderPosition = (vertex1 + vertex0) * 0.5f;
                     colliderOrientation = Quaternion.FromToRotation(Vector3.up, -axis);
 
-                    DrawColliderUtility.DrawPrimitiveCapsuleFaces(radius, height, colliderPosition, colliderOrientation, worldFromCollider, ref Geometries.CapsuleGeometry, color, uniformScale);
+                    DrawColliderUtility.DrawPrimitiveCapsuleFaces(radius, height, colliderPosition, colliderOrientation, worldFromCollider, ref Geometries.OpenCylinder, ref Geometries.OpenHemisphere, color, uniformScale);
 
                     break;
 
