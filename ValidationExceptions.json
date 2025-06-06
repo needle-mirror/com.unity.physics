@@ -2,7 +2,7 @@
   "ErrorExceptions": [
     {
       "ValidationTest": "API Validation",
-      "PackageVersion": "1.4.0-exp.2"
+      "PackageVersion": "1.4.0-pre.3"
     }
   ],
   "WarningExceptions": []

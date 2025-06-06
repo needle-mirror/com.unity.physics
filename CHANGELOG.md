@@ -4,11 +4,21 @@ uid: unity-physics-changelog
 
 # Changelog
 
+## [1.4.0-pre.3] - 2025-06-06
+
+
+### Changed
+
+* Updated Burst dependency to version 1.8.21
+* Updated the `com.unity.entities` dependency to version `1.4.0-pre.3`
+
+
 ## [1.4.0-exp.2] - 2025-03-07
 
 ### Added
 
 * Added: The Physics Debug Display, previously only supported in the Editor, can now also be enabled in Player builds via the `Physics -> Unity Physics -> Enable Player Debug Display` project setting, or by directly adding the `ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY` scripting define symbol to your Player configuration. This will help debugging physics behavior directly in-game if required.
+* Add support for substepping with Unity Physics to improve solver stability and simulation accuracy. Substepping segments the timestep by the substep count and runs the iterative solver for each of these substeps. Collision detection is only performed on the first substep. To use this feature, set the "Substep Count" field greater than 1 in the `PhysicsStep` component. By default, the Substep Count is set to 1.
 
 ### Changed
 
@@ -20,6 +30,20 @@ uid: unity-physics-changelog
 ### Removed
 
 * removing various material assets within unity/physics (PhysicsDynamicDebugMaterial.mat and Material.mat (HullGeneration scene)).
+
+### Fixed
+
+* Incorrect capsule debug visualization when using non-default proportions in `PhysicsDebugDisplay`.
+
+
+## [1.3.14] - 2025-04-11
+
+### Changed
+
+* Updated the `com.unity.entities` dependency to version `1.3.14`
+* Updated the `com.unity.burst` dependency to version `1.8.19`
+* Updated the `com.unity.test-framework dependency` to version `1.4.6`
+* The minimum supported editor version is now 2022.3.20f1
 
 ### Fixed
 
