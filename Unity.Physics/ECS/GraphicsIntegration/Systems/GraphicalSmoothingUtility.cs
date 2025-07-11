@@ -12,9 +12,19 @@ namespace Unity.Physics.GraphicsIntegration
     public static class GraphicalSmoothingUtility
     {
         /// <summary>
-        /// Compute a simple extrapolated transform for the graphical representation of a rigid body using its <c>currentTransform</c> and <c>currentVelocity</c>.
-        /// Because bodies' motion may change the next time physics steps (e.g., as the result of a collision), using this method can mis-predict their future locations, causing them to appear to snap into place the next time physics steps.
-        /// It generally results in a solid contact and kick from collisions, albeit with some interpenetration, as well as slight jitter on small, smooth velocity changes (e.g., the top of a parabolic arc).
+        /// <para>
+        /// Compute a simple extrapolated transform for the graphical representation of a rigid body using its
+        /// <c>currentTransform</c> and <c>currentVelocity</c>.
+        /// </para>
+        /// <para>
+        /// Because bodies' motion may change the next time physics steps (e.g., as the result of a collision),
+        /// using this method can mis-predict their future locations, causing them to appear to snap into place
+        /// the next time physics steps.
+        /// </para>
+        /// <para>
+        /// It generally results in a solid contact and kick from collisions, albeit with some interpenetration,
+        /// as well as slight jitter on small, smooth velocity changes (e.g., the top of a parabolic arc).
+        /// </para>
         /// <code>
         /// Simulation:                Graphical Extrapolation:
         ///
@@ -32,7 +42,7 @@ namespace Unity.Physics.GraphicsIntegration
         /// <param name="timeAhead">A value indicating how many seconds the current elapsed time for graphics is ahead of the elapsed time when physics last stepped.</param>
         /// <returns>
         /// An extrapolated transform for a rigid body's graphical representation, suitable for constructing its <c>LocalToWorld</c> matrix before rendering.
-        /// See also <seealso cref="BuildLocalToWorld"/>.
+        /// See also <see cref="BuildLocalToWorld"/>.
         /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static RigidTransform Extrapolate(
@@ -45,8 +55,14 @@ namespace Unity.Physics.GraphicsIntegration
         }
 
         /// <summary>
-        /// Compute a simple interpolated transform for the graphical representation of a rigid body between <c>previousTransform</c> and <c>currentTransform</c>.
-        /// Because bodies' motion is often deflected during a physics step when there is a contact event, using this method can make bodies appear to change direction before a collision is actually visible.
+        /// <para>
+        /// Compute a simple interpolated transform for the graphical representation of a rigid body between
+        /// <c>previousTransform</c> and <c>currentTransform</c>.
+        /// </para>
+        /// <para>
+        /// Because bodies' motion is often deflected during a physics step when there is a contact event,
+        /// using this method can make bodies appear to change direction before a collision is actually visible.
+        /// </para>
         /// <code>
         /// Simulation:                Graphical Interpolation:
         ///
@@ -57,15 +73,20 @@ namespace Unity.Physics.GraphicsIntegration
         /// _________\/_________       ____________________
         ///
         /// </code>
-        /// (Note that for cartoons, an animator would use squash and stretch to force a body to make contact even if it is technically not hitting on a specific frame.)
+        /// <para>
+        /// (Note that for cartoons, an animator would use squash and stretch to force a body to make contact
+        /// even if it is technically not hitting on a specific frame.)
+        /// </para>
+        /// <para>
         /// See <see cref="InterpolateUsingVelocity"/> for an alternative approach.
+        /// </para>
         /// </summary>
         /// <param name="previousTransform">The transform of the rigid body before physics stepped.</param>
         /// <param name="currentTransform">The transform of the rigid body after physics has stepped (i.e., the value of its <see cref="Unity.Transforms.LocalTransform"/> components).</param>
         /// <param name="normalizedTimeAhead">A value in the range [0, 1] indicating how many seconds the current elapsed time for graphics is ahead of the elapsed time when physics last stepped, as a proportion of the fixed timestep used by physics.</param>
         /// <returns>
         /// An interpolated transform for a rigid body's graphical representation, suitable for constructing its <c>LocalToWorld</c> matrix before rendering.
-        /// See also <seealso cref="BuildLocalToWorld"/>.
+        /// See also <see cref="BuildLocalToWorld"/>.
         /// </returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static RigidTransform Interpolate(
@@ -94,7 +115,7 @@ namespace Unity.Physics.GraphicsIntegration
         /// <param name="normalizedTimeAhead">A value in the range [0, 1] indicating how many seconds the current elapsed time for graphics is ahead of the elapsed time when physics last stepped, as a proportion of the fixed timestep used by physics.</param>
         /// <returns>
         /// An interpolated transform for a rigid body's graphical representation, suitable for constructing its <c>LocalToWorld</c> matrix before rendering.
-        /// See also <seealso cref="BuildLocalToWorld"/>.
+        /// See also <see cref="BuildLocalToWorld"/>.
         /// </returns>
         public static RigidTransform InterpolateUsingVelocity(
             in RigidTransform previousTransform,

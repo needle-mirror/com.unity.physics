@@ -47,7 +47,7 @@ public partial struct GetNumCollisionEventsSystem : ISystem
     public void OnUpdate(ref SystemState state)
     {
         NativeReference<int> numCollisionEvents = new NativeReference<int>(0, Allocator.TempJob);
-        
+
         state.Dependency = new CountNumCollisionEvents
         {
             NumCollisionEvents = numCollisionEvents
@@ -87,7 +87,7 @@ public partial struct GetNumTriggerEventsSystem : ISystem
     public void OnUpdate(ref SystemState state)
     {
         NativeReference<int> numTriggerEvents = new NativeReference<int>(0, Allocator.TempJob);
-        
+
         state.Dependency = new CountNumTriggerEvents
         {
             NumTriggerEvents = numTriggerEvents

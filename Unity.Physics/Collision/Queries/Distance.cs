@@ -108,12 +108,10 @@ namespace Unity.Physics
         /// <value> Distance at which the hit occurred. </value>
         public float Distance => Fraction;
 
-        /// <summary>   Collider key of the query collider. </summary>
-        ///
-        /// ### <returns>
+        /// <summary>   Collider key of the query collider.
         /// If the query input uses composite collider, this field will have the collider key of it's
         /// leaf which participated in the hit, otherwise the value will be undefined.
-        /// </returns>
+        /// </summary>
         public ColliderKey QueryColliderKey;
     }
 
@@ -273,6 +271,13 @@ namespace Unity.Physics
             float3 edgeA = capsuleVertex1 - capsuleVertex0;
             float dot = math.dot(edgeA, centerB - capsuleVertex0);
             float edgeLengthSquared = math.lengthsq(edgeA);
+
+            // If the capsule is degenerate (becomes a sphere), just use vertex0 as the point
+            if (edgeLengthSquared < distanceEpsSq)
+            {
+                return PointPoint(capsuleVertex0, centerB, capsuleRadius, capsuleRadius + sphereRadius);
+            }
+
             dot = math.max(dot, 0.0f);
             dot = math.min(dot, edgeLengthSquared);
             float invEdgeLengthSquared = 1.0f / edgeLengthSquared;

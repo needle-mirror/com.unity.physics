@@ -1,6 +1,7 @@
 using System;
 using NUnit.Framework;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 using Assert = UnityEngine.Assertions.Assert;
 
@@ -31,89 +32,110 @@ namespace Unity.Physics.Tests.Base.Containers
             public int NextFree { get; set; }
         }
 
-        [Test]
+        [Test, Timeout(60000)]
         public unsafe void CreateEmpty([Values(1, 100, 200)] int count)
         {
-            PoolTestElement* elements = stackalloc PoolTestElement[count];
-            ElementPoolBase poolBase = new ElementPoolBase(elements, count);
-            var pool = new ElementPool<PoolTestElement> { ElementPoolBase = &poolBase };
-
-            var numElems = 0;
-            foreach (var elem in pool.Elements)
+            void* elements = UnsafeUtility.Malloc(sizeof(PoolTestElement) * count, 1, Allocator.Persistent);
+            try
             {
-                numElems++;
-            }
+                ElementPoolBase poolBase = new ElementPoolBase(elements, count);
+                var pool = new ElementPool<PoolTestElement> { ElementPoolBase = &poolBase };
 
-            Assert.IsTrue(numElems == 0);
-            Assert.IsTrue(pool.Capacity == count);
-            Assert.IsTrue(pool.PeakCount == 0);
+                var numElems = 0;
+                foreach (var elem in pool.Elements)
+                {
+                    numElems++;
+                }
+
+                Assert.IsTrue(numElems == 0);
+                Assert.IsTrue(pool.Capacity == count);
+                Assert.IsTrue(pool.PeakCount == 0);
+            }
+            finally
+            {
+                UnsafeUtility.Free(elements, Allocator.Persistent);
+            }
         }
 
-        [Test]
+        [Test, Timeout(60000)]
         public unsafe void InsertAndClear([Values(1, 100, 200)] int count)
         {
-            PoolTestElement* elements = stackalloc PoolTestElement[count];
-            ElementPoolBase poolBase = new ElementPoolBase(elements, count);
-            var pool = new ElementPool<PoolTestElement> { ElementPoolBase = &poolBase };
-
-            for (var i = 0; i < count; ++i)
+            void* elements = UnsafeUtility.Malloc(sizeof(PoolTestElement) * count, 1, Allocator.Persistent);
+            try
             {
-                pool.Allocate(new PoolTestElement { TestIndex  = i});
-                Assert.IsTrue(pool[i].IsAllocated);
+                ElementPoolBase poolBase = new ElementPoolBase(elements, count);
+                var pool = new ElementPool<PoolTestElement> { ElementPoolBase = &poolBase };
+
+                for (var i = 0; i < count; ++i)
+                {
+                    pool.Allocate(new PoolTestElement { TestIndex  = i});
+                    Assert.IsTrue(pool[i].IsAllocated);
+                }
+
+                Assert.IsTrue(pool.Capacity == count);
+
+                var numElems = 0;
+                foreach (var elem in pool.Elements)
+                {
+                    Assert.IsTrue(pool[numElems].TestIndex == numElems);
+                    numElems++;
+                }
+
+                Assert.IsTrue(numElems == count);
+                Assert.IsTrue(pool.PeakCount == count);
+
+                pool.Clear();
+
+                numElems = 0;
+                foreach (var elem in pool.Elements)
+                {
+                    numElems++;
+                }
+
+                Assert.IsTrue(numElems == 0);
+                Assert.IsTrue(pool.PeakCount == 0);
             }
-
-            Assert.IsTrue(pool.Capacity == count);
-
-            var numElems = 0;
-            foreach (var elem in pool.Elements)
+            finally
             {
-                Assert.IsTrue(pool[numElems].TestIndex == numElems);
-                numElems++;
+                UnsafeUtility.Free(elements, Allocator.Persistent);
             }
-
-            Assert.IsTrue(numElems == count);
-            Assert.IsTrue(pool.PeakCount == count);
-
-            pool.Clear();
-
-            numElems = 0;
-            foreach (var elem in pool.Elements)
-            {
-                numElems++;
-            }
-
-            Assert.IsTrue(numElems == 0);
-            Assert.IsTrue(pool.PeakCount == 0);
         }
 
-        [Test]
+        [Test, Timeout(60000)]
         public unsafe void Copy([Values(1, 100, 200)] int count)
         {
-            PoolTestElement* elements = stackalloc PoolTestElement[count];
-            ElementPoolBase poolBase = new ElementPoolBase(elements, count);
-            var pool = new ElementPool<PoolTestElement> { ElementPoolBase = &poolBase };
-
-            PoolTestElement* anotherElements = stackalloc PoolTestElement[count];
-            ElementPoolBase anotherPoolBase = new ElementPoolBase(anotherElements, count);
-            var anotherPool = new ElementPool<PoolTestElement> { ElementPoolBase = &anotherPoolBase };
-
-            Assert.IsTrue(pool.Capacity == anotherPool.Capacity);
-
-            for (var i = 0; i < count; ++i)
+            void* elements = UnsafeUtility.Malloc(sizeof(PoolTestElement) * count, 1, Allocator.Persistent);
+            try
             {
-                pool.Allocate(new PoolTestElement { TestIndex = i });
-                Assert.IsTrue(pool[i].IsAllocated);
+                ElementPoolBase poolBase = new ElementPoolBase(elements, count);
+                var pool = new ElementPool<PoolTestElement> { ElementPoolBase = &poolBase };
+
+                PoolTestElement* anotherElements = stackalloc PoolTestElement[count];
+                ElementPoolBase anotherPoolBase = new ElementPoolBase(anotherElements, count);
+                var anotherPool = new ElementPool<PoolTestElement> { ElementPoolBase = &anotherPoolBase };
+
+                Assert.IsTrue(pool.Capacity == anotherPool.Capacity);
+
+                for (var i = 0; i < count; ++i)
+                {
+                    pool.Allocate(new PoolTestElement { TestIndex = i });
+                    Assert.IsTrue(pool[i].IsAllocated);
+                }
+
+                anotherPool.CopyFrom(pool);
+
+                Assert.IsTrue(pool.PeakCount == anotherPool.PeakCount);
+
+                for (var i = 0; i < count; ++i)
+                {
+                    Assert.IsTrue(pool[i].TestIndex == i);
+                    Assert.IsTrue(anotherPool[i].TestIndex == i);
+                    Assert.IsTrue(anotherPool[i].IsAllocated);
+                }
             }
-
-            anotherPool.CopyFrom(pool);
-
-            Assert.IsTrue(pool.PeakCount == anotherPool.PeakCount);
-
-            for (var i = 0; i < count; ++i)
+            finally
             {
-                Assert.IsTrue(pool[i].TestIndex == i);
-                Assert.IsTrue(anotherPool[i].TestIndex == i);
-                Assert.IsTrue(anotherPool[i].IsAllocated);
+                UnsafeUtility.Free(elements, Allocator.Persistent);
             }
         }
     }

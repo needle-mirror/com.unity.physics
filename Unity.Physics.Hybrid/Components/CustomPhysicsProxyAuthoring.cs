@@ -20,8 +20,11 @@ namespace Unity.Physics.Authoring
 #endif
 
         /// <summary>
-        /// First Order Gain <para/>
-        /// Coefficient in range [0,1] denoting how much the client body will be driven by position (teleported), while the rest of the position diff will be velocity-driven."
+        /// <para>First Order Gain.</para>
+        /// <para>
+        /// Coefficient in range [0,1] denoting how much the client body will be driven by position (teleported),
+        /// while the rest of the position difference will be velocity-driven.
+        /// </para>
         /// </summary>
         [Range(0f, 1f)]
         [Tooltip("Coefficient in range [0,1] denoting how much the client body will be driven by position (teleported), while the rest of the position diff will be velocity-driven.")]

@@ -44,6 +44,14 @@ namespace Unity.Physics.Tests.Collision.Colliders
             new float3(7.66f, 3.44f, 0.0f)
         };
 
+        internal static readonly float3[] k_FlatTestPoints =
+        {
+            new float3(-1.0f, 0.0f, -1.0f),
+            new float3(-1.0f, 0.0f, 1.0f),
+            new float3(1.0f, 0.0f, 1.0f),
+            new float3(1.0f, 0.0f, -1.0f)
+        };
+
         void ValidateConvexCollider(Entities.BlobAssetReference<Collider> collider)
         {
             // manually created colliders are unique by design
@@ -67,6 +75,38 @@ namespace Unity.Physics.Tests.Collision.Colliders
             ValidateConvexCollider(collider);
             using var colliderClone = collider.Value.Clone();
             ValidateConvexCollider(colliderClone);
+        }
+
+        /// <summary>
+        /// Test that a <see cref="ConvexCollider"/> created with a flat point cloud has correct <see cref="ConvexHull"/> connectivity
+        /// </summary>
+        [Test]
+        public void TestFlatConvexColliderConvexHullConnectivity()
+        {
+            var points = new NativeArray<float3>(k_FlatTestPoints, Allocator.Temp);
+            using var collider = ConvexCollider.Create(
+                points, new ConvexHullGenerationParameters { BevelRadius = 0.15f }, CollisionFilter.Default
+            );
+
+            ValidateConvexCollider(collider);
+            using var colliderClone = collider.Value.Clone();
+            ValidateConvexCollider(colliderClone);
+
+            ref var convexCollider = ref collider.As<ConvexCollider>();
+
+            Assert.AreEqual(k_FlatTestPoints.Length, convexCollider.ConvexHull.VertexEdges.Length);
+            for (int i = 0; i < k_FlatTestPoints.Length; i++)
+            {
+                ref var edge = ref convexCollider.ConvexHull.VertexEdges[i];
+                ref var face = ref convexCollider.ConvexHull.Faces[edge.FaceIndex];
+
+                ref var adjacentEdge = ref convexCollider.ConvexHull.FaceLinks[face.FirstIndex + edge.EdgeIndex];
+                ref var adjacentFace = ref convexCollider.ConvexHull.Faces[adjacentEdge.FaceIndex];
+
+                // For a flat shapes adjacent edge should have a link back to the original edge.
+                ref var originalEdge = ref convexCollider.ConvexHull.FaceLinks[adjacentFace.FirstIndex + adjacentEdge.EdgeIndex];
+                Assert.AreEqual(edge, originalEdge);
+            }
         }
 
 #if ENABLE_UNITY_COLLECTIONS_CHECKS

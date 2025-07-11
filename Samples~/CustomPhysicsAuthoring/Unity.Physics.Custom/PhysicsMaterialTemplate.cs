@@ -19,6 +19,8 @@ namespace Unity.Physics.Authoring
 
         public CustomPhysicsMaterialTags CustomTags { get => m_Value.CustomTags; set => m_Value.CustomTags = value; }
 
+        public PhysicsMaterialFlag DetailedStaticMeshCollision { get => m_Value.DetailedStaticMeshCollision; set => m_Value.DetailedStaticMeshCollision = value; }
+
         [SerializeField]
         PhysicsMaterialProperties m_Value = new PhysicsMaterialProperties(false);
 

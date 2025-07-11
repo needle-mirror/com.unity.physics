@@ -5,18 +5,17 @@ namespace Unity.Physics.Authoring
 {
     /// <summary>
     /// Display modes for the physics debug displays.
-    /// <para>PreIntegration displays the state of the body before the simulation.</para>
-    /// <para>PostIntegration displays the state of the body when the simulation results have been integrated.</para>
     /// </summary>
     public enum PhysicsDebugDisplayMode : byte
     {
+        /// <summary>PreIntegration displays the state of the body before the simulation.</summary>
         PreIntegration,
+        /// <summary>PostIntegration displays the state of the body when the simulation results have been integrated.</summary>
         PostIntegration
     }
 
     /// <summary>
-    /// Physics Debug Display Data.<para/>
-    ///
+    /// Physics Debug Display Data.
     /// Component data containing physics debug display settings.
     /// </summary>
     public struct PhysicsDebugDisplayData : IComponentData
@@ -83,8 +82,7 @@ namespace Unity.Physics.Authoring
     }
 
     /// <summary>
-    /// Physics Debug Display Authoring.<para/>
-    ///
+    /// Physics Debug Display Authoring.
     /// GameObject component containing physics debug display settings.
     /// </summary>
     [AddComponentMenu("Entities/Physics/Physics Debug Display")]

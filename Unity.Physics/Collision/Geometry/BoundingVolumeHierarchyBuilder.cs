@@ -313,31 +313,29 @@ namespace Unity.Physics
                     }
                     else
                     {
-                        Node* childNode = GetNode(childNodeIndex);
-                        *childNode = Node.EmptyLeaf;
-                        childNode->Parent = range.Root;
-                        childNode->IsLeaf = true;
+                        ref Node childNode = ref Bvh.GetNode(childNodeIndex);
+                        childNode = Node.EmptyLeaf;
+                        childNode.Parent = range.Root;
+                        childNode.IsLeaf = true;
 
                         for (int pointIndex = 0; pointIndex < subRanges[i].Length; pointIndex++)
                         {
-                            childNode->Data[pointIndex] = Points[subRanges[i].Start + pointIndex].Index;
+                            childNode.Data[pointIndex] = Points[subRanges[i].Start + pointIndex].Index;
                         }
 
                         for (int j = subRanges[i].Length; j < 4; j++)
                         {
-                            childNode->ClearLeafData(j);
+                            childNode.ClearLeafData(j);
                         }
                     }
                 }
 
-                Node* parentNode = GetNode(range.Root);
-                *parentNode = Node.Empty;
-                parentNode->Parent = range.Parent;
-                parentNode->Data = parentData;
-                parentNode->IsInternal = true;
+                ref var parentNode = ref Bvh.GetNode(range.Root);
+                parentNode = Node.Empty;
+                parentNode.Parent = range.Parent;
+                parentNode.Data = parentData;
+                parentNode.IsInternal = true;
             }
-
-            Node* GetNode(int nodeIndex) => Bvh.m_Nodes + nodeIndex;
 
             float4* PointsAsFloat4 => (float4*)Points.GetUnsafePtr();
 
@@ -420,11 +418,11 @@ namespace Unity.Physics
                     rangeStack[stackSize++] = subRange;
                 }
 
-                Node* rootNode = GetNode(range.Root);
-                *rootNode = Node.Empty;
-                rootNode->Parent = range.Parent;
-                rootNode->Data = rootData;
-                rootNode->IsInternal = true;
+                ref Node rootNode = ref Bvh.GetNode(range.Root);
+                rootNode = Node.Empty;
+                rootNode.Parent = range.Parent;
+                rootNode.Data = rootData;
+                rootNode.IsInternal = true;
             }
 
             /// <summary>
@@ -478,6 +476,7 @@ namespace Unity.Physics
             {
                 Points = points,
                 Nodes = m_Nodes,
+                MaxNodeCount = m_MaxNodeCount,
                 NodeFilters = m_NodeFilters,
                 Ranges = ranges,
                 BranchNodeOffsets = branchNodeOffsets,
@@ -494,6 +493,7 @@ namespace Unity.Physics
                 Aabbs = aabbs,
                 BodyFilters = bodyFilters,
                 Nodes = m_Nodes,
+                MaxNodeCount = m_MaxNodeCount,
                 NodeFilters = m_NodeFilters,
                 Ranges = ranges,
                 BranchNodeOffsets = branchNodeOffsets,
@@ -520,7 +520,7 @@ namespace Unity.Physics
         }
 
         /// <summary>
-        /// <para>Clears the tree and adds a single empty node at the root (<see cref="Nodes">node</see> with index 1).</para>
+        /// <para>Clears the tree and adds a single empty node at the root (<see cref="GetNode">node</see> with index 1).</para>
         /// <para>Can only be called on an <see cref="IsIncremental">incremental</see> tree.</para>
         /// </summary>
         public unsafe void Clear()
@@ -591,18 +591,18 @@ namespace Unity.Physics
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        unsafe CollisionFilter BuildCombinedCollisionFilterForLeafNode(CollisionFilter* leafFilters, Node* leafNode)
+        unsafe CollisionFilter BuildCombinedCollisionFilterForLeafNode(CollisionFilter* leafFilters, ref Node leafNode)
         {
-            SafetyChecks.CheckAreEqualAndThrow(true, leafNode->IsLeaf);
+            SafetyChecks.CheckAreEqualAndThrow(true, leafNode.IsLeaf);
 
             CollisionFilter combinedFilter = CollisionFilter.Zero;
 
             bool first = true;
             for (int j = 0; j < 4; ++j)
             {
-                if (leafNode->IsLeafValid(j))
+                if (leafNode.IsLeafValid(j))
                 {
-                    CollisionFilter leafFilter = leafFilters[leafNode->Data[j]];
+                    CollisionFilter leafFilter = leafFilters[leafNode.Data[j]];
                     combinedFilter = first ? leafFilter : CollisionFilter.CreateUnion(combinedFilter, leafFilter);
                     first = false;
                 }
@@ -612,17 +612,17 @@ namespace Unity.Physics
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        unsafe CollisionFilter BuildCombinedCollisionFilterForInternalNode(Node* internalNode)
+        unsafe CollisionFilter BuildCombinedCollisionFilterForInternalNode(ref Node internalNode)
         {
-            SafetyChecks.CheckAreEqualAndThrow(true, internalNode->IsInternal);
+            SafetyChecks.CheckAreEqualAndThrow(true, internalNode.IsInternal);
             CollisionFilter combinedFilter = CollisionFilter.Zero;
 
             bool first = true;
             for (int j = 0; j < 4; j++)
             {
-                if (internalNode->IsInternalValid(j))
+                if (internalNode.IsInternalValid(j))
                 {
-                    CollisionFilter nodeFilter = m_NodeFilters[internalNode->Data[j]];
+                    CollisionFilter nodeFilter = m_NodeFilters[internalNode.Data[j]];
                     combinedFilter = first ? nodeFilter : CollisionFilter.CreateUnion(combinedFilter, nodeFilter);
                     first = false;
                 }
@@ -635,28 +635,29 @@ namespace Unity.Physics
         internal unsafe void BuildCombinedCollisionFilter(NativeArray<CollisionFilter> leafFilterInfo, int nodeStartIndex, int nodeEndIndex)
         {
             Node* baseNode = m_Nodes;
+            SafetyChecks.CheckIndexAndThrow(nodeEndIndex, m_MaxNodeCount);
             Node* currentNode = baseNode + nodeEndIndex;
             CollisionFilter* leafFilters = (CollisionFilter*)leafFilterInfo.GetUnsafeReadOnlyPtr();
 
             for (int i = nodeEndIndex; i >= nodeStartIndex; i--, currentNode--)
             {
-                m_NodeFilters[i] = currentNode->IsLeaf ? BuildCombinedCollisionFilterForLeafNode(leafFilters, currentNode)
-                    : BuildCombinedCollisionFilterForInternalNode(currentNode);
+                SafetyChecks.CheckIndexAndThrow(i, m_MaxNodeCount);
+                m_NodeFilters[i] = currentNode->IsLeaf ? BuildCombinedCollisionFilterForLeafNode(leafFilters, ref UnsafeUtility.AsRef<Node>(currentNode))
+                    : BuildCombinedCollisionFilterForInternalNode(ref UnsafeUtility.AsRef<Node>(currentNode));
             }
         }
 
-        // Set the collision filter on nodeIndex to the combination of all it's child filters. Node must not be a leaf.
+        // Set the collision filter on nodeIndex to the combination of all its child filters. Node must not be a leaf.
         unsafe void BuildCombinedCollisionFilter(int nodeIndex)
         {
-            Node* baseNode = m_Nodes;
-            Node* currentNode = baseNode + nodeIndex;
+            ref Node currentNode = ref GetNode(nodeIndex);
 
-            Assert.IsTrue(currentNode->IsInternal);
+            Assert.IsTrue(currentNode.IsInternal);
 
             CollisionFilter combinedFilter = new CollisionFilter();
             for (int j = 0; j < 4; j++)
             {
-                combinedFilter = CollisionFilter.CreateUnion(combinedFilter, m_NodeFilters[currentNode->Data[j]]);
+                combinedFilter = CollisionFilter.CreateUnion(combinedFilter, m_NodeFilters[currentNode.Data[j]]);
             }
 
             m_NodeFilters[nodeIndex] = combinedFilter;
@@ -665,10 +666,12 @@ namespace Unity.Physics
         public unsafe void Refit(NativeArray<Aabb> aabbs, int nodeStartIndex, int nodeEndIndex)
         {
             Node* baseNode = m_Nodes;
+            SafetyChecks.CheckIndexAndThrow(nodeEndIndex, m_MaxNodeCount);
             Node* currentNode = baseNode + nodeEndIndex;
 
             for (int i = nodeEndIndex; i >= nodeStartIndex; i--, currentNode--)
             {
+                SafetyChecks.CheckIndexAndThrow(i, m_MaxNodeCount);
                 if (currentNode->IsLeaf)
                 {
                     ushort numFreeLeafSlots = 0;
@@ -906,6 +909,7 @@ namespace Unity.Physics
             public NativeArray<PointAndIndex> Points;
             [NativeDisableUnsafePtrRestriction]
             public Node* Nodes;
+            public int MaxNodeCount;
             [NativeDisableUnsafePtrRestriction]
             public CollisionFilter* NodeFilters;
             public NativeArray<Builder.Range> Ranges;
@@ -929,7 +933,7 @@ namespace Unity.Physics
                     return;
                 }
 
-                var bvh = new BoundingVolumeHierarchy(Nodes, NodeFilters);
+                var bvh = new BoundingVolumeHierarchy(Nodes, MaxNodeCount, NodeFilters);
                 bvh.BuildFirstNLevels(Points, Ranges, BranchNodeOffsets, ThreadCount, out int branchCount);
                 BranchCount[0] = branchCount;
             }
@@ -948,6 +952,7 @@ namespace Unity.Physics
 
             [NativeDisableUnsafePtrRestriction]
             public Node* Nodes;
+            public int MaxNodeCount;
             [NativeDisableUnsafePtrRestriction]
             public CollisionFilter* NodeFilters;
 
@@ -957,7 +962,7 @@ namespace Unity.Physics
             public void Execute(int index)
             {
                 Assert.IsTrue(BranchNodeOffsets[index] >= 0);
-                var bvh = new BoundingVolumeHierarchy(Nodes, NodeFilters);
+                var bvh = new BoundingVolumeHierarchy(Nodes, MaxNodeCount, NodeFilters);
                 int lastNode = bvh.BuildBranch(Points, Aabbs, Ranges[index], BranchNodeOffsets[index]);
 
                 NodeCounts[index] = lastNode + 1;
@@ -1019,7 +1024,7 @@ namespace Unity.Physics
                     NodeFiltersList->Length = maxNodeCount;
                 }
 
-                var bvh = new BoundingVolumeHierarchy(Nodes, NodeFilters);
+                var bvh = new BoundingVolumeHierarchy(Nodes, maxNodeCount , NodeFilters);
                 bvh.Refit(Aabbs, 1, minBranchNodeIndex);
 
                 if (NodeFilters != null)
@@ -1049,8 +1054,8 @@ namespace Unity.Physics
         //  f) validates inner node collision filter integrity
         internal unsafe void CheckIntegrity(int nodeIndex = 1, int parentIndex = 0, byte childIndex = 0)
         {
-            Node parent = m_Nodes[parentIndex];
-            Node node = m_Nodes[nodeIndex];
+            Node parent = GetNode(parentIndex);
+            Node node = GetNode(nodeIndex);
             // the 0'th node is reserved as an empty invalid node. The tree starts at index 1.
             var parentValid = parentIndex != 0;
 
@@ -1066,7 +1071,7 @@ namespace Unity.Physics
                 // check parent's collision filter
                 if (m_NodeFilters != null)
                 {
-                    var combinedFilter = BuildCombinedCollisionFilterForInternalNode(&parent);
+                    var combinedFilter = BuildCombinedCollisionFilterForInternalNode(ref parent);
                     if (!combinedFilter.Equals(m_NodeFilters[parentIndex]))
                     {
                         SafetyChecks.ThrowInvalidOperationException("Parent filter does not match combination of child filters.");
@@ -1175,10 +1180,9 @@ namespace Unity.Physics
             }
         }
 
-        internal unsafe void CheckLeafNodeElementIntegrity(int numElements = -1)
+        internal void CheckLeafNodeElementIntegrity(int numElements = -1)
         {
             // make sure that all element indices from 0 to numElements - 1 are present in the tree
-            var nodes = Nodes;
             var elementIndexSet = new NativeHashSet<int>(numElements, Allocator.Temp);
 
             var queue = new NativeQueue<int>(Allocator.Temp);
@@ -1191,7 +1195,7 @@ namespace Unity.Physics
             while (!queue.IsEmpty())
             {
                 var nodeIndex = queue.Dequeue();
-                var node = nodes[nodeIndex];
+                var node = GetNode(nodeIndex);
                 if (node.IsInternal)
                 {
                     for (int i = 0; i < 4; ++i)
@@ -1254,28 +1258,26 @@ namespace Unity.Physics
         internal unsafe void CheckLeafNodeFilterIntegrity(CollisionFilter* filters)
         {
             // make sure that all element indices from 0 to numBodies - 1 are present in the tree
-            var nodes = Nodes;
-
             var queue = new NativeQueue<int>(Allocator.Temp);
             // start with root node (node at index 1)
             queue.Enqueue(1);
             while (!queue.IsEmpty())
             {
                 var nodeIndex = queue.Dequeue();
-                var node = nodes + nodeIndex;
-                if (node->IsInternal)
+                var node = GetNode(nodeIndex);
+                if (node.IsInternal)
                 {
                     for (int i = 0; i < 4; ++i)
                     {
-                        if (node->IsChildValid(i))
+                        if (node.IsChildValid(i))
                         {
-                            queue.Enqueue(node->Data[i]);
+                            queue.Enqueue(node.Data[i]);
                         }
                     }
                 }
                 else
                 {
-                    var combinedFilter = BuildCombinedCollisionFilterForLeafNode(filters, node);
+                    var combinedFilter = BuildCombinedCollisionFilterForLeafNode(filters, ref node);
                     if (!combinedFilter.Equals(m_NodeFilters[nodeIndex]))
                     {
                         SafetyChecks.ThrowInvalidOperationException("Leaf filter does not match combination of child filters.");

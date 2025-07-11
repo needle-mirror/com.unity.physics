@@ -2,7 +2,7 @@
 
 Interacting with rigid bodies can be done using scripts. For example to alter the velocity of a body, you can query for its `PhysicsVelocity` and set new values. Let's make an example that attracts all bodies to a single point.
 
-First, we will create a `MonoBehaviour` script file called `TargetAuthoring.cs` (with two values, one float and one GameObject) and attach it to the Sphere GameObject. This will allow us to input data values from the inspector. Then, we need to add an `IComponentData` struct named `Target` and as well as a `Baker` called `TargetAuthoringBaker` and bridge the values from the `TargetAuthoring` with the `Target`. 
+First, we will create a `MonoBehaviour` script file called `TargetAuthoring.cs` (with two values, one float and one GameObject) and attach it to the Sphere GameObject. This will allow us to input data values from the inspector. Then, we need to add an `IComponentData` struct named `Target` and as well as a `Baker` called `TargetAuthoringBaker` and bridge the values from the `TargetAuthoring` with the `Target`.
 
 ```csharp
 using Unity.Entities;
@@ -37,7 +37,7 @@ public class TargetAuthoringBaker : Baker<TargetAuthoring>
 
 Now, we need do something similar to be able run the logic inside the `ISystem`. Create another `MonoBehaviour` script file called `MovingBodyAuthoring.cs` but instead of authoring the same values than before, we will use a float for velocity magnitude.
 
-Inside the OnUpdate within `ISystem`, let's use the new idiomatic `foreach()` to query for all the entities with `MovingBody`. Then we can run the command to calculate the relative distance between the `Target` position and the `MovingBody` entity. Finally, we compare if the distance is smaller than the MaxDistance value, if so the `PhysicsVelocity` will be altered and the entity will start moving towards the target position. 
+Inside the OnUpdate within `ISystem`, let's use the new idiomatic `foreach()` to query for all the entities with `MovingBody`. Then we can run the command to calculate the relative distance between the `Target` position and the `MovingBody` entity. Finally, we compare if the distance is smaller than the MaxDistance value, if so the `PhysicsVelocity` will be altered and the entity will start moving towards the target position.
 
 ```csharp
 using Unity.Entities;
@@ -125,9 +125,9 @@ public static void ApplyImpulse(ref PhysicsVelocity pv, PhysicsMass pm,
             // Calculate point impulse
             var worldFromEntity = new RigidTransform(r.Value, t.Value);
             var worldFromMotion = math.mul(worldFromEntity, pm.Transform);
-            float3 angularImpulseWorldSpace = 
+            float3 angularImpulseWorldSpace =
                 math.cross(point - worldFromMotion.pos, impulse);
-            float3 angularImpulseInertiaSpace = 
+            float3 angularImpulseInertiaSpace =
                 math.rotate(math.inverse(worldFromMotion.rot), angularImpulseWorldSpace);
 
             pv.Angular += angularImpulseInertiaSpace * pm.InverseInertia;

@@ -9,63 +9,6 @@
       "errors": [
         ".samples: must be an array of objects with allowed string entries \"description\", \"displayName\", and \"path\" and allowed boolean entry \"interactiveImport\""
       ]
-    },
-    "PVP-150-1": {
-      "errors": [
-        "Unity.Physics.Math: multiple <summary> tags",
-        "Unity.Physics.Math: float3 DecomposeScale(float4x4): empty <returns> tag",
-        "Unity.Physics.BlobArray.Accessor<T>: this[int]: unexpected <returns>; use <value> instead",
-        "Unity.Physics.ColliderCastHit: QueryColliderKey: text or XML content outside a top-level tag",
-        "Unity.Physics.ColliderCastHit: QueryColliderKey: unexpected <returns>",
-        "Unity.DebugDisplay.ColorIndex: DynamicMesh: text or XML content outside a top-level tag",
-        "Unity.Physics.Authoring.CustomPhysicsBodyTags: empty <para> tag",
-        "Unity.Physics.Authoring.CustomPhysicsBodyTags: mixed block and inline content in <summary>; wrap inline content in <para>",
-        "Unity.Physics.Authoring.CustomPhysicsProxyAuthoring: FirstOrderGain: empty <para> tag",
-        "Unity.Physics.Authoring.CustomPhysicsProxyAuthoring: FirstOrderGain: mixed block and inline content in <summary>; wrap inline content in <para>",
-        "Unity.Physics.Authoring.PhysicsDisplayDebugGroup: mixed block and inline content in <summary>; wrap inline content in <para>",
-        "Unity.Physics.Authoring.PhysicsDebugDisplaySystem: empty <para> tag",
-        "Unity.Physics.Authoring.PhysicsDebugDisplaySystem: mixed block and inline content in <summary>; wrap inline content in <para>",
-        "Unity.Physics.DistanceHit: QueryColliderKey: text or XML content outside a top-level tag",
-        "Unity.Physics.DistanceHit: QueryColliderKey: unexpected <returns>",
-        "Unity.Physics.GraphicsIntegration.GraphicalSmoothingUtility: RigidTransform Extrapolate(in RigidTransform, in PhysicsVelocity, in PhysicsMass, float): mixed block and inline content in <summary>; wrap inline content in <para>",
-        "Unity.Physics.GraphicsIntegration.GraphicalSmoothingUtility: RigidTransform Extrapolate(in RigidTransform, in PhysicsVelocity, in PhysicsMass, float): <seealso> in block context; use <see> instead",
-        "Unity.Physics.GraphicsIntegration.GraphicalSmoothingUtility: RigidTransform Interpolate(in RigidTransform, in RigidTransform, float): mixed block and inline content in <summary>; wrap inline content in <para>",
-        "Unity.Physics.GraphicsIntegration.GraphicalSmoothingUtility: RigidTransform Interpolate(in RigidTransform, in RigidTransform, float): <seealso> in block context; use <see> instead",
-        "Unity.Physics.GraphicsIntegration.GraphicalSmoothingUtility: RigidTransform InterpolateUsingVelocity(in RigidTransform, in PhysicsVelocity, in PhysicsVelocity, in PhysicsMass, float, float): <seealso> in block context; use <see> instead",
-        "Unity.Physics.Constraint: DefaultSpringDamping: mixed block and inline content in <summary>; wrap inline content in <para>",
-        "Unity.Physics.Constraint: SpringDamping: mixed block and inline content in <summary>; wrap inline content in <para>",
-        "Unity.Physics.PhysicsColliderKeyEntityPair: mixed block and inline content in <summary>; wrap inline content in <para>",
-        "Unity.Physics.Authoring.PhysicsDebugDisplayMode: mixed block and inline content in <summary>; wrap inline content in <para>",
-        "Unity.Physics.Authoring.PhysicsDebugDisplayData: empty <para> tag",
-        "Unity.Physics.Authoring.PhysicsDebugDisplayData: mixed block and inline content in <summary>; wrap inline content in <para>",
-        "Unity.Physics.Authoring.PhysicsDebugDisplayAuthoring: empty <para> tag",
-        "Unity.Physics.Authoring.PhysicsDebugDisplayAuthoring: mixed block and inline content in <summary>; wrap inline content in <para>",
-        "Unity.Physics.GraphicsIntegration.PhysicsGraphicalSmoothing: <seealso> in block context; use <see> instead",
-        "Unity.Physics.Authoring.PhysicsStepAuthoring: empty <para> tag",
-        "Unity.Physics.Authoring.PhysicsStepAuthoring: mixed block and inline content in <summary>; wrap inline content in <para>",
-        "Unity.Physics.Authoring.PhysicsStepAuthoring: SolverIterationCount: empty <para> tag",
-        "Unity.Physics.Authoring.PhysicsStepAuthoring: SolverIterationCount: mixed block and inline content in <summary>; wrap inline content in <para>",
-        "Unity.Physics.Authoring.PhysicsStepAuthoring: MultiThreaded: empty <para> tag",
-        "Unity.Physics.Authoring.PhysicsStepAuthoring: MultiThreaded: mixed block and inline content in <summary>; wrap inline content in <para>",
-        "Unity.Physics.Systems.PhysicsWorldBuilder: JobHandle ScheduleUpdateBroadphase(ref PhysicsWorldData, float, float3, uint, in JobHandle, bool): text or XML content outside a top-level tag",
-        "Unity.Physics.Systems.PhysicsWorldBuilder: void UpdateBroadphaseImmediate(ref PhysicsWorldData, float, float3, uint): empty <param> tag",
-        "Unity.Physics.Systems.PhysicsWorldData: void Update(ref SystemState): must use self-closing <see/> syntax",
-        "Unity.Physics.GraphicsIntegration.MostRecentFixedTime: <seealso> in block context; use <see> instead",
-        "Unity.Physics.RigidBody: text or XML content outside a top-level tag",
-        "Unity.Physics.Authoring.BodySmoothing: Interpolation: <seealso> in block context; use <see> instead",
-        "Unity.Physics.Authoring.BodySmoothing: Extrapolation: <seealso> in block context; use <see> instead",
-        "Unity.Physics.Simulation: Contacts: text or XML content outside a top-level tag"
-      ]
-    },
-    "PVP-151-1": {
-      "errors": [
-        "Preferences: undocumented",
-        "Preferences: IntegrityChecksDisabled: undocumented",
-        "Preferences: DebugDisplayRuntimeEnabled: undocumented",
-        "Unity.Physics.Authoring.PhysicsDebugDisplayMode: PreIntegration: undocumented",
-        "Unity.Physics.Authoring.PhysicsDebugDisplayMode: PostIntegration: undocumented",
-        "Unity.Physics.Systems.PhysicsWorldBuilder: JobHandle ScheduleUpdateMotionData(ref SystemState, ref PhysicsWorldData, JobHandle): missing <returns>"
-      ]
     }
   }
 }

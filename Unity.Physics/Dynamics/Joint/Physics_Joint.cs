@@ -44,7 +44,7 @@ namespace Unity.Physics
 
         /// <summary>
         /// <para> Deprecated. Use DefaultDampingRatio instead. </para>
-        /// The default damping ratio.
+        /// <para> The default damping ratio. </para>
         /// </summary>
         [Obsolete("DefaultSpringDamping has been deprecated (RemovedAfter 2023-05-09). Use DefaultDampingRatio instead. (UnityUpgradable) -> DefaultDampingRatio", false)]
         public const float DefaultSpringDamping = 2530.126f;
@@ -71,7 +71,7 @@ namespace Unity.Physics
 
         /// <summary>
         /// <para> Deprecated. Use DampingRatio instead. </para>
-        /// The spring damping ratio.
+        /// <para> The spring damping ratio. </para>
         /// </summary>
         [Obsolete("SpringDamping has been deprecated (RemovedAfter 2023-05-09). Use DampingRatio instead. (UnityUpgradable) -> DampingRatio", false)]
         [FieldOffset(16)]

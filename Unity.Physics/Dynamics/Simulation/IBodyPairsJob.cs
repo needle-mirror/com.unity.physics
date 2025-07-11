@@ -129,18 +129,24 @@ namespace Unity.Physics
         {
             SafetyChecks.CheckSimulationStageAndThrow(simulation.m_SimulationScheduleStage, SimulationScheduleStage.PostCreateBodyPairs);
 
-            var data = new BodyPairsJobData<T>
+            if (simulation.StepContext.PhasedDispatchPairs.IsCreated)
             {
-                UserJobData = jobData,
-                PhasedDispatchPairs = simulation.StepContext.PhasedDispatchPairs.AsDeferredJobArray(),
-                Bodies = world.Bodies
-            };
+                var data = new BodyPairsJobData<T>
+                {
+                    UserJobData = jobData,
+                    PhasedDispatchPairs = simulation.StepContext.PhasedDispatchPairs.AsDeferredJobArray(),
+                    Bodies = world.Bodies
+                };
 
-            var jobReflectionData = BodyPairsJobProcess<T>.jobReflectionData.Data;
-            BodyPairsJobProcess<T>.CheckReflectionDataCorrect(jobReflectionData);
+                var jobReflectionData = BodyPairsJobProcess<T>.jobReflectionData.Data;
+                BodyPairsJobProcess<T>.CheckReflectionDataCorrect(jobReflectionData);
 
-            var parameters = new JobsUtility.JobScheduleParameters(UnsafeUtility.AddressOf(ref data), jobReflectionData, inputDeps, ScheduleMode.Single);
-            return JobsUtility.Schedule(ref parameters);
+                var parameters = new JobsUtility.JobScheduleParameters(UnsafeUtility.AddressOf(ref data), jobReflectionData, inputDeps, ScheduleMode.Single);
+                return JobsUtility.Schedule(ref parameters);
+            }
+            // else:
+
+            return inputDeps;
         }
 
         internal struct BodyPairsJobData<T> where T : struct

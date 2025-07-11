@@ -83,7 +83,6 @@ namespace Unity.Physics
         public static implicit operator float4(Plane plane) => plane.m_NormalAndDistance;
     }
 
-    /// <summary>   Helper functions. </summary>
     public static partial class Math
     {
         /// <summary>   Construct a Plane from direction. </summary>

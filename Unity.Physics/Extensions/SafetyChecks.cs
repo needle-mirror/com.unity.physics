@@ -356,16 +356,16 @@ namespace Unity.Physics
         #region Throw Exceptions
 
         [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
-        public static void ThrowInvalidOperationException(FixedString128Bytes message = default) => throw new InvalidOperationException($"{message}");
+        public static void ThrowInvalidOperationException(FixedString512Bytes message = default) => throw new InvalidOperationException($"{message}");
 
         [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
         public static void ThrowNotImplementedException() => throw new NotImplementedException();
 
         [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
-        public static void ThrowNotSupportedException(FixedString64Bytes message = default) => throw new NotSupportedException($"{message}");
+        public static void ThrowNotSupportedException(FixedString512Bytes message = default) => throw new NotSupportedException($"{message}");
 
         [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)]
-        public static void ThrowArgumentException(in FixedString32Bytes paramName, FixedString64Bytes message = default) =>
+        public static void ThrowArgumentException(in FixedString32Bytes paramName, FixedString512Bytes message = default) =>
             throw new ArgumentException($"{message}", $"{paramName}");
 
         #endregion

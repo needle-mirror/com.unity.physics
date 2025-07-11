@@ -8,7 +8,7 @@ This issue is most likely to occur when rigid bodies move at high speeds relativ
 - Colliders are composed of multiple connected elements, like triangles in a mesh.
 - Colliders are convex and overlap with adjacent edges or vertices.
 
-A classic example of ghost collisions can be seen in a box sliding across two connected edges. As it transitions from one edge to the next, the physics system might interpret the connection as a collision and generate a response force that blocks or redirects the box's movement. As the image illustrates in the following scenario, a box falls from the top of a sloped mesh surface. 
+A classic example of ghost collisions can be seen in a box sliding across two connected edges. As it transitions from one edge to the next, the physics system might interpret the connection as a collision and generate a response force that blocks or redirects the box's movement. As the image illustrates in the following scenario, a box falls from the top of a sloped mesh surface.
 
 Instead of sliding smoothly, the box collides with every segment of the mesh. This leads to unexpected behavior, such as the box stopping or experiencing abnormal friction as it moves. The collision system incorrectly tries to stop the box while simultaneously pushing it along the surface's normal direction. During this process, contact points are registered along the mesh's surface. These points, indicated by pink lines, represent the areas where the box intersects with the surface. As a result, these contact points alter the dynamics of the collision, affecting how the box interacts with the surface.
 
@@ -27,13 +27,13 @@ Instead of sliding smoothly, the box collides with every segment of the mesh. Th
 
 - **Narrowphase Contact Modification:** Narrowphase modifies collision predictions by smoothing the interaction between connected colliders. It ensures that contact points across adjacent colliders are treated as part of a continuous surface rather than separate elements. [Checkout Unity Physics Samples for more details](#narrow-phase-contacts-solution).
 
+- **Detailed Static Mesh Collision:** For static geometry to provide context about neighboring colliders, enabling the system to eliminate ghost collisions by leveraging ghost vertices for smoother transitions due to it processes contact detection for dynamic objects colliding with static colliders across both the current and next frame. This helps predict and refine collision accuracy. [Checkout Custom Physics Body Component for more details](custom-bodies.md) or add **Detailed Static Mesh Collision** component alongside the collider at the same component level.
+
 - **Reducing Shape Complexity:** Simplifying collision colliders by reducing triangle counts or using convex hull approximations minimizes the potential for ghost collisions.
 
 - **Smaller Time Steps:** Reducing the simulation's delta time enhances collision detection accuracy, minimizing the likelihood of ghost collisions. However, keep in mind that while a smaller time step increases precision, it can also impact performance, so it's important to balance accuracy with computational efficiency.
 
 - **Voronoi Regions (Optional custom solution):** A Voronoi region defines the valid range of collision normals for an edge. If a calculated collision normal lies outside this range, it is ignored or adjusted to align with the nearest valid normal.
-
-- **Shape Chains (Optional custom solution):** For static geometry to provide context about neighboring colliders, enabling the system to eliminate ghost collisions by leveraging ghost vertices for smoother transitions.
 
 ## Practical Examples
 - **Mesh Colliders:** Ghost collisions frequently appear in mesh colliders where the dynamic body interacts with individual triangles. For example, a car driving over a terrain mesh might bounce unexpectedly at triangle edges.
@@ -61,8 +61,8 @@ $$
 The first step is to check if either of the entities involved in the collision corresponds to the surface entity:
 
 ```csharp
-bool isBodyA = (contactHeader.EntityA == SurfaceEntity); // is the entity A the surface? 
-bool isBodyB = (contactHeader.EntityB == SurfaceEntity); // is the entity B the surface? 
+bool isBodyA = (contactHeader.EntityA == SurfaceEntity); // is the entity A the surface?
+bool isBodyB = (contactHeader.EntityB == SurfaceEntity); // is the entity B the surface?
 ```
 
 If either entity is the surface, the next step is to determine if the entity has any leaf or child colliders attached to the main collider. This is relevant when dealing with mesh surfaces with multiple attached leaf colliders.

@@ -151,6 +151,18 @@ namespace Unity.Physics.Authoring
 
         public CustomPhysicsMaterialTags CustomTags { get => m_Material.CustomTags; set => m_Material.CustomTags = value; }
 
+        public bool OverrideDetailedStaticMeshCollision
+        {
+            get => m_Material.OverrideDetailedStaticMeshCollision;
+            set => m_Material.OverrideDetailedStaticMeshCollision = value;
+        }
+
+        public PhysicsMaterialFlag DetailedStaticMeshCollision
+        {
+            get => m_Material.DetailedStaticMeshCollision;
+            set => m_Material.DetailedStaticMeshCollision = value;
+        }
+
         [SerializeField]
         PhysicsMaterialProperties m_Material = new PhysicsMaterialProperties(true);
 

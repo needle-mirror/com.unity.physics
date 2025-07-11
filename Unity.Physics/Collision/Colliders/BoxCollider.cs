@@ -215,7 +215,7 @@ namespace Unity.Physics
                     ConvexHull.FacePlanesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_ConvexHullData.FacePlanes[0], ref ConvexHull.FacePlanesBlob);
                     ConvexHull.FacePlanesBlob.Length = 6;
 
-                    ConvexHull.FacesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_ConvexHullData.Faces[0], ref ConvexHull.FacesBlob.Offset);
+                    ConvexHull.FacesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_ConvexHullData.Faces[0], ref ConvexHull.FacesBlob);
                     ConvexHull.FacesBlob.Length = 6;
 
                     ConvexHull.FaceVertexIndicesBlob.Offset = UnsafeEx.CalculateOffset(ref collider->m_ConvexHullData.FaceVertexIndices[0], ref ConvexHull.FaceVertexIndicesBlob);

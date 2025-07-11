@@ -21,10 +21,10 @@ byte bodyTags = allBodies[bodyIndex].CustomTags;
 
 ## Custom Physics Body Tag authoring
 
-You can set Custom Physics Body Tags through code as flags. However, it's more convenient to do so through the Unity Editor. To assign a name for each of the Custom Physics Body Tags in the Editor, right click on the folder where you want to save the definition file and select **Create** &gt; **Unity Physics** &gt; **Custom Physics Body Tag Names**.  
+You can set Custom Physics Body Tags through code as flags. However, it's more convenient to do so through the Unity Editor. To assign a name for each of the Custom Physics Body Tags in the Editor, right click on the folder where you want to save the definition file and select **Create** &gt; **Unity Physics** &gt; **Custom Physics Body Tag Names**.
 
-Not all tags are required to have names.  
-![custom physics body tags names](images/custom-physics-body-tags-names.png)  
+Not all tags are required to have names.
+![custom physics body tags names](images/custom-physics-body-tags-names.png)
 
 ### Authoring through built-in physics authoring
 
@@ -32,7 +32,7 @@ If you are using the [built-in `Rigidbody`](built-in-components.md) you have to 
 
 ### Authoring through custom physics authoring
 
-Assigning Custom Physics Body Tag to a physics `Rigidbody` is simple if you are using `custom` [`PhysicsBodyAuthoring`](custom-bodies.md), see the screenshot below:  
-![physics body tags](images/custom-physics-body-tags.png)  
+Assigning Custom Physics Body Tag to a physics `Rigidbody` is simple if you are using `custom` [`PhysicsBodyAuthoring`](custom-bodies.md), see the screenshot below:
+![physics body tags](images/custom-physics-body-tags.png)
 
 Built in baking will do all the job of converting authoring data to runtime data.

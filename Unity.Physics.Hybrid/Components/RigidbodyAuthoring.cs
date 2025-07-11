@@ -37,13 +37,13 @@ namespace Unity.Physics.Authoring
         /// The body's graphics representation will display a smooth result between the two most recent physics simulation ticks.
         /// The result is one tick behind, but will not mis-predict the body's position and orientation.
         /// However, it can make the body appear as if it changes direction before making contact with other bodies, particularly when the physics tick rate is low.
-        /// See <seealso cref="GraphicsIntegration.GraphicalSmoothingUtility.Interpolate"/> for details.
+        /// See <see cref="GraphicsIntegration.GraphicalSmoothingUtility.Interpolate"/> for details.
         /// </summary>
         Interpolation,
         /// <summary>
         /// The body's graphics representation will display a smooth result by projecting into the future based on its current velocity.
         /// The result is thus up-to-date, but can mis-predict the body's position and orientation since any future collision response has not yet been resolved.
-        /// See <seealso cref="GraphicsIntegration.GraphicalSmoothingUtility.Extrapolate"/> for details.
+        /// See <see cref="GraphicsIntegration.GraphicalSmoothingUtility.Extrapolate"/> for details.
         /// </summary>
         Extrapolation
     }

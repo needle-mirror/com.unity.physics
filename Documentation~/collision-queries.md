@@ -171,7 +171,7 @@ This section lists some simple examples for various queries. The examples for Ra
         }
         return Entity.Null;
     }
-```              
+```
 
 That will return the closest hit Entity along the desired ray. You can inspect the results of `RaycastHit` for more information such as hit position and normal etc.
 

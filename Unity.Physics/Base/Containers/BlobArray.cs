@@ -35,11 +35,11 @@ namespace Unity.Physics
                 }
             }
 
-            /// <summary>   Indexer to get items within this collection using array index syntax. </summary>
-            ///
-            /// <param name="index">    Zero-based index of the entry to access. </param>
-            ///
-            /// <returns>   The indexed item. </returns>
+            /// <summary>
+            /// Indexer to get items within this collection using array index syntax.
+            /// </summary>
+            /// <param name="index"> Zero-based index of the entry to access. </param>
+            /// <value> The element at the specified index. </value>
             public ref T this[int index]
             {
                 get

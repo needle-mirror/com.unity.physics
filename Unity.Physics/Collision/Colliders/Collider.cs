@@ -1620,6 +1620,51 @@ namespace Unity.Physics
         }
     }
 
+    /// <summary>
+    /// Stores triangle vertex position data for two intersecting colliders,
+    /// including main transform data and the leaf transform from a static mesh.
+    /// </summary>
+    public struct JacobianPolygonData
+    {
+        /// <summary> Represents the static body's position, rotation, and scale. </summary>
+        public AffineTransform Transform;
+        /// <summary> Stores the position, rotation, and scale of the leaf polygon used for ray evaluation. </summary>
+        public AffineTransform LeafTransform;
+        /// <summary>
+        /// Define the triangle polygon from (<see cref="LeafTransform"/>) used to
+        ///   predict potential collisions in the next frame.
+        /// </summary>
+        public float3 Vertex0;
+        /// <summary>
+        /// Define the triangle polygon from (<see cref="LeafTransform"/>) used to
+        ///   predict potential collisions in the next frame.
+        /// </summary>
+        public float3 Vertex1;
+        /// <summary>
+        /// Define the triangle polygon from (<see cref="LeafTransform"/>) used to
+        ///   predict potential collisions in the next frame.
+        /// </summary>
+        public float3 Vertex2;
+        /// <summary>
+        /// Derived from the opposing collider’s center of mass. If Body A collides
+        ///   with Body B, A’s data is stored while the center of mass is taken from B.
+        /// </summary>
+        public float3 CenterOfMass;
+        /// <summary>
+        /// The world-space position where two colliders make contact during the Jacobian Build stage.
+        ///   This point is later used in the solve phase to determine whether the predicted collision will occur.
+        /// </summary>
+        public float3 ContactPoint;
+        /// <summary> The normal contact point is used to determine the other point where the collision occurs. </summary>
+        public float3 Normal;
+        /// <summary> Indicates whether Body A or B is static. This is required for setting other properties. </summary>
+        public bool IsBodyAStatic;
+        /// <summary> Indicates whether Body A or B is static. This is required for setting other properties. </summary>
+        public bool IsBodyBStatic;
+        /// <summary> Determines whether the <see cref="LeafTransform"/> is a valid polygon child. </summary>
+        public bool IsValid;
+    }
+
     /// <summary>   A pair of collider keys. </summary>
     public struct ColliderKeyPair
     {

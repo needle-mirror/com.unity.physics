@@ -59,10 +59,10 @@ partial struct RuntimePhysicsDebugDisplayDataManager : ISystem
 
         if (Input.GetKeyDown(KeyCode.Alpha1))
             debugDisplayData.DrawColliders ^= 1;
-        
+
         if (Input.GetKeyDown(KeyCode.Alpha2))
             debugDisplayData.DrawColliderEdges ^= 1;
-        
+
         if (Input.GetKeyDown(KeyCode.Alpha3))
             debugDisplayData.DrawContacts ^= 1;
 
@@ -76,7 +76,7 @@ partial struct RuntimePhysicsDebugDisplayDataManager : ISystem
         //debugDisplayData.ColliderEdgesDisplayMode = (PhysicsDebugDisplayMode)((byte)debugDisplayData.ColliderEdgesDisplayMode ^ 1);
         //debugDisplayData.ColliderAabbDisplayMode = (PhysicsDebugDisplayMode)((byte)debugDisplayData.ColliderAabbDisplayMode ^ 1);
         //debugDisplayData.ColliderDisplayMode = (PhysicsDebugDisplayMode)((byte)debugDisplayData.ColliderDisplayMode ^ 1);
-        
+
         SystemAPI.SetSingleton(debugDisplayData);
     }
 }

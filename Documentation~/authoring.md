@@ -1,4 +1,4 @@
-# Authoring 
+# Authoring
 
 You can edit your physics simulation and author your sub-scenes using the following authoring components.
 

@@ -1,5 +1,5 @@
 {
-    "name": "Unity.Physics.PlayModeTests",
+    "name": "Unity.Physics.Runtime.Tests",
     "rootNamespace": "",
     "references": [
         "Unity.Burst",

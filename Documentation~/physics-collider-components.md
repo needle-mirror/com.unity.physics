@@ -29,7 +29,7 @@ Various collider types are supported in Unity Physics. The collider type of ever
 
 Using the Unity Editor's Inspector to display runtime data can be a powerful tool to examine a `PhysicsCollider` component and its collider blob. To show this data, have the subscene open for editing and have a GameObject selected. Navigate to the top right corner of the Inspector and click on the circle icon (see Figure 1) and choose the 'Runtime' option to display the entity components that are baked from this GameObject.
 
-![Inspector Navigation](images/inspector-runtime-view.png)<br/>_Figure 1: How to navigate to the Runtime View in the Inspector._ 
+![Inspector Navigation](images/inspector-runtime-view.png)<br/>_Figure 1: How to navigate to the Runtime View in the Inspector._
 
 Figure 2 shows an example of the Inspector dynamically updating in Runtime View while the `CollisionFilter` in a collider is modified each time a specified counter value is reached.
 
@@ -124,7 +124,7 @@ While you can provide the mass properties yourself, it is not necessary in most 
 
 # Modifying colliders
 
-Colliders can be modified via the `PhysicsCollider` component's `BlobAssetReference<Collider>` value. Caution should be taken when modifying this collider blob for two reasons. First, because you are modifying data which is potentially shared, and second, because the timing of this operation will matter to the physics simulation. It is generally safe to modify collider data in jobs that declare write access to the `PhysicsCollider` component, but it should be avoided when write-access is not specified. Additionally, this modification should be timed so that it happens before or after the physics simulation, or else you may encounter issues. 
+Colliders can be modified via the `PhysicsCollider` component's `BlobAssetReference<Collider>` value. Caution should be taken when modifying this collider blob for two reasons. First, because you are modifying data which is potentially shared, and second, because the timing of this operation will matter to the physics simulation. It is generally safe to modify collider data in jobs that declare write access to the `PhysicsCollider` component, but it should be avoided when write-access is not specified. Additionally, this modification should be timed so that it happens before or after the physics simulation, or else you may encounter issues.
 
 To make a change in a collider you need to access the corresponding `PhysicsCollider` component using any of the available methods, e.g., `EntityManager.GetComponentData<PhysicsCollider>(entity)`. Then, you can change the data within the collider blob directly, while remaining aware of the collider blob potentially being shared across multiple `PhysicsCollider` components, or after ensuring it is unique as explained in the previous section.
 
@@ -199,7 +199,7 @@ You can modify the geometry of any primitive collider through their type-specifi
 Other collider types, such as mesh-based colliders or compound colliders, don't offer any type-specific geometric parameters, but they can be modified using the generic method described below.
 
 ### Generic geometry modifications
-A generic way for modifying the geometry of colliders is offered by the [Collider.BakeTransform()](xref:Unity.Physics.Collider.BakeTransform(AffineTransform)) method. This method bakes any given affine transformation into the underlying geometry of the collider. An affine transformation can contain translation, rotation, uniform or non-uniform scale and even shear, and when applied to a collider, the collider's geometry is accordingly translated, rotated, scaled and sheared in the process.
+A generic way for modifying the geometry of colliders is offered by the [Collider.BakeTransform()](xref:Unity.Physics.Collider.BakeTransform(Unity.Mathematics.AffineTransform)) method. This method bakes any given affine transformation into the underlying geometry of the collider. An affine transformation can contain translation, rotation, uniform or non-uniform scale and even shear, and when applied to a collider, the collider's geometry is accordingly translated, rotated, scaled and sheared in the process.
 
 ![Collider.BakeTransform Example](images/collider-bake-transform.gif)<br/>_Figure 7: An example showing various different colliders (in blue), including mesh-based collider types, being modified using the `Collider.BakeTransform()` method. Given an affine transformation to be baked into a collider, this generic method directly modifies the type-specific geometric parameters of the affected collider accordingly, as we can see in the inspector panel (right side) for the selected `CylinderCollider`. See the "Modify Runtime - Collider Geometry" scene in the [Unity Physics Samples](https://github.com/Unity-Technologies/EntityComponentSystemSamples/)._
 
@@ -218,12 +218,12 @@ Creating a `PhysicsCollider` component at runtime can be a time-consuming proces
 To avoid structural changes, it is possible to create a `PhysicsCollider` component with a null `BlobAssetReference` ahead of time and to assign another, non-null collider blob at a later moment during runtime.
 
 >[!NOTE]
-> When a new `BlobAssetReference<Collider>` is manually created, it is up to you to keep track of the reference and dispose of it when the asset is no longer needed. To do this, you could add the `BlobAssetReference` to a NativeList for later disposal. 
+> When a new `BlobAssetReference<Collider>` is manually created, it is up to you to keep track of the reference and dispose of it when the asset is no longer needed. To do this, you could add the `BlobAssetReference` to a NativeList for later disposal.
 
 The following code snippet demonstrates an example of how to create a `MeshCollider` from a `UnityEngine.Mesh` in a job. Note that you cannot directly use `UnityEngine.Mesh` in a job, because it is a managed component; instead, you must pass either the `MeshData` or `MeshDataArray` into the job. Manual management of the BlobAssetReference lifetime is required in this situation.
 
 ```csharp
-struct CreateFromMeshDataJob : IJobParallelFor         
+struct CreateFromMeshDataJob : IJobParallelFor
 {
     [ReadOnly] public NativeArray<UnityEngine.Mesh.MeshData> MeshData;
     [WriteOnly] public NativeArray<BlobAssetReference<Collider>> ColliderBlobReference;
@@ -233,7 +233,7 @@ struct CreateFromMeshDataJob : IJobParallelFor
         ColliderBlobReference[i] = MeshCollider.Create(MeshData[i], CollisionFilter.Default, Material.Default);
     }
 }
-  
+
 public void MeshCollider_CreateFromJob(UnityEngine.Mesh engineMesh)
 {
     int num = 3; // We are 3 creating colliders of the same mesh for example purposes only.

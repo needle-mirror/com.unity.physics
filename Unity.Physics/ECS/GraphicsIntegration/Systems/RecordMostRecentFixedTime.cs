@@ -11,7 +11,7 @@ namespace Unity.Physics.GraphicsIntegration
 
     /// <summary>
     /// Singleton dynamic buffer that record the last <c>Time.ElapsedTime</c> and <c>Time.DeltaTime</c>
-    /// of the most recent tick for each stepped Physics World. The <seealso cref="PhysicsWorldIndex"/>
+    /// of the most recent tick for each stepped Physics World. The <see cref="PhysicsWorldIndex"/>
     /// value is used as index to store and retrieve the timing data. Because of that, the dynamic
     /// buffer size is always equals to the largest PhysicsWorldIndex value set by the application.
     /// </summary>

@@ -1,4 +1,4 @@
-# The Physics Step authoring component 
+# The Physics Step authoring component
 
 To control Unity Physics settings, you need a `Physics Step` authoring component. As usual when working with **Entities**, a **SubScene** is necessary when adding the `Physics Step` authoring component. Only one instance of this component should be present in a scene as it will apply to the whole physics simulation.
 

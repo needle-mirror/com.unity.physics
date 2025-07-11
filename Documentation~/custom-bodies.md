@@ -23,3 +23,4 @@ The `PhysicsBody` component has the following properties:
 | World Index                        | The index of the physics world this body belongs to. Default physics world has index 0                                                                              |
 | Override Default Mass Distribution | Default mass distribution is based on the shapes associated with this body (default is false)                                                                       |
 | Custom Tags                        | Specify a custom tag for your body (default is nothing)                                                                                                             |
+| Detailed Static Mesh Collision    | Processes contact detection for dynamic objects colliding with static colliders across both the current and next frame. This helps predict and refine collision accuracy.                                                                              |

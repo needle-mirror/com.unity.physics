@@ -158,6 +158,8 @@ namespace Unity.Physics.Systems
         {
             ref var buildPhysicsData =
                 ref state.EntityManager.GetComponentDataRW<BuildPhysicsWorldData>(state.SystemHandle).ValueRW;
+
+            buildPhysicsData.CompleteInputDependency();
             buildPhysicsData.PhysicsData.Dispose();
         }
 
@@ -166,7 +168,7 @@ namespace Unity.Physics.Systems
         {
             ref var buildPhysicsData =
                 ref state.EntityManager.GetComponentDataRW<BuildPhysicsWorldData>(state.SystemHandle).ValueRW;
-            buildPhysicsData.m_InputDependencyToComplete.Complete();
+            buildPhysicsData.CompleteInputDependency();
 
             float timeStep = SystemAPI.Time.DeltaTime;
 
@@ -380,13 +382,9 @@ namespace Unity.Physics.Systems
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            // these getter are not waiting for depedencies on the main thread, and that would avoid blocking for no
-            // reason.
             var buildPhysicsData = state.EntityManager.GetComponentData<BuildPhysicsWorldData>(m_BuildSystemHandle);
             buildPhysicsData.IntegrityCheckMap.Clear();
-            // Should be un-necessary to update the handles at this point (there are no structural changes at this point)
-            // has been added as extra safety measure.
-            // buildPhysicsData.PhysicsData.ComponentHandles.Update(ref state);
+
             state.Dependency = new PhysicsIntegrityCheckJobs.RecordDynamicBodyIntegrity
             {
                 IntegrityCheckMap = buildPhysicsData.IntegrityCheckMap,

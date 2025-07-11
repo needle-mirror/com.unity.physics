@@ -161,7 +161,6 @@ namespace Unity.Physics
         }
     }
 
-    /// <summary>   Helper functions. </summary>
     public static partial class Math
     {
         /// <summary>   Transform an AABB into another space, expanding it as needed. </summary>

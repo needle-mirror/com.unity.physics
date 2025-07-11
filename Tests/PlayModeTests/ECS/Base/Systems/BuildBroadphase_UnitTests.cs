@@ -1,3 +1,6 @@
+using System;
+using System.Diagnostics;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -5,6 +8,8 @@ using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Physics.Systems;
 using Unity.Transforms;
+using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace Unity.Physics.Tests.Systems
 {
@@ -240,10 +245,7 @@ namespace Unity.Physics.Tests.Systems
             using var entities = CreateRigidBodies(world, numGroups, sphereCollider, incremental);
 
             // trigger system update
-            buildPhysicsWorld.Update(world.Unmanaged);
-            var jobHandle = world.Unmanaged.ResolveSystemStateRef(buildPhysicsWorld).Dependency;
-            jobHandle.Complete();
-            Assert.IsTrue(jobHandle.IsCompleted);
+            BuildPhysicsWorld(buildPhysicsWorld, world);
 
             // validate broadphase integrity
             var worldData = world.EntityManager.GetComponentData<BuildPhysicsWorldData>(buildPhysicsWorld);
@@ -333,10 +335,7 @@ namespace Unity.Physics.Tests.Systems
             using var entities = CreateRigidBodies(world, numGroups, sphereCollider, incremental);
 
             // trigger system update
-            buildPhysicsWorld.Update(world.Unmanaged);
-            var jobHandle = world.Unmanaged.ResolveSystemStateRef(buildPhysicsWorld).Dependency;
-            jobHandle.Complete();
-            Assert.IsTrue(jobHandle.IsCompleted);
+            BuildPhysicsWorld(buildPhysicsWorld, world);
 
             // validate broadphase integrity
             var worldData = world.EntityManager.GetComponentData<BuildPhysicsWorldData>(buildPhysicsWorld);
@@ -395,10 +394,7 @@ namespace Unity.Physics.Tests.Systems
             using var entities = CreateRigidBodies(world, numGroups, sphereCollider, incremental);
 
             // trigger system update
-            buildPhysicsWorld.Update(world.Unmanaged);
-            var jobHandle = world.Unmanaged.ResolveSystemStateRef(buildPhysicsWorld).Dependency;
-            jobHandle.Complete();
-            Assert.IsTrue(jobHandle.IsCompleted);
+            BuildPhysicsWorld(buildPhysicsWorld, world);
 
             // validate broadphase integrity
             var worldData = world.EntityManager.GetComponentData<BuildPhysicsWorldData>(buildPhysicsWorld);
@@ -465,7 +461,7 @@ namespace Unity.Physics.Tests.Systems
         }
 
         /// Test which functions like the tests above but which does not add temporal
-        /// coherence data immediately to the created rigid bodies. Instead it requires the data to be injected
+        /// coherence data immediately to the created rigid bodies. Instead, it requires the data to be injected
         /// by either the InjectTemporalCoherenceDataSystem or the InjectTemporalCoherenceDataLastResortSystem.
         [Test]
         public void BuildBroadphase_InjectTemporalCoherenceData([Values] bool multiThreaded, [Values] bool incrementalDynamic,
@@ -524,5 +520,138 @@ namespace Unity.Physics.Tests.Systems
             var collisionWorld = worldData.PhysicsData.PhysicsWorld.CollisionWorld;
             ValidateBroadphase(collisionWorld.Broadphase, numGroups, incrementalStatic);
         }
+
+#if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
+        [Test]
+        public void BuildBroadphase_TestIntegrityCheck_IllegalTemporalCoherenceDataModification_ResetToDefault([Values] bool multiThreaded,
+            [Values] bool incrementalDynamic, [Values] bool incrementalStatic) =>
+            BuildBroadphase_TestIntegrityCheck_IllegalTemporalCoherenceDataModification(multiThreaded, incrementalDynamic, incrementalStatic, (staticBody, dynamicBody, world) =>
+            {
+                // Invalidate the temporal coherence of both a static and a dynamic body by overwriting the PhysicsTemporalCoherenceInfo
+                // with a new default component.
+                world.EntityManager.SetComponentData(staticBody, PhysicsTemporalCoherenceInfo.Default);
+                world.EntityManager.SetComponentData(dynamicBody, PhysicsTemporalCoherenceInfo.Default);
+
+                var numErrors = 0;
+                numErrors += math.select(0, 1, incrementalDynamic);
+                numErrors += math.select(0, 1, incrementalStatic);
+                return numErrors;
+            }
+            );
+
+        [Test]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)] // only run if SafetyChecks are available / enabled
+        public void BuildBroadphase_TestIntegrityCheck_IllegalTemporalCoherenceDataModification_Remove([Values] bool multiThreaded,
+            [Values] bool incrementalDynamic, [Values] bool incrementalStatic) =>
+            BuildBroadphase_TestIntegrityCheck_IllegalTemporalCoherenceDataModification(multiThreaded, incrementalDynamic, incrementalStatic, (staticBody, dynamicBody, world) =>
+            {
+                // Invalidate the temporal coherence of both a static and a dynamic body by removing the PhysicsTemporalCoherenceInfo component.
+                world.EntityManager.RemoveComponent<PhysicsTemporalCoherenceInfo>(staticBody);
+                world.EntityManager.RemoveComponent<PhysicsTemporalCoherenceInfo>(dynamicBody);
+
+                if (incrementalDynamic && incrementalStatic)
+                {
+                    return 4;
+                }
+                // else:
+
+                if (incrementalDynamic || incrementalStatic)
+                {
+                    return 3;
+                }
+                // else:
+
+                return 0;
+            }
+            );
+
+        [Test]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)] // only run if SafetyChecks are available / enabled
+        public void BuildBroadphase_TestIntegrityCheck_IllegalTemporalCoherenceDataModification_ModifyValues([Values] bool multiThreaded,
+            [Values] bool incrementalDynamic, [Values] bool incrementalStatic) =>
+            BuildBroadphase_TestIntegrityCheck_IllegalTemporalCoherenceDataModification(multiThreaded, incrementalDynamic, incrementalStatic, (staticBody, dynamicBody, world) =>
+            {
+                // Invalidate the temporal coherence of both a static and a dynamic body by overwriting the PhysicsTemporalCoherenceInfo component
+                // with invalid values.
+                var invalidTemporalCoherenceInfo = new PhysicsTemporalCoherenceInfo
+                {
+                    LastRigidBodyIndex = 15,
+                    LastBvhNodeIndex = -1,
+                    LastBvhLeafSlotIndex = 42
+                };
+
+                world.EntityManager.SetComponentData(staticBody, invalidTemporalCoherenceInfo);
+                world.EntityManager.SetComponentData(dynamicBody, invalidTemporalCoherenceInfo);
+
+                var numErrors = 0;
+                numErrors += math.select(0, 1, incrementalDynamic);
+                numErrors += math.select(0, 1, incrementalStatic);
+                return numErrors;
+            }
+            );
+
+        /// Tests that the incremental broadphase integrity check (see ExportPhysicsWorld.cs) correctly detects an illegal
+        /// modification of the temporal coherence data.
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol), Conditional(CompilationSymbols.DebugChecksSymbol)] // only run if SafetyChecks are available / enabled
+        static void BuildBroadphase_TestIntegrityCheck_IllegalTemporalCoherenceDataModification(bool multiThreaded,
+            bool incrementalDynamic, bool incrementalStatic, Func<Entity, Entity, World, int> invalidTemporalCoherenceDataModification)
+        {
+            using var world = new World("Test world");
+
+            // Create the systems
+            var buildPhysicsWorld = world.GetOrCreateSystem<BuildPhysicsWorld>();
+            var exportPhysicsWorld = world.GetOrCreateSystem<ExportPhysicsWorld>();
+
+            var physicsStep = PhysicsStep.Default;
+            physicsStep.MultiThreaded = (byte)(multiThreaded ? 1 : 0);
+            physicsStep.IncrementalDynamicBroadphase = incrementalDynamic;
+            physicsStep.IncrementalStaticBroadphase = incrementalStatic;
+
+            world.EntityManager.CreateSingleton(physicsStep);
+
+            // create some rigid bodies
+            using var sphereCollider = SphereCollider.Create(new SphereGeometry {Radius = 0.25f});
+            int numGroups = 10;
+            using var entities = CreateRigidBodies(world, numGroups, sphereCollider, injectTemporalCoherenceData: true);
+
+            Action updateSystems = () =>
+            {
+                BuildPhysicsWorld(buildPhysicsWorld, world);
+
+                exportPhysicsWorld.Update(world.Unmanaged);
+                var jobHandle = world.Unmanaged.ResolveSystemStateRef(exportPhysicsWorld).Dependency;
+                jobHandle.Complete();
+                Assert.IsTrue(jobHandle.IsCompleted);
+            };
+
+            // trigger system update and expect the integrity checks to pass (no exception thrown)
+            updateSystems();
+
+            // Start by validating broadphase integrity
+            var worldData = world.EntityManager.GetComponentData<BuildPhysicsWorldData>(buildPhysicsWorld);
+            var collisionWorld = worldData.PhysicsData.PhysicsWorld.CollisionWorld;
+            ValidateBroadphase(collisionWorld.Broadphase, numGroups, incrementalStatic);
+
+            // invalidate temporal coherence data for some random bodies and expect this illegal change to be detected
+            // by the incremental broadphase integrity check.
+            int staticBodyGroup = 3;
+            int dynamicBodyGroup = 8;
+            var staticBody = entities[3 * staticBodyGroup];
+            var dynamicBody = entities[3 * dynamicBodyGroup + 1];
+            var numExpectedErrors = invalidTemporalCoherenceDataModification(staticBody, dynamicBody, world);
+
+            // Trigger system update and expect the integrity check to throw an exception if incremental
+            // broadphase is enabled:
+
+            updateSystems();
+
+            var errorMessage = ".*";
+            for (int i = 0; i < numExpectedErrors; ++i)
+            {
+                LogAssert.Expect(LogType.Exception, new Regex(errorMessage));
+            }
+        }
+
+#endif
     }
 }

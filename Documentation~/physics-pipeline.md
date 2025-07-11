@@ -1,6 +1,6 @@
 # Physics Pipeline
 
-All physics jobs (initializing simulation data, stepping, and exporting data to ECS) are executed inside `PhysicsSystemGroup`. It is a `ComponentSystemGroup`, and is a subgroup of `FixedStepSimulationSystemGroup`. Therefore, multiple physics steps can occur during one frame. 
+All physics jobs (initializing simulation data, stepping, and exporting data to ECS) are executed inside `PhysicsSystemGroup`. It is a `ComponentSystemGroup`, and is a subgroup of `FixedStepSimulationSystemGroup`. Therefore, multiple physics steps can occur during one frame.
 
 `PhysicsSystemGroup` consists of two other subgroups, each responsible for a single phase in physics step, and `ExportPhysicsWorld` system, which schedules jobs that convert physics simulation data to ECS data (`LocalTransform` and `PhysicsVelocity`).
 Subgroups are:

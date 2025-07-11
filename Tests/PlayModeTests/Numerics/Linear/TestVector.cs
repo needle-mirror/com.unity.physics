@@ -1,4 +1,4 @@
-﻿using NUnit.Framework;
+using NUnit.Framework;
 using Unity.Collections;
 using Unity.Numerics.Memory;
 using Unity.Numerics.Linear.Dense.Primitives;

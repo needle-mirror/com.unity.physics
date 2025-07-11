@@ -6,6 +6,8 @@ namespace Unity.Physics.Authoring
 {
     interface IPhysicsMaterialProperties
     {
+        PhysicsMaterialFlag DetailedStaticMeshCollision { get; set; }
+
         CollisionResponsePolicy CollisionResponse { get; set; }
 
         PhysicsMaterialCoefficient Friction { get; set; }
@@ -25,12 +27,19 @@ namespace Unity.Physics.Authoring
     interface IInheritPhysicsMaterialProperties : IPhysicsMaterialProperties
     {
         PhysicsMaterialTemplate Template { get; set; }
+        bool OverrideDetailedStaticMeshCollision { get; set; }
         bool OverrideCollisionResponse { get; set; }
         bool OverrideFriction { get; set; }
         bool OverrideRestitution { get; set; }
         bool OverrideBelongsTo { get; set; }
         bool OverrideCollidesWith { get; set; }
         bool OverrideCustomTags { get; set; }
+    }
+
+    [Serializable]
+    public struct PhysicsMaterialFlag
+    {
+        public bool Value;
     }
 
     [Serializable]
@@ -75,6 +84,9 @@ namespace Unity.Physics.Authoring
     }
 
     [Serializable]
+    class OverridablePhysicsMaterialFlag : OverridableValue<PhysicsMaterialFlag> { }
+
+    [Serializable]
     class OverridableCategoryTags : OverridableValue<PhysicsCategoryTags> {}
 
     [Serializable]
@@ -111,6 +123,25 @@ namespace Unity.Physics.Authoring
         OverridableCollisionResponse m_CollisionResponse = new OverridableCollisionResponse
         {
             Value = CollisionResponsePolicy.Collide,
+            Override = false
+        };
+
+        public bool OverrideDetailedStaticMeshCollision
+        {
+            get => m_DetailedStaticMeshCollision.Override;
+            set => m_DetailedStaticMeshCollision.Override = value;
+        }
+
+        public PhysicsMaterialFlag DetailedStaticMeshCollision
+        {
+            get => Get(m_DetailedStaticMeshCollision, m_Template == null ? null : m_Template?.DetailedStaticMeshCollision);
+            set => m_DetailedStaticMeshCollision.Value = value;
+        }
+
+        [SerializeField]
+        OverridablePhysicsMaterialFlag m_DetailedStaticMeshCollision = new OverridablePhysicsMaterialFlag
+        {
+            Value = new PhysicsMaterialFlag { Value = false },
             Override = false
         };
 

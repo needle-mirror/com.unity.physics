@@ -5,11 +5,15 @@ using UnityEngine.Assertions;
 
 namespace Unity.Physics
 {
-    /// <summary>   Common math helper functions. </summary>
+    /// <summary>
+    /// Common math helper functions.
+    /// </summary>
     [DebuggerStepThrough]
     public static partial class Math
     {
-        /// <summary>   Constants. </summary>
+        /// <summary>
+        /// Constants.
+        /// </summary>
         [DebuggerStepThrough]
         public static class Constants
         {
@@ -42,9 +46,13 @@ namespace Unity.Physics
             /// </summary>
             public const float UnityEpsilon = 0.00001F;
 
-            /// <summary>   Tau. </summary>
+            /// <summary>
+            /// Tau.
+            /// </summary>
             public const float Tau = 2.0f * math.PI;
-            /// <summary>   1.0f / Tau. </summary>
+            /// <summary>
+            /// 1.0f / Tau.
+            /// </summary>
             public const float OneOverTau = 1.0f / Tau;
         }
 
@@ -302,7 +310,7 @@ namespace Unity.Physics
         }
 
         // Note: taken from Unity.Animation/Core/MathExtensions.cs, which will be moved to Unity.Mathematics at some point
-        //       after that, this should be removed and the Mathematics version should be used
+        // after that, this should be removed and the Mathematics version should be used
         #region toEuler
         static float3 toEuler(quaternion q, math.RotationOrder order = math.RotationOrder.Default)
         {

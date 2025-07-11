@@ -3,7 +3,6 @@ using Unity.Mathematics;
 
 namespace Unity.Physics
 {
-    /// <summary>   A mathematics utility class. </summary>
     public static partial class Math
     {
         /// <summary>   Range of possible values for some constrained parameter. </summary>

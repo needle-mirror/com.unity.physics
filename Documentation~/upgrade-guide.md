@@ -4,14 +4,14 @@ To upgrade from Physics 0.51 to 1.0, you firstly need to upgrade your Entities p
 
 ## Physics pipeline reworked
 
-The physics pipeline has been reworked. 
-* `PhysicsSystemGroup` is introduced. It is a `ComponentSystemGroup` that covers all physics jobs. It consists of `PhysicsInitializeGroup`, `PhysicsSimulationGroup`, and `ExportPhysicsWorld`. `PhysicsSimulationGroup` further consists of `PhysicsCreateBodyPairsGroup`, `PhysicsCreateContactsGroup`, `PhysicsCreateJacobiansGroup`, `PhysicsSolveAndIntegrateGroup` which run in that order. See [documentation](interacting-with-physics.md) for details. 
+The physics pipeline has been reworked.
+* `PhysicsSystemGroup` is introduced. It is a `ComponentSystemGroup` that covers all physics jobs. It consists of `PhysicsInitializeGroup`, `PhysicsSimulationGroup`, and `ExportPhysicsWorld`. `PhysicsSimulationGroup` further consists of `PhysicsCreateBodyPairsGroup`, `PhysicsCreateContactsGroup`, `PhysicsCreateJacobiansGroup`, `PhysicsSolveAndIntegrateGroup` which run in that order. See [documentation](interacting-with-physics.md) for details.
 * `StepPhysicsWorld` and `EndFramePhysicsSystem` systems have been removed, `BuildPhysicsWorld` has been moved to `PhysicsInitializeGroup`:
-  * If you had Update `(Before|After)StepPhysicsWorld`, replace it with: `[UpdateInGroup(typeof(PhysicsSystemGroup))][Update(After|Before)(typeof(PhysicsSimulationGroup))]`. 
+  * If you had Update `(Before|After)StepPhysicsWorld`, replace it with: `[UpdateInGroup(typeof(PhysicsSystemGroup))][Update(After|Before)(typeof(PhysicsSimulationGroup))]`.
   * If you had `Update(Before|After)BuildPhysicsWorld`, replace it with: `[UpdateBefore(typeof(PhysicsSystemGroup))]` or `[UpdateInGroup(typeof(PhysicsSystemGroup))][UpdateAfter(typeof(PhysicsInitializeGroup))]`.
-  * If you had `Update(Before|After)ExportPhysicsWorld` replace it with: `[UpdateInGroup(typeof(PhysicsSystemGroup))][UpdateBefore(typeof(ExportPhysicsWorld))]` or `[UpdateAfter(typeof(PhysicsSystemGroup))]`. 
-  * If you had `[Update(Before|After)EndFramePhysicsSystem]` replace it with: `[UpdateAfter(typeof(PhysicsSystemGroup))]`. 
-  * If you had combination of those (e.g. `[UpdateAfter(typeof(BuildPhysicsWorld))][UpdateBefore(typeof(StepPhysicsWorld))]`) take a look at the diagram in [documentation](physics-pipeline.md). 
+  * If you had `Update(Before|After)ExportPhysicsWorld` replace it with: `[UpdateInGroup(typeof(PhysicsSystemGroup))][UpdateBefore(typeof(ExportPhysicsWorld))]` or `[UpdateAfter(typeof(PhysicsSystemGroup))]`.
+  * If you had `[Update(Before|After)EndFramePhysicsSystem]` replace it with: `[UpdateAfter(typeof(PhysicsSystemGroup))]`.
+  * If you had combination of those (e.g. `[UpdateAfter(typeof(BuildPhysicsWorld))][UpdateBefore(typeof(StepPhysicsWorld))]`) take a look at the diagram in [documentation](physics-pipeline.md).
 * All new systems are unmanaged, which means that they are more efficient, and their `OnUpdate()` is Burst friendly. You shouldn't call `World.GetOrCreateSystem<AnyPhysicsSystem>()` as of this release and should be using singletons (see below).
 
 ## Physics Sample custom components
@@ -93,22 +93,22 @@ The following methods have a uniform scale argument added as the last argument (
   * `class SimulationCallbacks` is removed.
   * `enum SimulationCallbacks.Phase is removed`. - callback delegate : `public delegate JobHandle Callback(ref ISimulation simulation, ref PhysicsWorld world, JobHandle inputDeps)` has been removed.
 * Removed `PhysicsWorld` getter from `BuildPhysicsWorld`. It is still possible to get a `PhysicsWorld` reference through `BuildPhysicsWorld`.`PhysicsData.PhysicsWorld` but it isn't recommended since it can cause race conditions.
-* Removed `StepPhysicsWorld` system. 
-* Removed `EndFramePhysicsSystem` system. 
-* Removed `BuildPhysicsWorld.AddInputDependencyToComplete()` from public API. 
-* Removed `BuildPhysicsWorld.AddInputDependency()` method. 
-* Removed `BuildPhysicsWorld.GetOutputDependency()` method. 
-* Removed `ExportPhysicsWorld.AddInputDependency()` method. 
-* Removed `ExportPhysicsWorld.GetOutputDependency()` method. 
-  * Removed static class `PhysicsRuntimeExtenstions`, as a consequence, the following extension methods are removed as well: 
-  * public static void `RegisterPhysicsRuntimeSystemReadOnly(this SystemBase system)` 
+* Removed `StepPhysicsWorld` system.
+* Removed `EndFramePhysicsSystem` system.
+* Removed `BuildPhysicsWorld.AddInputDependencyToComplete()` from public API.
+* Removed `BuildPhysicsWorld.AddInputDependency()` method.
+* Removed `BuildPhysicsWorld.GetOutputDependency()` method.
+* Removed `ExportPhysicsWorld.AddInputDependency()` method.
+* Removed `ExportPhysicsWorld.GetOutputDependency()` method.
+  * Removed static class `PhysicsRuntimeExtenstions`, as a consequence, the following extension methods are removed as well:
+  * public static void `RegisterPhysicsRuntimeSystemReadOnly(this SystemBase system)`
   * public static void `RegisterPhysicsRuntimeSystemReadWrite(this SystemBase system) `
   * public static void `RegisterPhysicsRuntimeSystemReadOnly<T>(this SystemBase system) where T : unmanaged, IComponentData `
   * public static void `RegisterPhysicsRuntimeSystemReadWrite<T>(this SystemBase system) where T : unmanaged, IComponentData `
-* Removed `PhysicsWorldExporter.SharedData` struct. 
-* Removed `PhysicsWorldExporter.ScheduleCollisionWorldProxy()` method. 
-* Removed `PhysicsWorldExporter.ScheduleCollisionWorldCopy()` method. 
-* Removed `PhysicsWorldExporter.CopyCollisionWorldImmediate()` method. 
+* Removed `PhysicsWorldExporter.SharedData` struct.
+* Removed `PhysicsWorldExporter.ScheduleCollisionWorldProxy()` method.
+* Removed `PhysicsWorldExporter.ScheduleCollisionWorldCopy()` method.
+* Removed `PhysicsWorldExporter.CopyCollisionWorldImmediate()` method.
 * Removed `PhysicsWorldStepper` class.
 
 
@@ -122,7 +122,7 @@ RigidTransform argument removed:
 
 * PhysicsWorldData.HaveStaticBodiesChanged is now a NativeReference<int> instead of NativeArray<int>.
 * `Attributes.cs` script has been removed since the `com.unity.properties` package is part of the editor as a module.
-* Use of `TransformAspect.WorldPosition`, T`ransformAspect.WorldRotation`, `TransformAspect.WorldScale` when using `Transform_V2` instead of `TransformAspect.Position`, `TransformAspect.Rotation`, `TransformAspect.Scale`. 
+* Use of `TransformAspect.WorldPosition`, T`ransformAspect.WorldRotation`, `TransformAspect.WorldScale` when using `Transform_V2` instead of `TransformAspect.Position`, `TransformAspect.Rotation`, `TransformAspect.Scale`.
 * `BaseShapeBakingSystem` and `BuildCompoundCollidersBakingSystem` have been modified to use `IJobEntity` instead of `Entities.ForEach()`.
 * Replaced `PhysicsTransformAspect` with `TransformAspect`
 

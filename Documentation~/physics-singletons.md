@@ -18,13 +18,13 @@ public partial struct CastRayISystemExample : ISystem
     public partial struct CastRayJob : IJob
     {
         public PhysicsWorldSingleton World;
-        
+
         public void Execute()
         {
             World.CastRay(...);
         }
     }
-    
+
     [BurstCompile]
     public void OnUpdate(ref SystemState state)
     {
@@ -53,7 +53,7 @@ public partial class CastRaySystemBaseExample : SystemBase
     public partial struct CastRayJob : IJob
     {
         public PhysicsWorldSingleton World;
-        
+
         [BurstCompile]
         public void Execute()
         {

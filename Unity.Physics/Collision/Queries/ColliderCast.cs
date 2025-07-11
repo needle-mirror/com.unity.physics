@@ -144,12 +144,10 @@ namespace Unity.Physics
         /// <value> Returns the normal of the point where the hit occurred. </value>
         public float3 SurfaceNormal { get; set; }
 
-        /// <summary>   Collider key of the query collider. </summary>
-        ///
-        /// ### <returns>
+        /// <summary>   Collider key of the query collider.
         /// If the query input uses composite collider, this field will have the collider key of it's
         /// leaf which participated in the hit, otherwise the value will be undefined.
-        /// </returns>
+        /// </summary>
         public ColliderKey QueryColliderKey;
 
         /// <summary>   Convert this object into a string representation. </summary>

@@ -12,6 +12,6 @@ The main parts of Unity you need to use:
 
 Built on top of these core parts are additional DOTS packages:
 
-* **Physics** (this package): A stateless and deterministic physics system for entities. 
+* **Physics** (this package): A stateless and deterministic physics system for entities.
 * [Netcode](https://docs.unity3d.com/Packages/com.unity.netcode@latest): A client-server netcode solution for entities.
 * [Entities Graphics](https://docs.unity3d.com/Packages/com.unity.entities.graphics@latest): Uses the scriptable render pipeline (SRP) to render entities.

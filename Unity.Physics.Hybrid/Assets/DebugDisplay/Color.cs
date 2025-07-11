@@ -138,9 +138,9 @@ namespace Unity.DebugDisplay
         /// </summary>
         public static readonly ColorIndex OrangeRed = new ColorIndex{value = 55}; //(0x00, 0x41, 0xff)
 
-        /// Max value is staticColorCount - 1 {247} at the moment.
+        // Max value is staticColorCount - 1 {247} at the moment.
 
-        /// Next values can change at runtime.
+        // Next values can change at runtime.
 
         /// <summary>
         /// DynamicMesh - Dynamic Color.

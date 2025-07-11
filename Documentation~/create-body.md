@@ -4,7 +4,7 @@ Now that you know how to create rigid bodies in the editor and how to alter thei
 
 ## Starting from a Prefab
 
-If we take the Sphere prefab that we used before we can make it spawn multiple times once we enter the runtime mode by baking it with `ConfigAuthoring` component. 
+If we take the Sphere prefab that we used before we can make it spawn multiple times once we enter the runtime mode by baking it with `ConfigAuthoring` component.
 
 1. Create and attach the `ConfigAuthoring` script to a new empty gameObject.
 2. Add the Sphere prefab to the gameObject field and set the number of times we want to spawn.

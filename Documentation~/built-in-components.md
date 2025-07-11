@@ -15,7 +15,7 @@ Unity Physics supports the built-in Unity Engine Physics components for sub-scen
     * [FixedJoint](xref:class-FixedJoint)
     * [HingeJoint](xref:class-HingeJoint)
 * [Ragdolls](xref:ragdoll-physics-section)
-    * See the [Unity Physics Samples](https://github.com/Unity-Technologies/EntityComponentSystemSamples/tree/master/PhysicsSamples) project for ragdoll demo scenes. 
+    * See the [Unity Physics Samples](https://github.com/Unity-Technologies/EntityComponentSystemSamples/tree/master/PhysicsSamples) project for ragdoll demo scenes.
 
 Alternatively, you can use the custom physics components for authoring your simulation.
 Refer to the [Custom Physics Authoring](custom-samples-physics-components.md) section for more details.

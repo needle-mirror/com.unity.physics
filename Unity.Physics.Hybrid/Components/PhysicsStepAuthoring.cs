@@ -57,7 +57,7 @@ namespace Unity.Physics.Authoring
         int m_SubstepCount = Default.SubstepCount;
 
         /// <summary>
-        ///     Specifies the number of solver iterations the physics engine will perform.<para/>
+        ///     Specifies the number of solver iterations the physics engine will perform.
         ///     Higher values mean more stability, but also worse performance.
         /// </summary>
         public int SolverIterationCount

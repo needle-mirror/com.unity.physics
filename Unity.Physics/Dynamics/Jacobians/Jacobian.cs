@@ -46,14 +46,13 @@ namespace Unity.Physics
         Disabled = 1 << 0,
         /// <summary>   A binary constant representing the enable mass factors flag. Applies to all jacobians.</summary>
         EnableMassFactors = 1 << 1,
-        /// <summary>   A binary constant representing the user flag 0 flag. Applies to all jacobians. </summary>
-        UserFlag0 = 1 << 2,
-        /// <summary>   A binary constant representing the user flag 1 flag. Applies to all jacobians. </summary>
-        UserFlag1 = 1 << 3,
-        /// <summary>   A binary constant representing the user flag 2 flag. Applies to all jacobians. </summary>
-        UserFlag2 = 1 << 4,
 
         // These flags apply only to contact Jacobians
+        /// <summary>
+        /// A binary constat representing the detail contact to narrow phase down ghost collisions,
+        /// by checking current and next frame contact.
+        /// </summary>
+        EnableDetailedStaticMeshCollision = 1 << 4,
         /// <summary>   A binary constant representing the is trigger flag. Apples only to contact jacobian. </summary>
         IsTrigger = 1 << 5,
         /// <summary>   A binary constant representing the enable collision events flag. Apples only to contact jacobian. </summary>
@@ -63,7 +62,12 @@ namespace Unity.Physics
 
         // Applies only to joint Jacobians
         /// <summary>   A binary constant representing the enable impulse events options. Apples only to joint jacobian. </summary>
-        EnableImpulseEvents = 1 << 5
+        EnableImpulseEvents = 1 << 5,
+
+        /// <summary>   A binary constant representing the user flag 0 flag. Applies to all jacobians. </summary>
+        UserFlag0 = 1 << 2,
+        /// <summary>   A binary constant representing the user flag 1 flag. Applies to all jacobians. </summary>
+        UserFlag1 = 1 << 3,
     }
 
     // Jacobian header, first part of each Jacobian in the stream
@@ -82,6 +86,9 @@ namespace Unity.Physics
 
         // Whether the Jacobian contains manifold data for collision events or not
         public bool HasContactManifold => (Flags & JacobianFlags.EnableCollisionEvents) != 0;
+
+        // Whether the Jacobian contains the necessary data to process a detailed static mesh contact or not
+        public bool HasDetailedStaticMeshCollision => (Flags & JacobianFlags.EnableDetailedStaticMeshCollision) != 0;
 
         // Collider keys for the collision events
         public ColliderKeyPair ColliderKeys
@@ -264,10 +271,16 @@ namespace Unity.Physics
                 UnsafeUtility.SizeOf<MassFactors>() : 0;
         }
 
+        private static int SizeOfJacobianContactCollidersData(JacobianType type, JacobianFlags flags)
+        {
+            return (type == JacobianType.Contact && (flags & JacobianFlags.EnableDetailedStaticMeshCollision) != 0) ?
+                UnsafeUtility.SizeOf<JacobianPolygonData>() : 0;
+        }
+
         private static int SizeOfModifierData(JacobianType type, JacobianFlags flags)
         {
             return SizeOfColliderKeys(type, flags) + SizeOfEntityPair(type, flags) + SizeOfSurfaceVelocity(type, flags) +
-                SizeOfMassFactors(type, flags) + SizeOfImpulseEventSolverData(type, flags);
+                SizeOfMassFactors(type, flags) + SizeOfImpulseEventSolverData(type, flags) + SizeOfJacobianContactCollidersData(type, flags);
         }
 
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
@@ -383,6 +396,16 @@ namespace Unity.Physics
             byte* ptr = (byte*)UnsafeUtility.AddressOf(ref this);
             ptr += UnsafeUtility.SizeOf<JacobianHeader>() + SizeOfBaseJacobian(Type);
             return ref UnsafeUtility.AsRef<ImpulseEventSolverData>(ptr);
+        }
+
+        public unsafe ref JacobianPolygonData AccessJacobianContactData()
+        {
+            Assert.IsTrue((Flags & JacobianFlags.EnableDetailedStaticMeshCollision) != 0);
+            byte* ptr = (byte*)UnsafeUtility.AddressOf(ref this);
+            ptr += UnsafeUtility.SizeOf<JacobianHeader>() + SizeOfBaseJacobian(Type) +
+                SizeOfColliderKeys(Type, Flags) + SizeOfEntityPair(Type, Flags) + SizeOfSurfaceVelocity(Type, Flags) +
+                SizeOfMassFactors(Type, Flags);
+            return ref UnsafeUtility.AsRef<JacobianPolygonData>(ptr);
         }
 
         #endregion

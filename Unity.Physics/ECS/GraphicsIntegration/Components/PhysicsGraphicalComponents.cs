@@ -8,7 +8,7 @@ namespace Unity.Physics.GraphicsIntegration
     /// A component to indicate that the graphical representation of a dynamic rigid body's motion should be smoothed when the rendering framerate is greater than the fixed step rate used by physics.
     /// When used on its own, it indicates that smoothing should extrapolate into the future based on the body's current velocity.
     /// The result is thus up-to-date, but can mis-predict the body's transformations since any future collision response has not yet been resolved.
-    /// See also <seealso cref="PhysicsGraphicalInterpolationBuffer"/>.
+    /// See also <see cref="PhysicsGraphicalInterpolationBuffer"/>.
     /// </summary>
     [WriteGroup(typeof(LocalToWorld))]
     public struct PhysicsGraphicalSmoothing : IComponentData

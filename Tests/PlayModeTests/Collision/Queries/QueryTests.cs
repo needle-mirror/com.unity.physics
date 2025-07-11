@@ -8,6 +8,7 @@ using Unity.Collections;
 using Random = Unity.Mathematics.Random;
 using static Unity.Physics.Math;
 using Unity.Physics.Tests.Utils;
+using UnityEngine;
 
 namespace Unity.Physics.Tests.Collision.Queries
 {
@@ -771,6 +772,263 @@ namespace Unity.Physics.Tests.Collision.Queries
                 TestUtils.DisposeAllColliderBlobs(ref world);
                 world.Dispose(); // TODO leaking memory if the test fails
             }
+        }
+
+        /// <summary>
+        /// Test the distance query between a capsule and a sphere.
+        /// </summary>
+        /// <param name="height"> The height of the capsule (cylindrical part). </param>
+        [Test]
+        public unsafe void CapsuleConvexDistanceTest([Values(0.0f, 1.0f)] float height)
+        {
+            Random rnd = new Random(0x12345678);
+
+            // Capsule properties
+            float radius = 0.5f;
+            float3 vertex0 = new float3(0, 0, 0);
+            float3 vertex1 = vertex0 + new float3(0, height, 0);
+
+            // Create the capsule collider
+            using var capsuleCollider = CapsuleCollider.Create(new CapsuleGeometry
+            {
+                Vertex0 = vertex0,
+                Vertex1 = vertex1,
+                Radius = radius
+            }, CollisionFilter.Default);
+            ConvexCollider* capsule = (ConvexCollider*)capsuleCollider.GetUnsafePtr();
+
+            // Create a secondary shape to test against (e.g., sphere)
+            float3 sphereCenter = new float3(2, 4, 3); // Offset from the capsule
+            float sphereRadius = 0.75f;
+            using var sphereCollider = SphereCollider.Create(new SphereGeometry
+            {
+                Center = sphereCenter,
+                Radius = sphereRadius
+            }, CollisionFilter.Default);
+            ConvexCollider* sphere = (ConvexCollider*)sphereCollider.GetUnsafePtr();
+
+            // Create a transform between the two shapes
+            MTransform capsuleFromSphere = new MTransform(rnd.NextQuaternionRotation(), rnd.NextFloat3(-2.0f, 2.0f));
+
+            // Perform the distance queries
+            DistanceQueries.Result capsuleToSphereResult = DistanceQueries.ConvexConvex((Collider*)capsule, (Collider*)sphere, capsuleFromSphere);
+            float referenceDistance = RefConvexConvexDistance(ref capsule->ConvexHull, ref sphere->ConvexHull, capsuleFromSphere);
+
+            // Validate the results
+            ValidateDistanceResult(
+                capsuleToSphereResult,
+                ref capsule->ConvexHull,
+                ref sphere->ConvexHull,
+                new ScaledMTransform(capsuleFromSphere, 1.0f),
+                referenceDistance,
+                1.0f,
+                $"CapsuleConvexDistanceTest failed with height {height}");
+        }
+
+        [Test]
+        public void CapsuleManifoldQueryTest([Values(0.0f, 1.0f)] float height)
+        {
+            float radius = 0.5f;
+
+            // Define collider geometries
+            using var capsuleCollider = CapsuleCollider.Create(new CapsuleGeometry
+            {
+                Vertex0 = float3.zero,
+                Vertex1 = new float3(0, height, 0),
+                Radius = radius
+            });
+
+            using var sphereCollider = SphereCollider.Create(new SphereGeometry
+            {
+                Center = float3.zero,
+                Radius = radius
+            });
+
+            // Set up transforms
+            float3 spherePosition = new float3(1, 0, 0);
+            var expectedDistance = math.length(spherePosition) - (radius + radius);
+            var capsuleTransform = RigidTransform.identity;
+            var sphereTransform = new RigidTransform(quaternion.identity, spherePosition);
+
+            // Set up motions (only need InverseMass to make one of the body non-kinematic)
+            var capsuleMotion = MotionVelocity.Zero;
+            capsuleMotion.InverseMass = 1.0f;
+            var sphereMotion = MotionVelocity.Zero;
+
+            // Generate contacts
+            using var contacts = new NativeStream(1, Allocator.Temp);
+            var contactWriter = contacts.AsWriter();
+            contactWriter.BeginForEachIndex(0);
+
+            ManifoldQueries.BodyBody(
+                new Physics.RigidBody
+                {
+                    Collider = capsuleCollider,
+                    WorldFromBody = capsuleTransform,
+                    Scale = 1.0f
+                },
+                new Physics.RigidBody
+                {
+                    Collider = sphereCollider,
+                    WorldFromBody = sphereTransform,
+                    Scale = 1.0f
+                },
+                capsuleMotion,
+                sphereMotion,
+                collisionTolerance: 0.05f,
+                timeStep: 1.0f,
+                new BodyIndexPair { BodyIndexA = 0, BodyIndexB = 1 },
+                ref contactWriter
+            );
+
+            contactWriter.EndForEachIndex();
+
+            // Validate contacts
+            var contactReader = contacts.AsReader();
+            contactReader.BeginForEachIndex(0);
+
+            int manifoldCount = 0;
+            while (contactReader.RemainingItemCount > 0)
+            {
+                var header = contactReader.Read<ContactHeader>();
+                Assert.Greater(header.NumContacts, 0, "No contacts generated in the manifold!");
+                Assert.IsTrue(math.length(header.Normal) > 0, "Contact manifold normal is invalid.");
+
+                for (int i = 0; i < header.NumContacts; i++)
+                {
+                    var contact = contactReader.Read<ContactPoint>();
+                    Assert.IsFalse(math.any(math.isnan(contact.Position)), $"Invalid contact position at manifold {manifoldCount}, contact {i}.");
+
+                    // Verify the contact distance matches our geometric calculation
+                    Assert.That(contact.Distance, Is.EqualTo(expectedDistance).Within(1e-3f));
+                }
+
+                manifoldCount++;
+            }
+
+            Assert.Greater(manifoldCount, 0, "No manifolds generated.");
+        }
+
+        [Test]
+        public void ConvexCompositeManifoldQueryTest_ExpansionSpaceIsComputedCorrectly([Values(1f, 1.3f, 0.6f)] float convexScale, [Values(1f, 0.5f, 2.1f)] float compositeScale, [Values] bool flipOrder)
+        {
+            // create a box as convex
+            float size = 1;
+
+            using var boxCollider = BoxCollider.Create(new BoxGeometry
+            {
+                Center = float3.zero,
+                Orientation = quaternion.identity,
+                Size = new float3(size, size, size)
+            });
+
+            // create a single flat two-triangle surface as composite
+            var vertices = new NativeArray<float3>(6, Allocator.Temp);
+            var triangles = new NativeArray<int3>(2, Allocator.Temp);
+
+            vertices[0] = new float3(0, 0, 0);
+            vertices[1] = new float3(0, 0, size);
+            vertices[2] = new float3(size, 0, size);
+            vertices[3] = new float3(0, 0, 0);
+            vertices[4] = new float3(size, 0, size);
+            vertices[5] = new float3(size, 0, 0);
+            triangles[0] = new int3(0, 1, 2);
+            triangles[1] = new int3(3, 4, 5);
+
+            using var meshCollider = MeshCollider.Create(vertices, triangles);
+
+            // Set up transforms:
+
+            var convexPosition = new float3(42.1f, -23.1f, 6.21f);
+
+            // objects are far apart
+            var distance = size * 10f;
+            var motionDirection = math.normalize(new float3(-21.1f, 42f, 13f));
+
+            var compositePosition = convexPosition + motionDirection * distance;
+
+            // To create an overlap, they have to approach each other.
+            // We induce a motion such that the objects' origins will overlap, guaranteeing a collision.
+            var timeStep = 1 / 60f;
+            var linearVelocity = motionDirection * distance / timeStep;
+
+            // convex moves towards composite
+            var convexVelocity = new MotionVelocity
+            {
+                LinearVelocity = linearVelocity / 2,
+                AngularVelocity = float3.zero,
+                InverseMass = 1.0f
+            };
+
+            // composite moves towards convex
+            var compositeVelocity = new MotionVelocity
+            {
+                LinearVelocity = -convexVelocity.LinearVelocity,
+                AngularVelocity = float3.zero,
+                InverseMass = 1.0f
+            };
+
+            // finalize transforms by picking some random orientations
+            var convexTransform = new RigidTransform(quaternion.Euler(0.55f, -2.3f, 42.4242f), convexPosition);
+            var compositeTransform = new RigidTransform(quaternion.Euler(-23.232323f, 4.2f, 0.12f), compositePosition);
+
+            // compute collisions
+            using var contactStream = new NativeStream(1, Allocator.Temp);
+            var contactWriter = contactStream.AsWriter();
+            contactWriter.BeginForEachIndex(0);
+
+            if (flipOrder)
+            {
+                ManifoldQueries.BodyBody(
+                    new Physics.RigidBody
+                    {
+                        Collider = meshCollider,
+                        WorldFromBody = compositeTransform,
+                        Scale = compositeScale
+                    },
+                    new Physics.RigidBody
+                    {
+                        Collider = boxCollider,
+                        WorldFromBody = convexTransform,
+                        Scale = convexScale
+                    },
+                    compositeVelocity,
+                    convexVelocity,
+                    collisionTolerance: 0f,
+                    timeStep: timeStep,
+                    new BodyIndexPair { BodyIndexA = 0, BodyIndexB = 1 },
+                    ref contactWriter
+                );
+            }
+            else
+            {
+                ManifoldQueries.BodyBody(
+                    new Physics.RigidBody
+                    {
+                        Collider = boxCollider,
+                        WorldFromBody = convexTransform,
+                        Scale = convexScale
+                    },
+                    new Physics.RigidBody
+                    {
+                        Collider = meshCollider,
+                        WorldFromBody = compositeTransform,
+                        Scale = compositeScale
+                    },
+                    convexVelocity,
+                    compositeVelocity,
+                    collisionTolerance: 0f,
+                    timeStep: timeStep,
+                    new BodyIndexPair { BodyIndexA = 0, BodyIndexB = 1 },
+                    ref contactWriter
+                );
+            }
+
+            contactWriter.EndForEachIndex();
+
+            // make sure we have contacts
+            var contacts = contactStream.ToNativeArray<ContactHeader>(Allocator.Temp);
+            Assert.Greater(contacts.Length, 0);
         }
     }
 }

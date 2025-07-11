@@ -377,22 +377,26 @@ namespace Unity.Physics
                         for (byte i = 0; i < Vertices.Length; i++)
                         {
                             FaceVertexIndices.Add(i);
-                            VertexEdges.Add(new ConvexHull.Edge
+                            VertexEdges[i] = new ConvexHull.Edge
                             {
                                 FaceIndex = 0,
-                                EdgeIndex = i
-                            });
+                                EdgeIndex = i,
+                            };
                             FaceLinks.Add(new ConvexHull.Edge
                             {
                                 FaceIndex = 1,
-                                EdgeIndex = (byte)(Vertices.Length - 1 - i)
+                                EdgeIndex = (byte)((2 * Vertices.Length - 2 - i) % Vertices.Length)
                             });
                         }
 
                         for (byte i = 0; i < Vertices.Length; i++)
                         {
                             FaceVertexIndices.Add((byte)(Vertices.Length - 1 - i));
-                            FaceLinks.Add(VertexEdges[i]);
+                            FaceLinks.Add(new ConvexHull.Edge
+                            {
+                                FaceIndex = 0,
+                                EdgeIndex = (byte)((2 * Vertices.Length - 2 - i) % Vertices.Length)
+                            });
                         }
 
                         // Make planes and faces

@@ -710,7 +710,8 @@ namespace Unity.Physics
             {
                 return new UpdateStaticTreeJob
                 {
-                    World = world
+                    World = world,
+                    BuildStaticTree = buildStaticTree
                 }.Schedule(inputDeps);
             }
             else
@@ -794,10 +795,10 @@ namespace Unity.Physics
         struct UpdateStaticTreeJob : IJob
         {
             public PhysicsWorld World;
-            public NativeReference<int>.ReadOnly buildStaticTree;
+            public NativeReference<int>.ReadOnly BuildStaticTree;
             public void Execute()
             {
-                if (buildStaticTree.Value != 0)
+                if (BuildStaticTree.Value != 0)
                     World.CollisionWorld.UpdateStaticTree(ref World);
             }
         }

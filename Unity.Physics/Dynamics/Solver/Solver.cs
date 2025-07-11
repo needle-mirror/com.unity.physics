@@ -220,7 +220,7 @@ namespace Unity.Physics
         }
 
         [BurstCompile]
-        private struct BuildJacobiansJob : IJob
+        struct BuildJacobiansJob : IJob
         {
             [ReadOnly] public PhysicsWorld World;
 
@@ -240,7 +240,7 @@ namespace Unity.Physics
         }
 
         [BurstCompile]
-        private struct ParallelBuildJacobiansJob : IJobParallelForDefer
+        struct ParallelBuildJacobiansJob : IJobParallelForDefer
         {
             [ReadOnly] public PhysicsWorld World;
 
@@ -383,6 +383,9 @@ namespace Unity.Physics
                             contactJacobian.SumImpulsesOverSubsteps = 0.0f;
                             contactJacobian.SumImpulsesOverSolverIterations = 0.0f;
 
+                            // Write polygons from colliders if they are required for detailed static mesh collision detection.
+                            WriteJacobianPolygonData(ref jacobianHeader, bodies, contactHeader, worldFromA, worldFromB, motionVelocities.Length);
+
                             // Initialize modifier data (in order from JacobianModifierFlags) before angular jacobians
                             InitModifierData(ref jacobianHeader, contactHeader.ColliderKeys, new EntityPair
                             {
@@ -505,6 +508,53 @@ namespace Unity.Physics
 
             contactReader.EndForEachIndex();
             jacobianWriter.EndForEachIndex();
+        }
+
+        private static unsafe void WriteJacobianPolygonData(ref JacobianHeader jacobianHeader, NativeArray<RigidBody> bodies, in ContactHeader contactHeader, in MTransform worldFromA, in MTransform worldFromB, int dynamicBodiesCount)
+        {
+            bool isBodyAStatic = contactHeader.BodyPair.BodyIndexA >= dynamicBodiesCount;
+            bool isBodyBStatic = contactHeader.BodyPair.BodyIndexB >= dynamicBodiesCount;
+
+            if (jacobianHeader.HasDetailedStaticMeshCollision && (isBodyAStatic || isBodyBStatic))
+            {
+                ref JacobianPolygonData jacobianPolygonContact = ref jacobianHeader.AccessJacobianContactData();
+
+                // setup conditional variables.
+                RigidBody body = default;
+                float3 centerOfMass = default; // The center of mass is based on the opposite collider. A over B, and B over A.
+                ColliderKey colliderKey = default;
+
+                if (isBodyAStatic)
+                {
+                    centerOfMass = worldFromB.Translation;
+                    body = bodies[contactHeader.BodyPair.BodyIndexA];
+                    colliderKey = contactHeader.ColliderKeys.ColliderKeyA;
+                }
+                else
+                {
+                    centerOfMass = worldFromA.Translation;
+                    body = bodies[contactHeader.BodyPair.BodyIndexB];
+                    colliderKey = contactHeader.ColliderKeys.ColliderKeyB;
+                }
+
+                // assigning conditional variables
+                jacobianPolygonContact.CenterOfMass = centerOfMass;
+                jacobianPolygonContact.Transform = new AffineTransform(body.WorldFromBody.pos, body.WorldFromBody.rot, body.Scale);
+
+                Collider* collider = (Collider*)body.Collider.GetUnsafePtr();
+                SafetyChecks.CheckAreEqualAndThrow(true, collider != null);
+                jacobianPolygonContact.IsValid = collider->GetLeaf(colliderKey, out ChildCollider leafCollider);
+                if (jacobianPolygonContact.IsValid)
+                {
+                    PolygonCollider* polygon = (PolygonCollider*)leafCollider.Collider;
+                    jacobianPolygonContact.Vertex0 = polygon->Vertices[0];
+                    jacobianPolygonContact.Vertex1 = polygon->Vertices[1];
+                    jacobianPolygonContact.Vertex2 = polygon->Vertices[2];
+                    jacobianPolygonContact.LeafTransform = new AffineTransform(leafCollider.TransformFromChild);
+                    jacobianPolygonContact.IsBodyAStatic = isBodyAStatic;
+                    jacobianPolygonContact.IsBodyBStatic = isBodyBStatic;
+                }
+            }
         }
 
         #endregion //BuildJacobians
@@ -667,7 +717,7 @@ namespace Unity.Physics
 
         #region UpdateJacobians
 
-        internal static unsafe JobHandle ScheduleUpdateJacobiansJobs(ref PhysicsWorld physicsWorld,
+        internal static JobHandle ScheduleUpdateJacobiansJobs(ref PhysicsWorld physicsWorld,
             ref NativeStream jacobians, ref DispatchPairSequencer.SolverSchedulerInfo solverSchedulerInfo,
             StepInput stepInput, JobHandle inputDeps, bool multiThreaded = true)
         {
@@ -686,32 +736,14 @@ namespace Unity.Physics
             }
             else
             {
-                // Following ParallelSolverJob methodology:
-                int numPhases = solverSchedulerInfo.NumActivePhases[0];
-                if (numPhases > 0)
+                updateHandle = new ParallelUpdateJacobiansJob()
                 {
-                    var phaseInfoPtrs =
-                        (DispatchPairSequencer.SolverSchedulerInfo.SolvePhaseInfo*)NativeArrayUnsafeUtility
-                            .GetUnsafeBufferPointerWithoutChecks(solverSchedulerInfo.PhaseInfo);
-
-                    for (int phaseId = 0; phaseId < numPhases; phaseId++)
-                    {
-                        var job = new UpdateJacobiansParallelJob()
-                        {
-                            JacobiansReader = jacobians.AsReader(),
-                            MotionDatas = physicsWorld.MotionDatas,
-                            MotionVelocities = physicsWorld.MotionVelocities,
-                            Bodies = physicsWorld.Bodies,
-                            Phases = solverSchedulerInfo.PhaseInfo,
-                            stepInput = stepInput,
-                            PhaseIndex = phaseId,
-                        };
-
-                        var info = phaseInfoPtrs[phaseId];
-                        updateHandle = JobHandle.CombineDependencies(updateHandle,
-                            job.Schedule(info.NumWorkItems, 1, inputDeps));
-                    }
-                }
+                    JacobiansReader = jacobians.AsReader(),
+                    MotionDatas = physicsWorld.MotionDatas,
+                    MotionVelocities = physicsWorld.MotionVelocities,
+                    Bodies = physicsWorld.Bodies,
+                    stepInput = stepInput,
+                }.ScheduleUnsafeIndex0(solverSchedulerInfo.NumWorkItems, 1, inputDeps);
             }
 
             return updateHandle;
@@ -719,7 +751,7 @@ namespace Unity.Physics
 
         [BurstCompile]
         [NoAlias]
-        private struct UpdateJacobiansJob : IJob
+        struct UpdateJacobiansJob : IJob
         {
             [NoAlias][ReadOnly] public NativeStream.Reader JacobiansReader;
             [NoAlias][ReadOnly] public NativeArray<MotionData> MotionDatas;
@@ -735,20 +767,17 @@ namespace Unity.Physics
 
         [BurstCompile]
         [NoAlias]
-        private struct UpdateJacobiansParallelJob : IJobParallelFor
+        struct ParallelUpdateJacobiansJob : IJobParallelForDefer
         {
             [NoAlias][ReadOnly] public NativeStream.Reader JacobiansReader;
             [NoAlias][ReadOnly] public NativeArray<MotionData> MotionDatas;
             [NoAlias][ReadOnly] public NativeArray<MotionVelocity> MotionVelocities;
             [NoAlias][ReadOnly] public NativeArray<RigidBody> Bodies;
-            [ReadOnly] public NativeArray<DispatchPairSequencer.SolverSchedulerInfo.SolvePhaseInfo> Phases;
             [ReadOnly] public StepInput stepInput;
-            [ReadOnly] public int PhaseIndex;
 
             public void Execute(int workItemIndex)
             {
-                int workItemStartIndexOffset = Phases[PhaseIndex].FirstWorkItemIndex;
-                Update(workItemIndex + workItemStartIndexOffset, MotionDatas, MotionVelocities, Bodies,
+                Update(workItemIndex, MotionDatas, MotionVelocities, Bodies,
                     ref JacobiansReader, stepInput);
             }
         }

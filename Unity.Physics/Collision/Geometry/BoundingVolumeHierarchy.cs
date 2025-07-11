@@ -17,16 +17,13 @@ namespace Unity.Physics
         private unsafe UnsafeList<CollisionFilter>* m_NodeFiltersList;
 
         private unsafe Node* m_Nodes;
+        private int m_MaxNodeCount;
         private unsafe CollisionFilter* m_NodeFilters;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private readonly int GetNodeCapacity()
         {
-            unsafe
-            {
-                SafetyChecks.CheckAreEqualAndThrow(true, IsIncremental);
-                return m_NodesList->Capacity;
-            }
+            return m_MaxNodeCount;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -37,6 +34,7 @@ namespace Unity.Physics
                 SafetyChecks.CheckAreEqualAndThrow(true, IsIncremental);
                 m_NodesList->Capacity = capacity;
                 m_Nodes = m_NodesList->Ptr;
+                m_MaxNodeCount = capacity;
                 m_NodeFiltersList->Capacity = capacity;
                 m_NodeFilters = m_NodeFiltersList->Ptr;
             }
@@ -85,6 +83,16 @@ namespace Unity.Physics
 
         public readonly unsafe Node* Nodes => m_Nodes;
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ref Node GetNode(int index)
+        {
+            unsafe
+            {
+                SafetyChecks.CheckIndexAndThrow(index, m_MaxNodeCount);
+                return ref *(m_Nodes + index);
+            }
+        }
+
         /// <summary> Get the AABB that includes everything in this tree (compound AABB of first valid node in the tree). </summary>
         public unsafe Aabb Domain => m_Nodes[1].Bounds.GetCompoundAabb();
 
@@ -92,9 +100,10 @@ namespace Unity.Physics
         /// <para>Create a new bounding volume hierarchy from the nodes and node filters located at the provided memory location.</para>
         /// <para>The tree will not be <see cref="IsIncremental">incremental</see>.</para>
         /// </summary>
-        public unsafe BoundingVolumeHierarchy(Node* nodes, CollisionFilter* nodeFilters)
+        public unsafe BoundingVolumeHierarchy(Node* nodes, int maxNodeCount, CollisionFilter* nodeFilters)
         {
             m_Nodes = nodes;
+            m_MaxNodeCount = maxNodeCount;
             m_NodeFilters = nodeFilters;
             m_NodesList = null;
             m_NodeFiltersList = null;
@@ -114,6 +123,7 @@ namespace Unity.Physics
             m_NodesList = nodes;
             m_NodeFiltersList = nodeFilters;
             m_Nodes = nodes->Ptr;
+            m_MaxNodeCount = m_NodesList->Capacity;
             m_NodeFilters = nodeFilters->Ptr;
 
             if (clear)
@@ -131,6 +141,7 @@ namespace Unity.Physics
             SafetyChecks.CheckAreEqualAndThrow(nodes.Length, nodeFilters.Length);
 
             m_Nodes = (Node*)nodes.GetUnsafeReadOnlyPtr();
+            m_MaxNodeCount = nodes.Length;
             m_NodeFilters = (CollisionFilter*)nodeFilters.GetUnsafeReadOnlyPtr();
             m_NodesList = null;
             m_NodeFiltersList = null;
@@ -139,6 +150,7 @@ namespace Unity.Physics
         public unsafe BoundingVolumeHierarchy(NativeArray<Node> nodes)
         {
             m_Nodes = (Node*)nodes.GetUnsafeReadOnlyPtr();
+            m_MaxNodeCount = nodes.Length;
             m_NodeFilters = null;
             m_NodesList = null;
             m_NodeFiltersList = null;
@@ -375,10 +387,7 @@ namespace Unity.Physics
             public void Insert(ref BoundingVolumeHierarchy bvh, Aabb aabb, PointAndIndex point, CollisionFilter filter)
             {
                 var result = bvh.Insert(aabb, point, filter);
-                unsafe
-                {
-                    SafetyChecks.CheckAreEqualAndThrow(true, bvh.Nodes[result.NodeIndex].IsLeaf);
-                }
+                SafetyChecks.CheckAreEqualAndThrow(true, bvh.GetNode(result.NodeIndex).IsLeaf);
 
                 Insert(ref bvh, result);
             }
@@ -397,23 +406,20 @@ namespace Unity.Physics
                     // remove outdated migration data
                     m_ElementLocationDataHashMap.Remove(result.MigratedLeafNodeIndexOld);
 
-                    unsafe
+                    // add new migration data for the migrated node
+                    var migratedNode = bvh.GetNode(result.MigratedLeafNodeIndexNew);
+                    SafetyChecks.CheckAreEqualAndThrow(true, migratedNode.IsLeaf);
+                    for (byte j = 0; j < 4; ++j)
                     {
-                        // add new migration data for the migrated node
-                        var migratedNode = bvh.Nodes[result.MigratedLeafNodeIndexNew];
-                        SafetyChecks.CheckAreEqualAndThrow(true, migratedNode.IsLeaf);
-                        for (byte j = 0; j < 4; ++j)
+                        if (migratedNode.IsChildValid(j))
                         {
-                            if (migratedNode.IsChildValid(j))
-                            {
-                                m_ElementLocationDataHashMap.Add(result.MigratedLeafNodeIndexNew,
-                                    new ElementLocationData
-                                    {
-                                        ElementIndex = migratedNode.Data[j],
-                                        NodeIndex = result.MigratedLeafNodeIndexNew,
-                                        LeafSlotIndex = j
-                                    });
-                            }
+                            m_ElementLocationDataHashMap.Add(result.MigratedLeafNodeIndexNew,
+                                new ElementLocationData
+                                {
+                                    ElementIndex = migratedNode.Data[j],
+                                    NodeIndex = result.MigratedLeafNodeIndexNew,
+                                    LeafSlotIndex = j
+                                });
                         }
                     }
                 }
@@ -500,33 +506,33 @@ namespace Unity.Physics
             {
                 var removalData = removals[i];
                 var slotIndex = removalData.LeafSlotIndex;
-                var leafNode = m_Nodes + removalData.NodeIndex;
-                SafetyChecks.CheckAreEqualAndThrow(true, leafNode->IsLeaf);
-                SafetyChecks.CheckAreEqualAndThrow(true, leafNode->IsChildValid(slotIndex));
+                ref var leafNode = ref GetNode(removalData.NodeIndex);
+                SafetyChecks.CheckAreEqualAndThrow(true, leafNode.IsLeaf);
+                SafetyChecks.CheckAreEqualAndThrow(true, leafNode.IsChildValid(slotIndex));
 
-                leafNode->ClearLeafData(slotIndex);
-                leafNode->Bounds.SetAabb(slotIndex, Aabb.Empty);
-                SafetyChecks.CheckAreEqualAndThrow(true, leafNode->NumFreeSlotsInLeaf <= 3);
-                leafNode->NumFreeSlotsInLeaf++;
-                SafetyChecks.CheckAreEqualAndThrow(true, leafNode->NumElements >= 1);
-                leafNode->NumElements--;
+                leafNode.ClearLeafData(slotIndex);
+                leafNode.Bounds.SetAabb(slotIndex, Aabb.Empty);
+                SafetyChecks.CheckAreEqualAndThrow(true, leafNode.NumFreeSlotsInLeaf <= 3);
+                leafNode.NumFreeSlotsInLeaf++;
+                SafetyChecks.CheckAreEqualAndThrow(true, leafNode.NumElements >= 1);
+                leafNode.NumElements--;
 
-                var parentIndex = leafNode->Parent;
+                var parentIndex = leafNode.Parent;
                 if (addedNodesSet.Add(parentIndex))
                 {
                     nodesToProcess.Push(parentIndex);
                 }
 
-                if (leafNode->NumFreeSlotsInLeaf == 4 && removalData.NodeIndex == NodeCount - 1)
+                if (leafNode.NumFreeSlotsInLeaf == 4 && removalData.NodeIndex == NodeCount - 1)
                 {
                     // no more entries in leaf and leaf is last node in tree. Free it.
                     --NodeCount;
 
                     // Move up the tree and disconnect removed leaf node
-                    var parent = m_Nodes + parentIndex;
-                    var childOffset = parent->FindChildOffset(removalData.NodeIndex);
+                    ref var parent = ref GetNode(parentIndex);
+                    var childOffset = parent.FindChildOffset(removalData.NodeIndex);
                     SafetyChecks.CheckAreEqualAndThrow(true, childOffset != -1);
-                    parent->ClearInternalData(childOffset);
+                    parent.ClearInternalData(childOffset);
                 }
                 else
                 {
@@ -536,7 +542,7 @@ namespace Unity.Physics
                     // potentially multiple times. However, the processing and memory access cost is hopefully low enough that
                     // the potential duplication of work does not matter.
                     var nodeFilter = m_NodeFilters + removalData.NodeIndex;
-                    *nodeFilter = BuildCombinedCollisionFilterForLeafNode(leafFilters, leafNode);
+                    *nodeFilter = BuildCombinedCollisionFilterForLeafNode(leafFilters, ref leafNode);
                 }
             }
 
@@ -546,11 +552,11 @@ namespace Unity.Physics
                 var updateData = updates[i];
                 SafetyChecks.CheckAreEqualAndThrow(true, updateData.UpdateCommandFlags != (byte)UpdateData.CommandFlags.None);
                 var slotIndex = updateData.LeafSlotIndex;
-                var leafNode = m_Nodes + updateData.NodeIndex;
-                SafetyChecks.CheckAreEqualAndThrow(true, leafNode->IsLeaf);
-                SafetyChecks.CheckAreEqualAndThrow(true, leafNode->IsChildValid(slotIndex));
+                ref var leafNode = ref GetNode(updateData.NodeIndex);
+                SafetyChecks.CheckAreEqualAndThrow(true, leafNode.IsLeaf);
+                SafetyChecks.CheckAreEqualAndThrow(true, leafNode.IsChildValid(slotIndex));
 
-                var parentIndex = leafNode->Parent;
+                var parentIndex = leafNode.Parent;
                 if (addedNodesSet.Add(parentIndex))
                 {
                     nodesToProcess.Push(parentIndex);
@@ -558,7 +564,7 @@ namespace Unity.Physics
 
                 if ((updateData.UpdateCommandFlags & (byte)UpdateData.CommandFlags.UpdateAabb) != 0)
                 {
-                    leafNode->Bounds.SetAabb(slotIndex, updateData.Aabb);
+                    leafNode.Bounds.SetAabb(slotIndex, updateData.Aabb);
                 }
 
                 if ((updateData.UpdateCommandFlags & (byte)UpdateData.CommandFlags.UpdateFilter) != 0)
@@ -569,7 +575,7 @@ namespace Unity.Physics
                     // potentially multiple times. However, the processing and memory access cost is hopefully low enough that
                     // the potential duplication of work does not matter.
                     var nodeFilter = m_NodeFilters + updateData.NodeIndex;
-                    *nodeFilter = BuildCombinedCollisionFilterForLeafNode(leafFilters, leafNode);
+                    *nodeFilter = BuildCombinedCollisionFilterForLeafNode(leafFilters, ref leafNode);
                 }
             }
 
@@ -579,21 +585,21 @@ namespace Unity.Physics
             do
             {
                 var nodeIndex = nodesToProcess.Pop();
-                var node = m_Nodes + nodeIndex;
-                SafetyChecks.CheckAreEqualAndThrow(true, node->IsInternal);
+                ref var node = ref GetNode(nodeIndex);
+                SafetyChecks.CheckAreEqualAndThrow(true, node.IsInternal);
 
                 uint numElements = 0;
                 int childNodeCount = 0;
                 for (int j = 0; j < 4; j++)
                 {
                     Aabb aabb;
-                    if (node->IsInternalValid(j))
+                    if (node.IsInternalValid(j))
                     {
                         ++childNodeCount;
-                        ref var childNode = ref m_Nodes[node->Data[j]];
+                        ref var childNode = ref GetNode(node.Data[j]);
                         aabb = childNode.Bounds.GetCompoundAabb();
 
-                        node->NumFreeLeafSlots[j] = (ushort)childNode.NumFreeLeafSlotsTotal;
+                        node.NumFreeLeafSlots[j] = (ushort)childNode.NumFreeLeafSlotsTotal;
                         numElements += childNode.NumElements;
                     }
                     else
@@ -601,12 +607,14 @@ namespace Unity.Physics
                         aabb = Aabb.Empty;
 
                         // could add a new leaf node here which would provide 4 available leaf slots
-                        node->NumFreeLeafSlots[j] = 4;
+                        node.NumFreeLeafSlots[j] = 4;
                     }
 
-                    node->Bounds.SetAabb(j, aabb);
-                    node->NumElements = numElements;
+                    node.Bounds.SetAabb(j, aabb);
                 }
+
+                // set final element count
+                node.NumElements = numElements;
 
                 if (nodeIndex > 1 && childNodeCount == 0 && nodeIndex == NodeCount - 1)
                 {
@@ -615,19 +623,19 @@ namespace Unity.Physics
                     --NodeCount;
 
                     // Move up the tree and disconnect removed leaf node
-                    var parent = m_Nodes + node->Parent;
-                    var childOffset = parent->FindChildOffset(nodeIndex);
+                    ref var parent = ref GetNode(node.Parent);
+                    var childOffset = parent.FindChildOffset(nodeIndex);
                     SafetyChecks.CheckAreEqualAndThrow(true, childOffset != -1);
-                    parent->ClearInternalData(childOffset);
+                    parent.ClearInternalData(childOffset);
                 }
                 else
                 {
                     // update combined collision filter for this node
                     var nodeFilter = m_NodeFilters + nodeIndex;
-                    *nodeFilter = BuildCombinedCollisionFilterForInternalNode(node);
+                    *nodeFilter = BuildCombinedCollisionFilterForInternalNode(ref node);
                 }
 
-                var parentIndex = node->Parent;
+                var parentIndex = node.Parent;
                 if (addedNodesSet.Add(parentIndex))
                 {
                     nodesToProcess.Push(parentIndex);

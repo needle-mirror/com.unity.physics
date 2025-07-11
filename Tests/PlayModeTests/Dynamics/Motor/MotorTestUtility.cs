@@ -6,7 +6,7 @@ using Random = Unity.Mathematics.Random;
 //
 // Tools to create and run a tiny simulation for a single body pair and joint, used by all of the tests
 //
-namespace Unity.Physics.Tests.Motors
+namespace Unity.Physics.Tests.Dynamics.Motors
 {
     // Test runner tools and utilities
     public class MotorTestUtility
@@ -25,7 +25,7 @@ namespace Unity.Physics.Tests.Motors
 
         internal static void Integrate(ref MotionVelocity velocity, ref MotionData motion, float timestep)
         {
-            Integrator.Integrate(ref motion.WorldFromMotion, velocity, timestep);
+            Unity.Physics.Integrator.Integrate(ref motion.WorldFromMotion, velocity, timestep);
         }
 
         //

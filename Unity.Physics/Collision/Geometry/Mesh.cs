@@ -61,7 +61,7 @@ namespace Unity.Physics
 
         // The bounding volume hierarchy
         private BlobArray m_BvhNodesBlob;
-        public unsafe BoundingVolumeHierarchy BoundingVolumeHierarchy => new BoundingVolumeHierarchy(BvhNodesPtr, nodeFilters: null);
+        public unsafe BoundingVolumeHierarchy BoundingVolumeHierarchy => new BoundingVolumeHierarchy(BvhNodesPtr, m_BvhNodesBlob.Length, nodeFilters: null);
 
         private unsafe BoundingVolumeHierarchy.Node* BvhNodesPtr
         {

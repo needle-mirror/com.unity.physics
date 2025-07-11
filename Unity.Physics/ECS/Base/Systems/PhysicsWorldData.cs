@@ -184,7 +184,7 @@ namespace Unity.Physics.Systems
         }
 
         /// <summary>
-        /// Calls the <see cref="PhysicsWorldComponentHandles.Update(ref SystemState)"></see> of the
+        /// Calls the <see cref="PhysicsWorldComponentHandles.Update(ref SystemState)"/> of the
         /// handles stored in this object. /&gt;
         /// </summary>
         ///

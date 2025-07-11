@@ -7,4 +7,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("Unity.Numerics.Tests.Memory")]
 
 [assembly: InternalsVisibleTo("Unity.Physics")]
-[assembly: InternalsVisibleTo("Unity.Physics.PlayModeTests")]
+[assembly: InternalsVisibleTo("Unity.Physics.Runtime.Tests")]

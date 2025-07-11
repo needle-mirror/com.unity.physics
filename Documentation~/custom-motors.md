@@ -10,8 +10,8 @@ A motor is a type of `PhysicsJoint` that has one driven constraint. There are tw
 | Linear Velocity Motor   | A linear motor, drives towards a velocity. A motorized prismatic joint that drives to a constant target relative velocity. The axis is the direction of motion        |
 
 In general, there are three possible ways to author a motor:
-1. Use a GameObject Joint Component and use the baking pipeline to bake the data into Unity Physics 
-2. Use a C# API to author the motor 
+1. Use a GameObject Joint Component and use the baking pipeline to bake the data into Unity Physics
+2. Use a C# API to author the motor
 3. Use a Unity Physics authoring motor component for the motor type (note that the motor authoring components in the Unity Physics Samples are not guaranteed to be supported, therefore this method is not recommended)
 
 
@@ -29,10 +29,10 @@ For each of the Rotation Motor Authoring sections, we will create the following 
 There are two potential methods to create a rotation motor using a GameObject Component: using a `Hinge Joint` or using a `Configurable Joint`. We will outline the steps to create each. Note that not all parameters within a GameObject component are used by Unity Physics.
 
 #### Method 1) Using a `Hinge Joint` Component:
-1. Starting from a SubScene, add a GameObject > Cube. Rename it 'StaticCube'. A BoxCollider should already be present as a component. 
-2. Add a `Rigidbody` component to 'StaticCube' and then disable `Use Gravity` and enable `Is Kinematic`. 
+1. Starting from a SubScene, add a GameObject > Cube. Rename it 'StaticCube'. A BoxCollider should already be present as a component.
+2. Add a `Rigidbody` component to 'StaticCube' and then disable `Use Gravity` and enable `Is Kinematic`.
 3. Create another Cube and parent it from 'StaticCube'. Name this one 'RotationMotor'. Add a `Rigidbody`. Set the Transform Position to (0,-1,0)
-4. Add a `Hinge Joint` component to the 'RotationalMotor' GameObject 
+4. Add a `Hinge Joint` component to the 'RotationalMotor' GameObject
 5. To set up the General Rotation Motor Example 1 with a pivot at (0.5, 0.5, 0) and rotation along the z-axis, set the following:
    - `Connected Body` = 'StaticCube'. Motor rotation will be relative to this body.
    - `Anchor` = (0.5, 0.5, 0). This is the pivot position of the motor. It is relative to the centre of 'RotationMotor'. This data is baked into the `BodyFrame` position of bodyA.
@@ -46,50 +46,50 @@ There are two potential methods to create a rotation motor using a GameObject Co
    - `Break Torque` : This value will be baked into the MaxImpulse data to enable breakable events. This data is baked into `MaxImpulse` and applies to non-motorized angular constraints.
    - `Break Force`: This value will be baked into the MaxImpulse data to enable breakable events. This data is baked into `MaxImpulse` and applies to non-motorized linear constraints.
 
-No other data is used by the baking pipeline at this time to create a Rotation Motor. 
+No other data is used by the baking pipeline at this time to create a Rotation Motor.
 
 #### Method 2) Using a `Configurable Joint` Component:
 
-While using this method is possible, it is recommended to use the `Hinge Joint` instead. 
+While using this method is possible, it is recommended to use the `Hinge Joint` instead.
 
-The General Rotation Motor Example 1 creates a z-axis rotating motor that will hold at a +45 degree angle, however, this design is more complex when authoring using a `Configurable Joint` component. 
+The General Rotation Motor Example 1 creates a z-axis rotating motor that will hold at a +45 degree angle, however, this design is more complex when authoring using a `Configurable Joint` component.
 
 The design is complicated by two items. The first item is due to the design of the `Configurable Joint` for use with GameObject and the second item is due to a simulation requirement of the physics solver. When setting the `Target Rotation` for a `Configurable Joint`, the target is set such that the current location is an offset from the target. This change of reference frame means that to rotate as in the example, by +45 degrees, the `Target Rotation` should be set to -45 degrees. This relates to the first item, when setting a negative `Target Rotation` in the Inspector, the field will automatically recalculate the value to be positive. For example, if you enter -45 degrees, it will be updated to 315 degrees. This leads into the second item regarding simulation requirements. The Rotation Motor is only stable for rotations within the -180 to +180 degree range. The Inspector updating a -45 degree target to +315 degrees will lead to the creation of an unstable motor.
 
 The General Rotation Motor Example is modified in the steps below to get around the complexity mentioned in the previous paragraph by changing the direction of the `Axis`. The overall behavior of the motor remains the same:
-1. Repeat Steps 1-3 from Method 1 
-2. Add a `Configurable Joint` to the 'RotationalMotor' GameObject 
+1. Repeat Steps 1-3 from Method 1
+2. Add a `Configurable Joint` to the 'RotationalMotor' GameObject
 3. To set up the General Rotation Motor Example 1 with a pivot at (0.5, 0.5, 0) and rotation along the z-axis, set the following:
    - `Connected Body` = 'StaticCube' Motor rotation will be relative to this body.
    - `Anchor` = (0.5, 0.5, 0).  This is the pivot position of the motor. It is relative to the centre of 'RotationMotor'. This data is baked into the `BodyFrame` position of bodyA.
    - `Axis` = (0, 0, -1). The axis that the pivot will rotate about. This data is baked into the `BodyFrame` axis of bodyA.
    - `Auto Configure Connected Anchor` = True. This is always baked as if True. The `BodyFrame` of bodyB (the `Connected Body`) will be automatically calculated from the `Axis` and `Anchor` of bodyA. If it is not enabled, the baking pipeline will calculate the `BodyFrame` for the `Connected Body` as if it were enabled. This setting takes the Anchor and Axis and calculates the position of the Connected Body relative to the body with the motor on it. If a design requires this to be false then the motor API method must be used  (see section on Authoring via the C# API).
    - `Secondary Axis` = (0, 1, 0). This could also be (1, 0, 0), but it does need to be perpendicular to `Axis` (A check is done internally to verify this). This data is used by the baking pipeline to set up `BodyFrame` data.
-   - `X / Y / Z Motion` = Locked. For an angular motor, these must be locked. 
+   - `X / Y / Z Motion` = Locked. For an angular motor, these must be locked.
    - `Angular X Motion` = Free. (Applies to the primary `Axis` field).
    - `Angular Y Motion` = Locked. (Applies to the `Secondary Axis` field).
    - `Angular Z Motion` = Locked. (Applies to the axis perpendicular to both `Axis` and `Secondary Axis` field).
    - `Angular X Drive`:
      - `Position Spring` = 987. This is the spring constant of the motor. It describes how 'bouncy' a motor will be when it converges to its target angle. This value will be baked and used by the solver.
      - `Position Damper` = 44. This is the damping coefficient of the motor. This value will be baked and used by the solver.
-     - `Maximum Force` = 60,000. This is the maximum impulse that the motor constraint will be able to exert. Within the code, this is multiplied by 'fixedDeltaTime' to get an impulse. This would set the equivalent of `Motor` > `Force` for a `Hinge Joint`. This data is baked into `MaxImpulseOfMotor`. 
+     - `Maximum Force` = 60,000. This is the maximum impulse that the motor constraint will be able to exert. Within the code, this is multiplied by 'fixedDeltaTime' to get an impulse. This would set the equivalent of `Motor` > `Force` for a `Hinge Joint`. This data is baked into `MaxImpulseOfMotor`.
    - `Target Rotation` = (45, 0, 0). The target rotation in degrees, relative to the target rotation. Note that the x,y,z components of this field align with the setting of `Axis` and `Secondary Axis`, not x,y,z in world space. Since drives along the primary `Axis` are only supported, only the x-component of this field is baked into `Target`.
    - `Break Force` = Infinity. This value is multiplied by 'fixedDeltaTime' to get an impulse. It is baked into 'MaxImpulse' for breakable events and applies only to linear non-motorized constraints.
    - `Break Torque` = Infinity. This value is multiplied by 'fixedDeltaTime' to get an impulse. It is baked into 'MaxImpulse' for breakable events and applies only to angular non-motorized constraints.
 
 The `ConfigurableJoint` baking method supports locking, limiting and motorizing all of the individual degrees of freedom (such as about `Axis`, `Secondary Axis` and the remaining axis), as well as combining those in various ways. However, there are a few limitations that are worth noting:
 - Currently `Unity.Physics` doesn’t allow motorizing two or more linear velocity targets at the same time. If you set that up, they are still converted, but an error message is shown in the console and you will see the effect of the linear velocity motor that was added last.
-- The slerp rotational drive is not supported. When set, an error message is printed to the console, and the twist-swing motors are used instead. 
+- The slerp rotational drive is not supported. When set, an error message is printed to the console, and the twist-swing motors are used instead.
 
 ### Authoring via the C# API
 The C# API to author a Rotation Motor is
 ```csharp
 PhysicsJoint.CreateRotationalMotor(
-    bodyAFromJoint, 
-    bodyBFromJoint, 
-    target, 
+    bodyAFromJoint,
+    bodyBFromJoint,
+    target,
     maxImpulseOfMotor,
-    springFrequency, 
+    springFrequency,
     dampingRatio)
 ```
 where:
@@ -124,11 +124,11 @@ See the C# API Documentation for more details.
 The Rotational Motor component exists only in the Unity Physics Samples Project and is intended for educational/internal testing purposes. To use this component, the Unity Physics Samples must be imported from the Package Manager. Then, the script can be found in the Unity Physics Samples Project at this path: `Assets/Samples/Unity Physics/0.62.0-preview.162/Custom Physics Authoring/Unity.Physics.Custom/Motors/RotationalMotor.cs`. Arguments for this component may change, or the component may be deprecated in the future. See the Joints/Motors Demos in the Unity Physics Samples for sample usage.
 
 To set up the General Rotation Motor Example 1, follow these steps:
-1. Starting from a SubScene, add a GameObject > Cube. Rename it 'StaticCube'. A BoxCollider should already be present as a component. Remove the Box Collider. 
-2. Add a `Physics Body` Component to 'StaticCube' (a `Physics Body` is the ECS custom component similar to a `Rigidbody`). Set `Motion Type` to Static. 
-3. Add a `Physics Shape` Component to 'StaticCube' (a `Physics Shape` is the ECS custom component similar to a `Box Collider`). Don't modify the default settings. 
+1. Starting from a SubScene, add a GameObject > Cube. Rename it 'StaticCube'. A BoxCollider should already be present as a component. Remove the Box Collider.
+2. Add a `Physics Body` Component to 'StaticCube' (a `Physics Body` is the ECS custom component similar to a `Rigidbody`). Set `Motion Type` to Static.
+3. Add a `Physics Shape` Component to 'StaticCube' (a `Physics Shape` is the ECS custom component similar to a `Box Collider`). Don't modify the default settings.
 4. Create another Cube and parent it from 'StaticCube'. Name this one 'RotationMotor'. Add a `Physics Body`; no settings need to be modified. Set the Transform Position to (0,-1,0).
-5. Add the `Rotational Motor` component to the 'RotationalMotor' GameObject. (The script needs to be available locally) 
+5. Add the `Rotational Motor` component to the 'RotationalMotor' GameObject. (The script needs to be available locally)
 6. To set up the General Rotation Motor Example 1 with a pivot at (0.5, 0.5, 0) and rotation along the z-axis, set the following:
   - `Connected Body` = 'StaticCube'. Motor rotation will be relative to this body.
   - `Enable Collision`. If enabled, then this body may collide with the `Connected Body`.
@@ -165,10 +165,10 @@ For each of the Angular Velocity Motor Authoring sections, we will create the fo
 There are two potential methods to create an angular velocity motor using a GameObject Component: using a `Hinge Joint` or using a `Configurable Joint`. We will outline the steps to create each. Note that not all parameters within a GameObject component are used by Unity Physics.
 
 #### Method 1) Using a `Hinge Joint` Component:
-1. Starting from a SubScene, add a GameObject > Cube. Rename it 'StaticCube'. A BoxCollider should already be present as a component. 
+1. Starting from a SubScene, add a GameObject > Cube. Rename it 'StaticCube'. A BoxCollider should already be present as a component.
 2. Add a `Rigidbody` component and then disable `Use Gravity` and enable `Is Kinematic`.
 3. Create another Cube and parent it from 'StaticCube'. Name this one 'AngularVelocityMotor'. Add a `Rigidbody`. Set the Transform Position to (0,1,0)
-4. Add a `Hinge Joint` component to the 'AngularVelocityMotor' GameObject 
+4. Add a `Hinge Joint` component to the 'AngularVelocityMotor' GameObject
 5. To set up the General Angular Velocity Motor Example 1 with a pivot at (0.5, 0, 0.5) and rotation along the y-axis, set the following:
   - `Connected Body` = 'StaticCube'. Motor rotation will be relative to this body.
   - `Anchor` = (0.5, 0, 0.5). This is the pivot position of the motor. It is relative to the centre of 'AngularVelocityMotor'. This data is baked into the `BodyFrame` position of bodyA.
@@ -188,8 +188,8 @@ No other data is used by the baking pipeline at this time to create an Angular V
 
 While using this method is possible, it is recommended to use the `Hinge Joint` for simplicity.
 
-1. Repeat Steps 1-3 from Method 1 
-2. Add a `Configurable Joint` to the 'AngularVelocityMotor' GameObject 
+1. Repeat Steps 1-3 from Method 1
+2. Add a `Configurable Joint` to the 'AngularVelocityMotor' GameObject
 3. To set up the General Angular Velocity Motor Example 1 with a pivot at (0.5, 0, 0.5) and rotation along the y-axis, set the following:
    - `Connected Body` = 'StaticCube'. Motor rotation will be relative to this body.
    - `Anchor` = (0.5, 0, 0.5). This is the pivot position of the motor. It is relative to the centre of 'AngularVelocityMotor'. This data is baked into the `BodyFrame` position of bodyA.
@@ -208,7 +208,7 @@ While using this method is possible, it is recommended to use the `Hinge Joint` 
    - `Break Force` = Infinity. This value is multiplied by 'fixedDeltaTime' to get an impulse. It is baked into 'MaxImpulse' for breakable events and applies only to linear non-motorized constraints.
    - `Break Torque` = Infinity. This value is multiplied by 'fixedDeltaTime' to get an impulse. It is baked into 'MaxImpulse' for breakable events and applies only to angular non-motorized constraints.
 
-**Important!** Due to the complexity of the `Configurable Joint`, the baking pipeline is only supporting a simplified use-case when authoring an angular velocity motor. It is only possible to apply a drive to the primary `Axis`. When selecting the DOF options, `X/Y/Z Motion` must each be set to Locked, `Angular Y/Z Motion` must be set to Locked and `Angular X Motion` must be set to Free. Any other settings will result in an error message in the Console and the `Configurable Joint` baking will fail. The baking will not proceed until all errors have been resolved. To change the rotation direction of the motor, the `Axis` field must be used. 
+**Important!** Due to the complexity of the `Configurable Joint`, the baking pipeline is only supporting a simplified use-case when authoring an angular velocity motor. It is only possible to apply a drive to the primary `Axis`. When selecting the DOF options, `X/Y/Z Motion` must each be set to Locked, `Angular Y/Z Motion` must be set to Locked and `Angular X Motion` must be set to Free. Any other settings will result in an error message in the Console and the `Configurable Joint` baking will fail. The baking will not proceed until all errors have been resolved. To change the rotation direction of the motor, the `Axis` field must be used.
 
 Any drive settings in the Inspector that were not listed in the step-by-step instructions will not be baked. The `Target Angular Velocity` field will only use the x-component data. If a joint is driven on either the secondary or tertiary axis, then it is advised to add another component to create that drive separately. Note that depending on the configuration, this may lead to unstable simulation.
 
@@ -217,11 +217,11 @@ Any drive settings in the Inspector that were not listed in the step-by-step ins
 The C# API to author an Angular Velocity Motor is
 ```csharp
 PhysicsJoint.CreateAngularVelocityMotor(
-    bodyAFromJoint, 
-    bodyBFromJoint, 
-    target, 
+    bodyAFromJoint,
+    bodyBFromJoint,
+    target,
     maxImpulseOfMotor,
-    springFrequency, 
+    springFrequency,
     dampingRatio)
 ```
 where:
@@ -256,9 +256,9 @@ See the C# API Documentation for more details.
 The Angular Velocity Motor component exists only in the Unity Physics Samples Project and is intended for educational/internal testing purposes. To use this component, the Unity Physics Samples must be imported from the Package Manager. Then, the script can be found in the Unity Physics Samples Project at this path: `Assets/Samples/Unity Physics/0.62.0-preview.162/Custom Physics Authoring/Unity.Physics.Custom/Motors/AngularVelocityMotor.cs`. Arguments for this component may change, or the component may be deprecated in the future. See the Joints/Motors Demos in the Unity Physics Samples for sample usage.
 
 To set up the General Angular Velocity Motor Example 1, follow these steps:
-1. Starting from a SubScene, add a GameObject > Cube. Rename it 'StaticCube'. A BoxCollider should already be present as a component. Remove the Box Collider. 
-2. Add a `Physics Body` Component to 'StaticCube' (a `Physics Body` is the ECS custom component similar to a `Rigidbody`). Set `Motion Type` to Static. 
-3. Add a `Physics Shape` Component to 'StaticCube' (a `Physics Shape` is the ECS custom component similar to a `Box Collider`). Don't modify the default settings. 
+1. Starting from a SubScene, add a GameObject > Cube. Rename it 'StaticCube'. A BoxCollider should already be present as a component. Remove the Box Collider.
+2. Add a `Physics Body` Component to 'StaticCube' (a `Physics Body` is the ECS custom component similar to a `Rigidbody`). Set `Motion Type` to Static.
+3. Add a `Physics Shape` Component to 'StaticCube' (a `Physics Shape` is the ECS custom component similar to a `Box Collider`). Don't modify the default settings.
 4. Create another Cube and parent it from 'StaticCube'. Name this one 'AVM'. Add a `Physics Body`; no settings need to be modified. Set the Transform Position to (0,1,0)
 5. Add the `Angular Velocity Motor` component to the 'AVM' GameObject (The script needs to be available locally)
 6. To set up the General Angular Velocity Motor Example 1 with a pivot at (0.5, 0, 0.5) and rotation along the y-axis, set the following:
@@ -282,7 +282,7 @@ All data in the `Angular Velocity Motor` component is baked.
 
 
 ## The Position Motor
-A position motor is a linear motor type that will drive along an axis towards a specified target distance between bodies' anchor points. Angular degrees of freedom are locked. In some ways, this is similar to how a spring joint works, but is slightly different because the response to move towards a target is not strictly due to a spring constant and damping parameter, but a motor that is maintaining the position. 
+A position motor is a linear motor type that will drive along an axis towards a specified target distance between bodies' anchor points. Angular degrees of freedom are locked. In some ways, this is similar to how a spring joint works, but is slightly different because the response to move towards a target is not strictly due to a spring constant and damping parameter, but a motor that is maintaining the position.
 
 As such, a position motor might be used instead of a spring joint in some situations where it is more important to maintain some position than it would be to model spring behavior. The motor component should be placed on the body that requires this motor behaviour. Generally, these parameters need to be specified:
 - Anchor Position: an offset from the center of the body with the motor on it.  This can be thought of as the 'starting point' of the motor.
@@ -297,10 +297,10 @@ For each of the Position Motor Authoring sections, we will create the following 
 The only GameObject component that can be used to author a position motor is a `Configurable Joint`. Note that not all parameters within a GameObject `Configurable Joint` component are used by Unity Physics. If a parameter is not mentioned as being changed from default in the steps, then that value should remain unchanged.
 
 Using a `Configurable Joint` Component:
-1. Starting from a SubScene, add a GameObject > Cube. Rename it 'StaticCube'. A BoxCollider should already be present as a component. 
-2. Add a `Rigidbody` component and then disable `Use Gravity` and enable `Is Kinematic`. 
+1. Starting from a SubScene, add a GameObject > Cube. Rename it 'StaticCube'. A BoxCollider should already be present as a component.
+2. Add a `Rigidbody` component and then disable `Use Gravity` and enable `Is Kinematic`.
 3. Create another Cube and parent it from 'StaticCube'. Name this one 'PositionMotor'. Add a `Rigidbody`. Set the Transform Position to (1,0,0)
-4. Add a `Configurable Joint` to the 'PositionMotor' GameObject 
+4. Add a `Configurable Joint` to the 'PositionMotor' GameObject
 5. To set up the General Position Motor Example 1, set the following:
   - `Connected Body` = 'StaticCube'. Motor movement will be relative to this body.
   - `Anchor` = (0, 0, 0). This is the anchor position of the motor. It is relative to the centre of 'PositionMotor'. This data is baked into the `BodyFrame` position of bodyA.
@@ -318,7 +318,7 @@ Using a `Configurable Joint` Component:
   - `Break Force` = Infinity. This value is multiplied by 'fixedDeltaTime' to get an impulse. It is baked into 'MaxImpulse' for breakable events and applies only to linear non-motorized constraints.
   - `Break Torque` = Infinity. This value is multiplied by 'fixedDeltaTime' to get an impulse. It is baked into 'MaxImpulse' for breakable events and applies only to angular non-motorized constraints.
 
-**Important!** Due to the complexity of the `Configurable Joint` component, the baking pipeline is only supporting a simplified use-case when authoring a rotational motor. It is only possible to apply a drive to the primary `Axis`. When selecting the DOF options, `Angular X/Y/Z Motion` must each be set to Locked, `Y/Z Motion` must be set to Locked and `X Motion` must be set to Free. Any other settings will result in an error message in the Console and the `Configurable Joint` baking will fail. The baking will not proceed until all errors have been resolved. To change the movement direction of the motor, the `Axis` field must be used. 
+**Important!** Due to the complexity of the `Configurable Joint` component, the baking pipeline is only supporting a simplified use-case when authoring a rotational motor. It is only possible to apply a drive to the primary `Axis`. When selecting the DOF options, `Angular X/Y/Z Motion` must each be set to Locked, `Y/Z Motion` must be set to Locked and `X Motion` must be set to Free. Any other settings will result in an error message in the Console and the `Configurable Joint` baking will fail. The baking will not proceed until all errors have been resolved. To change the movement direction of the motor, the `Axis` field must be used.
 
 Any drive settings in the Inspector that were not listed in the step-by-step instructions will not be baked. The `Target Position` field will only use the x-component data. If a joint is driven on either the secondary or tertiary axis, then it is advised to add another joint component to create that drive separately. Note that depending on the configuration, this may lead to unstable simulation.
 
@@ -327,11 +327,11 @@ Any drive settings in the Inspector that were not listed in the step-by-step ins
 The C# API to author a Position Motor is
 ```csharp
 PhysicsJoint.CreatePositionMotor(
-    bodyAFromJoint, 
-    bodyBFromJoint, 
-    target, 
+    bodyAFromJoint,
+    bodyBFromJoint,
+    target,
     maxImpulseOfMotor,
-    springFrequency, 
+    springFrequency,
     dampingRatio)
 ```
 where:
@@ -366,9 +366,9 @@ See the C# API Documentation for more details.
 The Position Motor component exists only in the Unity Physics Samples Project and is intended for educational/internal testing purposes. To use this component, the Unity Physics Samples must be imported from the Package Manager. Then, the script can be found in the Unity Physics Samples Project at this path: `Assets/Samples/Unity Physics/0.62.0-preview.162/Custom Physics Authoring/Unity.Physics.Custom/Motors/PositionMotor.cs`. Arguments for this component may change, or the component may be deprecated in the future. See the Joints/Motors Demos in the Unity Physics Samples for sample usage.
 
 To set up the General Position Motor Example 1, follow these steps:
-1. Starting from a SubScene, add a GameObject > Cube. Rename it 'StaticCube'. A BoxCollider should already be present as a component. Remove the Box Collider. 
-2. Add a `Physics Body` Component to 'StaticCube' (a `Physics Body` is the ECS custom component similar to a `Rigidbody`). Set `Motion Type` to Static. 
-3. Add a `Physics Shape` Component to 'StaticCube' (a `Physics Shape` is the ECS custom component similar to a `Box Collider`). Don't modify the default settings. 
+1. Starting from a SubScene, add a GameObject > Cube. Rename it 'StaticCube'. A BoxCollider should already be present as a component. Remove the Box Collider.
+2. Add a `Physics Body` Component to 'StaticCube' (a `Physics Body` is the ECS custom component similar to a `Rigidbody`). Set `Motion Type` to Static.
+3. Add a `Physics Shape` Component to 'StaticCube' (a `Physics Shape` is the ECS custom component similar to a `Box Collider`). Don't modify the default settings.
 4. Create another Cube and parent it from 'StaticCube'. Name this one 'PositionMotor'. Add a `Physics Body`; no settings need to be modified. Set the Transform Position to (1,0,0)
 5. Add the `Position Motor` component to the 'PositionMotor' GameObject (The script needs to be available locally)
 6. Let's say we want to make this motor move along the x-axis to a location +2 away, set the following:
@@ -402,9 +402,9 @@ For each of the Linear Velocity Motor Authoring sections, we will create the fol
 The only GameObject component that can be used to author a linear velocity motor is a `Configurable Joint`. Note that not all parameters within a GameObject `Configurable Joint` component are used by Unity Physics. If a parameter is not mentioned as being changed from default in the steps, then that value should remain unchanged.
 
 Using a `Configurable Joint` Component:
-1. Starting from a SubScene, add a GameObject > Cube. A BoxCollider should already be present as a component. 
-2. Name this cube 'LVM'. Add a `Rigidbody`. 
-3. Add a `Configurable Joint` to the 'LVM' GameObject 
+1. Starting from a SubScene, add a GameObject > Cube. A BoxCollider should already be present as a component.
+2. Name this cube 'LVM'. Add a `Rigidbody`.
+3. Add a `Configurable Joint` to the 'LVM' GameObject
 4. To configure the General Linear Velocity Motor 1 Example, set the following:
    - `Connected Body` = 'None'. Motor movement will be relative to this body. When it is set to none, the body uses world-space coordinates.
    - `Anchor` = (0, 0, 0). This is the anchor position of the motor. It is relative to the centre of 'PositionMotor'. This data is baked into the `BodyFrame` position of bodyA.
@@ -431,11 +431,11 @@ Any drive settings in the Inspector that were not listed in the step-by-step ins
 The C# API to author a Linear Velocity Motor is
 ```csharp
 PhysicsJoint.CreateLinearVelocityMotor(
-    bodyAFromJoint, 
-    bodyBFromJoint, 
-    target, 
+    bodyAFromJoint,
+    bodyBFromJoint,
+    target,
     maxImpulseOfMotor,
-    springFrequency, 
+    springFrequency,
     dampingRatio)
 ```
 where:
@@ -469,8 +469,8 @@ See the C# API Documentation for more details.
 The Linear Velocity Motor component exists only in the Unity Physics Samples Project and is intended for educational/internal testing purposes. To use this component, the Unity Physics Samples must be imported from the Package Manager. Then, the script can be found in the Unity Physics Samples Project at this path: `Assets/Samples/Unity Physics/0.62.0-preview.162/Custom Physics Authoring/Unity.Physics.Custom/Motors/LinearVelocityMotor.cs`. Arguments for this component may change, or the component may be deprecated in the future. See the Joints/Motors Demos in the Unity Physics Samples for sample usage.
 
 To set up the General Linear Velocity Motor Example 1, follow these steps:
-1. Starting from a SubScene, add a GameObject > Cube. Rename it 'LVM'. A BoxCollider should already be present as a component. Remove the Box Collider. 
-2. Add a `Physics Shape` Component to 'LVM' (a `Physics Shape` is the ECS custom component similar to a `Box Collider`). Don't modify the default settings. 
+1. Starting from a SubScene, add a GameObject > Cube. Rename it 'LVM'. A BoxCollider should already be present as a component. Remove the Box Collider.
+2. Add a `Physics Shape` Component to 'LVM' (a `Physics Shape` is the ECS custom component similar to a `Box Collider`). Don't modify the default settings.
 3. Add the `Linear Velocity Motor` component to the 'LVM' GameObject (The script needs to be available locally)
 4. To configure this component for the General Linear Velocity Motor 1 Example, set the following:
    - `Connected Body` = 'None'.

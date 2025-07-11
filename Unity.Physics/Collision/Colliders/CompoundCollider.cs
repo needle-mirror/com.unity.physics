@@ -407,7 +407,7 @@ namespace Unity.Physics
                 fixed(BlobArray* blob = &m_BvhNodesBlob)
                 {
                     var firstNode = (BoundingVolumeHierarchy.Node*)((byte*)&(blob->Offset) + blob->Offset);
-                    return new BoundingVolumeHierarchy(firstNode, nodeFilters: null);
+                    return new BoundingVolumeHierarchy(firstNode, BvhNodes.Length, nodeFilters: null);
                 }
             }
         }

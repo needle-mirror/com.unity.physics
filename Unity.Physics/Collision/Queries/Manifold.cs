@@ -180,6 +180,11 @@ namespace Unity.Physics
                         header.CoefficientOfFriction = Material.GetCombinedFriction(materialA, materialB);
                         header.CoefficientOfRestitution = Material.GetCombinedRestitution(materialA, materialB);
                     }
+
+                    if (Material.GetCombineDetailedStaticMeshCollision(materialA, materialB))
+                    {
+                        header.JacobianFlags |= JacobianFlags.EnableDetailedStaticMeshCollision;
+                    }
                 }
 
                 context.ContactWriter->Write(header);
@@ -451,12 +456,15 @@ namespace Unity.Physics
             ScaledMTransform scaledWorldFromA = new ScaledMTransform(worldFromA, context.ScaleA);
             ScaledMTransform bFromA = Mul(bFromWorld, scaledWorldFromA);
 
-            expansionWS.Linear = math.mul(bFromA.Rotation, expansionWS.Linear);
+            // Calculate swept AABB of A in B:
 
-            // Calculate swept AABB of A in B - divide by B's scale to get from WS to B space
             var expansionInB = expansionWS;
+
+            // bring linear expansion into B space
+            expansionInB.Linear = math.mul(bFromWorld.Rotation, expansionWS.Linear);
             if (!IsApproximatelyEqual(context.ScaleB, 1.0f))
             {
+                // if B is not identity scale, we need to scale both the linear expansion `Linear` and the uniform expansion `Uniform` to get to B space
                 expansionInB = new float4(expansionInB) / math.abs(context.ScaleB);
             }
 

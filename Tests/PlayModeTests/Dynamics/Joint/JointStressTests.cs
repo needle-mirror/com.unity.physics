@@ -4,7 +4,7 @@ using Unity.Mathematics;
 using Random = Unity.Mathematics.Random;
 using static Unity.Physics.Math;
 
-namespace Unity.Physics.Tests.Joints
+namespace Unity.Physics.Tests.Dynamics.Joints
 {
     /// <summary>
     /// These tests generate random motions and joints, simulate them for several steps, then verifies that the joint error is nearly zero.
@@ -29,7 +29,7 @@ namespace Unity.Physics.Tests.Joints
 
         static void integrate(ref MotionVelocity velocity, ref MotionData motion, float timestep)
         {
-            Integrator.Integrate(ref motion.WorldFromMotion, velocity, timestep);
+            Unity.Physics.Integrator.Integrate(ref motion.WorldFromMotion, velocity, timestep);
         }
 
         //

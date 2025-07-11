@@ -84,7 +84,7 @@ namespace Unity.Physics
     ///     into a compound collider.
     ///     It contains one entry per child in the resultant compound collider, associating the original <see cref="Unity.Entities.Entity"/>
     ///     which contained the collider before creation of the compound with the compound's child collider through the child's collider key.
-    /// </para>.
+    /// </para>
     /// </summary>
     [InternalBufferCapacity(0)]
     public struct PhysicsColliderKeyEntityPair : IBufferElementData

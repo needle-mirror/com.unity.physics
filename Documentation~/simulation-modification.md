@@ -37,11 +37,11 @@ public partial struct ApplyImpulseSystem : ISystem
             World.ApplyImpulse(3, new float3(1, 0, 0), new float3(1, 1, 1));
         }
     }
-    
+
     [BurstCompile]
     public void OnUpdate(ref SystemState state)
-    {        
-        PhysicsWorldSingleton worldSingleton = SystemAPI.GetSingletonRW<PhysicsWorldSingleton>(); 
+    {
+        PhysicsWorldSingleton worldSingleton = SystemAPI.GetSingletonRW<PhysicsWorldSingleton>();
         // Note that it is neccessary to call GetSingletonRW (not just GetSingleton), since you are writing to the world.
         state.Dependency = new ApplyImpulseJob
         {
@@ -97,10 +97,10 @@ public partial struct DisableDynamicDynamicPairsSystem : ISystem
             }
         }
     }
-    
+
     [BurstCompile]
     public void OnUpdate(ref SystemState state)
-    {        
+    {
         PhysicsWorldSingleton worldSingleton = SystemAPI.GetSingletonRW<PhysicsWorldSingleton>();
         SimulationSingleton simulationSingleton = SystemAPI.GetSingletonRW<SimulationSingleton>();
 
@@ -144,7 +144,7 @@ public partial struct EnableSurfaceVelocitySystem : ISystem
     {
         state.Dependency = new EnableSurfaceVelocityJob()
             .Schedule(SystemAPI.GetSingletonRW<SimulationSingleton>(),
-            ref SystemAPI.GetSingletonRW<PhysicsWorldSingleton>().PhysicsWorld, 
+            ref SystemAPI.GetSingletonRW<PhysicsWorldSingleton>().PhysicsWorld,
             state.Dependency);
     }
 }
@@ -163,14 +163,14 @@ public partial struct EnableSurfaceVelocitySystem : ISystem
 [UpdateAfter(typeof(PhysicsCreateJacobiansGroup))]
 [UpdateBefore(typeof(PhysicsSolveAndIntegrateGroup))]
 public partial struct SetFrictionToZeroSystem : ISystem
-{   
+{
     [BurstCompile]
-    public partial struct SetFrictionToZeroJob : IJacobiansJob 
+    public partial struct SetFrictionToZeroJob : IJacobiansJob
     // Note: there are much more performant ways of setting friction to zero, this is just for demonstration purposes
     {
         // Don't do anything for triggers
         public void Execute(ref ModifiableJacobianHeader h, ref ModifiableTriggerJacobian j) {}
-        
+
         [BurstCompile]
         public void Execute(ref ModifiableJacobianHeader jacHeader, ref ModifiableContactJacobian contactJacobian)
         {
@@ -195,10 +195,10 @@ public partial struct SetFrictionToZeroSystem : ISystem
     public void OnUpdate(ref SystemState state)
     {
         state.Dependency = new SetFrictionToZeroJob()
-            .Schedule(SystemAPI.GetSingletonRW<SimulationSingleton>(), 
+            .Schedule(SystemAPI.GetSingletonRW<SimulationSingleton>(),
             ref SystemAPI.GetSingletonRW<PhysicsWorldSingleton>().PhysicsWorld,
             state.Dependency);
-    }    
+    }
 }
 ```
 

@@ -2,7 +2,7 @@ using NUnit.Framework;
 using Unity.Mathematics;
 using UnityEngine;
 
-namespace Unity.Physics.Tests.Joints
+namespace Unity.Physics.Tests.Dynamics.Joints
 {
     /// <summary>
     /// Specific verification tests for specific joints, designed to ensure we obtain the expected physical behavior.
@@ -35,7 +35,7 @@ namespace Unity.Physics.Tests.Joints
                 context.Reset(m_StepInput);
                 for (var i = 0; i < numSteps; ++i)
                 {
-                    Simulation.StepImmediate(m_StepInput, ref context);
+                    Unity.Physics.Simulation.StepImmediate(m_StepInput, ref context);
 #if DEBUG_PRINT_BODY_POSITION
                     if (i % 10 == 0)
                         Debug.Log(m_World.DynamicsWorld.MotionDatas[m_DynamicBodyIndex].WorldFromMotion.pos);

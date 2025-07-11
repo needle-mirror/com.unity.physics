@@ -282,12 +282,12 @@ namespace Unity.Physics.Systems
         /// Schedule jobs to update the broadphase of the specified PhysicsWorld.
         /// </summary>
         ///
-        /// <param name="physicsWorldData">                 [in,out] Information describing the physics world. </param>
-        /// <param name="inputDep">                         The input dependency. </param>
-        /// <param name="timeStep">                         The time step. </param>
-        /// <param name="isBroadphaseUpdatedMultiThreaded"> True if is broadphase update is multi threaded, false if not. </param>s
-        /// <param name="gravity">                          The gravity. </param>
-        /// <param name="lastSystemVersion">                The last system version. </param>
+        /// <param name="physicsWorldData">[in,out] Information describing the physics world.</param>
+        /// <param name="timeStep">The time step.</param>
+        /// <param name="gravity">The gravity.</param>
+        /// <param name="lastSystemVersion">The last system version.</param>
+        /// <param name="inputDep">The input dependency.</param>
+        /// <param name="isBroadphaseUpdatedMultiThreaded">True if the broadphase update is multithreaded; false otherwise.</param>
         ///
         /// <returns>   A JobHandle. </returns>
         public static JobHandle ScheduleUpdateBroadphase(ref PhysicsWorldData physicsWorldData,
@@ -317,6 +317,7 @@ namespace Unity.Physics.Systems
         /// <param name="systemState"> [in,out] State of the system. </param>
         /// <param name="physicsData">[in,out] Information describing the physics. </param>
         /// <param name="inputDeps">the input dependencies</param>
+        /// <returns>   A JobHandle. </returns>
         public static JobHandle ScheduleUpdateMotionData(ref SystemState systemState, ref PhysicsWorldData physicsData, JobHandle inputDeps)
         {
             var numDynamicBodies = physicsData.StaticEntityGroup.CalculateEntityCount();
@@ -558,10 +559,10 @@ namespace Unity.Physics.Systems
         /// Update the broadphase BoundingVolumeHierarchy of the of the specified PhysicsWorld (run immediately on
         /// the current thread).
         /// </summary>
-        /// <param name="physicsWorldData"></param>
-        /// <param name="timeStep"></param>
-        /// <param name="gravity"></param>
-        /// <param name="lastSystemVersion"></param>
+        /// <param name="physicsWorldData">  Reference to the physics world data structure to update. </param>
+        /// <param name="timeStep"> The time step for which the broadphase update is performed. </param>
+        /// <param name="gravity"> The gravity vector applied during the update. </param>
+        /// <param name="lastSystemVersion"> The system version used to detect changes in components since the last update. </param>
         public static void UpdateBroadphaseImmediate(ref PhysicsWorldData physicsWorldData, float timeStep, float3 gravity, uint lastSystemVersion)
         {
             physicsWorldData.HaveStaticBodiesChanged.Value = 0;

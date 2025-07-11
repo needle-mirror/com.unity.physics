@@ -9,7 +9,7 @@ To enable custom simulation of bodies in non-default worlds, you need to:
 
 ## Assigning bodies to different worlds
 By default, bodies are assigned to the main physics world (world index 0).
-In order to assign a body to a different world, add a `PhysicsWorldIndexAuthoring` component to the GameObject you want to modify alongside its `Rigidbody` component and then set its `World Index` property to the desired value. 
+In order to assign a body to a different world, add a `PhysicsWorldIndexAuthoring` component to the GameObject you want to modify alongside its `Rigidbody` component and then set its `World Index` property to the desired value.
 
 ## CustomPhysicsSystemGroup
 
@@ -22,7 +22,7 @@ Example:
     [UpdateInGroup(typeof(FixedStepSimulationSystemGroup))]
     public partial class UserPhysicsGroup : CustomPhysicsSystemGroup
     {
-        public UserPhysicsGroup() : base(1, true) {} // our physics group will simulate entities with world index 1, and share static entities with main world        
+        public UserPhysicsGroup() : base(1, true) {} // our physics group will simulate entities with world index 1, and share static entities with main world
     }
 
     [UpdateInGroup(PhysicsInitializeGroup)] // As the system updates inside [PhysicsSinitializeGroup], it will automatically be ran inside UserPhysicsGroup as well
@@ -63,8 +63,8 @@ If overriding these methods, it is necessary to call `base.Pre/PostGroupUpdateCa
 
 ### Limitations
 
-The main physics world and all other physics worlds use the same `PhysicsStep` singleton. 
- 
+The main physics world and all other physics worlds use the same `PhysicsStep` singleton.
+
 # Next steps
 
 Now that you know how to create bodies, it would be a good time to learn about [Collision queries](collision-queries.md) and filtering. At that stage you should be all set for at least intermediate use of Unity Physics and can progress onto the more advanced topics such as understanding the [Physics pipeline](physics-pipeline.md#physics-pipeline) and modifying simulation as it is running ([directly](simulation-modification.md#directly-modifying-physicsworld) or via [slotting in systems between physics pipeline stages](simulation-modification.md)) and getting a deeper understanding of how the code works.

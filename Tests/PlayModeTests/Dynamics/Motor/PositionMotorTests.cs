@@ -3,7 +3,7 @@ using NUnit.Framework;
 using Unity.Mathematics;
 using Random = Unity.Mathematics.Random;
 
-namespace Unity.Physics.Tests.Motors
+namespace Unity.Physics.Tests.Dynamics.Motors
 {
     [TestFixture]
     public class PositionMotorTests

@@ -66,6 +66,43 @@ namespace Unity.Physics.Tests.Collision.Colliders
             ValidateCapsuleCollider(colliderClone, geometry);
         }
 
+        /// <summary>
+        /// Test if the CapsuleCollider behaves correctly when it degenerates into a Sphere,
+        /// i.e., when Vertex0 and Vertex1 are at the same position.
+        /// </summary>
+        [Test]
+        public void CapsuleCollider_ActsAsSphere_WhenDegenerated()
+        {
+            // Define the input geometry where Vertex0 and Vertex1 are the same
+            var geometry = new CapsuleGeometry
+            {
+                Vertex0 = new float3(1.0f, 2.0f, 3.0f),
+                Vertex1 = new float3(1.0f, 2.0f, 3.0f), // Same as Vertex0
+                Radius = 1.5f
+            };
+
+            using var collider = CapsuleCollider.Create(geometry);
+
+            // Validate that the capsule effectively behaves as a sphere
+            Assert.AreEqual(collider.Value.Type, ColliderType.Capsule);
+            Assert.AreEqual(collider.Value.CollisionType, CollisionType.Convex);
+
+            ref var capsuleCollider = ref collider.As<CapsuleCollider>();
+
+            // Ensure that the geometry matches the expected degenerate sphere
+            ValidateCapsuleCollider(collider, geometry);
+
+            // The calculated AABB should match that of a sphere
+            var expectedAabb = new Aabb
+            {
+                Min = geometry.Vertex0 - new float3(geometry.Radius),
+                Max = geometry.Vertex0 + new float3(geometry.Radius)
+            };
+            var aabb = capsuleCollider.CalculateAabb();
+            TestUtils.AreEqual(expectedAabb.Min, aabb.Min, 1e-5f);
+            TestUtils.AreEqual(expectedAabb.Max, aabb.Max, 1e-5f);
+        }
+
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
         [Test]
         public void CapsuleCollider_Create_WhenVertexInvalid_Throws(
@@ -279,6 +316,32 @@ namespace Unity.Physics.Tests.Collision.Colliders
             });
             float3 inertiaTensor = capsuleCollider.Value.MassProperties.MassDistribution.InertiaTensor;
             TestUtils.AreEqual(expectedInertiaTensor, inertiaTensor, 1e-3f);
+        }
+
+        /// <summary>
+        /// Test that the mass properties of a degenerated <see cref="CapsuleCollider"/> are the same as a <see cref="SphereCollider"/>
+        /// </summary>
+        [Test]
+        public void DegeneratedCapsule_HasSameMassPropertiesAsSphere()
+        {
+            float3 vertex0 = new float3(1.1f, 2.2f, 3.4f);
+            float radius = 2.3f;
+
+            // Create a capsule with degenerated vertices
+            using var capsuleCollider = CapsuleCollider.Create(new CapsuleGeometry
+            {
+                Vertex0 = vertex0,
+                Vertex1 = vertex0,
+                Radius = radius
+            });
+
+            using var sphereCollider = SphereCollider.Create(new SphereGeometry
+            {
+                Center = vertex0,
+                Radius = radius
+            });
+
+            TestUtils.AreEqual(sphereCollider.Value.MassProperties, capsuleCollider.Value.MassProperties, 1e-4f);
         }
 
         #endregion

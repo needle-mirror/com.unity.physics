@@ -1,6 +1,6 @@
 # Get started
 
-This section contains information on how to get started using Entities. 
+This section contains information on how to get started using Entities.
 
 | Topic                                           | Description                                                                                  |
 |-------------------------------------------------|----------------------------------------------------------------------------------------------|

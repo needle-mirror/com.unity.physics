@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using Unity.Mathematics;
 
-namespace Unity.Physics.Tests.Motors
+namespace Unity.Physics.Tests.Dynamics.Motors
 {
     [TestFixture]
     public class AngularVelocityMotorTests

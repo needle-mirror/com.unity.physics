@@ -315,6 +315,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
             {
                 Points = points,
                 Nodes = (Node*)nodes.GetUnsafePtr(),
+                MaxNodeCount = nodes.Length,
                 Ranges = ranges,
                 BranchNodeOffsets = branchNodeOffset,
                 BranchCount = branchCount,
@@ -329,6 +330,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
                 Aabbs = aabbs,
                 BodyFilters = filters,
                 Nodes = (Node*)nodes.GetUnsafePtr(),
+                MaxNodeCount = nodes.Length,
                 NodeFilters = null,
                 Ranges = ranges,
                 BranchNodeOffsets = branchNodeOffset,
@@ -393,6 +395,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
             {
                 Points = points,
                 Nodes = tree.Nodes.GetUnsafePtr(),
+                MaxNodeCount = tree.Nodes.Capacity,
                 NodeFilters = tree.NodeFilters.GetUnsafePtr(),
                 Ranges = tree.Ranges,
                 BranchNodeOffsets = branchNodeOffset,
@@ -408,6 +411,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
                 Aabbs = aabbs,
                 BodyFilters = tree.BodyFilters.AsArray(),
                 Nodes = tree.Nodes.GetUnsafePtr(),
+                MaxNodeCount = tree.Nodes.Capacity,
                 NodeFilters = tree.NodeFilters.GetUnsafePtr(),
                 Ranges = tree.Ranges,
                 BranchNodeOffsets = branchNodeOffset,
@@ -576,6 +580,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
 
             var seenUnfiltered = new HashSet<BodyIndexPair>();
             {
+                nodes.Resize(numNodes, NativeArrayOptions.UninitializedMemory);
                 var bvhUnfiltered = new BoundingVolumeHierarchy(nodes.AsArray());
                 bvhUnfiltered.Build(points, aabbs, out int numNodesOut);
                 bvhUnfiltered.CheckIntegrity(elementCount, null);
@@ -583,6 +588,8 @@ namespace Unity.Physics.Tests.Collision.Geometry
                 EverythingWriter pairWriter = new EverythingWriter { SeenPairs = seenUnfiltered };
                 BoundingVolumeHierarchy.TreeOverlap(ref pairWriter, nodes.GetUnsafePtr(), nodes.GetUnsafePtr());
             }
+
+            nodes.Clear();
 
             if (incremental)
             {
@@ -592,6 +599,8 @@ namespace Unity.Physics.Tests.Collision.Geometry
             }
             else
             {
+                nodes.Resize(numNodes, NativeArrayOptions.UninitializedMemory);
+                nodeFilters.Resize(numNodes, NativeArrayOptions.UninitializedMemory);
                 var bvhFiltered = new BoundingVolumeHierarchy(nodes.AsArray(), nodeFilters.AsArray());
                 bvhFiltered.Build(points, aabbs, out int numNodesFilteredTree);
                 bvhFiltered.BuildCombinedCollisionFilter(bodyFilters, 0, numNodesFilteredTree - 1);
@@ -701,6 +710,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
             }
             else
             {
+                nodes.Resize(numNodes, NativeArrayOptions.UninitializedMemory);
                 var bvh = new BoundingVolumeHierarchy(nodes.AsArray());
                 bvh.Build(points, aabbs, out int numNodesOut);
                 bvh.CheckIntegrity(elementCount, null);
@@ -868,6 +878,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
             }
             else
             {
+                nodes.Resize(numNodes, NativeArrayOptions.UninitializedMemory);
                 var bvh = new BoundingVolumeHierarchy(nodes.AsArray());
                 bvh.Build(points, aabbs, out int numNodesOut);
                 bvh.CheckIntegrity(elementCount, null);

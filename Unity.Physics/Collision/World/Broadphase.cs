@@ -125,6 +125,9 @@ namespace Unity.Physics
             }
             // else:
 
+            // flag tree as not built incrementally, since we rebuild it from scratch
+            StaticTree.Incremental = false;
+
             // Read bodies
             var aabbs = new NativeArray<Aabb>(staticBodies.Length, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
             var points = new NativeArray<PointAndIndex>(staticBodies.Length, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
@@ -173,6 +176,9 @@ namespace Unity.Physics
                 return;
             }
             // else:
+
+            // flag tree as not built incrementally, since we rebuild it from scratch
+            DynamicTree.Incremental = false;
 
             var aabbs = new NativeArray<Aabb>(dynamicBodies.Length, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
             var points = new NativeArray<PointAndIndex>(dynamicBodies.Length, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
@@ -480,6 +486,8 @@ namespace Unity.Physics
             NativeList<ElementLocationData> m_UpdatedElementLocationDataList;
             [NoAlias]
             IncrementalInsertionContext m_IncrementalInsertionContext;
+            [NoAlias]
+            NativeReference<bool> m_Incremental;
 
             // Data stream representing rigid bodies that need to be removed from the tree, e.g., due to their deletion.
             // Used as part of the incremental broadphase.
@@ -524,6 +532,12 @@ namespace Unity.Physics
 
             internal Allocator Allocator;
 
+            internal bool Incremental
+            {
+                get => m_Incremental.Value;
+                set => m_Incremental.Value = value;
+            }
+
             public BoundingVolumeHierarchy BoundingVolumeHierarchy
             {
                 [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -552,6 +566,9 @@ namespace Unity.Physics
                 m_InsertBodyDataStream = default;
                 m_UpdatedElementLocationDataList = default;
                 m_IncrementalInsertionContext = new IncrementalInsertionContext(128, allocator);
+
+                m_Incremental = new NativeReference<bool>(allocator);
+                m_Incremental.Value = false;
             }
 
             public void Reset(int numBodies)
@@ -624,12 +641,14 @@ namespace Unity.Physics
                     m_UpdateBodyDataStream = default,
                     m_InsertBodyDataStream = default,
                     m_UpdatedElementLocationDataList = default,
-                    m_IncrementalInsertionContext = new IncrementalInsertionContext(128, Allocator.Persistent)
+                    m_IncrementalInsertionContext = new IncrementalInsertionContext(128, Allocator.Persistent),
+                    m_Incremental = new NativeReference<bool>(Allocator.Persistent)
                 };
                 clone.Nodes.CopyFrom(Nodes);
                 clone.NodeFilters.CopyFrom(NodeFilters);
                 clone.BodyFilters.CopyFrom(BodyFilters);
                 clone.RespondsToCollision.CopyFrom(RespondsToCollision);
+                clone.Incremental = Incremental;
 
                 return clone;
             }
@@ -656,16 +675,22 @@ namespace Unity.Physics
 
                 if (m_IncrementalInsertionContext.IsCreated)
                     m_IncrementalInsertionContext.Dispose();
+
+                if (m_Incremental.IsCreated)
+                    m_Incremental.Dispose();
             }
 
             [GenerateTestsForBurstCompatibility]
             public void BuildIncremental()
             {
                 var bvh = BoundingVolumeHierarchy;
-                if (bvh.NodeCount == 0)
+                if (bvh.NodeCount == 0 || // Tree has not yet been initialized. First two nodes in an empty tree are 0: invalid node, 1: root node.
+                    !Incremental) // Tree was previously not built incrementally. We need to clear out any previous content to make sure we don't retain any leftover, untracked bodies.
                 {
                     bvh.Clear();
                 }
+
+                Incremental = true;
 
                 var removalsRequested = RemoveBodyDataStream.IsCreated && !RemoveBodyDataStream.IsEmpty();
                 var updatesRequested = UpdateBodyDataStream.IsCreated && !UpdateBodyDataStream.IsEmpty();

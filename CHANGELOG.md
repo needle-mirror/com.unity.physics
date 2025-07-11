@@ -4,6 +4,33 @@ uid: unity-physics-changelog
 
 # Changelog
 
+## [1.4.0-pre.4] - 2025-07-11
+
+### Added
+
+* New `TerrainCollider.Create` function variant that allows customizing the triangulation pattern of the created terrain collider's cells by flipping their inner diagonal edge, thus enabling users to align the physics collision representation with their visual terrain mesh.
+* A newly introduced Detailed Static Mesh Collision feature enables enhanced collision detection precision for interactions with static meshes, effectively eliminating ghost collisions that can otherwise frequently occur in the presence of small mesh triangles or at high motion speeds. To enable the feature select the "Detailed Static Mesh Collision" option in the "Advanced" section of your custom `PhysicsShapeAuthoring` component, or, If you are using built-in `Collider` components, add the new `DetailedStaticMeshCollisionAuthoring` component alongside your collider. For runtime-generated colliders, please use the `EnableDetailedStaticMeshCollision` parameter in the physics material.
+* Integrity checks for incremental broadphase. When integrity checks are enabled (see Project Settings -> Physics -> Unity Physics -> Enable Integrity Checks) the `PhysicsTemporalCoherenceInfo` component data of rigid body entities is validated against the internal state of the broadphase, to make sure the data is as expected. This allows detecting unexpected external modifications to this important bookkeeping data.
+
+### Changed
+
+* Parallelize jacobian updates for substepping without consideration of solver phases since there are no data dependencies
+* Safer access to nodes in `BoundingVolumeHierarchy` of broadphase, ensuring there are no out-of-bounds accesses.
+
+### Fixed
+
+* Fixed a crash when scheduling an IBodyPairsJob and an IJacobiansJob in a situation without any body pairs or jacobians present in the simulation.
+* Division by zero errors causing NaN values when a Capsule degenerates into a Sphere (occurs when Height = 2*Radius)
+* ConvexHull connectivity for flat convex colliders
+* Referenced prefabs in bakers with built-in joints incorrectly displayed the anchor position when the `Auto Configure Connected Anchor` flag was enabled.
+* Correctly compute the expansion space for convex / composite collision queries, preventing missed collisions in certain cases.
+* Pass the "Build Static Tree" flag to tree build job in single-threaded version of static tree update.
+* A specific use case has been patched which applies only to Mac Silicon devices using editor version 2022.3 and when a negative scale is used in the transform of a BoxCollider: The transform calculation from localToWorld matrix to quaternion doesn't return the correct value due to differences in the calculation of rsqrt(x). This is exhibited as BoxGeometry orientations returning a strange quaternion value when the scale is negative. This bug has been fixed in the editor.
+* Prevent invalid entries in incrementally built broadphase if it was built non-incrementally previously.
+
+### Security
+
+
 ## [1.4.0-pre.3] - 2025-06-06
 
 
@@ -507,7 +534,7 @@ uid: unity-physics-changelog
 
 ### Upgrade guide
 
-* The physics pipeline has been reworked. 	- `PhysicsSystemGroup` is introduced. It is a `ComponentSystemGroup` that covers all physics jobs. It consists of `PhysicsInitializeGroup`, `PhysicsSimulationGroup`, and `ExportPhysicsWorld`. `PhysicsSimulationGroup` further consists of `PhysicsCreateBodyPairsGroup`, `PhysicsCreateContactsGroup`, `PhysicsCreateJacobiansGroup`, `PhysicsSolveAndIntegrateGroup` which run in that order. See [documentation](xref:interacting-with-physics) for details. 	- `StepPhysicsWorld` and `EndFramePhysicsSystem` systems have been removed, `BuildPhysicsWorld` has been moved to `PhysicsInitializeGroup`: 	    - If you had `Update(Before|After)StepPhysicsWorld`, replace it with: `[UpdateInGroup(typeof(PhysicsSystemGroup))][Update(After|Before)(typeof(PhysicsSimulationGroup))]`. 	    - If you had `Update(Before|After)BuildPhysicsWorld`, replace it with: `[UpdateBefore(typeof(PhysicsSystemGroup))]` or `[UpdateInGroup(typeof(PhysicsSystemGroup))][UpdateAfter(typeof(PhysicsInitializeGroup))]` 	    - If you had `Update(Before|After)ExportPhysicsWorld` replace it with: `[UpdateInGroup(typeof(PhysicsSystemGroup))][UpdateBefore(typeof(ExportPhysicsWorld))]` or `[UpdateAfter(typeof(PhysicsSystemGroup))]` 	    - If you had `[Update(Before|After)EndFramePhysicsSystem]` replace it with: `[UpdateAfter(typeof(PhysicsSystemGroup))]` 	    - If you had combination of those (e.g. `[UpdateAfter(typeof(BuildPhysicsWorld))][UpdateBefore(typeof(StepPhysicsWorld))`) take a look at the diagram in [documentation](xref:interacting-with-physics). 	- All new systems are unmanaged, which means that they are more efficient, and their `OnUpdate()` is Burst friendly. You shouldn't call `World.GetOrCreateSystem<AnyPhysicsSystem>()` as of this release and should be using singletons (see below).
+* The physics pipeline has been reworked.  - `PhysicsSystemGroup` is introduced. It is a `ComponentSystemGroup` that covers all physics jobs. It consists of `PhysicsInitializeGroup`, `PhysicsSimulationGroup`, and `ExportPhysicsWorld`. `PhysicsSimulationGroup` further consists of `PhysicsCreateBodyPairsGroup`, `PhysicsCreateContactsGroup`, `PhysicsCreateJacobiansGroup`, `PhysicsSolveAndIntegrateGroup` which run in that order. See [documentation](xref:interacting-with-physics) for details.  - `StepPhysicsWorld` and `EndFramePhysicsSystem` systems have been removed, `BuildPhysicsWorld` has been moved to `PhysicsInitializeGroup`:      - If you had `Update(Before|After)StepPhysicsWorld`, replace it with: `[UpdateInGroup(typeof(PhysicsSystemGroup))][Update(After|Before)(typeof(PhysicsSimulationGroup))]`.      - If you had `Update(Before|After)BuildPhysicsWorld`, replace it with: `[UpdateBefore(typeof(PhysicsSystemGroup))]` or `[UpdateInGroup(typeof(PhysicsSystemGroup))][UpdateAfter(typeof(PhysicsInitializeGroup))]`      - If you had `Update(Before|After)ExportPhysicsWorld` replace it with: `[UpdateInGroup(typeof(PhysicsSystemGroup))][UpdateBefore(typeof(ExportPhysicsWorld))]` or `[UpdateAfter(typeof(PhysicsSystemGroup))]`      - If you had `[Update(Before|After)EndFramePhysicsSystem]` replace it with: `[UpdateAfter(typeof(PhysicsSystemGroup))]`      - If you had combination of those (e.g. `[UpdateAfter(typeof(BuildPhysicsWorld))][UpdateBefore(typeof(StepPhysicsWorld))`) take a look at the diagram in [documentation](xref:interacting-with-physics).  - All new systems are unmanaged, which means that they are more efficient, and their `OnUpdate()` is Burst friendly. You shouldn't call `World.GetOrCreateSystem<AnyPhysicsSystem>()` as of this release and should be using singletons (see below).
 * Retrieval of `PhysicsWorld` is achieved differently. Previously, it was necessary to get it directly from `BuildPhysicsWorld` system. Now, `PhysicsWorld` is retrieved by calling (`SystemAPI|SystemBase|EntityQuery`).GetSingleton<PhysicsWorldSingleton>().PhysicsWorld in case read-only access is required, and by calling (`SystemAPI|SystemBase|EntityQuery`).GetSingletonRW<PhysicsWorldSingleton>().PhysicsWorld in case of a read-write access. It is still possible to get the world from `BuildPhysicsWorld`, but is not recommended, as it can cause race conditions. This is only affecting the `PhysicsWorld` managed by the engine. Users still can create and manage their own `PhysicsWorld`. Check out [documentation](xref:interacting-with-physics) for more information.
 * Retrieval of `Simulation` is achieved differently. Previously, it was neccessary to get it directly from `StepPhysicsWorld` system. Now, `Simulation` is retrieved by calling (`SystemAPI|SystemBase|EntityQuery`).GetSingleton<SimulationSingleton>().AsSimulation() in case read-only access is required, and by calling (`SystemAPI|SystemBase|EntityQuery`).GetSingletonRW<SimulationSingleton>().AsSimulation() in case of read-write access. Check out [documentation](xref:interacting-with-physics) for more information.
 * The dependencies between physics systems now get sorted automatically as long as `GetSingleton<>()` approach is used for retrieving `PhysicsWorld` and `Simulation`. There is no need to call `RegisterPhysicsSystems(ReadOnly|ReadWrite)`, `AddInputDependency()` or `AddInputDependencyToComplete()` and these functions were removed.
@@ -722,7 +749,7 @@ uid: unity-physics-changelog
     * Added a `PhysicsMassOverride.SetVelocityToZero` field. If `PhysicsMassOverride.IsKinematic`, is a non-zero value, then a body's mass and inertia are made infinite, though it's motion will still be integrated. If `PhysicsMassOverride.SetVelocityToZero` is also a non-zero value, the kinematic body will ignore the values in the associated `PhysicsVelocity` component and no longer move.
 
 * Run-Time Behavior
-	* If a body has infinite mass and/or inertia, then linear and/or angular damping will no longer be applied respectively.
+ * If a body has infinite mass and/or inertia, then linear and/or angular damping will no longer be applied respectively.
 
 ### Fixes
 
@@ -754,7 +781,7 @@ uid: unity-physics-changelog
     * Removed `ModifiableJacobianHeader.HasColliderKeys`, `ModifiableJacobianHeader.ColliderKeyA` and `ModifiableJacobianHeader.ColliderKeyB` as they are not meant to be read by users, but to fill the data for collision events.
     * Removed `SimulationCallbacks.Phase.PostSolveJacobians` as it doesn't have real use cases and it's causing inconsistencies between the two engines. Instead, users should schedule their jobs after `StepPhysicsWorld` and before `ExportPhysicsWorld` to achieve a similar effect.
     * Added `ClampToMaxLength()` to `Unity.Physics.Math`, which reduces the length of specified `float3` vector to specified maxLength if it was bigger.
-	* `ColliderCastHit` and `DistanceHit` now have `QueryColliderKey` field. If the input of `ColliderCast` or `ColliderDistance` queries contains a non-convex collider, this field will contain the collider key of the input collider. Otherwise, its value will be `ColliderKey.Empty`.
+ * `ColliderCastHit` and `DistanceHit` now have `QueryColliderKey` field. If the input of `ColliderCast` or `ColliderDistance` queries contains a non-convex collider, this field will contain the collider key of the input collider. Otherwise, its value will be `ColliderKey.Empty`.
     * Removed `AddInputDependency()` and `GetOutputDependency()` from all physics systems as dependencies are now handled in a different way (see below).
     * Added `RegisterPhysicsRuntimeSystemReadOnly()` and `RegisterPhysicsRuntimeSystemReadWrite()` that are both extension methods for `SystemBase` and are used to declare interaction with the runtime physics data (stored in PhysicsWorld). One should call one of these in their system's `OnStartRunning()` (using `this.RegisterPhysicsRuntimeSystemReadOnly()` or `this.RegisterPhysicsRuntimeSystemReadWrite()`) to declare interaction with the physics data, which will translate to automatic data dependencies being included in the `SystemBase.Dependency` property of any system.
     * Previously internal functions in `ColliderKey`, `ColliderKeyPath` and `ChildCollider` are now public to aid the traversal of a `Collider` hierarchy.
@@ -766,7 +793,7 @@ uid: unity-physics-changelog
     * Added a `PhysicsRenderEntity` component data. This is primarily used for populating a `CompoundCollider.Child.Entity` field where there was no graphical representation on the same GameObject that has a `PhysicsShapeAuthoring` component.
 
 * Run-Time Behavior
-	* `ColliderDistance` and `ColliderCast` queries now support non-convex input colliders (Compounds, Meshes and Terrains).
+ * `ColliderDistance` and `ColliderCast` queries now support non-convex input colliders (Compounds, Meshes and Terrains).
 
 * Authoring/Conversion Behavior
 
@@ -838,7 +865,7 @@ uid: unity-physics-changelog
 * Authoring/Conversion API
 
 * Run-Time Behavior
-	* `ExportPhysicsWorld` system should now only get updated when there is at least one entity satisfying `BuildPhysicsWorld.DynamicEntityGroup` entity query.
+ * `ExportPhysicsWorld` system should now only get updated when there is at least one entity satisfying `BuildPhysicsWorld.DynamicEntityGroup` entity query.
 
 * Authoring/Conversion Behavior
 
@@ -868,7 +895,7 @@ uid: unity-physics-changelog
     * Added the `TerrainCollider.Filter` setter
     * Removed the `CompoundCollider.Filter` setter as it was doing the wrong thing (composite collider filters should be the union of their children)
     * Added `BuildPhysicsWorld.AddDependencyToComplete()` which takes a job dependency that the `BuildPhysicsWorld` system should complete immediately in its `OnUpdate()` call (before scheduling new jobs). The reason is that this system does reallocations in the `OnUpdate()` immediately (not in jobs), and any previous jobs that are being run before this system could rely on that data being reallocated. This way, these jobs can provide their dependency to `BuildPhysicsWorld` and make sure it will wait until they are finished before doing the reallocations.
-	* Added the option to provide a custom explosion filter in 'PhysicsVelocity.ApplyExplosionForce'.
+ * Added the option to provide a custom explosion filter in 'PhysicsVelocity.ApplyExplosionForce'.
 
 * Authoring/Conversion API
 
@@ -953,8 +980,8 @@ uid: unity-physics-changelog
         * `Solver.ApplyGravityAndCopyInputVelocities()` passing `NativeArray<MotionData>`
         * `Solver.SolveJacobians()` not passing explicit `StabilizationData`
     * Added `JointType.LimitedDegreeOfFreedom` and associated creation and control functions
-	* Added `Aabb.Intersect()` function
-	* Added `PhysicsComponentExtensions.GetEffectiveMass()`
+ * Added `Aabb.Intersect()` function
+ * Added `PhysicsComponentExtensions.GetEffectiveMass()`
 
 * Authoring/Conversion API
     * Removed the following expired members/types:

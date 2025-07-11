@@ -8,8 +8,10 @@ using Unity.Physics.Aspects;
 
 namespace Unity.Physics
 {
-    /// <summary>   An instance of a collider in a physics world. </summary>
-    /// Using StructLayout to handle for an issue where there can be a mismatch between struct sizes for RigidBody in separate jobs
+    /// <summary>   An instance of a collider in a physics world.
+    /// Using StructLayout to handle for an issue where there can be a mismatch
+    /// between struct sizes for RigidBody in separate jobs
+    /// </summary>
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Explicit, Pack = 1, Size = 56)]
     public struct RigidBody : ICollidable, IAspectQueryable
     {

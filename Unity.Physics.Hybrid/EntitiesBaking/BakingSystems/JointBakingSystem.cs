@@ -161,11 +161,41 @@ namespace Unity.Physics.Authoring
             float3 connectedAnchorPos = joint.connectedBody
                 ? GetScaledLocalAnchorPosition(joint.connectedBody.transform, joint.connectedAnchor)
                 : joint.connectedAnchor;
+
+            float3 bJointPosition = math.mul(bFromBSource, new float4(connectedAnchorPos, 1f)).xyz;
+#if UNITY_EDITOR
+            bool IsPrefabAsset = UnityEditor.PrefabUtility.GetPrefabAssetType(joint) != UnityEditor.PrefabAssetType.NotAPrefab &&
+                UnityEditor.PrefabUtility.GetPrefabInstanceStatus(joint) == UnityEditor.PrefabInstanceStatus.NotAPrefab;
+
+            // This correction applies only to prefabs referenced by other Authoring/Baker scripts,
+            // which have not yet been instantiated in the scene. Since {joint.connectedAnchor}
+            // is not correctly initialized at this point, the Joint Position shown in the Inspector
+            // may appear incorrect for these prefabs.
+            if (IsPrefabAsset && joint.autoConfigureConnectedAnchor)
+            {
+                // Resolve the connected transform if one exists
+                Transform connectedTransform = null;
+                if (joint.connectedBody != null)
+                    connectedTransform = joint.connectedBody.transform;
+                else if (joint.connectedArticulationBody != null)
+                    connectedTransform = joint.connectedArticulationBody.transform;
+
+                // Correct the joint position to account for prefab initialization state
+                if (connectedTransform != null)
+                {
+                    float3 localPos = math.mul(math.inverse(joint.transform.rotation), connectedTransform.position - joint.transform.position);
+                    localPos -= anchorPos;
+                    localPos *= -1.0f; // Flip the result to match the expected local direction
+                    bJointPosition = localPos;
+                }
+            }
+#endif
+
             bodyBFromJoint = new BodyFrame
             {
                 Axis = math.mul(bFromA.rot, bodyAFromJoint.Axis),
                 PerpendicularAxis = math.mul(bFromA.rot, bodyAFromJoint.PerpendicularAxis),
-                Position = math.mul(bFromBSource, new float4(connectedAnchorPos, 1f)).xyz
+                Position = bJointPosition
             };
         }
 

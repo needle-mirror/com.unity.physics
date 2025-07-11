@@ -83,6 +83,9 @@ namespace Unity.Physics.Authoring
                     collider
                 );
 
+            var detailedStaticMeshCollision = collider.gameObject.GetComponent<DetailedStaticMeshCollisionAuthoring>();
+            material.EnableDetailedStaticMeshCollision = detailedStaticMeshCollision != null && detailedStaticMeshCollision.isActiveAndEnabled;
+
             return material;
         }
 
@@ -270,10 +273,21 @@ namespace Unity.Physics.Authoring
 
             var center = math.transform(bakeToShape, shape.center);
 
+            // On 2022.3 (Mac Silicon platform only): an incorrect quaternion returned from the transform's
+            // localToWorldMatrix for a negative localScale. As a workaround, get the quaternion a different way:
+            var orientation = bakeToShape.rotation;
+#if UNITY_2022_3_OR_NEWER && !UNITY_2023_1_OR_NEWER
+            if (bodyTransform.localToWorldMatrix.determinant < 0) // if the scale is negative
+            {
+                var workaround = Math.DecomposeRigidBodyTransform(bodyTransform.localToWorldMatrix);
+                orientation = workaround.rot;
+            }
+#endif
+
             var geometry = new BoxGeometry
             {
                 Center = center,
-                Orientation = bakeToShape.rotation
+                Orientation = orientation
             };
 
             geometry.Size = math.abs(shape.size * (float3)bakeToShape.lossyScale);

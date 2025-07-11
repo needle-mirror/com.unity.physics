@@ -73,6 +73,33 @@ namespace Unity.Physics
         }
 
         /// <summary>
+        /// When enabled, this option processes contact points from both the current and next frame
+        /// to predict and refine collision accuracy, reducing the likelihood of ghost collisions.
+        ///
+        /// This is particularly effective in scenarios prone to ghost collisions,
+        /// such as colliders moving along slopes, either uphill or downhill,
+        /// or similar cases where tend to occur ghost collisions.
+        ///
+        /// To activate this behavior, at least one of the colliding objects must have this flag enabled.
+        /// However, it also functions when both colliders have the flag enabled.
+        ///
+        /// The system prioritizes evaluation from the dynamic collider when it collides with a static collider.
+        /// </summary>
+
+        public bool EnableDetailedStaticMeshCollision
+        {
+            get { return (Flags & MaterialFlags.EnableDetailedStaticMeshCollision) != 0; }
+            set
+            {
+                if (value != EnableDetailedStaticMeshCollision)
+                {
+                    // Toggle the bit since the value is changing
+                    Flags ^= MaterialFlags.EnableDetailedStaticMeshCollision;
+                }
+            }
+        }
+
+        /// <summary>
         ///   Get or Set EnableMassFactors
         /// </summary>
         ///
@@ -121,7 +148,8 @@ namespace Unity.Physics
             EnableCollisionEvents = 1 << 1,
             EnableMassFactors = 1 << 2,
             EnableSurfaceVelocity = 1 << 3,
-            DisableCollisions = 1 << 4
+            DisableCollisions = 1 << 4,
+            EnableDetailedStaticMeshCollision = 1 << 5,
         }
 
         /// <summary>   Defines how a value from a pair of materials should be combined. </summary>
@@ -226,6 +254,22 @@ namespace Unity.Physics
                 default:
                     return 0;
             }
+        }
+
+        /// <summary>
+        /// Determines if detailed contact calculation should be enabled based on
+        /// materials with the EnableDetailedStaticMeshCollision property enabled.
+        /// Detailed contacts process collision points between the current and predicted future frame
+        /// to improve collision accuracy and prevent ghost collisions.
+        /// </summary>
+        /// <param name="materialA">    The material a. </param>
+        /// <param name="materialB">    The material b. </param>
+        /// <returns>
+        /// True if either material requires detailed contact processing between the current and next frame.
+        /// </returns>
+        public static bool GetCombineDetailedStaticMeshCollision(Material materialA, Material materialB)
+        {
+            return materialA.EnableDetailedStaticMeshCollision || materialB.EnableDetailedStaticMeshCollision;
         }
 
         internal enum MaterialField

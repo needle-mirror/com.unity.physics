@@ -330,19 +330,25 @@ namespace Unity.Physics
         {
             SafetyChecks.CheckSimulationStageAndThrow(simulation.m_SimulationScheduleStage, SimulationScheduleStage.PostCreateJacobians);
 
-            var data = new JacobiansJobData<T>
+            if (simulation.StepContext.Jacobians.IsCreated && simulation.StepContext.SolverSchedulerInfo.NumWorkItems.IsCreated)
             {
-                UserJobData = jobData,
-                StreamReader = simulation.StepContext.Jacobians.AsReader(),
-                NumWorkItems = simulation.StepContext.SolverSchedulerInfo.NumWorkItems,
-                Bodies = world.Bodies
-            };
+                var data = new JacobiansJobData<T>
+                {
+                    UserJobData = jobData,
+                    StreamReader = simulation.StepContext.Jacobians.AsReader(),
+                    NumWorkItems = simulation.StepContext.SolverSchedulerInfo.NumWorkItems,
+                    Bodies = world.Bodies
+                };
 
-            var jobReflectionData = JacobiansJobProcess<T>.jobReflectionData.Data;
-            JacobiansJobProcess<T>.CheckReflectionDataCorrect(jobReflectionData);
+                var jobReflectionData = JacobiansJobProcess<T>.jobReflectionData.Data;
+                JacobiansJobProcess<T>.CheckReflectionDataCorrect(jobReflectionData);
 
-            var parameters = new JobsUtility.JobScheduleParameters(UnsafeUtility.AddressOf(ref data), jobReflectionData, inputDeps, ScheduleMode.Single);
-            return JobsUtility.Schedule(ref parameters);
+                var parameters = new JobsUtility.JobScheduleParameters(UnsafeUtility.AddressOf(ref data), jobReflectionData, inputDeps, ScheduleMode.Single);
+                return JobsUtility.Schedule(ref parameters);
+            }
+            // else:
+
+            return inputDeps;
         }
 
         internal unsafe struct JacobiansJobData<T> where T : struct

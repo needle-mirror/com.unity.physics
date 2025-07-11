@@ -180,6 +180,13 @@ namespace Unity.Physics
             centerA += armA;
             centerB += armB;
 
+            if (jacobianHeader.HasDetailedStaticMeshCollision)
+            {
+                ref JacobianPolygonData jacobianData = ref jacobianHeader.AccessJacobianContactData();
+                jacobianData.ContactPoint = contact.Position;
+                jacobianData.Normal = normal;
+            }
+
             // Write the contact point to the jacobian stream if requested
             if (jacobianHeader.HasContactManifold)
             {
@@ -380,10 +387,17 @@ namespace Unity.Physics
 
             float sumImpulses = 0.0f;         // Impulse accumulated across NumContacts for current solve call (across multiple Jacobians)
             bool forceCollisionEvent = false; // Is raised when there is a penetration regardless of impulse conditions
-
             for (int j = 0; j < BaseJacobian.NumContacts; j++)
             {
                 ref ContactJacAngAndVelToReachCp jacAngular = ref jacHeader.AccessAngularJacobian(j);
+
+                if (jacHeader.HasDetailedStaticMeshCollision)
+                {
+                    ref JacobianPolygonData jacContact = ref jacHeader.AccessJacobianContactData();
+                    // Checking whether the contact needs processing.
+                    if (!WillHitNextFrame(ref jacContact, ref jacAngular, tempVelocityA, tempVelocityB, stepInput.Timestep))
+                        continue;
+                }
 
                 // Calculate the relative velocity in the NORMAL direction
                 float dv = CalculateRelativeVelocityAlongNormal(tempVelocityA, tempVelocityB, ref jacAngular, BaseJacobian.Normal,
@@ -528,11 +542,19 @@ namespace Unity.Physics
                 return;
             }
 
+
             // Calculate normal impulses and fire collision event
             // if at least one contact point would have an impulse applied
             for (int j = 0; j < BaseJacobian.NumContacts; j++)
             {
                 ref ContactJacAngAndVelToReachCp jacAngular = ref jacHeader.AccessAngularJacobian(j);
+                if (jacHeader.HasDetailedStaticMeshCollision)
+                {
+                    ref JacobianPolygonData jacContact = ref jacHeader.AccessJacobianContactData();
+                    if (!WillHitNextFrame(ref jacContact, ref jacAngular, velocityA, velocityB, stepInput.Timestep))
+                        continue;
+                }
+
                 float dv = CalculateRelativeVelocityAlongNormal(velocityA, velocityB, ref jacAngular, BaseJacobian.Normal,
                     out float relativeVelocity);
 
@@ -544,6 +566,64 @@ namespace Unity.Physics
                     return;
                 }
             }
+        }
+
+        unsafe bool WillHitNextFrame(ref JacobianPolygonData jacContact,
+            ref ContactJacAngAndVelToReachCp jacAngular,
+            MotionVelocity velocityA,
+            MotionVelocity velocityB,
+            float timeStep)
+        {
+            bool IsNotIntersecting = jacAngular.ContactDistance > 0;
+            var IsBodyAStatic = jacContact.IsBodyAStatic;
+            if (IsNotIntersecting && jacContact.IsValid)
+            {
+                float3 contactPoint = IsBodyAStatic ? jacContact.ContactPoint : jacContact.ContactPoint + jacContact.Normal * jacAngular.ContactDistance;
+                MotionVelocity motionVelocity = IsBodyAStatic ? velocityB : velocityA;
+
+                // Create the predicted contact point which the contact will occur in the next timestep.
+                float3 contactDirection = contactPoint - jacContact.CenterOfMass;
+                float3 velocityTorsion = math.cross(motionVelocity.AngularVelocity, contactDirection);
+                float3 linearVelocityAtContactPoint = velocityTorsion + motionVelocity.LinearVelocity;
+                float3 predictedContactPoint = contactPoint + (timeStep * linearVelocityAtContactPoint);
+
+                // Translate the vector to create the ray based on leaf local position to Evaluate the collision.
+                AffineTransform inverseTransform = math.inverse(jacContact.Transform);
+                AffineTransform bodyTransform = math.mul(inverseTransform, jacContact.LeafTransform);
+                float3 origin = math.transform(bodyTransform, contactPoint);
+                float3 displacement = math.transform(bodyTransform, predictedContactPoint) - origin;
+
+                var maxFraction = 1.0f; // This is used to evaluate the fraction of the ray, considering its entire length.
+                var hadHit = RaycastQueries.RayTriangle(origin,
+                    displacement,
+                    jacContact.Vertex0,
+                    jacContact.Vertex1,
+                    jacContact.Vertex2,
+                    ref maxFraction,
+                    out float3 unnormalizedNormal);
+
+                if (!hadHit)
+                {
+#if DISPLAY_DETAILED_STATIC_MESH_DEBUG
+                    // draw triangle
+                    UnityEngine.Debug.DrawLine(jacContact.Vertex0, jacContact.Vertex2, UnityEngine.Color.magenta);
+                    UnityEngine.Debug.DrawLine(jacContact.Vertex0, jacContact.Vertex1, UnityEngine.Color.magenta);
+                    UnityEngine.Debug.DrawLine(jacContact.Vertex1, jacContact.Vertex2, UnityEngine.Color.magenta);
+                    // draw ray
+                    UnityEngine.Debug.DrawLine(contactPoint, predictedContactPoint, UnityEngine.Color.red);
+                    UnityEngine.Debug.DrawLine(origin, origin + displacement, UnityEngine.Color.red);
+#endif
+                    return false;
+                }
+                else
+                {
+#if DISPLAY_DETAILED_STATIC_MESH_DEBUG
+                    UnityEngine.Debug.DrawLine(contactPoint, predictedContactPoint, UnityEngine.Color.blue);
+#endif
+                }
+            }
+
+            return true;
         }
 
         // Helper functions

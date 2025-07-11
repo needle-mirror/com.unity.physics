@@ -56,24 +56,23 @@ namespace Unity.Physics
         /// <param name="collisionMethod">  The collision method. </param>
         ///
         /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
-        public static BlobAssetReference<Collider> Create(
-            NativeArray<float> heights, int2 size, float3 scale, CollisionMethod collisionMethod
-        ) =>
+        public static BlobAssetReference<Collider> Create(NativeArray<float> heights, int2 size, float3 scale, CollisionMethod collisionMethod) =>
             Create(heights, size, scale, collisionMethod, CollisionFilter.Default, Material.Default);
 
-        /// <summary>   Creates a new BlobAssetReference&lt;Collider&gt; </summary>
+        /// <summary>   Create a terrain collider from a grid of heights. </summary>
         ///
-        /// <param name="heights">          The heights. </param>
-        /// <param name="size">             The size. </param>
-        /// <param name="scale">            The scale. </param>
-        /// <param name="collisionMethod">  The collision method. </param>
-        /// <param name="filter">           Specifies the filter. </param>
+        /// <param name="heights">              The heights. </param>
+        /// <param name="size">                 The size. </param>
+        /// <param name="scale">                The scale. </param>
+        /// <param name="collisionMethod">      The collision method. </param>
+        /// <param name="flipInnerCellEdges">   Flips the orientation of the inner diagonal edges in the terrain collider's cells.
+        ///                                     Each terrain cell (i,j) is made up of 4 vertices and is split into two adjacent triangles. When this parameter is set to false,
+        ///                                     the inner diagonal edge of the triangles goes from vertex (i+1, j) (bottom-right corner) to (i, j+1) (top-left corner).
+        ///                                     When set to true, it is flipped and goes from vertex (i, j) (bottom-left corner) to (i+1, j+1) (top-right corner). </param>
         ///
         /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
-        public static BlobAssetReference<Collider> Create(
-            NativeArray<float> heights, int2 size, float3 scale, CollisionMethod collisionMethod, CollisionFilter filter
-        ) =>
-            Create(heights, size, scale, collisionMethod, filter, Material.Default);
+        public static BlobAssetReference<Collider> Create(NativeArray<float> heights, int2 size, float3 scale, CollisionMethod collisionMethod, bool flipInnerCellEdges) =>
+            Create(heights, size, scale, collisionMethod, CollisionFilter.Default, Material.Default, flipInnerCellEdges);
 
         /// <summary>   Creates a new BlobAssetReference&lt;Collider&gt; </summary>
         ///
@@ -82,12 +81,39 @@ namespace Unity.Physics
         /// <param name="scale">            The scale. </param>
         /// <param name="collisionMethod">  The collision method. </param>
         /// <param name="filter">           Specifies the filter. </param>
-        /// <param name="material">         The material. </param>
         ///
         /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
-        public static BlobAssetReference<Collider> Create(
-            NativeArray<float> heights, int2 size, float3 scale, CollisionMethod collisionMethod, CollisionFilter filter, Material material
-        )
+        public static BlobAssetReference<Collider> Create(NativeArray<float> heights, int2 size, float3 scale, CollisionMethod collisionMethod, CollisionFilter filter) =>
+            Create(heights, size, scale, collisionMethod, filter, Material.Default, flipInnerCellEdges: false);
+
+        /// <summary>   Creates a new BlobAssetReference&lt;Collider&gt; </summary>
+        ///
+        /// <param name="heights">              The heights. </param>
+        /// <param name="size">                 The size. </param>
+        /// <param name="scale">                The scale. </param>
+        /// <param name="collisionMethod">      The collision method. </param>
+        /// <param name="filter">               Specifies the filter. </param>
+        /// <param name="material">             The material. </param>
+        ///
+        /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
+        public static BlobAssetReference<Collider> Create(NativeArray<float> heights, int2 size, float3 scale, CollisionMethod collisionMethod, CollisionFilter filter, Material material) =>
+            Create(heights, size, scale, collisionMethod, filter, material, flipInnerCellEdges: false);
+
+        /// <summary>   Creates a new BlobAssetReference&lt;Collider&gt; </summary>
+        ///
+        /// <param name="heights">              The heights. </param>
+        /// <param name="size">                 The size. </param>
+        /// <param name="scale">                The scale. </param>
+        /// <param name="collisionMethod">      The collision method. </param>
+        /// <param name="filter">               Specifies the filter. </param>
+        /// <param name="material">             The material. </param>
+        /// <param name="flipInnerCellEdges">   Flips the orientation of the inner diagonal edges in the terrain collider's cells.
+        ///                                     Each terrain cell (i,j) is made up of 4 vertices and is split into two adjacent triangles. When this parameter is set to false,
+        ///                                     the inner diagonal edge of the triangles goes from vertex (i+1, j) (bottom-right corner) to (i, j+1) (top-left corner).
+        ///                                     When set to true, it is flipped and goes from vertex (i, j) (bottom-left corner) to (i+1, j+1) (top-right corner). </param>
+        ///
+        /// <returns>   A BlobAssetReference&lt;Collider&gt; </returns>
+        public static BlobAssetReference<Collider> Create(NativeArray<float> heights, int2 size, float3 scale, CollisionMethod collisionMethod, CollisionFilter filter, Material material, bool flipInnerCellEdges)
         {
             unsafe
             {
@@ -109,7 +135,7 @@ namespace Unity.Physics
                 collider->m_Header.Filter = filter;
                 collider->Material = material;
                 collider->MemorySize = totalSize;
-                collider->Terrain.Init(size, scale, (float*)heights.GetUnsafePtr());
+                collider->Terrain.Init(size, scale, (float*)heights.GetUnsafePtr(), flipInnerCellEdges);
 
                 var blob = BlobAssetReference<Collider>.Create(collider, totalSize);
                 UnsafeUtility.Free(collider, Allocator.Temp);
@@ -725,7 +751,6 @@ namespace Unity.Physics
         #endregion
     }
 
-
     // Terrain data.
     // Heights are quantized to a signed 16 bit integer.
     // Four height samples at (i, j), (i + 1, j), (i, j + 1), (i + 1, j + 1) make a quad.
@@ -808,6 +833,14 @@ namespace Unity.Physics
         private BlobArray m_NodesBlob;
         public BlobArray.Accessor<Node> Nodes => new BlobArray.Accessor<Node>(ref m_NodesBlob);
 
+        /// <summary>
+        /// A flag that determines how the inner diagonal edge of each terrain quad is oriented during triangulation.
+        /// When `true`, the diagonal splits the quad from the bottom-left to top-right.
+        /// When `false` (default), the diagonal splits the quad from bottom-right to top-left.
+        /// This affects how the terrain quads are divided into two triangles, which impacts collision accuracy and visual fidelity.
+        /// </summary>
+        private bool m_FlipInnerCellEdge;
+
         #region Construction
 
         // Calculate the number of quadtree nodes and levels required for the given heightfield size
@@ -852,7 +885,7 @@ namespace Unity.Physics
 
         // Initialize the terrain.
         // The memory must have been allocated correctly beforehand.
-        internal unsafe void Init(int2 size, float3 scale, float* heights)
+        internal unsafe void Init(int2 size, float3 scale, float* heights, bool flipInnerCellEdges = false)
         {
             int numSamples = size.x * size.y;
             CalculateTreeInfo(size, out int numNodes, out int numLevels,
@@ -1041,6 +1074,9 @@ namespace Unity.Physics
                 Min = new float3(0, math.cmin(root->Min4), 0) * Scale,
                 Max = new float3(size.x - 1, math.cmax(root->Max4), size.y - 1) * Scale
             };
+
+            // Set the flag that determines the orientation of the inner diagonal edge of each terrain cell during triangulation.
+            m_FlipInnerCellEdge = flipInnerCellEdges;
         }
 
         #endregion
@@ -1103,9 +1139,22 @@ namespace Unity.Physics
         // Returns a triangle in a ChildCollider
         public ChildCollider GetTriangle(int2 index, int triangle, CollisionFilter filter, Material material)
         {
-            int2 index0 = index + new int2(0, triangle);
-            int2 index1 = index + new int2(1, 0);
-            int2 index2 = index + new int2(triangle, 1);
+            int2 index0, index1, index2;
+
+            if (m_FlipInnerCellEdge)
+            {
+                // Triangulation for cell (i, j) with diagonal from (i + 1, j) to (i, j + 1):
+                index0 = index + new int2(0, 0);
+                index1 = index + new int2(1, triangle);
+                index2 = index + new int2(1 - triangle, 1);
+            }
+            else
+            {
+                // Triangulation for cell (i, j) with diagonal from (i + 1, j) to (i, j + 1):
+                index0 = index + new int2(0, triangle);
+                index1 = index + new int2(1, 0);
+                index2 = index + new int2(triangle, 1);
+            }
 
             return new ChildCollider(
                 new float3(index0.x, GetHeight(index0), index0.y) * Scale,

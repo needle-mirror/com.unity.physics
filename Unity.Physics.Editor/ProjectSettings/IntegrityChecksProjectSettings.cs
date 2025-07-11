@@ -5,18 +5,27 @@ using UnityEditor;
 using UnityEditor.Build;
 using UnityEngine;
 
+/// <summary>
+/// Preferences for Unity Physics package
+/// </summary>
 public static class Preferences
 {
     const string k_DisableIntegrityDefine = "UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS";
     const string k_EnableDebugDisplayAtRuntime = "ENABLE_UNITY_PHYSICS_RUNTIME_DEBUG_DISPLAY";
     const char k_defineSeparator = ';';
 
+    /// <summary>
+    /// IntegrityChecksDisabled
+    /// </summary>
     public static bool IntegrityChecksDisabled
     {
         get => DefineExists(k_DisableIntegrityDefine);
         set => UpdateDefine(k_DisableIntegrityDefine, value);
     }
 
+    /// <summary>
+    /// DebugDisplayRuntimeEnabled
+    /// </summary>
     public static bool DebugDisplayRuntimeEnabled
     {
         get => DefineExists(k_EnableDebugDisplayAtRuntime, BuildPipeline.GetBuildTargetGroup(EditorUserBuildSettings.activeBuildTarget));

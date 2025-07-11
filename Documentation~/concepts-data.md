@@ -19,7 +19,7 @@ All physics bodies require components from [`Unity.Transforms`](xref:Unity.Trans
 
 # Dynamic Bodies
 
-Dynamic bodies are bodies that require a [`LocalTransform`](xref:Unity.Transforms.LocalTransform) component and a `PhysicsVelocity` component. Since a dynamic body is unparented during entity baking for improved performance, its `LocalTransform` component can be presumed to be in world space and thus fully defines the body's world space position and orientation. 
+Dynamic bodies are bodies that require a [`LocalTransform`](xref:Unity.Transforms.LocalTransform) component and a `PhysicsVelocity` component. Since a dynamic body is unparented during entity baking for improved performance, its `LocalTransform` component can be presumed to be in world space and thus fully defines the body's world space position and orientation.
 During the baking process of a GameObject into a dynamic body, the GameObject's world-space position and orientation is transferred into the `LocalTransform` component of the resultant entity.
 
 # Static Bodies
@@ -63,6 +63,6 @@ It is possible to apply **non-uniform scale and shear** to the shape of a rigid 
 
 # Additional Topics
 
-Next in this chapter, the [PhysicsCollider component](physics-collider-components.md) section describes how the shape and geometry of rigid bodies is defined. 
+Next in this chapter, the [PhysicsCollider component](physics-collider-components.md) section describes how the shape and geometry of rigid bodies is defined.
 
 Subsequent chapters describe how to [add rigid bodies to your scenes](authoring.md), and how to [interact with rigid bodies and their runtime data](interacting-with-bodies.md).

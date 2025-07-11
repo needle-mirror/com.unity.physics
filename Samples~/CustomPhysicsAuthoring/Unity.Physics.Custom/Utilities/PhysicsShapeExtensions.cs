@@ -43,7 +43,8 @@ namespace Unity.Physics.Authoring
                 Restitution = shape.Restitution.Value,
                 RestitutionCombinePolicy = shape.Restitution.CombineMode,
                 CollisionResponse = shape.CollisionResponse,
-                CustomTags = shape.CustomTags.Value
+                CustomTags = shape.CustomTags.Value,
+                EnableDetailedStaticMeshCollision = shape.DetailedStaticMeshCollision.Value
             };
         }
 

@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using Unity.Mathematics;
 
-namespace Unity.Physics.Tests.Motors
+namespace Unity.Physics.Tests.Dynamics.Motors
 {
     // Test cases we want to verify:
     // Test Case A: Adding impulse to accumulation does not exceed threshold

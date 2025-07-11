@@ -4,7 +4,6 @@ using Unity.Mathematics;
 
 namespace Unity.Physics
 {
-    /// <summary>   A mathematics utility class. </summary>
     public static partial class Math
     {
         /// <summary>   A transform in matrix format </summary>
