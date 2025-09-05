@@ -9,7 +9,7 @@ See the [Unity Physics Samples](https://github.com/Unity-Technologies/EntityComp
 ## Supported Unity Versions
 
 * 2022.3 (LTS)
-* 2023.3 (Latest Beta and beyond)
+* Unity 6 (LTS)
 
 ## Package installation
 
@@ -19,12 +19,6 @@ To install the package, open the Package Manager window (**Window &gt; Package M
 
 * [Add the package by its name](xref:upm-ui-quick) (com.unity.physics)
 * [Add the package from its Git URL](xref:upm-ui-giturl)
-
-## Known issues
-
-* Mesh collider types contacting results in a wrong behaviour by getting glued to each other as if they were joints.
-* Mesh collider simplification: if primitive scale is smaller than 0.018f, selecting entities in the scene view throws error.
-* Compound collider gets created even if children are disabled in Editor's game object hierarchy.
 
 ## Additional resources
 

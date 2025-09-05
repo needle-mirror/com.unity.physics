@@ -291,7 +291,6 @@ namespace Unity.Physics
 
         internal SimulationContext SimulationContext;
 
-        private DispatchPairSequencer m_Scheduler;
         internal SimulationJobHandles m_StepHandles;
 
         internal bool ReadyForEventScheduling => SimulationContext.ReadyForEventScheduling;
@@ -311,7 +310,6 @@ namespace Unity.Physics
         /// </summary>
         public void Dispose()
         {
-            m_Scheduler.Dispose();
             SimulationContext.Dispose();
         }
 
@@ -319,7 +317,6 @@ namespace Unity.Physics
         {
             StepContext = new StepContext();
             SimulationContext = new SimulationContext();
-            m_Scheduler = DispatchPairSequencer.Create();
             m_StepHandles = new SimulationJobHandles(new JobHandle());
             m_SimulationScheduleStage = SimulationScheduleStage.Idle;
         }
@@ -486,7 +483,7 @@ namespace Unity.Physics
             var postOverlapsHandle = handle;
 
             // Sort all overlapping and jointed body pairs into phases
-            handles = m_Scheduler.ScheduleCreatePhasedDispatchPairsJob(
+            handles = DispatchPairSequencer.ScheduleCreatePhasedDispatchPairsJob(
                 ref input.World, ref dynamicVsDynamicBodyPairs, ref dynamicVsStaticBodyPairs, handle,
                 ref StepContext.PhasedDispatchPairs, out StepContext.SolverSchedulerInfo, multiThreaded);
 

@@ -3,9 +3,9 @@
   "category": "Unity",
   "description": "Unity's C# stateless physics library.\n\nBuilt on top of the Unity C# ECS framework, Unity Physics is network-ready, completely customizable, and built for performance out of the box. Whether you're building the next mobile hit or a new networked multiplayer console experience, Unity Physics leverages the Burst compiler and Job system to scale across a range of hardware.",
   "dependencies": {
-    "com.unity.burst": "1.8.21",
-    "com.unity.collections": "2.6.0-pre.4",
-    "com.unity.entities": "1.4.0-pre.4",
+    "com.unity.burst": "1.8.23",
+    "com.unity.collections": "2.6.2",
+    "com.unity.entities": "1.4.2",
     "com.unity.mathematics": "1.3.2",
     "com.unity.test-framework": "1.4.6",
     "com.unity.modules.imgui": "1.0.0",
@@ -18,7 +18,7 @@
   "name": "com.unity.physics",
   "unity": "2022.3",
   "unityRelease": "20f1",
-  "version": "1.4.0-pre.4",
+  "version": "1.4.2",
   "samples": [
     {
       "displayName": "Custom Physics Authoring",
@@ -28,15 +28,15 @@
     }
   ],
   "_upm": {
-    "changelog": "### Added\n\n* New `TerrainCollider.Create` function variant that allows customizing the triangulation pattern of the created terrain collider's cells by flipping their inner diagonal edge, thus enabling users to align the physics collision representation with their visual terrain mesh.\n* A newly introduced Detailed Static Mesh Collision feature enables enhanced collision detection precision for interactions with static meshes, effectively eliminating ghost collisions that can otherwise frequently occur in the presence of small mesh triangles or at high motion speeds. To enable the feature select the \"Detailed Static Mesh Collision\" option in the \"Advanced\" section of your custom `PhysicsShapeAuthoring` component, or, If you are using built-in `Collider` components, add the new `DetailedStaticMeshCollisionAuthoring` component alongside your collider. For runtime-generated colliders, please use the `EnableDetailedStaticMeshCollision` parameter in the physics material.\n* Integrity checks for incremental broadphase. When integrity checks are enabled (see Project Settings -> Physics -> Unity Physics -> Enable Integrity Checks) the `PhysicsTemporalCoherenceInfo` component data of rigid body entities is validated against the internal state of the broadphase, to make sure the data is as expected. This allows detecting unexpected external modifications to this important bookkeeping data.\n\n### Changed\n\n* Parallelize jacobian updates for substepping without consideration of solver phases since there are no data dependencies\n* Safer access to nodes in `BoundingVolumeHierarchy` of broadphase, ensuring there are no out-of-bounds accesses.\n\n### Fixed\n\n* Fixed a crash when scheduling an IBodyPairsJob and an IJacobiansJob in a situation without any body pairs or jacobians present in the simulation.\n* Division by zero errors causing NaN values when a Capsule degenerates into a Sphere (occurs when Height = 2*Radius)\n* ConvexHull connectivity for flat convex colliders\n* Referenced prefabs in bakers with built-in joints incorrectly displayed the anchor position when the `Auto Configure Connected Anchor` flag was enabled.\n* Correctly compute the expansion space for convex / composite collision queries, preventing missed collisions in certain cases.\n* Pass the \"Build Static Tree\" flag to tree build job in single-threaded version of static tree update.\n* A specific use case has been patched which applies only to Mac Silicon devices using editor version 2022.3 and when a negative scale is used in the transform of a BoxCollider: The transform calculation from localToWorld matrix to quaternion doesn't return the correct value due to differences in the calculation of rsqrt(x). This is exhibited as BoxGeometry orientations returning a strange quaternion value when the scale is negative. This bug has been fixed in the editor.\n* Prevent invalid entries in incrementally built broadphase if it was built non-incrementally previously.\n\n### Security"
+    "changelog": "### Added\n\n* New maximum depenetration velocity properties in the `Physics Step Authoring` component allow controlling the maximum velocity with which intersecting rigid bodies separate. This can be useful in cases where contacts lead to deep intersections between colliders, consequently causing too aggressive, ejecting motions. The new `Max Dynamic Depenetration Velocity` and `Max Static Depenetration Velocity` properties control the maximum relative velocity that can be produced when separating intersecting dynamic rigid bodies, and the maximum relative velocity that can be produced when separating dynamic rigid bodies intersecting with static rigid bodies, respectively.\n\n### Changed\n\n* The maximum number of phases in the parallel constraint solver was increased from 16 to now 64, leading to significant speed-ups in parallel constraint processing by the `ParallelSolverJob` in situations where the body-constraint graph topology would have caused the graph coloring algorithm to run out of colors (phases). In the latter, all affected constraints were processed in serial at the end of each solver iteration by only a single job worker thread, thereby wasting significant computational resources and causing an unnecessary slowdown in every solver iteration. This is no longer the case with this change. The resultant performance improvement can be observed among others in the `Planet Gravity` sample scene in the `PhysicsSamples` project.\n* Updated Burst dependency to version 1.8.23"
   },
   "upmCi": {
-    "footprint": "fa6b2437f5550c37081d3806ac39376e11fb1a26"
+    "footprint": "3391d4a9d0e995e6e383b93d774cf28b595b9ede"
   },
   "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.physics@1.4/manual/index.html",
   "repository": {
     "url": "https://github.cds.internal.unity3d.com/unity/dots.git",
     "type": "git",
-    "revision": "266ff518fda4c414e7e3f86e546afaba5f1046c3"
+    "revision": "34a49c9a68f70872c0a108dbef6cdea306d6b593"
   }
 }

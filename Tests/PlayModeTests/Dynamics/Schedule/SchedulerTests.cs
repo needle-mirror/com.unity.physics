@@ -1,29 +1,30 @@
 using NUnit.Framework;
+using Unity.Burst;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
+using Unity.PerformanceTesting;
 using static Unity.Physics.DispatchPairSequencer;
 
 namespace Unity.Physics.Tests.Dynamics.Schedule
 {
     // Tests to validate scheduler implementation
     [TestFixture]
+    [BurstCompile]
     class SchedulerTests
     {
-        private DispatchPairSequencer Sequencer;
         private SolverSchedulerInfo SolverSchedulerInfo;
-        private int NumPhases => Sequencer.m_PhaseLookupTableDynamicDynamicPairs.NumPhases;
+        private int MaxNumPhases => DispatchPairSequencer.kMaxNumPhases;
         private int BatchSize => CreateDispatchPairPhasesJob.k_MinBatchSize;
 
         [SetUp]
         public void SetUp()
         {
-            Sequencer = DispatchPairSequencer.Create();
-            SolverSchedulerInfo = new SolverSchedulerInfo(NumPhases);
+            SolverSchedulerInfo = new SolverSchedulerInfo(MaxNumPhases);
         }
 
         [TearDown]
         public void TearDown()
         {
-            Sequencer.Dispose();
             SolverSchedulerInfo.Dispose();
         }
 
@@ -34,10 +35,7 @@ namespace Unity.Physics.Tests.Dynamics.Schedule
             {
                 DispatchPairs = sortedDispatchPairs,
                 NumDynamicBodies = numDynamicBodies,
-                NumPhases = NumPhases,
                 PhasedDispatchPairs = phasedDispatchPairs,
-                PhaseLookupTableDynamicDynamicPairs = Sequencer.m_PhaseLookupTableDynamicDynamicPairs.Table,
-                PhaseLookupTableDynamicStaticPairs = Sequencer.m_PhaseLookupTableDynamicStaticPairs.Table,
                 SolverSchedulerInfo = SolverSchedulerInfo
             };
             createDispatchPairsJob.Execute();
@@ -95,9 +93,9 @@ namespace Unity.Physics.Tests.Dynamics.Schedule
             // This will result in a sequential phase with at least 1 element.
 
             // 1 center node + N+1 adjacent nodes, where N is the number of phases.
-            int numDynamicsBodies = NumPhases + 2;
+            int numDynamicsBodies = MaxNumPhases + 2;
 
-            // With the last phase being reserved for sequential processing, we expect the first 15 incident
+            // With the last phase being reserved for sequential processing, we expect the first MaxNumPhases-1 incident
             // edges (dispatch pairs) to end up in data parallel phases and the remaining 2 in the sequential phase.
             // However, given that dispatch pairs are added to phases in batches, and that these batches are assumed to be processed sequentially,
             // we need to create "BatchSize" dispatch pairs between each adjacent node and the center node, to force every phase to be minimally full.
@@ -120,10 +118,71 @@ namespace Unity.Physics.Tests.Dynamics.Schedule
 
             CreatePhasedDispatchPairsAndVerify(numDynamicsBodies, sortedDispatchPairs);
 
-            // Verify that we get 16 phases, that the last phase is flagged as sequential, and that it contains 2 dispatch pairs.
-            Assert.AreEqual(16, SolverSchedulerInfo.NumActivePhases[0]);
-            Assert.AreEqual(2 * BatchSize, SolverSchedulerInfo.PhaseInfo[15].DispatchPairCount);
-            Assert.IsTrue(SolverSchedulerInfo.PhaseInfo[15].ContainsDuplicateIndices);
+            // Verify that we get the maximum number of phases, that the last phase is flagged as sequential, and that it contains 2 dispatch pair batches.
+            Assert.AreEqual(MaxNumPhases, SolverSchedulerInfo.NumActivePhases[0]);
+            Assert.AreEqual(2 * BatchSize, SolverSchedulerInfo.PhaseInfo[MaxNumPhases - 1].DispatchPairCount);
+            Assert.IsTrue(SolverSchedulerInfo.PhaseInfo[MaxNumPhases - 1].ContainsDuplicateIndices);
         }
+
+#if PHYSICS_ENABLE_PERF_TESTS
+        [BurstCompile]
+        static void CreatePhasedDispatchPairs(int numDynamicBodies, ref NativeArray<DispatchPair> sortedDispatchPairs, ref SolverSchedulerInfo solverSchedulerInfo)
+        {
+            using var phasedDispatchPairs = new NativeArray<DispatchPair>(sortedDispatchPairs.Length, Allocator.Temp);
+            var createDispatchPairsJob = new CreateDispatchPairPhasesJob
+            {
+                DispatchPairs = sortedDispatchPairs,
+                NumDynamicBodies = numDynamicBodies,
+                PhasedDispatchPairs = phasedDispatchPairs,
+                SolverSchedulerInfo = solverSchedulerInfo
+            };
+            createDispatchPairsJob.Execute();
+        }
+
+        // Performance test for dispatch pair phasing algorithm. The test creates a random arrangement of joints and collision pairs.
+        [Test, Performance]
+        public void TestSchedulerPerformance_Phasing([Values(1000, 10000, 20000)] int problemSize)
+        {
+            int numDynamicBodies = problemSize / 4;
+            int numStaticBodies = numDynamicBodies / 2;
+            int numBodies = numDynamicBodies + numStaticBodies;
+            int numJoints = problemSize;
+            int numCollisionPairs = problemSize;
+
+            var rng = new Mathematics.Random(1);
+
+            var sortedDispatchPairs = new NativeArray<DispatchPair>(numCollisionPairs + numJoints, Allocator.Temp);
+            var pairIndex = 0;
+            for (int i = 0; i < numJoints; ++i)
+            {
+                // connect some random bodies, ensuring body A is always dynamic.
+                var bodyIndexA = rng.NextInt(numDynamicBodies);
+                var bodyIndexB = rng.NextInt(numBodies);
+
+                int allowCollision = i % 2; // every other joint pair will allow collision
+                sortedDispatchPairs[pairIndex++] = DispatchPair.CreateJoint(new BodyIndexPair { BodyIndexA = bodyIndexA, BodyIndexB = bodyIndexB }, i, allowCollision);
+            }
+
+            for (int i = 0; i < numCollisionPairs; ++i)
+            {
+                // connect some random bodies, ensuring body A is always dynamic.
+                var bodyIndexA = rng.NextInt(numDynamicBodies);
+                var bodyIndexB = rng.NextInt(numBodies);
+
+                sortedDispatchPairs[pairIndex++] = DispatchPair.CreateCollisionPair(new BodyIndexPair { BodyIndexA = bodyIndexA, BodyIndexB = bodyIndexB });
+            }
+
+            unsafe
+            {
+                NativeSortExtension.Sort((ulong*)sortedDispatchPairs.GetUnsafePtr(), sortedDispatchPairs.Length);
+            }
+
+            Measure.Method(() =>
+                CreatePhasedDispatchPairs(numDynamicBodies, ref sortedDispatchPairs, ref SolverSchedulerInfo)).
+                MeasurementCount(5).
+                Run();
+        }
+
+#endif
     }
 }

@@ -4,6 +4,18 @@ uid: unity-physics-changelog
 
 # Changelog
 
+## [1.4.2] - 2025-09-05
+
+### Added
+
+* New maximum depenetration velocity properties in the `Physics Step Authoring` component allow controlling the maximum velocity with which intersecting rigid bodies separate. This can be useful in cases where contacts lead to deep intersections between colliders, consequently causing too aggressive, ejecting motions. The new `Max Dynamic Depenetration Velocity` and `Max Static Depenetration Velocity` properties control the maximum relative velocity that can be produced when separating intersecting dynamic rigid bodies, and the maximum relative velocity that can be produced when separating dynamic rigid bodies intersecting with static rigid bodies, respectively.
+
+### Changed
+
+* The maximum number of phases in the parallel constraint solver was increased from 16 to now 64, leading to significant speed-ups in parallel constraint processing by the `ParallelSolverJob` in situations where the body-constraint graph topology would have caused the graph coloring algorithm to run out of colors (phases). In the latter, all affected constraints were processed in serial at the end of each solver iteration by only a single job worker thread, thereby wasting significant computational resources and causing an unnecessary slowdown in every solver iteration. This is no longer the case with this change. The resultant performance improvement can be observed among others in the `Planet Gravity` sample scene in the `PhysicsSamples` project.
+* Updated Burst dependency to version 1.8.23
+
+
 ## [1.4.0-pre.4] - 2025-07-11
 
 ### Added

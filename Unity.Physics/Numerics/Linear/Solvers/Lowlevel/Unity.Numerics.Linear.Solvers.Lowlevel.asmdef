@@ -1,0 +1,16 @@
+{
+    "name": "Unity.Numerics.Linear.Solvers.Lowlevel",
+    "references": [
+        "Unity.Mathematics",
+        "Unity.Burst",
+        "Unity.Collections",
+        "Unity.Numerics.Memory",
+        "Unity.Numerics.Random",
+        "Unity.Numerics.Linear",
+        "Unity.Numerics.Linear.Dense",
+        "Unity.Numerics.Linear.Sparse"
+        ],
+    "allowUnsafeCode": true,
+    "includePlatforms": [],
+    "excludePlatforms": []
+}
