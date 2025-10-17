@@ -345,9 +345,9 @@ namespace Unity.Physics
         public byte SynchronizeCollisionWorld;
 
         /// <summary>
-        /// Flag indicating whether the dynamic broadphase is built incrementally.
-        /// Enabling this option will update the dynamic broadphase incrementally whenever changes between simulation steps occur,
-        /// potentially leading to time savings for cases with many dynamic rigid bodies that don't move or otherwise change.
+        /// <para>Flag indicating whether the dynamic broadphase is built incrementally.</para>
+        /// <para>Enabling this option will update the dynamic broadphase incrementally whenever changes between simulation steps occur,
+        /// potentially leading to time savings for cases with many dynamic rigid bodies that don't move or otherwise change.</para>
         /// </summary>
         public bool IncrementalDynamicBroadphase;
 
@@ -357,6 +357,12 @@ namespace Unity.Physics
         /// potentially leading to time savings for cases with many static rigid bodies that don't move or otherwise change.</para>
         /// </summary>
         public bool IncrementalStaticBroadphase;
+
+        /// <summary>   Maximum relative velocity that can be produced when separating intersecting dynamic rigid bodies. </summary>
+        public float MaxDynamicDepenetrationVelocity;
+
+        /// <summary>   Maximum relative velocity that can be produced when separating dynamic rigid bodies intersecting with static rigid bodies. </summary>
+        public float MaxStaticDepenetrationVelocity;
 
         /// <summary>   (Immutable) the default. </summary>
         public static readonly PhysicsStep Default = new PhysicsStep
@@ -370,7 +376,9 @@ namespace Unity.Physics
             CollisionTolerance = CollisionWorld.DefaultCollisionTolerance,
             SynchronizeCollisionWorld = 0,
             IncrementalDynamicBroadphase = false,
-            IncrementalStaticBroadphase = false
+            IncrementalStaticBroadphase = false,
+            MaxDynamicDepenetrationVelocity = SimulationStepInput.DefaultMaxDynamicDepenetrationVelocity,
+            MaxStaticDepenetrationVelocity = SimulationStepInput.DefaultMaxStaticDepenetrationVelocity
         };
     }
 

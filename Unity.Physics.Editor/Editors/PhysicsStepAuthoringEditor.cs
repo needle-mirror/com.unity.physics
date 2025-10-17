@@ -28,6 +28,8 @@ namespace Unity.Physics.Editor
         [AutoPopulate] SerializedProperty m_SynchronizeCollisionWorld;
         [AutoPopulate] SerializedProperty m_IncrementalDynamicBroadphase;
         [AutoPopulate] SerializedProperty m_IncrementalStaticBroadphase;
+        [AutoPopulate] SerializedProperty m_MaxDynamicDepenetrationVelocity;
+        [AutoPopulate] SerializedProperty m_MaxStaticDepenetrationVelocity;
 #pragma warning restore 649
 
         public override void OnInspectorGUI()
@@ -58,9 +60,11 @@ namespace Unity.Physics.Editor
                 using (new EditorGUI.DisabledScope(havokPhysics))
                 {
 #endif
-                EditorGUILayout.PropertyField(m_CollisionTolerance);
+                    EditorGUILayout.PropertyField(m_CollisionTolerance);
+                    EditorGUILayout.PropertyField(m_MaxDynamicDepenetrationVelocity);
+                    EditorGUILayout.PropertyField(m_MaxStaticDepenetrationVelocity);
 #if HAVOK_PHYSICS_EXISTS
-            }
+                }
 #endif
                 EditorGUILayout.PropertyField(m_SynchronizeCollisionWorld);
 

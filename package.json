@@ -3,9 +3,9 @@
   "category": "Unity",
   "description": "Unity's C# stateless physics library.\n\nBuilt on top of the Unity C# ECS framework, Unity Physics is network-ready, completely customizable, and built for performance out of the box. Whether you're building the next mobile hit or a new networked multiplayer console experience, Unity Physics leverages the Burst compiler and Job system to scale across a range of hardware.",
   "dependencies": {
-    "com.unity.burst": "1.8.23",
-    "com.unity.collections": "2.6.2",
-    "com.unity.entities": "1.4.2",
+    "com.unity.burst": "1.8.25",
+    "com.unity.collections": "2.6.3",
+    "com.unity.entities": "1.4.3",
     "com.unity.mathematics": "1.3.2",
     "com.unity.test-framework": "1.4.6",
     "com.unity.modules.imgui": "1.0.0",
@@ -18,7 +18,7 @@
   "name": "com.unity.physics",
   "unity": "2022.3",
   "unityRelease": "20f1",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "samples": [
     {
       "displayName": "Custom Physics Authoring",
@@ -28,15 +28,15 @@
     }
   ],
   "_upm": {
-    "changelog": "### Added\n\n* New maximum depenetration velocity properties in the `Physics Step Authoring` component allow controlling the maximum velocity with which intersecting rigid bodies separate. This can be useful in cases where contacts lead to deep intersections between colliders, consequently causing too aggressive, ejecting motions. The new `Max Dynamic Depenetration Velocity` and `Max Static Depenetration Velocity` properties control the maximum relative velocity that can be produced when separating intersecting dynamic rigid bodies, and the maximum relative velocity that can be produced when separating dynamic rigid bodies intersecting with static rigid bodies, respectively.\n\n### Changed\n\n* The maximum number of phases in the parallel constraint solver was increased from 16 to now 64, leading to significant speed-ups in parallel constraint processing by the `ParallelSolverJob` in situations where the body-constraint graph topology would have caused the graph coloring algorithm to run out of colors (phases). In the latter, all affected constraints were processed in serial at the end of each solver iteration by only a single job worker thread, thereby wasting significant computational resources and causing an unnecessary slowdown in every solver iteration. This is no longer the case with this change. The resultant performance improvement can be observed among others in the `Planet Gravity` sample scene in the `PhysicsSamples` project.\n* Updated Burst dependency to version 1.8.23"
+    "changelog": "### Added\n\n* The Force Unique Collider companion component can now be disabled in the Inspector. When disabled it will no longer cause its associated baked Unity Physics Colliders to be unique.\n\n### Changed\n\n* Updated the Burst dependency to version 1.8.25\n\n### Deprecated\n\n\n### Removed\n\n\n### Fixed\n\n* Baked Unity Physics Colliders that are forced to be unique will now produce stable collider blob hashes. This ensures that associated artifact IDs in your project will no longer change each time the project is re-imported. Note that baked colliders can be forced to be unique either via the \"Force Unique\" option in the custom Physics Shape authoring component, or via the Force Unique Collider companion component for built-in Colliders. Both approaches now support stable collider blob hashes.\n\n### Security"
   },
   "upmCi": {
-    "footprint": "3391d4a9d0e995e6e383b93d774cf28b595b9ede"
+    "footprint": "8bb41e07e3242c52b265a2f11a649da7f028de60"
   },
   "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.physics@1.4/manual/index.html",
   "repository": {
     "url": "https://github.cds.internal.unity3d.com/unity/dots.git",
     "type": "git",
-    "revision": "34a49c9a68f70872c0a108dbef6cdea306d6b593"
+    "revision": "24a86959758286a83e6dd55b789f094a23750872"
   }
 }

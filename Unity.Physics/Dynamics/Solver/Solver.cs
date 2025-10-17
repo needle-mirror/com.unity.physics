@@ -171,7 +171,9 @@ namespace Unity.Physics
         // Schedule jobs to build Jacobians from the contacts stored in the simulation context for the first substep
         // where timeStep = frame timestep / numSubsteps
         internal static SimulationJobHandles ScheduleBuildJacobiansJobs(ref PhysicsWorld world,
-            float timeStep, float gravityMagnitude, int numSubsteps, int numSolverIterations, JobHandle inputDeps,
+            float timeStep, float gravityMagnitude, int numSubsteps, int numSolverIterations,
+            float maxDynamicDepenetrationVelocity, float maxStaticDepenetrationVelocity,
+            JobHandle inputDeps,
             ref NativeList<DispatchPairSequencer.DispatchPair> dispatchPairs,
             ref DispatchPairSequencer.SolverSchedulerInfo solverSchedulerInfo,
             ref NativeStream contacts, ref NativeStream jacobians, bool multiThreaded = true)
@@ -188,6 +190,8 @@ namespace Unity.Physics
                     GravityMagnitude = gravityMagnitude,
                     NumSubsteps = numSubsteps,
                     NumSolverIterations = numSolverIterations,
+                    MaxDynamicDepenetrationVelocity = maxDynamicDepenetrationVelocity,
+                    MaxStaticDepenetrationVelocity = maxStaticDepenetrationVelocity,
                     World = world,
                     DispatchPairs = dispatchPairs.AsDeferredJobArray()
                 }.Schedule(inputDeps);
@@ -203,6 +207,8 @@ namespace Unity.Physics
                     InvTimeStep = CalculateInvTimeStep(timeStep),
                     NumSubsteps = numSubsteps,
                     NumSolverIterations = numSolverIterations,
+                    MaxDynamicDepenetrationVelocity = maxDynamicDepenetrationVelocity,
+                    MaxStaticDepenetrationVelocity = maxStaticDepenetrationVelocity,
                     World = world,
                     DispatchPairs = dispatchPairs.AsDeferredJobArray(),
                     SolverSchedulerInfo = solverSchedulerInfo
@@ -231,10 +237,13 @@ namespace Unity.Physics
             [ReadOnly] public NativeArray<DispatchPairSequencer.DispatchPair> DispatchPairs;
             [ReadOnly] public int NumSubsteps;
             [ReadOnly] public int NumSolverIterations;
+            [ReadOnly] public float MaxDynamicDepenetrationVelocity;
+            [ReadOnly] public float MaxStaticDepenetrationVelocity;
 
             public void Execute()
             {
                 BuildJacobians(ref World, TimeStep, GravityMagnitude, NumSubsteps, NumSolverIterations,
+                    MaxDynamicDepenetrationVelocity, MaxStaticDepenetrationVelocity,
                     DispatchPairs, ref ContactsReader, ref JacobiansWriter);
             }
         }
@@ -251,6 +260,8 @@ namespace Unity.Physics
             [ReadOnly] public NativeArray<DispatchPairSequencer.DispatchPair> DispatchPairs;
             [ReadOnly] public int NumSubsteps;
             [ReadOnly] public int NumSolverIterations;
+            [ReadOnly] public float MaxDynamicDepenetrationVelocity;
+            [ReadOnly] public float MaxStaticDepenetrationVelocity;
             public float InvTimeStep;  // Frequency
             [ReadOnly] public DispatchPairSequencer.SolverSchedulerInfo SolverSchedulerInfo;
 
@@ -261,6 +272,7 @@ namespace Unity.Physics
                 ContactsReader.BeginForEachIndex(workItemIndex);
                 JacobiansWriter.BeginForEachIndex(workItemIndex);
                 BuildJacobians(ref World, TimeStep, InvTimeStep, GravityMagnitude, NumSubsteps, NumSolverIterations,
+                    MaxDynamicDepenetrationVelocity, MaxStaticDepenetrationVelocity,
                     DispatchPairs, firstDispatchPairIndex, dispatchPairCount, ref ContactsReader, ref JacobiansWriter);
             }
         }
@@ -270,6 +282,7 @@ namespace Unity.Physics
         /// </summary>
         internal static void BuildJacobians(ref PhysicsWorld world,
             float timeStep, float gravityMagnitude, int numSubsteps, int numSolverIterations,
+            float maxDynamicDepenetrationVelocity, float maxStaticDepenetrationVelocity,
             NativeArray<DispatchPairSequencer.DispatchPair> dispatchPairs,
             ref NativeStream.Reader contactsReader, ref NativeStream.Writer jacobiansWriter)
         {
@@ -277,23 +290,32 @@ namespace Unity.Physics
             jacobiansWriter.BeginForEachIndex(0);
             float frequency = CalculateInvTimeStep(timeStep);
 
-            BuildJacobians(ref world, timeStep, frequency, gravityMagnitude, numSubsteps, numSolverIterations, dispatchPairs,
+            BuildJacobians(ref world, timeStep, frequency, gravityMagnitude, numSubsteps, numSolverIterations,
+                maxDynamicDepenetrationVelocity, maxStaticDepenetrationVelocity, dispatchPairs,
                 0, dispatchPairs.Length, ref contactsReader, ref jacobiansWriter);
         }
 
-        private static unsafe void BuildJacobians(
+        static unsafe void BuildJacobians(
             ref PhysicsWorld world,
             float timestep, // the substep time
             float frequency,
             float gravityMagnitude,
             int numSubsteps,
             int numSolverIterations,
+            float maxDynamicDepenetrationVelocity,
+            float maxStaticDepenetrationVelocity,
             NativeArray<DispatchPairSequencer.DispatchPair> dispatchPairs,
             int firstDispatchPairIndex,
             int dispatchPairCount,
             ref NativeStream.Reader contactReader,
             ref NativeStream.Writer jacobianWriter)
         {
+            // fall back to defaults if depenetration velocities not set or invalid.
+            maxDynamicDepenetrationVelocity = math.select(maxDynamicDepenetrationVelocity,
+                SimulationStepInput.DefaultMaxDynamicDepenetrationVelocity, maxDynamicDepenetrationVelocity <= 0);
+            maxStaticDepenetrationVelocity = math.select(maxStaticDepenetrationVelocity,
+                SimulationStepInput.DefaultMaxStaticDepenetrationVelocity, maxStaticDepenetrationVelocity <= 0);
+
             // Source: Narrowphase uses predicted velocity to generate dispatchPairs and contactReader data
             for (int i = 0; i < dispatchPairCount; i++)
             {
@@ -372,7 +394,7 @@ namespace Unity.Physics
 
                         // If contact distance is negative, use an artificially reduced penetration depth to prevent the
                         // dynamic-dynamic contacts from depenetrating too quickly
-                        float maxDepenetrationVelocity = isDynamicStaticPair ? float.MaxValue : 3.0f;
+                        float maxDepenetrationVelocity = math.select(maxDynamicDepenetrationVelocity, maxStaticDepenetrationVelocity, isDynamicStaticPair);
 
                         if (jacobianHeader.Type == JacobianType.Contact)
                         {

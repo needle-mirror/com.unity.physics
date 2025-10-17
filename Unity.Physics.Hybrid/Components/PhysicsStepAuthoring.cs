@@ -156,6 +156,26 @@ namespace Unity.Physics.Authoring
             "potentially leading to time savings for cases with many static rigid bodies that don't move or otherwise change.")]
         bool m_IncrementalStaticBroadphase = Default.IncrementalStaticBroadphase;
 
+        /// <summary>   Maximum relative velocity that can be produced when separating intersecting dynamic rigid bodies. </summary>
+        public float MaxDynamicDepenetrationVelocity
+        {
+            get => m_MaxDynamicDepenetrationVelocity;
+            set => m_MaxDynamicDepenetrationVelocity = value;
+        }
+        [SerializeField]
+        [Tooltip("Maximum relative velocity that can be produced when separating intersecting dynamic rigid bodies.")]
+        float m_MaxDynamicDepenetrationVelocity = Default.MaxDynamicDepenetrationVelocity;
+
+        /// <summary>   Maximum relative velocity that can be produced when separating dynamic rigid bodies intersecting with static rigid bodies. </summary>
+        public float MaxStaticDepenetrationVelocity
+        {
+            get => m_MaxStaticDepenetrationVelocity;
+            set => m_MaxStaticDepenetrationVelocity = value;
+        }
+        [SerializeField]
+        [Tooltip("Maximum relative velocity that can be produced when separating dynamic rigid bodies intersecting with static rigid bodies.")]
+        float m_MaxStaticDepenetrationVelocity = Default.MaxStaticDepenetrationVelocity;
+
         internal PhysicsStep AsComponent => new PhysicsStep
         {
             SimulationType = SimulationType,
@@ -175,7 +195,9 @@ namespace Unity.Physics.Authoring
             CollisionTolerance = CollisionTolerance,
             SynchronizeCollisionWorld = (byte)(SynchronizeCollisionWorld ? 1 : 0),
             IncrementalDynamicBroadphase = IncrementalDynamicBroadphase,
-            IncrementalStaticBroadphase = IncrementalStaticBroadphase
+            IncrementalStaticBroadphase = IncrementalStaticBroadphase,
+            MaxDynamicDepenetrationVelocity = MaxDynamicDepenetrationVelocity,
+            MaxStaticDepenetrationVelocity = MaxStaticDepenetrationVelocity
         };
 
         void OnValidate()

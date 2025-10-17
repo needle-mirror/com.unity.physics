@@ -391,7 +391,8 @@ namespace Unity.Physics
                 var contactsReader = contacts.AsReader();
                 var jacobiansWriter = jacobians.AsWriter();
                 Solver.BuildJacobians(ref input.World, input.SubstepTimeStep, math.length(input.Gravity), input.NumSubsteps,
-                    input.NumSolverIterations, dispatchPairs.AsArray(), ref contactsReader, ref jacobiansWriter);
+                    input.NumSolverIterations, input.MaxDynamicDepenetrationVelocity, input.MaxStaticDepenetrationVelocity,
+                    dispatchPairs.AsArray(), ref contactsReader, ref jacobiansWriter);
             }
 
             var stepInput = new Solver.StepInput()
@@ -577,7 +578,8 @@ namespace Unity.Physics
             // Create/Initialize Jacobians for first substep
             var disposeHandle = m_StepHandles.FinalDisposeHandle;
             m_StepHandles = Solver.ScheduleBuildJacobiansJobs(ref input.World, input.SubstepTimeStep, math.length(input.Gravity),
-                input.NumSubsteps, input.NumSolverIterations, inputDeps, ref StepContext.PhasedDispatchPairs,
+                input.NumSubsteps, input.NumSolverIterations, input.MaxDynamicDepenetrationVelocity, input.MaxStaticDepenetrationVelocity,
+                inputDeps, ref StepContext.PhasedDispatchPairs,
                 ref StepContext.SolverSchedulerInfo, ref StepContext.Contacts, ref StepContext.Jacobians, multiThreaded);
             m_StepHandles.FinalDisposeHandle = JobHandle.CombineDependencies(disposeHandle, m_StepHandles.FinalDisposeHandle);
 

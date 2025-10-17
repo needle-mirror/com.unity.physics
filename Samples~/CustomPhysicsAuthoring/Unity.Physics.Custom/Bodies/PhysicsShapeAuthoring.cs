@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Diagnostics;
 using Unity.Burst;
 using Unity.Collections;
@@ -9,6 +8,10 @@ using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering;
+
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace Unity.Physics.Authoring
 {
@@ -22,11 +25,15 @@ namespace Unity.Physics.Authoring
     [Icon(k_IconPath)]
 #endif
     [AddComponentMenu("Entities/Physics/Physics Shape")]
-    public sealed class PhysicsShapeAuthoring : MonoBehaviour, IInheritPhysicsMaterialProperties, ISerializationCallbackReceiver
+    public sealed class PhysicsShapeAuthoring : MonoBehaviour, IInheritPhysicsMaterialProperties
     {
         const string k_IconPath = "Packages/com.unity.physics/Unity.Physics.Editor/Editor Default Resources/Icons/d_BoxCollider@64.png";
 
         PhysicsShapeAuthoring() {}
+
+        internal uint ForceUniqueID => m_ForceUniqueID;
+        [SerializeField]
+        uint m_ForceUniqueID = 0;
 
         [Serializable]
         struct CylindricalProperties
@@ -734,27 +741,49 @@ namespace Unity.Physics.Authoring
             // included so tick box appears in Editor
         }
 
-        const int k_LatestVersion = 1;
+        const int k_VersionAddedForceUniqueID = 2; // added ForceUniqueID for stable artifact IDs
+        const int k_LatestVersion = k_VersionAddedForceUniqueID;
 
-        [SerializeField]
-        int m_SerializedVersion = 0;
+        [SerializeField, HideInInspector]
+        int m_SerializedVersion = k_LatestVersion;
 
-        void ISerializationCallbackReceiver.OnBeforeSerialize() {}
+#if UNITY_EDITOR
+        static string s_LastWarnedPath;
+        static double s_NextWarningTime;
+#endif
 
-        void ISerializationCallbackReceiver.OnAfterDeserialize() => UpgradeVersionIfNecessary();
-
-#pragma warning disable 618
         void UpgradeVersionIfNecessary()
         {
             if (m_SerializedVersion < k_LatestVersion)
             {
-                // old data from version < 1 have been removed
-                if (m_SerializedVersion < 1)
-                    m_SerializedVersion = 1;
+                m_SerializedVersion = k_LatestVersion;
+
+#if UNITY_EDITOR
+                if (PrefabUtility.IsPartOfAnyPrefab(this) || gameObject.scene.IsValid())
+                {
+                    // Inform user that scene needs to be saved:
+
+                    var scenePath = gameObject.scene.path;
+
+                    if (string.IsNullOrEmpty(scenePath))
+                    {
+                        var gameObjectPath = UnityEditor.Search.SearchUtils.GetHierarchyPath(gameObject);
+                        UnityEngine.Debug.LogWarning("A Physics Shape component in game object '" + gameObjectPath + "' needs to be upgraded. "
+                            + "To apply the upgrade, open and re-save the containing asset, " +
+                            "or use the automatic version upgrade tool under 'Tools -> Unity Physics -> Upgrade Physics Shape Versions'.", gameObject);
+                    }
+                    else if (scenePath != s_LastWarnedPath || EditorApplication.timeSinceStartup > s_NextWarningTime)
+                    {
+                        UnityEngine.Debug.LogWarning("A Physics Shape component in a scene needs to be upgraded. To apply the upgrade, open and re-save the scene '" + scenePath + "', " +
+                            "or use the automatic version upgrade tool under 'Tools -> Unity Physics -> Upgrade Physics Shape Versions'.");
+
+                        s_LastWarnedPath = scenePath;
+                        s_NextWarningTime = EditorApplication.timeSinceStartup + 5f;
+                    }
+                }
+#endif
             }
         }
-
-#pragma warning restore 618
 
         static void Validate(ref CylindricalProperties props)
         {
@@ -764,7 +793,10 @@ namespace Unity.Physics.Authoring
 
         void OnValidate()
         {
-            UpgradeVersionIfNecessary();
+            if (m_ForceUniqueID == 0)
+            {
+                m_ForceUniqueID = (uint)UnityEngine.Random.Range(1, Int32.MaxValue);
+            }
 
             m_PrimitiveSize = math.max(m_PrimitiveSize, new float3());
             Validate(ref m_Capsule);
@@ -801,6 +833,8 @@ namespace Unity.Physics.Authoring
             m_ConvexHullGenerationParameters.OnValidate();
 
             PhysicsMaterialProperties.OnValidate(ref m_Material, true);
+
+            UpgradeVersionIfNecessary();
         }
 
         // matrix to transform point from shape space into world space

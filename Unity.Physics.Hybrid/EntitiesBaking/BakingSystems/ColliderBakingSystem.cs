@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
@@ -89,14 +90,14 @@ namespace Unity.Physics.Authoring
             return material;
         }
 
-        internal ShapeComputationDataBaking GenerateComputationDataGeneric(UnityEngine.Collider shape, GameObject body, ColliderInstanceBaking colliderInstance, bool forceUnique)
+        internal ShapeComputationDataBaking GenerateComputationDataGeneric(UnityEngine.Collider shape, GameObject body, ColliderInstanceBaking colliderInstance, uint forceUniqueID)
         {
             return new ShapeComputationDataBaking
             {
                 Instance = colliderInstance,
                 Material = ProduceMaterial(shape),
                 CollisionFilter = ProduceCollisionFilter(shape, body),
-                ForceUniqueIdentifier = forceUnique ? (uint)shape.GetInstanceID() : 0u
+                ForceUniqueIdentifier = forceUniqueID
             };
         }
 
@@ -161,7 +162,7 @@ namespace Unity.Physics.Authoring
             return FindTopmostEnabledAncestor(shape, FindAncestorBuffer.s_CollidersBuffer);
         }
 
-        protected abstract ShapeComputationDataBaking GenerateComputationData(T shapeData, GameObject body, Transform bodyTransform, ColliderInstanceBaking colliderInstance, Entity colliderEntity, bool isUnique);
+        protected abstract ShapeComputationDataBaking GenerateComputationData(T shapeData, GameObject body, Transform bodyTransform, ColliderInstanceBaking colliderInstance, Entity colliderEntity, uint forceUniqueID);
 
         ShapeComputationDataBaking GetInputDataFromAuthoringComponent(T shape, Entity colliderEntity)
         {
@@ -192,9 +193,27 @@ namespace Unity.Physics.Authoring
             };
 
             ForceUniqueColliderAuthoring forceUniqueComponent = body.GetComponent<ForceUniqueColliderAuthoring>();
-            bool isForceUnique = forceUniqueComponent != null;
+            bool isForceUnique = forceUniqueComponent != null && forceUniqueComponent.enabled;
 
-            var data = GenerateComputationData(shape, body, bodyTransform, instance, colliderEntity, isForceUnique);
+            uint forceUniqueID = 0;
+            if (isForceUnique)
+            {
+                // Assembly a unique id for the collider based on the stable id stored in the ForceUniqueColliderAuthoring component.
+                forceUniqueID = forceUniqueComponent.ForceUniqueID;
+
+                // We increment the id by the index of the collider in the game object, so that multiple colliders in the same game object get different ids.
+                var collidersInGameObject = body.GetComponentsInChildren<UnityEngine.Collider>();
+                for (int i = 0; i < collidersInGameObject.Length; ++i)
+                {
+                    if (collidersInGameObject[i] == shape)
+                    {
+                        forceUniqueID += (uint)i;
+                        break;
+                    }
+                }
+            }
+
+            var data = GenerateComputationData(shape, body, bodyTransform, instance, colliderEntity, forceUniqueID);
 
             data.Instance.ConvertedAuthoringInstanceID = shapeInstanceID;
             data.Instance.ConvertedBodyInstanceID = bodyTransform.GetInstanceID();
@@ -263,9 +282,9 @@ namespace Unity.Physics.Authoring
 
     class BoxBaker : ColliderBaker<UnityEngine.BoxCollider>
     {
-        protected override ShapeComputationDataBaking GenerateComputationData(UnityEngine.BoxCollider shape, GameObject body, Transform bodyTransform, ColliderInstanceBaking colliderInstance, Entity colliderEntity, bool forceUnique)
+        protected override ShapeComputationDataBaking GenerateComputationData(UnityEngine.BoxCollider shape, GameObject body, Transform bodyTransform, ColliderInstanceBaking colliderInstance, Entity colliderEntity, uint forceUniqueID)
         {
-            var res = GenerateComputationDataGeneric(shape, body, colliderInstance, forceUnique);
+            var res = GenerateComputationDataGeneric(shape, body, colliderInstance, forceUniqueID);
             res.ShapeType = ShapeType.Box;
 
             var shapeLocalToWorld = shape.transform.localToWorldMatrix;
@@ -290,7 +309,7 @@ namespace Unity.Physics.Authoring
                 Orientation = orientation
             };
 
-            geometry.Size = math.abs(shape.size * (float3)bakeToShape.lossyScale);
+            geometry.Size = math.abs((float3)shape.size * (float3)bakeToShape.lossyScale);
 
             // Note: set bevel radius to a reasonable value, ensuring it can not collapse to a quad, while considering the uniform scale of the baked rigid body which will be applied to the collider at runtime.
             geometry.BevelRadius = math.min(ConvexHullGenerationParameters.Default.BevelRadius / bodyUniformScale, math.cmin(geometry.Size) * 0.1f);
@@ -303,9 +322,9 @@ namespace Unity.Physics.Authoring
 
     class SphereBaker : ColliderBaker<UnityEngine.SphereCollider>
     {
-        protected override ShapeComputationDataBaking GenerateComputationData(UnityEngine.SphereCollider shape, GameObject body, Transform bodyTransform, ColliderInstanceBaking colliderInstance, Entity colliderEntity, bool forceUnique)
+        protected override ShapeComputationDataBaking GenerateComputationData(UnityEngine.SphereCollider shape, GameObject body, Transform bodyTransform, ColliderInstanceBaking colliderInstance, Entity colliderEntity, uint forceUniqueID)
         {
-            var res = GenerateComputationDataGeneric(shape, body, colliderInstance, forceUnique);
+            var res = GenerateComputationDataGeneric(shape, body, colliderInstance, forceUniqueID);
             res.ShapeType = ShapeType.Sphere;
 
             var shapeLocalToWorld = shape.transform.localToWorldMatrix;
@@ -322,9 +341,9 @@ namespace Unity.Physics.Authoring
 
     class CapsuleBaker : ColliderBaker<UnityEngine.CapsuleCollider>
     {
-        protected override ShapeComputationDataBaking GenerateComputationData(UnityEngine.CapsuleCollider shape, GameObject body, Transform bodyTransform, ColliderInstanceBaking colliderInstance, Entity colliderEntity, bool forceUnique)
+        protected override ShapeComputationDataBaking GenerateComputationData(UnityEngine.CapsuleCollider shape, GameObject body, Transform bodyTransform, ColliderInstanceBaking colliderInstance, Entity colliderEntity, uint forceUniqueID)
         {
-            var res = GenerateComputationDataGeneric(shape, body, colliderInstance, forceUnique);
+            var res = GenerateComputationDataGeneric(shape, body, colliderInstance, forceUniqueID);
 
             res.ShapeType = ShapeType.Capsule;
 
@@ -361,7 +380,7 @@ namespace Unity.Physics.Authoring
 
     class MeshBaker : ColliderBaker<UnityEngine.MeshCollider>
     {
-        protected override ShapeComputationDataBaking GenerateComputationData(UnityEngine.MeshCollider shape, GameObject body, Transform bodyTransform, ColliderInstanceBaking colliderInstance, Entity colliderEntity, bool forceUnique)
+        protected override ShapeComputationDataBaking GenerateComputationData(UnityEngine.MeshCollider shape, GameObject body, Transform bodyTransform, ColliderInstanceBaking colliderInstance, Entity colliderEntity, uint forceUniqueID)
         {
             UnityEngine.Mesh mesh = shape.sharedMesh;
             if (mesh == null)
@@ -381,7 +400,7 @@ namespace Unity.Physics.Authoring
             // No need to check for null mesh as this has been checked earlier in the function
             DependsOn(mesh);
 
-            var res = GenerateComputationDataGeneric(shape, body, colliderInstance, forceUnique);
+            var res = GenerateComputationDataGeneric(shape, body, colliderInstance, forceUniqueID);
 
             if (shape.convex)
             {

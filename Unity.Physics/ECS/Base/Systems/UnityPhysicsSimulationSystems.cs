@@ -194,6 +194,8 @@ namespace Unity.Physics.Systems
                 SynchronizeCollisionWorld = stepComponent.SynchronizeCollisionWorld > 0,
                 NumSubsteps = stepComponent.SubstepCount,
                 NumSolverIterations = stepComponent.SolverIterationCount,
+                MaxDynamicDepenetrationVelocity = stepComponent.MaxDynamicDepenetrationVelocity,
+                MaxStaticDepenetrationVelocity = stepComponent.MaxStaticDepenetrationVelocity,
                 SolverStabilizationHeuristicSettings = stepComponent.SolverStabilizationHeuristicSettings,
                 HaveStaticBodiesChanged = buildPhysicsData.PhysicsData.HaveStaticBodiesChanged
             };

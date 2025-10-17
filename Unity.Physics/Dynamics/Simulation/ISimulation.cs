@@ -43,6 +43,22 @@ namespace Unity.Physics
         /// <summary>   Number of Gauss-Seidel iterations to perform while solving constraints. </summary>
         public int NumSolverIterations;
 
+        /// <summary>   Maximum relative velocity that can be produced when separating intersecting dynamic rigid bodies. </summary>
+        public float MaxDynamicDepenetrationVelocity;
+
+        /// <summary>   Maximum relative velocity that can be produced when separating dynamic rigid bodies intersecting with static rigid bodies. </summary>
+        public float MaxStaticDepenetrationVelocity;
+
+        /// <summary>
+        /// Default <see cref="MaxDynamicDepenetrationVelocity"/> value.
+        /// </summary>
+        public const float DefaultMaxDynamicDepenetrationVelocity = 3.0f;
+
+        /// <summary>
+        /// Default <see cref="MaxStaticDepenetrationVelocity"/> value.
+        /// </summary>
+        public const float DefaultMaxStaticDepenetrationVelocity = float.PositiveInfinity;
+
         /// <summary>
         /// Whether to update the collision world after the step for more precise queries.
         /// </summary>

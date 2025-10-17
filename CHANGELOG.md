@@ -4,6 +4,29 @@ uid: unity-physics-changelog
 
 # Changelog
 
+## [1.4.3] - 2025-10-17
+
+### Added
+
+* The Force Unique Collider companion component can now be disabled in the Inspector. When disabled it will no longer cause its associated baked Unity Physics Colliders to be unique.
+
+### Changed
+
+* Updated the Burst dependency to version 1.8.25
+
+### Deprecated
+
+
+### Removed
+
+
+### Fixed
+
+* Baked Unity Physics Colliders that are forced to be unique will now produce stable collider blob hashes. This ensures that associated artifact IDs in your project will no longer change each time the project is re-imported. Note that baked colliders can be forced to be unique either via the "Force Unique" option in the custom Physics Shape authoring component, or via the Force Unique Collider companion component for built-in Colliders. Both approaches now support stable collider blob hashes.
+
+### Security
+
+
 ## [1.4.2] - 2025-09-05
 
 ### Added
@@ -41,6 +64,7 @@ uid: unity-physics-changelog
 * Prevent invalid entries in incrementally built broadphase if it was built non-incrementally previously.
 
 ### Security
+
 
 
 ## [1.4.0-pre.3] - 2025-06-06

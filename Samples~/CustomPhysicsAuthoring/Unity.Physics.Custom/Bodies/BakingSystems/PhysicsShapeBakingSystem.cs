@@ -81,7 +81,7 @@ namespace Unity.Physics.Authoring
             };
 
             ForceUniqueColliderAuthoring forceUniqueComponent = body.GetComponent<ForceUniqueColliderAuthoring>();
-            bool isForceUniqueComponentPresent = forceUniqueComponent != null;
+            bool isForceUniqueComponentPresent = forceUniqueComponent != null && forceUniqueComponent.enabled;
 
             var data = GenerateComputationData(shape, bodyTransform, instance, colliderEntity, isForceUniqueComponentPresent);
 
@@ -261,7 +261,7 @@ namespace Unity.Physics.Authoring
                 Instance = colliderInstance,
                 Material = ProduceMaterial(shape),
                 CollisionFilter = ProduceCollisionFilter(shape),
-                ForceUniqueIdentifier = isUnique ? (uint)shape.GetInstanceID() : 0u
+                ForceUniqueIdentifier = isUnique ? shape.ForceUniqueID : 0u
             };
 
             var shapeTransform = shape.transform;
