@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using NUnit.Framework;
 using Unity.Collections;
 using Unity.Entities;
@@ -15,14 +16,40 @@ namespace Unity.Physics.Tests.Authoring
         [Test]
         public void PrefabConversion_ChildCollider_ForceUnique([Values] bool forceUniqueCollider)
         {
-            var rigidBody = new GameObject("Parent", new[] {typeof(Rigidbody), typeof(UnityEngine.BoxCollider)});
+            var rigidBody = new GameObject("Body", typeof(Rigidbody), typeof(UnityEngine.BoxCollider));
 
-            ValidatePrefabChildColliderUniqueStatus(rigidBody, forceUniqueCollider,
+            ValidateChildCollidersInBakedEntityPrefabAreUnique(rigidBody, forceUniqueCollider,
                 (gameObject, mass) => { gameObject.GetComponent<Rigidbody>().mass = mass; },
-                (gameObject) =>
+                _ =>
                 {
                     if (forceUniqueCollider) rigidBody.AddComponent<ForceUniqueColliderAuthoring>();
                 });
+        }
+
+        [Test]
+        public void PrefabConversion_GameObjectPrefabInstances_ForceUnique([Values] bool forceUniqueCollider)
+        {
+            var rigidBody = new GameObject("Body", typeof(Rigidbody), typeof(UnityEngine.BoxCollider));
+
+            ValidateCollidersBakedFromGameObjectPrefabInstancesAreUnique(rigidBody, forceUniqueCollider,
+                _ =>
+                {
+                    if (forceUniqueCollider) rigidBody.AddComponent<ForceUniqueColliderAuthoring>();
+                });
+        }
+
+        [Test]
+        public void PrefabConversion_StableForceUniqueIDInPrefabs()
+        {
+            var rigidBody = new GameObject("Body", typeof(Rigidbody), typeof(UnityEngine.BoxCollider), typeof(ForceUniqueColliderAuthoring));
+
+            uint GetForceUniqueID(GameObject gameObject)
+            {
+                var forceUniqueColliderAuthoring = gameObject.GetComponent<ForceUniqueColliderAuthoring>();
+                return forceUniqueColliderAuthoring.ForceUniqueID;
+            }
+
+            ValidateStableForceUniqueIDForCollidersInPrefabs(rigidBody, GetForceUniqueID);
         }
     }
 
@@ -46,11 +73,12 @@ namespace Unity.Physics.Tests.Authoring
 
     internal class PrefabConversionTestsBase : BaseHierarchyConversionTest
     {
-        private string TempPrefabAssetPath => "Assets/Temp.prefab";
-        private GameObject Prefab;
+        string TempPrefabAssetPath => "Assets/Temp.prefab";
 
-        void CreatePrefab(GameObject gameObject)
-            => Prefab = PrefabUtility.SaveAsPrefabAsset(gameObject, TempPrefabAssetPath);
+        GameObject CreatePrefab(GameObject gameObject)
+        {
+            return PrefabUtility.SaveAsPrefabAsset(gameObject, TempPrefabAssetPath);
+        }
 
         [TearDown]
         public override void TearDown()
@@ -69,7 +97,7 @@ namespace Unity.Physics.Tests.Authoring
         /// <param name="forceUniqueCollider">A flag indicating whether the collider on the provided game object should be forced to be unique.</param>
         /// <param name="setMassFunction">A function required for the validation which sets the mass on the dynamic rigid body to the specified value.</param>
         /// <param name="forceUniqueFunction">A function which ensures that the provided game object's collider is forced to be unique.</param>
-        protected void ValidatePrefabChildColliderUniqueStatus(GameObject dynamicRigidBodyWithCollider, bool forceUniqueCollider, Action<GameObject, float> setMassFunction, Action<GameObject> forceUniqueFunction)
+        protected void ValidateChildCollidersInBakedEntityPrefabAreUnique(GameObject dynamicRigidBodyWithCollider, bool forceUniqueCollider, Action<GameObject, float> setMassFunction, Action<GameObject> forceUniqueFunction)
         {
             var child1 = dynamicRigidBodyWithCollider;
             var child2 = UnityEngine.Object.Instantiate(child1);
@@ -95,15 +123,18 @@ namespace Unity.Physics.Tests.Authoring
                 forceUniqueFunction(child1);
             }
 
-            // Create a prefab from the prefab root game object.
-            // Accessible as member Prefab afterwards.
-            CreatePrefab(prefabRoot);
+            // create a prefab from the prefab root game object
+            var prefab = CreatePrefab(prefabRoot);
 
             // create a game object that references the prefab, in order to trigger the prefab baking
             var prefabRef = new GameObject("prefab_ref", typeof(ConversionTestPrefabReference));
             var prefabRefComponent = prefabRef.GetComponent<ConversionTestPrefabReference>();
             Assert.That(prefabRefComponent, Is.Not.Null);
-            prefabRefComponent.Prefab = Prefab;
+            prefabRefComponent.Prefab = prefab;
+
+            // Note: make sure there is no leftover world from other tests, since this test relies on proper cleanup behavior
+            // and is thus sensitive to leftovers from previous tests.
+            World.DisposeAllWorlds();
 
             var world = DefaultWorldInitialization.Initialize("Test world");
             try
@@ -114,7 +145,7 @@ namespace Unity.Physics.Tests.Authoring
                 using var prefabRootQueryBuilder = new EntityQueryBuilder(Allocator.Temp)
                         .WithOptions(EntityQueryOptions.IncludePrefab)
                         .WithAll<Prefab>()
-                            .WithAll<LinkedEntityGroup>();
+                        .WithAll<LinkedEntityGroup>();
 
                 using var prefabInstanceRootQueryBuilder = new EntityQueryBuilder(Allocator.Temp)
                         .WithAll<LinkedEntityGroup>();
@@ -241,28 +272,181 @@ namespace Unity.Physics.Tests.Authoring
                 }
 
                 // destroy instantiated entities and prefab and expect them to be cleaned up properly
-                using (var allEntities = world.EntityManager.CreateEntityQuery(new EntityQueryBuilder(Allocator.Temp)
+                using (var allEntitiesQuery = world.EntityManager.CreateEntityQuery(new EntityQueryBuilder(Allocator.Temp)
                     .WithAny<LinkedEntityGroup, PhysicsCollider>()
-                    .WithOptions(EntityQueryOptions.IncludePrefab)))
+                    .WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)))
                 {
-                    world.EntityManager.DestroyEntity(allEntities);
+                    Assert.DoesNotThrow(() => world.EntityManager.DestroyEntity(allEntitiesQuery));
                 }
 
-                world.Update();
+                // Step the world a few times to allow for the collider blob cleanup systems to run and for the entities that previously contained
+                // the ColliderBlobCleanupData to be fully destroyed. This will occur once the ColliderBlobCleanupSystem has completed
+                // its run and issued the removal of the ColliderBlobCleanupData components, and in addition once any other unrelated
+                // ICleanupComponentData components that may have been on the entities have also been removed.
+                for (int i = 0; i < 10; ++i)
+                {
+                    world.Update();
+                }
 
-                // After we have destroyed the entities we created and updated the world, we don't expect any more ColliderBlobCleanupData components.
-                // They should have been cleared out by now.
+                // make sure there are no more colliders left
+                using (var colliderQuery = world.EntityManager.CreateEntityQuery(new EntityQueryBuilder(Allocator.Temp)
+                           .WithAny<PhysicsCollider>()
+                           .WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)))
+                {
+                    Assert.That(colliderQuery.IsEmpty, Is.True);
+                }
+
+                // After we have destroyed the entities we created and we have updated the world, we don't expect there to be
+                // any ColliderBlobCleanupData components present. If there are still some, however, the collider should have
+                // been disposed, or the PhysicsCollider component is still present.
                 using (var colliderBlobCleanupQuery = world.EntityManager.CreateEntityQuery(
                     new EntityQueryBuilder(Allocator.Temp)
-                        .WithAll<ColliderBlobCleanupData>()))
+                        .WithAll<ColliderBlobCleanupData>()
+                        .WithNone<PhysicsCollider>()))
                 {
-                    Assert.That(colliderBlobCleanupQuery.IsEmpty, Is.True);
+                    if (!colliderBlobCleanupQuery.IsEmpty)
+                    {
+                        var entities = colliderBlobCleanupQuery.ToEntityArray(Allocator.Temp);
+                        var cleanupComponents = colliderBlobCleanupQuery.ToComponentDataArray<ColliderBlobCleanupData>(Allocator.Temp);
+                        for (int i = 0; i < entities.Length; ++i)
+                        {
+                            var cleanupComponent = cleanupComponents[i];
+                            Assert.That(cleanupComponent.Value.IsCreated, Is.False);
+                        }
+                    }
                 }
             }
             finally
             {
                 World.DisposeAllWorlds();
             }
+        }
+
+        /// <summary>
+        /// Ensures that when a prefab containing a rigid body with a collider is instantiated multiple times in a scene as
+        /// game object prefab instances, the resultant colliders are baked as unique or shared depending on whether
+        /// the collider authoring is forced to be unique.
+        /// </summary>
+        /// <param name="rigidBodyWithCollider">The game object containing the rigid body with collider.</param>
+        /// <param name="forceUniqueCollider">A flag indicating whether the collider on the provided game object should be forced to be unique.</param>
+        /// <param name="forceUniqueFunction">A function which ensures that the provided game object's collider is forced to be unique.</param>
+        protected void ValidateCollidersBakedFromGameObjectPrefabInstancesAreUnique(GameObject rigidBodyWithCollider, bool forceUniqueCollider, Action<GameObject> forceUniqueFunction)
+        {
+#if UNITY_6000_0_50F1_OR_NEWER
+            Assert.Ignore("With 6.0 and higher, this test does not correctly reproduce the Unity Editor behavior of instantiating prefab instances and thus fails.");
+#endif
+
+            // create a prefab with a single rigid body with collider
+            var prefabRoot = new GameObject("PrefabRoot");
+            rigidBodyWithCollider.transform.parent = prefabRoot.transform;
+
+            // force the collider to be unique if requested
+            if (forceUniqueCollider)
+            {
+                forceUniqueFunction(rigidBodyWithCollider);
+            }
+
+            // create a prefab from the prefab root game object.
+            var prefab = CreatePrefab(prefabRoot);
+
+            // create a root scene game object
+            var sceneRoot = new GameObject("SceneRoot");
+
+            // now create a few prefab instances, and, once baked, expect the colliders to be unique or shared depending
+            // on the forceUniqueCollider flag
+
+            var instances = new List<GameObject>();
+            instances.Add(PrefabUtility.InstantiatePrefab(prefab) as GameObject);
+            instances.Add(PrefabUtility.InstantiatePrefab(prefab) as GameObject);
+
+            // to mimic copy-paste, duplicate the prefab instance game objects
+#if UNITY_6000_0_50F1_OR_NEWER
+            instances.Add(GameObjectUtility.DuplicateGameObject(instances[0]));
+            instances.Add(GameObjectUtility.DuplicateGameObject(instances[1]));
+#endif
+
+            foreach (var instance in instances)
+            {
+                Assert.That(instance, Is.Not.Null);
+            }
+
+            // attach instances to scene root
+            foreach (var instance in instances)
+            {
+                instance.transform.parent = sceneRoot.transform;
+            }
+
+            // now bake the scene root containing the two prefab instances and expect the colliders to be unique or shared depending
+            // on the forceUniqueCollider flag
+            using var world = DefaultWorldInitialization.Initialize("Test world");
+            using var blobAssetStore = new BlobAssetStore(128);
+            ConvertBakeGameObject(sceneRoot, world, blobAssetStore);
+
+            using var colliderQueryBuilder = new EntityQueryBuilder(Allocator.Temp)
+                .WithAll<PhysicsCollider>();
+
+            // expect two colliders to have been baked
+            using var colliderQuery = world.EntityManager.CreateEntityQuery(colliderQueryBuilder);
+            Assert.That(colliderQuery.CalculateEntityCount(), Is.EqualTo(instances.Count));
+
+            var colliders = colliderQuery.ToComponentDataArray<PhysicsCollider>(Allocator.Temp);
+            foreach (var collider in colliders)
+            {
+                Assert.That(collider.IsUnique, Is.EqualTo(forceUniqueCollider));
+            }
+
+            // Make sure that, unless they are forced to be unique, all colliders are shared, i.e., they point to the
+            // same blob asset. Otherwise, they should all be unique.
+            var sharedColliderBlobs = !forceUniqueCollider;
+            for (int i = 0; i < colliders.Length; ++i)
+            {
+                for (int j = i + 1; j < colliders.Length; ++j)
+                {
+                    var blobAsset1 = colliders[i].Value;
+                    var blobAsset2 = colliders[j].Value;
+
+                    Assert.That(blobAsset1 == blobAsset2, Is.EqualTo(sharedColliderBlobs));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Ensures that the ForceUniqueID assigned to a collider in a prefab remains stable across prefab loads.
+        /// </summary>
+        /// <param name="rigidBodyWithUniqueCollider">A game object containing a rigid body with unique collider.</param>
+        /// <param name="getForceUniqueIDFunction">Function to obtain the force unique ID from the collider authoring in a game object.</param>
+        protected void ValidateStableForceUniqueIDForCollidersInPrefabs(GameObject rigidBodyWithUniqueCollider, Func<GameObject, uint> getForceUniqueIDFunction)
+        {
+            // create a prefab with a single rigid body with collider
+            var prefabRoot = new GameObject("PrefabRoot");
+            rigidBodyWithUniqueCollider.transform.parent = prefabRoot.transform;
+
+            // create a prefab from the prefab root game object
+            CreatePrefab(prefabRoot);
+
+            // load the prefab into an isolated scene
+            var prefab = PrefabUtility.LoadPrefabContents(TempPrefabAssetPath);
+
+            // get the rigid body game object from the loaded prefab
+            var rigidBodyInPrefab = prefab.gameObject.transform.GetChild(0).gameObject;
+
+            // get the force unique ID from the collider in the created prefab
+            var forceUniqueID = getForceUniqueIDFunction(rigidBodyInPrefab);
+
+            // close the prefab asset
+            PrefabUtility.UnloadPrefabContents(prefab);
+
+            // load the prefab again
+            var reloadedPrefab = PrefabUtility.LoadPrefabContents(TempPrefabAssetPath);
+
+            // get the force unique ID of the collider in the reloaded prefab
+            var rigidBodyInReloadedPrefab = reloadedPrefab.gameObject.transform.GetChild(0).gameObject;
+
+            // get the force unique ID from the collider in the reloaded prefab
+            var forceUniqueIDReloaded = getForceUniqueIDFunction(rigidBodyInReloadedPrefab);
+
+            // make sure the force unique IDs are the same
+            Assert.That(forceUniqueID, Is.EqualTo(forceUniqueIDReloaded));
         }
     }
 }

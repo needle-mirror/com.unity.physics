@@ -31,9 +31,12 @@ namespace Unity.Physics.Authoring
 
         PhysicsShapeAuthoring() {}
 
-        internal uint ForceUniqueID => m_ForceUniqueID;
-        [SerializeField]
+        internal uint ForceUniqueID => m_ForceUniqueID ^ m_PrefabInstanceID; // Note: incorporate prefab instance ID for uniqueness in prefab instances
+        [SerializeField, HideInInspector]
         uint m_ForceUniqueID = 0;
+
+        [SerializeField, HideInInspector]
+        uint m_PrefabInstanceID = 0;
 
         [Serializable]
         struct CylindricalProperties
@@ -742,10 +745,14 @@ namespace Unity.Physics.Authoring
         }
 
         const int k_VersionAddedForceUniqueID = 2; // added ForceUniqueID for stable artifact IDs
-        const int k_LatestVersion = k_VersionAddedForceUniqueID;
+        const int k_VersionAddedPrefabInstanceID = 3; // added m_PrefabInstanceID for unique ForceUniqueID across prefab instances
+        const int k_LatestVersion = k_VersionAddedPrefabInstanceID;
 
         [SerializeField, HideInInspector]
         int m_SerializedVersion = k_LatestVersion;
+
+        internal bool NeedsVersionUpgrade => m_NeedsVersionUpgrade;
+        bool m_NeedsVersionUpgrade = false;
 
 #if UNITY_EDITOR
         static string s_LastWarnedPath;
@@ -757,6 +764,8 @@ namespace Unity.Physics.Authoring
             if (m_SerializedVersion < k_LatestVersion)
             {
                 m_SerializedVersion = k_LatestVersion;
+
+                m_NeedsVersionUpgrade = true;
 
 #if UNITY_EDITOR
                 if (PrefabUtility.IsPartOfAnyPrefab(this) || gameObject.scene.IsValid())
@@ -797,6 +806,34 @@ namespace Unity.Physics.Authoring
             {
                 m_ForceUniqueID = (uint)UnityEngine.Random.Range(1, Int32.MaxValue);
             }
+
+#if UNITY_EDITOR
+            // Case: Unique shape in a prefab instance:
+            // The force unique IDs of multiple physics shape instances stemming from the same prefab will all be identical.
+            // So, in order to assign their resultant baked colliders a unique "force unique id", thereby ensuring
+            // that the resultant baked colliders are indeed unique, we need to incorporate an extra unique identifier
+            // representing the prefab instance into the force unique ID (see ForceUniqueID property above).
+            // This can be achieved using the targetPrefabId from the GlobalObjectId of the shape's game object, which is
+            // guaranteed to be unique for each prefab instance in the scene and stable across reloads and sessions.
+
+            var objectId = GlobalObjectId.GetGlobalObjectIdSlow(gameObject);
+            var prefabInstanceID = (uint)objectId.targetPrefabId;
+            if (prefabInstanceID != m_PrefabInstanceID)
+            {
+                // Note: we get here if this component is part of a prefab instance, either newly created (in which
+                // case m_PrefabInstanceID is zero initially) or duplicated (in which case the current m_PrefabInstanceID
+                // matches that of the original prefab instance and needs to be updated to the id of the new instance
+                // in order to be unique).
+
+                // Explicitly mark prefab instance as dirty so that the change gets saved alongside the prefab instance.
+                // Otherwise, the m_PrefabInstanceID value in the prefab would be used, which is not unique
+                // and would thus not allow creating unique colliders.
+                Undo.RecordObject(this, "Acquire Prefab Instance ID");
+                PrefabUtility.RecordPrefabInstancePropertyModifications(this);
+
+                m_PrefabInstanceID = prefabInstanceID;
+            }
+#endif
 
             m_PrimitiveSize = math.max(m_PrimitiveSize, new float3());
             Validate(ref m_Capsule);

@@ -354,21 +354,38 @@ namespace Unity.Physics
         {
             get
             {
-                // TODO - the inertia computed here is incorrect. Computing the correct inertia is expensive, so it probably ought to be cached.
-                // Note this is only called for top level polygon colliders, not for polygons within a mesh.
-                float3 center = (ConvexHull.Vertices[0] + ConvexHull.Vertices[1] + ConvexHull.Vertices[2]) / 3.0f;
+                // We assume spherical mass distribution for polygons and a volume based on a thin disc approximation.
+                // Note: the mass properties computed here are very approximate since computing the correct inertia tensor
+                // is expensive. For polygons that reside within a mesh, a better approximation is computed at the mesh level.
+
+                var center = float3.zero;
+                for (var i = 0; i < Vertices.Length; i++)
+                {
+                    center += Vertices[i];
+                }
+                center /= Vertices.Length;
+
                 float radiusSq = math.max(math.max(
-                    math.lengthsq(ConvexHull.Vertices[0] - center),
-                    math.lengthsq(ConvexHull.Vertices[1] - center)),
-                    math.lengthsq(ConvexHull.Vertices[2] - center));
+                        math.lengthsq(ConvexHull.Vertices[0] - center),
+                        math.lengthsq(ConvexHull.Vertices[1] - center)),
+                        math.lengthsq(ConvexHull.Vertices[2] - center));
+
+                if (IsQuad)
+                {
+                    radiusSq = math.max(radiusSq, math.lengthsq(ConvexHull.Vertices[3] - center));
+                }
+
+                // For the volume calculation, we assume a reasonably thin shell thickness, relative to the size of the polygon
+                var thickness = math.max(math.sqrt(radiusSq) * 1e-2f, math.EPSILON);
+
                 return new MassProperties
                 {
                     MassDistribution = new MassDistribution
                     {
                         Transform = new RigidTransform(quaternion.identity, center),
-                        InertiaTensor = new float3(2.0f / 5.0f * radiusSq)
+                        InertiaTensor = new float3(2.0f / 5.0f * radiusSq) // sphere inertia tensor
                     },
-                    Volume = 0,
+                    Volume = thickness * math.PI * radiusSq, // cylinder volume
                     AngularExpansionFactor = math.sqrt(radiusSq)
                 };
             }

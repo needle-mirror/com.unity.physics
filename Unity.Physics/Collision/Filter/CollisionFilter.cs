@@ -23,12 +23,13 @@ namespace Unity.Physics
         public int GroupIndex;
 
         /// <summary>
-        /// Returns true if the filter cannot collide with anything, which likely means it was default
-        /// constructed but not initialized.
+        /// Returns true if the filter cannot collide with anything, that is, it has a smaller equal 0 group index,
+        /// and either doesn't belong to any layer (<see cref="BelongsTo"/> is 0) or doesn't collide
+        /// with any layer (<see cref="CollidesWith"/> is 0).
         /// </summary>
         ///
         /// <value> True if this object is empty, false if not. </value>
-        public bool IsEmpty => BelongsTo == 0 || CollidesWith == 0;
+        public bool IsEmpty => (BelongsTo == 0 || CollidesWith == 0) && GroupIndex <= 0;
 
         /// <summary>   (Immutable) A collision filter which wants to collide with everything. </summary>
         public static readonly CollisionFilter Default = new CollisionFilter

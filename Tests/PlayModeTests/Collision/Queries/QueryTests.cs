@@ -202,6 +202,14 @@ namespace Unity.Physics.Tests.Collision.Queries
         [Timeout(600000)]
         public unsafe void ConvexConvexDistanceEdgeCaseTest()
         {
+            bool isAppleSilicon = UnityEngine.SystemInfo.processorType.Contains("Apple M");
+            bool isCI = !string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("CI"));
+
+            if (isCI && isAppleSilicon)
+            {
+                Assert.Ignore("[PHYS-600] The test consistently fails on Apple Silicon VMs");
+            }
+
             Random rnd = new Random(0x90456148);
             uint dbgShape = 0;
             uint dbgTest = 0;

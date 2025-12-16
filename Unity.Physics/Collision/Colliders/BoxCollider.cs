@@ -426,7 +426,7 @@ namespace Unity.Physics
                 Center = center,
                 Orientation = orientation,
                 Size = scale,
-                BevelRadius = math.clamp(box.BevelRadius, 0f, 0.5f * math.cmin(size)),
+                BevelRadius = math.clamp(box.BevelRadius, 0f, 0.5f * math.cmin(scale))
             });
         }
 

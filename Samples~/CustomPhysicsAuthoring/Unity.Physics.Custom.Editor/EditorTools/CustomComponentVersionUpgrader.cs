@@ -1,4 +1,5 @@
-﻿using UnityEditor;
+﻿using System;
+using UnityEditor;
 
 #if UNITY_EDITOR
 
@@ -9,7 +10,9 @@ namespace Unity.Physics.Editor
         [MenuItem("Tools/Unity Physics/Upgrade Physics Shape Versions")]
         static void UpgradeAssetsWithPhysicsShape()
         {
-            ComponentVersionUpgrader.UpgradeAssets<Authoring.PhysicsShapeAuthoring>("Physics Shape");
+            var componentNeedsUpgradeFunction = new Func<Authoring.PhysicsShapeAuthoring, bool>(
+                component => component.NeedsVersionUpgrade);
+            ComponentVersionUpgrader.UpgradeAssets("Physics Shape", componentNeedsUpgradeFunction);
         }
     }
 }

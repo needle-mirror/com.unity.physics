@@ -4,6 +4,25 @@ uid: unity-physics-changelog
 
 # Changelog
 
+## [1.4.4] - 2025-12-16
+
+
+### Changed
+
+* Updated the Burst dependency to version 1.8.25
+* Updated the `com.unity.entities` dependency to version `1.4.4`
+
+### Fixed
+
+* `CollisionFilter.IsEmpty` now correctly accounts for the `CollisionFilter.GroupIndex` value.
+* Fixed a bug when calling StepImmediate while using a SimulationStepInput struct which did not specify NumSubsteps would result in incorrect simulation. This would be observed for a project using StepImmediate that was created pre v1.4
+* Correctly set Connected Anchor of built-in joints in baked entity prefabs when Auto Configure Connected Anchor is enabled.
+* The `BoxCollider.BakeTransform` method now correctly limits the box bevel radius to half the minimum size of the new box, preventing invalid box collider properties.
+* Ensure that `PhysicsColliders` are unique when they are baked from unique `Physics Shape` or built-in `Collider` authoring components that are located within `GameObject` prefab instances. This fix addresses a regression introduced in a recent 1.4.x version, which caused baked colliders in this case to not be unique unexpectedly.
+* Make sure that the static broadphase in custom physics worlds is now updated correctly when the "Shared Static Colliders" option is used and static colliders are modified (see constructor `CustomPhysicsSystemGroup(uint worldIndex, bool shareStaticColliders)`). Prior to this fix, when moving or modifying the geometry of a static collider, collisions with static colliders would get missed in custom physics worlds.
+* The mass properties of compound colliders containing only polygon colliders now no longer contain NaN values.
+
+
 ## [1.4.3] - 2025-10-17
 
 ### Added
@@ -14,17 +33,9 @@ uid: unity-physics-changelog
 
 * Updated the Burst dependency to version 1.8.25
 
-### Deprecated
-
-
-### Removed
-
-
 ### Fixed
 
 * Baked Unity Physics Colliders that are forced to be unique will now produce stable collider blob hashes. This ensures that associated artifact IDs in your project will no longer change each time the project is re-imported. Note that baked colliders can be forced to be unique either via the "Force Unique" option in the custom Physics Shape authoring component, or via the Force Unique Collider companion component for built-in Colliders. Both approaches now support stable collider blob hashes.
-
-### Security
 
 
 ## [1.4.2] - 2025-09-05

@@ -20,8 +20,7 @@
         "Unity.Physics.Editor",
         "Unity.Transforms",
         "UnityEngine.TestRunner",
-        "UnityEditor.TestRunner",
-        "Unity.Async"
+        "UnityEditor.TestRunner"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

@@ -338,6 +338,8 @@ namespace Unity.Physics
                 return;
             }
 
+            if (input.NumSubsteps < 1) input.NumSubsteps = 1;
+
             // Inform the context of the timeStep: this is a frame timestep
             simulationContext.TimeStep = input.TimeStep;
 

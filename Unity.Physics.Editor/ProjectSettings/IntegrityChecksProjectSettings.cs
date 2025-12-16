@@ -41,6 +41,7 @@ public static class Preferences
             keywords = new[] { "Unity Physics", "Physics", "Enable Integrity Checks", "Disable Integrity Checks" },
             guiHandler = (searchContext) =>
             {
+                EditorGUI.indentLevel++;
                 EditorGUIUtility.labelWidth = 180;
 
                 bool oldEnableIntegrityChecks = !IntegrityChecksDisabled;
@@ -60,6 +61,7 @@ public static class Preferences
                 {
                     DebugDisplayRuntimeEnabled = newEnableDebugDisplay;
                 }
+                EditorGUI.indentLevel--;
             }
         };
 

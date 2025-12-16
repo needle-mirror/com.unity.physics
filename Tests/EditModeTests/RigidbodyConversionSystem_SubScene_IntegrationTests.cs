@@ -108,6 +108,9 @@ namespace Unity.Physics.Tests.Authoring
         // Test proper reset of rigid bodies contained in an open sub scene after leaving playmode
         public IEnumerator BasePlayModeAndResetTest<T>(Action<T> bodyCreationAction) where T : Component
         {
+            // make sure we are initially in edit mode
+            Assert.That(Application.isPlaying, Is.False);
+
             CreateAndLoadSubScene(bodyCreationAction);
 
             // wait until sub-scene is loaded by skipping frames
@@ -121,19 +124,20 @@ namespace Unity.Physics.Tests.Authoring
             // enable sub-scene for editing
             Scenes.Editor.SubSceneUtility.EditScene(SubSceneManaged);
 
-            // make sure rigid body exists and that its initial transform is identity
+            // make sure rigid body exists and cache its initial transform
+            LocalTransform initialTransform;
             using (var group = World.DefaultGameObjectInjectionWorld.EntityManager.CreateEntityQuery(ComponentType.ReadOnly<LocalTransform>(), ComponentType.ReadOnly<PhysicsMass>()))
             {
                 using var bodies = group.ToComponentDataArray<PhysicsMass>(Allocator.Temp);
-                Assume.That(bodies, Has.Length.EqualTo(1));
+                Assert.That(bodies, Has.Length.EqualTo(1));
                 var body = bodies[0];
-                Assume.That(body.IsKinematic, Is.False);
+                Assert.That(body.IsKinematic, Is.False);
                 using var transforms = group.ToComponentDataArray<LocalTransform>(Allocator.Temp);
-                Assume.That(transforms, Has.Length.EqualTo(1));
-                Assume.That(transforms[0], Is.EqualTo(LocalTransform.Identity));
+                Assert.That(transforms, Has.Length.EqualTo(1));
+                initialTransform = transforms[0];
             }
 
-            const int kNumStepsPerSession = 15;
+            const int kNumStepsPerSession = 20;
             DeterministicSteppingSystem.Initialize();
 
             // Session 1:
@@ -145,7 +149,7 @@ namespace Unity.Physics.Tests.Authoring
                 yield return null;
             }
 
-            Assume.That(SteppingSystem.IsStepping(), Is.False);
+            Assert.That(SteppingSystem.IsStepping(), Is.False);
 
             SteppingSystem.StartStepping(kNumStepsPerSession);
 
@@ -153,21 +157,22 @@ namespace Unity.Physics.Tests.Authoring
             {
                 yield return null;
             }
-            Assume.That(SteppingSystem.IsStepping(), Is.False);
+            Assert.That(SteppingSystem.IsStepping(), Is.False);
 
-            // Make sure the body exists and cache its transformation
-            LocalTransform expectedTransform;
+            // Make sure the body exists and cache its final transformation after simulation
+            LocalTransform finalTransform;
             using (var group = World.DefaultGameObjectInjectionWorld.EntityManager.CreateEntityQuery(ComponentType.ReadOnly<LocalTransform>(), ComponentType.ReadOnly<PhysicsMass>()))
             {
                 using var transforms = group.ToComponentDataArray<LocalTransform>(Allocator.Temp);
-                Assume.That(transforms, Has.Length.EqualTo(1));
-                expectedTransform = transforms[0];
-                Assume.That(expectedTransform, Is.Not.EqualTo(LocalTransform.Identity));
+                Assert.That(transforms, Has.Length.EqualTo(1));
+                finalTransform = transforms[0];
+                // make sure the body moved
+                Assert.That(finalTransform, Is.Not.EqualTo(initialTransform));
             }
 
-            // Exit play mode and try playing again.
-            // Afterwards confirm that the rigid body was brought back to its original location and we get the same end result
-            // as in the first play mode session above.
+            // Exit play mode and try playing again, but this time only half the number of steps.
+            // Afterwards, confirm that the rigid body restarted from its original location and we approached the same final
+            // transformation as in the first play mode session above.
             yield return new ExitPlayMode();
 
             while (Application.isPlaying)
@@ -183,9 +188,9 @@ namespace Unity.Physics.Tests.Authoring
             {
                 yield return null;
             }
-            Assume.That(SteppingSystem.IsStepping(), Is.False);
+            Assert.That(SteppingSystem.IsStepping(), Is.False);
 
-            SteppingSystem.StartStepping(kNumStepsPerSession);
+            SteppingSystem.StartStepping(kNumStepsPerSession / 2);
             while (SteppingSystem.IsStepping())
             {
                 yield return null;
@@ -195,8 +200,17 @@ namespace Unity.Physics.Tests.Authoring
             using (var group = World.DefaultGameObjectInjectionWorld.EntityManager.CreateEntityQuery(ComponentType.ReadOnly<LocalTransform>(), ComponentType.ReadOnly<PhysicsMass>()))
             {
                 using var transforms = group.ToComponentDataArray<LocalTransform>(Allocator.Temp);
-                Assume.That(transforms, Has.Length.EqualTo(1));
-                Assume.That(transforms[0], Is.EqualTo(expectedTransform));
+                Assert.That(transforms, Has.Length.EqualTo(1));
+                var intermediateTransform = transforms[0];
+                // expect the same orientation since the object should just have fallen under gravity
+                Assert.That(intermediateTransform.Rotation, Is.EqualTo(finalTransform.Rotation));
+                // expect that the position along gravity (default direction -y) lies somewhere between the initial position and the
+                // final position from the first session.
+                Assert.That(intermediateTransform.Position.y, Is.LessThan(initialTransform.Position.y));
+                Assert.That(intermediateTransform.Position.y, Is.GreaterThan(finalTransform.Position.y));
+                // expect the other position components to be unchanged
+                Assert.That(new float3(intermediateTransform.Position.x, 0, intermediateTransform.Position.z),
+                    Is.PrettyCloseTo(new float3(finalTransform.Position.x, 0, finalTransform.Position.z)));
             }
 
             DeterministicSteppingSystem.Uninitialize();
@@ -215,9 +229,10 @@ namespace Unity.Physics.Tests.Authoring
 
         // Test proper reset of rigid bodies built with Rigidbody components contained in an open sub scene after leaving playmode
         [UnityTest]
-        [UnityPlatform(exclude = new[] { RuntimePlatform.OSXEditor })]  // DOTS-9399
         public IEnumerator RigidbodyConversionSystem_IsInSubScene_PlayModeAndReset() => BasePlayModeAndResetTest<Rigidbody>(body =>
         {
+            body.transform.position = new Vector3(42f, -4.2f, 0.42f);
+            body.transform.rotation = Quaternion.Euler(4.2f, -42f, 42.0f);
             body.mass = 42f;
             body.isKinematic = false;
         });

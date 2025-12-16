@@ -5,7 +5,6 @@ using Unity.Mathematics;
 using Unity.Physics.Systems;
 using Unity.Collections;
 using Unity.Jobs;
-using UnityEngine;
 
 namespace Unity.Physics.Tests.Systems
 {
@@ -285,6 +284,93 @@ namespace Unity.Physics.Tests.Systems
                 // numSolverIterations will be set to 1 and will throw an error.
                 Assert.That(() => simulation.ScheduleStepJobs(stepInput, default, false),
                     Throws.Exception.TypeOf<System.ArgumentOutOfRangeException>());
+            }
+        }
+
+        [Test]
+        [Conditional(CompilationSymbols.CollectionsChecksSymbol)]
+        public void VerifyStepImmediateSimulationResultWithUnspecifiedSubstep()
+        {
+            float timeStep = 0.02f;
+            using (var world = new PhysicsWorld(0,1,0))
+            {
+                var body = new RigidTransform(quaternion.identity, new float3(0,10,0));
+
+                var geometry = new BoxGeometry
+                {
+                    Center = float3.zero,
+                    Orientation = quaternion.identity,
+                    Size = new float3(1,1,1),
+                    BevelRadius = 0.0f
+                };
+                using var collider = BoxCollider.Create(geometry);
+                var rigidBody = new RigidBody {WorldFromBody = body, Collider = collider, Scale = 1.0f};
+
+                var velocity = new MotionVelocity
+                {
+                    LinearVelocity = float3.zero,
+                    AngularVelocity = float3.zero,
+                    InverseInertia = new float3(6f, 6f, 6f),
+                    InverseMass = 1.0f,
+                    AngularExpansionFactor = 0.692820311f,
+                    GravityFactor = 1.0f
+                };
+
+                var motionData = new MotionData
+                {
+                    WorldFromMotion = body,
+                    BodyFromMotion = RigidTransform.identity,
+                    LinearDamping = 0.5f,
+                    AngularDamping = 0.01f
+                };
+
+                //----------------------------------------------------------------------
+                var bodies = world.Bodies;
+                bodies[0] = rigidBody;
+
+                var velocities = world.MotionVelocities;
+                velocities[0] = velocity;
+
+                var motionDatas = world.MotionDatas;
+                motionDatas[0] = motionData;
+
+                var simulationStepInput = new SimulationStepInput()
+                {
+                    World = world,
+                    TimeStep = timeStep,
+                    Gravity = new float3(0, -10.0f, 0),
+                    SynchronizeCollisionWorld = false,
+                    //NumSubsteps = DNE,
+                    NumSolverIterations = 3,
+                    SolverStabilizationHeuristicSettings = Solver.StabilizationHeuristicSettings.Default,
+                    HaveStaticBodiesChanged = new NativeReference<int>(1, Allocator.Temp)
+                };
+                var context = new SimulationContext();
+                context.Reset(simulationStepInput);
+
+                //-----------------------------------------------------------------------
+                int frames = 20;
+                for (var i = 0; i < frames; i++)
+                {
+                    simulationStepInput.World.CollisionWorld.BuildBroadphase(ref simulationStepInput.World,
+                        simulationStepInput.TimeStep, simulationStepInput.Gravity);
+
+                    Simulation.StepImmediate(simulationStepInput, ref context);
+                }
+
+                // if the substep is not passed into StepImmediate, gravity integration will be performed, but no
+                // Jacobian constraints will be solved and the final integrate step will skipped, meaning that the
+                // WorldFromMotion data won't be updated.
+                var vFinal = world.MotionVelocities[0].LinearVelocity.y;
+
+                var mass = math.rcp(velocity.InverseMass);
+                var gravity = simulationStepInput.Gravity.y;
+                var vNoDamping = mass * gravity * timeStep * frames;
+                Assert.IsTrue(vFinal > vNoDamping,"Error: Velocity Integration not performed with NumSubsteps unspecified.");
+
+                var dStart = motionData.WorldFromMotion.pos.y;
+                var dFinal = world.MotionDatas[0].WorldFromMotion.pos.y;
+                Assert.IsTrue(dFinal < dStart, "Error: MotionData update not performed when NumSubsteps unspecified.");
             }
         }
 

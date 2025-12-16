@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
@@ -198,7 +197,7 @@ namespace Unity.Physics.Authoring
             uint forceUniqueID = 0;
             if (isForceUnique)
             {
-                // Assembly a unique id for the collider based on the stable id stored in the ForceUniqueColliderAuthoring component.
+                // Assemble a unique id for the collider based on the stable id stored in the ForceUniqueColliderAuthoring component.
                 forceUniqueID = forceUniqueComponent.ForceUniqueID;
 
                 // We increment the id by the index of the collider in the game object, so that multiple colliders in the same game object get different ids.

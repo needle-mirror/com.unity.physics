@@ -31,6 +31,12 @@
     "defineConstraints": [
         "UNITY_INCLUDE_TESTS"
     ],
-    "versionDefines": [],
+    "versionDefines": [
+      {
+        "name": "Unity",
+        "expression": "6000.0.50f1",
+        "define": "UNITY_6000_0_50F1_OR_NEWER"
+      }
+    ],
     "noEngineReferences": false
 }

@@ -1,6 +1,7 @@
 using System;
 using NUnit.Framework;
 using Unity.Mathematics;
+using Unity.Physics.Authoring;
 using UnityEngine;
 
 namespace Unity.Physics.Tests.Authoring
@@ -116,6 +117,37 @@ namespace Unity.Physics.Tests.Authoring
                     var constraints = joints[i].GetConstraints();
                     for (int j = 0; j < constraints.Length; ++j)
                         Assume.That(constraints[j].ShouldRaiseImpulseEvents, Is.EqualTo(false));
+                }
+            }, count);
+        }
+
+        /// <summary>
+        /// Tests that the PhysicsWorldIndexAuthoring component on a GO joint component correctly bakes
+        /// into the PhysicsWorldIndex component value on the converted joint entity.
+        /// </summary>
+        [TestCaseSource(nameof(JointTestCases))]
+        public void ConversionSystems_WhenGOHasJoint_WithPhysicsWorldIndexAuthoring_JointEntityHasCorrectWorldIndex(Type jointType, int count)
+        {
+            CreateHierarchy(new[] { jointType }, Array.Empty<Type>(), Array.Empty<Type>());
+            var joint = Root.GetComponent<UnityEngine.Joint>();
+            LockXIfConfigurableJoint(joint);
+
+            var physicsWorldComponent = Root.AddComponent<PhysicsWorldIndexAuthoring>();
+
+            // pick a non-default world index to verify the value is correctly baked into the underlying PhysicsWorldIndex component.
+            physicsWorldComponent.WorldIndex += 1;
+            var expectedPhysicsWorldIndex = physicsWorldComponent.WorldIndex;
+
+            TestConvertedData<PhysicsJoint>((world, entities, joints) =>
+            {
+                foreach (var entity in entities)
+                {
+                    var hasJoint = world.EntityManager.HasComponent<PhysicsJoint>(entity);
+                    Assert.That(hasJoint, Is.True);
+                    var hasPhysicsWorldIndex = world.EntityManager.HasComponent<PhysicsWorldIndex>(entity);
+                    Assert.That(hasPhysicsWorldIndex, Is.True);
+                    var authoring = world.EntityManager.GetSharedComponent<PhysicsWorldIndex>(entity);
+                    Assert.That(authoring.Value, Is.EqualTo(expectedPhysicsWorldIndex));
                 }
             }, count);
         }

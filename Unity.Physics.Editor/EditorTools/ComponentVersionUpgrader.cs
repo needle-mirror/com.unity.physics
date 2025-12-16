@@ -16,10 +16,12 @@ namespace Unity.Physics.Editor
         [MenuItem("Tools/Unity Physics/Upgrade Force Unique Collider Versions")]
         static void UpgradeAssetsWithForceUniqueCollider()
         {
-            UpgradeAssets<Authoring.ForceUniqueColliderAuthoring>("Force Unique Collider");
+            var componentNeedsUpgradeFunction = new Func<Authoring.ForceUniqueColliderAuthoring, bool>(
+                component => component.NeedsVersionUpgrade);
+            UpgradeAssets("Force Unique Collider", componentNeedsUpgradeFunction);
         }
 
-        internal static void UpgradeAssets<T>(in string componentName) where T : Component
+        internal static void UpgradeAssets<T>(in string componentName, Func<T, bool> componentNeedsUpgradeFunction) where T : Component
         {
             int prefabCount = 0;
             int upgradedPrefabCount = 0;
@@ -31,10 +33,10 @@ namespace Unity.Physics.Editor
 
             try
             {
-                var cancelled = UpgradePrefabs<T>(componentName, out prefabCount, out upgradedPrefabCount);
+                var cancelled = UpgradePrefabs(componentName, componentNeedsUpgradeFunction, out prefabCount, out upgradedPrefabCount);
                 if (!cancelled)
                 {
-                    UpgradeScenes<T>(componentName, out sceneCount, out upgradedSceneCount);
+                    UpgradeScenes(componentName, componentNeedsUpgradeFunction, out sceneCount, out upgradedSceneCount);
                 }
             }
             finally
@@ -54,7 +56,8 @@ namespace Unity.Physics.Editor
         /// Finds and processes all prefabs and prefab variants in the project.
         /// <returns> False if cancelled. True otherwise. </returns>
         /// </summary>
-        static bool UpgradePrefabs<T>(in string componentName, out int prefabCount, out int upgradedPrefabCount) where T : Component
+        static bool UpgradePrefabs<T>(in string componentName, Func<T, bool> componentNeedsUpgradeFunction,
+            out int prefabCount, out int upgradedPrefabCount) where T : Component
         {
             string[] prefabGuids = AssetDatabase.FindAssets("t:Prefab");
             int processedCount = 0;
@@ -94,13 +97,27 @@ namespace Unity.Physics.Editor
                     try
                     {
                         // Check if any GameObject in the prefab has the target component.
-                        if (root.GetComponentInChildren<T>(true) != null)
+                        var components = root.GetComponentsInChildren<T>(true);
+                        if (components.Length > 0)
                         {
-                            Debug.Log($"Found {componentName} components in prefab '{path}'. Resaving.");
-                            modifiedCount++;
+                            var needUpgrade = false;
+                            foreach (var component in components)
+                            {
+                                if (componentNeedsUpgradeFunction(component))
+                                {
+                                    needUpgrade = true;
+                                    break; // No need to check further components.
+                                }
+                            }
 
-                            // Resave the prefab asset.
-                            PrefabUtility.SaveAsPrefabAsset(root, path);
+                            if (needUpgrade)
+                            {
+                                Debug.Log($"Found outdated {componentName} components in prefab '{path}'. Resaving.");
+                                modifiedCount++;
+
+                                // Resave the prefab asset.
+                                PrefabUtility.SaveAsPrefabAsset(root, path);
+                            }
                         }
                     }
                     finally
@@ -128,7 +145,8 @@ namespace Unity.Physics.Editor
         /// Finds and processes all scenes in the project.
         /// <returns> False if cancelled. True otherwise. </returns>
         /// </summary>
-        static bool UpgradeScenes<T>(in string componentName, out int sceneCount, out int upgradedSceneCount) where T : Component
+        static bool UpgradeScenes<T>(in string componentName, Func<T, bool> componentNeedsUpgradeFunction,
+            out int sceneCount, out int upgradedSceneCount) where T : Component
         {
             // Save the current scene setup to restore it later.
             SceneSetup[] originalSceneSetup = EditorSceneManager.GetSceneManagerSetup();
@@ -166,18 +184,28 @@ namespace Unity.Physics.Editor
                         bool sceneNeedsSaving = false;
                         foreach (GameObject rootObject in scene.GetRootGameObjects())
                         {
-                            if (rootObject.GetComponentInChildren<T>(true) != null)
+                            // Check if any GameObject in the prefab has the target component.
+                            var components = rootObject.GetComponentsInChildren<T>(true);
+                            if (components.Length > 0)
                             {
-                                sceneNeedsSaving = true;
-                                break; // Found one, no need to check other objects in this scene.
+                                foreach (var component in components)
+                                {
+                                    if (componentNeedsUpgradeFunction(component))
+                                    {
+                                        sceneNeedsSaving = true;
+                                        break; // No need to check further components.
+                                    }
+                                }
                             }
-                        }
 
-                        if (sceneNeedsSaving)
-                        {
-                            Debug.Log($"Found {componentName} components in scene '{path}'. Saving.");
-                            modifiedCount++;
-                            EditorSceneManager.SaveScene(scene);
+                            if (sceneNeedsSaving)
+                            {
+                                Debug.Log($"Found outdated {componentName} components in scene '{path}'. Saving.");
+                                modifiedCount++;
+                                EditorSceneManager.SaveScene(scene);
+
+                                break; // No need to check further root objects.
+                            }
                         }
                     }
                     catch (Exception)

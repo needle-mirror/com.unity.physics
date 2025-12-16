@@ -99,6 +99,8 @@ namespace Unity.Physics.Systems
         /// <value> The have static bodies changed flag. </value>
         public NativeReference<int> HaveStaticBodiesChanged => PhysicsData.HaveStaticBodiesChanged;
 
+        internal uint LastSystemVersion;
+
 #if (UNITY_EDITOR || DEVELOPMENT_BUILD) && !UNITY_PHYSICS_DISABLE_INTEGRITY_CHECKS
         internal NativeParallelHashMap<uint, long> IntegrityCheckMap;
 #endif
@@ -170,6 +172,16 @@ namespace Unity.Physics.Systems
                 ref state.EntityManager.GetComponentDataRW<BuildPhysicsWorldData>(state.SystemHandle).ValueRW;
             buildPhysicsData.CompleteInputDependency();
 
+            // Update last system version for change detection only for the default world, so that custom physics worlds
+            // can have independent change detection.
+            var isDefaultWorld = buildPhysicsData.WorldFilter.Equals(PhysicsWorldIndex.Default);
+            if (isDefaultWorld)
+            {
+                buildPhysicsData.LastSystemVersion = state.LastSystemVersion;
+            }
+
+            var lastSystemVersion = buildPhysicsData.LastSystemVersion;
+
             float timeStep = SystemAPI.Time.DeltaTime;
 
             if (!SystemAPI.TryGetSingleton(out PhysicsStep stepComponent))
@@ -181,7 +193,7 @@ namespace Unity.Physics.Systems
                 ref buildPhysicsData.PhysicsData, state.Dependency,
                 timeStep, stepComponent.CollisionTolerance, stepComponent.MultiThreaded > 0,
                 stepComponent.IncrementalDynamicBroadphase, stepComponent.IncrementalStaticBroadphase,
-                stepComponent.Gravity, state.LastSystemVersion);
+                stepComponent.Gravity, lastSystemVersion);
 
             SystemAPI.SetSingleton(new PhysicsWorldSingleton
             {

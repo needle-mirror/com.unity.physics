@@ -4,7 +4,7 @@ using UnityEngine;
 namespace Unity.Physics.Authoring
 {
     /// <summary>
-    /// Authoring component to associate a rigid body with the specified physics world.
+    /// Authoring component to associate a rigid body and its joints with the specified physics world.
     /// </summary>
 #if UNITY_2021_2_OR_NEWER
     [Icon(k_IconPath)]
@@ -22,11 +22,11 @@ namespace Unity.Physics.Authoring
         /// <summary>
         /// The physics world index.
         ///
-        /// The index of the physics world the rigid body will be associated to. The default physics world has index 0."
+        /// The index of the physics world the rigid body and its joints will be associated to. The default physics world has index 0."
         /// </summary>
         public uint WorldIndex { get => m_WorldIndex; set => m_WorldIndex = value; }
         [SerializeField]
-        [Tooltip("The index of the physics world the rigid body will be associated to. The default physics world has index 0.")]
+        [Tooltip("The index of the physics world the rigid body and its joints will be associated to. The default physics world has index 0.")]
         uint m_WorldIndex = 0;
 
         void OnEnable()

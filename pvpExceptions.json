@@ -4,11 +4,6 @@
       "errors": [
         "CHANGELOG.md: line 7: Unreleased section is not allowed for public release"
       ]
-    },
-    "PVP-107-2": {
-      "errors": [
-        ".samples: must be an array of objects with allowed string entries \"description\", \"displayName\", and \"path\" and allowed boolean entry \"interactiveImport\""
-      ]
     }
   }
 }

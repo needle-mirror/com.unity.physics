@@ -28,6 +28,9 @@ namespace Unity.Physics
             Value = worldIndex;
         }
 
+        /// <summary>   Default physics world index. </summary>
+        public static readonly PhysicsWorldIndex Default = new ();
+
         /// <summary>   Tests if this PhysicsWorldIndex is considered equal to another. </summary>
         ///
         /// <param name="other">    The physics world index to compare to this object. </param>

@@ -209,6 +209,46 @@ namespace Unity.Physics.Tests.Collision.Colliders
             TestUtils.AreEqual(expectedCollider.Value.MassProperties, boxCollider.MassProperties, 1e-5f);
         }
 
+        /// <summary>
+        /// Modify a <see cref="BoxCollider"/> by baking a user-provided transformation matrix that reduces the scale,
+        /// and make sure that bevel radius is still appropriate (not larger than 0.5 * the new scale).
+        /// </summary>
+        [Test]
+        public void TestBoxColliderBakeTransformLimitedBevelRadius()
+        {
+            var oldSize = new float3(0.8f);
+            var oldBevelRadius = 0.5f * math.cmin(oldSize); // max allowed for the old size, limited by the smallest size component
+            var geometry = new BoxGeometry
+            {
+                Center = float3.zero,
+                Orientation = quaternion.identity,
+                Size = oldSize,
+                BevelRadius = oldBevelRadius
+            };
+
+            using var collider = BoxCollider.Create(geometry);
+            ref var boxCollider = ref collider.As<BoxCollider>();
+
+            var scale = new float3(0.4f, 0.3f, 0.7f);
+            var transform = new AffineTransform(float3.zero, quaternion.identity, scale);
+            collider.Value.BakeTransform(transform);
+
+            var newSize = geometry.Size * scale;
+            // making the size smaller should again limit the bevel radius
+            var newBevelRadius = 0.5f * math.cmin(newSize);
+            Assert.That(newBevelRadius, Is.LessThan(oldBevelRadius));
+
+            var expectedGeometry = new BoxGeometry
+            {
+                Center = geometry.Center,
+                Orientation = geometry.Orientation,
+                Size = newSize,
+                BevelRadius = newBevelRadius
+            };
+
+            ValidateGeometryEqual(expectedGeometry, boxCollider.Geometry);
+        }
+
         #endregion
 
         #region IConvexCollider

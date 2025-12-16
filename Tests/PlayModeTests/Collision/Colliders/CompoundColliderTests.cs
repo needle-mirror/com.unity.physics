@@ -102,6 +102,58 @@ namespace Unity.Physics.Tests.Collision.Colliders
             TestCompoundBox(new RigidTransform(quaternion.EulerXYZ(0.5f, 1.0f, 1.5f), new float3(1.0f, 2.0f, 3.0f)));
         }
 
+        void ValidateMassPropertiesAreFinite(in MassProperties massProperties)
+        {
+            Assert.That(math.isfinite(massProperties.Volume));
+            Assert.That(math.isfinite(massProperties.AngularExpansionFactor));
+            Assert.That(math.all(math.isfinite(massProperties.MassDistribution.InertiaTensor)));
+            var tm = massProperties.MassDistribution.Transform;
+            Assert.That(math.all(math.isfinite(tm.rot.value)));
+            Assert.That(math.all(math.isfinite(tm.pos)));
+        }
+
+        public enum PolygonType
+        {
+            Triangle,
+            Quad,
+            Mixed
+        }
+
+        /// <summary>
+        /// Tests that mass properties of compound colliders built from polygon colliders are finite.
+        /// </summary>
+        [Test]
+        public void MassProperties_BuiltFromPolygonColliders_AreFinite([Values(1,10)] int polygonCount, [Values] PolygonType polygonType)
+        {
+            var colliders = new NativeList<CompoundCollider.ColliderBlobInstance>(Allocator.Temp);
+            for (int i = 0; i < polygonCount; ++i)
+            {
+                var v0 = new float3(0, i, 0);
+                var v1 = new float3(0, i, 1);
+                var v2 = new float3(1, i, 1);
+                var v3 = new float3(1, i, 0);
+                bool quad = polygonType == PolygonType.Quad || (polygonType == PolygonType.Mixed && (i % 2) == 0);
+                var polygonCollider = quad ? PolygonCollider.CreateQuad(v0, v1, v2, v3)
+                    : PolygonCollider.CreateTriangle(v0, v1, v3);
+
+                colliders.Add(new CompoundCollider.ColliderBlobInstance
+                {
+                    Collider = polygonCollider,
+                    CompoundFromChild = RigidTransform.identity
+                });
+                ValidateMassPropertiesAreFinite(polygonCollider.Value.MassProperties);
+            }
+            using var compoundCollider = CompoundCollider.Create(colliders.AsArray());
+            ValidateMassPropertiesAreFinite(compoundCollider.Value.MassProperties);
+
+            foreach (var child in colliders)
+            {
+                child.Collider.Dispose();
+            }
+
+            colliders.Dispose();
+        }
+
         unsafe void ValidateCompoundCollider(BlobAssetReference<Collider> collider, int expectedChildCount)
         {
             // manually created colliders are unique by design

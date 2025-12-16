@@ -181,5 +181,76 @@ namespace Unity.Physics.Tests.Collision.Filter
             Assert.IsTrue(CollisionFilter.CreateUnion(filter2, filter3).Equals(filter4));
             Assert.IsTrue(CollisionFilter.CreateUnion(filter3, filter4).Equals(filter4));
         }
+
+        /// <summary>
+        /// Tests whether the filter properties are correctly considered by the IsEmpty function.
+        /// A filter is empty if it cannot collide with anything, that is, it has a smaller equal 0 group index
+        /// and either doesn't belong to any layer (BelongsTo = 0) or doesn't collide with any layer (CollidesWith = 0).
+        /// </summary>
+        [Test]
+        public void CollisionFilterTestIsEmpty([Values] bool negativeGroupIndex)
+        {
+            Assert.IsTrue(CollisionFilter.Zero.IsEmpty);
+            Assert.IsFalse(CollisionFilter.Default.IsEmpty);
+
+            var filter = new CollisionFilter();
+            Assert.IsTrue(filter.IsEmpty);
+
+            var groupIndex = negativeGroupIndex ? -1 : 1;
+
+            filter = new CollisionFilter
+            {
+                GroupIndex = groupIndex
+            };
+            Assert.AreEqual(negativeGroupIndex, filter.IsEmpty);
+
+            filter = new CollisionFilter
+            {
+                BelongsTo = 1,
+                CollidesWith = 1,
+                GroupIndex = 0
+            };
+            Assert.IsFalse(filter.IsEmpty);
+
+            filter = new CollisionFilter
+            {
+                BelongsTo = 0,
+                CollidesWith = 0,
+                GroupIndex = 0
+            };
+            Assert.IsTrue(filter.IsEmpty);
+
+            filter = new CollisionFilter
+            {
+                BelongsTo = 0,
+                CollidesWith = 1,
+                GroupIndex = 0
+            };
+            Assert.IsTrue(filter.IsEmpty);
+
+            filter = new CollisionFilter
+            {
+                BelongsTo = 1,
+                CollidesWith = 0,
+                GroupIndex = 0
+            };
+            Assert.IsTrue(filter.IsEmpty);
+
+            filter = new CollisionFilter
+            {
+                BelongsTo = 0,
+                CollidesWith = 1,
+                GroupIndex = groupIndex
+            };
+            Assert.AreEqual(negativeGroupIndex, filter.IsEmpty);
+
+            filter = new CollisionFilter
+            {
+                BelongsTo = 1,
+                CollidesWith = 0,
+                GroupIndex = groupIndex
+            };
+            Assert.AreEqual(negativeGroupIndex, filter.IsEmpty);
+        }
     }
 }
