@@ -1,3 +1,4 @@
+#pragma warning disable CS0618
 using Unity.Entities;
 using Unity.Physics;
 using Unity.Transforms;

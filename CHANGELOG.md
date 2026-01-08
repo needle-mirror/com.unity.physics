@@ -2,6 +2,13 @@
 uid: unity-physics-changelog
 ---
 
+# Changelog
+
+## [1.3.15] - 2026-01-08
+
+### Changed
+* RigidBodyAspect and ColliderAspect marked as obsolete along with IAspect. In order to consolidate our API and improve iteration time, we have decided to remove Aspects in a future major release of Entities. Component and EntityQuery APIs should be used directly in the future instead of Aspects. Both Entities.ForEach and Aspects will remain supported in 1.x packages of Entities.
+
 
 ## [1.3.14] - 2025-04-11
 
@@ -10,7 +17,7 @@ uid: unity-physics-changelog
 * Updated the `com.unity.entities` dependency to version `1.3.14`
 * Updated the `com.unity.burst` dependency to version `1.8.19`
 * Updated the `com.unity.test-framework dependency` to version `1.4.6`
-* The minimum supported editor version is now 2022.3.20f1
+* The minimum supported editor version is now 2022.3.13f1
 
 ### Fixed
 

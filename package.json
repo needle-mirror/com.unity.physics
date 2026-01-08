@@ -5,7 +5,7 @@
   "dependencies": {
     "com.unity.burst": "1.8.19",
     "com.unity.collections": "2.5.7",
-    "com.unity.entities": "1.3.14",
+    "com.unity.entities": "1.3.15",
     "com.unity.mathematics": "1.3.2",
     "com.unity.test-framework": "1.4.6",
     "com.unity.modules.imgui": "1.0.0",
@@ -17,8 +17,8 @@
   ],
   "name": "com.unity.physics",
   "unity": "2022.3",
-  "version": "1.3.14",
   "unityRelease": "20f1",
+  "version": "1.3.15",
   "samples": [
     {
       "displayName": "Custom Physics Authoring",
@@ -28,15 +28,15 @@
     }
   ],
   "_upm": {
-    "changelog": "### Changed\n\n* Updated the `com.unity.entities` dependency to version `1.3.14`\n* Updated the `com.unity.burst` dependency to version `1.8.19`\n* Updated the `com.unity.test-framework dependency` to version `1.4.6`\n* The minimum supported editor version is now 2022.3.20f1\n\n### Fixed\n\n* Incorrect capsule debug visualization when using non-default proportions in `PhysicsDebugDisplay`."
+    "changelog": "### Changed\n* RigidBodyAspect and ColliderAspect marked as obsolete along with IAspect. In order to consolidate our API and improve iteration time, we have decided to remove Aspects in a future major release of Entities. Component and EntityQuery APIs should be used directly in the future instead of Aspects. Both Entities.ForEach and Aspects will remain supported in 1.x packages of Entities."
   },
   "upmCi": {
-    "footprint": "e2977b2dfdd298b31e0d47343955d2b51000ab23"
+    "footprint": "335b9705f35fb4d1c14dc473323e5dcbe0e5b221"
   },
   "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.physics@1.3/manual/index.html",
   "repository": {
     "url": "https://github.cds.internal.unity3d.com/unity/dots.git",
     "type": "git",
-    "revision": "2520fc806449bf4c278c9031eb21f0a6aeccda46"
+    "revision": "d6c50e1f1f48a6e3f817309d3343cb158dc31c3b"
   }
 }
