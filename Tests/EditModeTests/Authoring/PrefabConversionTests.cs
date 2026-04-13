@@ -12,9 +12,6 @@ namespace Unity.Physics.Tests.Authoring
 {
     class PrefabConversionTests : PrefabConversionTestsBase
     {
-
-        #if false
-        //Temporarily disabling this test due to failures exclusive to Packageworks
         [Test]
         public void PrefabConversion_ChildCollider_ForceUnique([Values] bool forceUniqueCollider)
         {
@@ -27,8 +24,9 @@ namespace Unity.Physics.Tests.Authoring
                     if (forceUniqueCollider) rigidBody.AddComponent<ForceUniqueColliderAuthoring>();
                 });
         }
-        #endif
-        
+
+        #if false
+        //Temporarily disabling this test due to failures exclusive to Packageworks
         [Test]
         public void PrefabConversion_GameObjectPrefabInstances_ForceUnique([Values] bool forceUniqueCollider)
         {
@@ -40,6 +38,7 @@ namespace Unity.Physics.Tests.Authoring
                     if (forceUniqueCollider) rigidBody.AddComponent<ForceUniqueColliderAuthoring>();
                 });
         }
+        #endif
 
         [Test]
         public void PrefabConversion_StableForceUniqueIDInPrefabs()
