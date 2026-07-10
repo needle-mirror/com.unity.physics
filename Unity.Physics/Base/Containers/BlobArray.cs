@@ -11,6 +11,12 @@ namespace Unity.Physics
         internal int Offset;
         internal int Length;    // number of T, not number of bytes
 
+        internal static unsafe T* GetUnsafeReadOnlyPtr<T>(ref BlobArray blobArray) where T : unmanaged
+        {
+            int* offsetPtr = (int*)UnsafeUtility.AddressOf(ref blobArray.Offset);
+            return (T*)((byte*)offsetPtr + *offsetPtr);
+        }
+
         /// <summary>   Generic accessor. </summary>
         ///
         /// <typeparam name="T">    Generic type parameter. </typeparam>

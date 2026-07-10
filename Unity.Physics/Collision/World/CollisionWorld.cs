@@ -1434,6 +1434,16 @@ namespace Unity.Physics
             return Broadphase.CastRay(input, m_Bodies, ref collector);
         }
 
+#if BVH_COLLECT_METRICS
+        // An overload for gathering performance BVH Metrics of the Static BVH Tree
+        internal bool CastRay<T>(RaycastInput input, ref T collector, out BVHTraversalMetrics metrics)
+            where T : struct, ICollector<RaycastHit>
+        {
+            input.QueryContext.InitScale();
+            return Broadphase.CastRay(input, m_Bodies, ref collector, out metrics);
+        }
+#endif
+
         /// <summary>   Cast collider. </summary>
         ///
         /// <param name="input">    The input. </param>
@@ -1470,6 +1480,16 @@ namespace Unity.Physics
             return Broadphase.CastCollider(input, m_Bodies, ref collector);
         }
 
+#if BVH_COLLECT_METRICS
+        // An overload for gathering performance BVH Metrics of the Static BVH Tree
+        internal bool CastCollider<T>(ColliderCastInput input, ref T collector, out BVHTraversalMetrics metrics)
+            where T : struct, ICollector<ColliderCastHit>
+        {
+            input.InitScale();
+            return Broadphase.CastCollider(input, m_Bodies, ref collector, out metrics);
+        }
+#endif
+
         /// <summary>   Calculates the distance. </summary>
         ///
         /// <param name="input">    The input. </param>
@@ -1505,6 +1525,16 @@ namespace Unity.Physics
             input.QueryContext.InitScale();
             return Broadphase.CalculateDistance(input, m_Bodies, ref collector);
         }
+
+#if BVH_COLLECT_METRICS
+        // An overload for gathering performance BVH Metrics of the Static BVH Tree
+        internal bool CalculateDistance<T>(PointDistanceInput input, ref T collector, out BVHTraversalMetrics metrics)
+            where T : struct, ICollector<DistanceHit>
+        {
+            input.QueryContext.InitScale();
+            return Broadphase.CalculateDistance(input, m_Bodies, ref collector, out metrics);
+        }
+#endif
 
         /// <summary>   Calculates the distance. </summary>
         ///
@@ -1651,6 +1681,17 @@ namespace Unity.Physics
 
         #pragma warning restore CS0618
         #endregion
+
+
+#if BVH_COLLECT_METRICS
+        // An overload for gathering performance BVH Metrics of the Static BVH Tree
+        internal bool CalculateDistance<T>(ColliderDistanceInput input, ref T collector, out BVHTraversalMetrics metrics)
+            where T : struct, ICollector<DistanceHit>
+        {
+            input.InitScale();
+            return Broadphase.CalculateDistance(input, m_Bodies, ref collector, out metrics);
+        }
+#endif
 
         #region GO API Queries
 

@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -53,8 +54,26 @@ namespace Unity.Physics
         // where it is used to handle penetration cases properly.
         public bool IsFlipped;
 
+        // When >= 0, indicates which child of the mesh BVH root to start traversal from.
+        // Set by the broadphase pre-filter when exactly one mesh sub-AABB is hit (used with SingleHitChildIndex()).
+        // -1 means traverse from root (default).
+        public int MeshBvhChildIndex;
+
+        // Count the hits and if there is only one, then determine on which child index it is
+        // This helps the BVH Leaf traversal skip the mesh BVH root node and start traversal directly at a child when
+        // the broadphase pre-filter finds just one hit.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static int SingleHitChildIndex(bool4 hits)
+        {
+            int hitCount = math.csum(math.select(int4.zero, new int4(1), hits));
+            return hitCount == 1
+                ? math.csum(math.select(int4.zero, new int4(0, 1, 2, 3), hits))
+                : -1;
+        }
+
         public float TargetScale => WorldFromLocalTransform.Scale;
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void InitScale()
         {
             InvTargetScale = 1.0f;
@@ -70,7 +89,8 @@ namespace Unity.Physics
             WorldFromLocalTransform = ScaledMTransform.Identity,
             InvTargetScale = 1.0f,
             IsInitialized = true,
-            IsFlipped = false
+            IsFlipped = false,
+            MeshBvhChildIndex = -1
         };
 
         public ColliderKey SetSubKey(uint childSubKeyNumOfBits, uint childSubKey)

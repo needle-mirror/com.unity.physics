@@ -167,6 +167,20 @@ namespace Unity.Physics
         /// <returns>   True if there is a hit, false otherwise. </returns>
         public bool CastRay(RaycastInput input, out RaycastHit closestHit) => QueryWrappers.RayCast(in this, input, out closestHit);
 
+#if BVH_COLLECT_METRICS
+        internal bool CastRay(RaycastInput input, out RaycastHit closestHit, out BVHTraversalMetrics metrics)
+        {
+            var collector = new ClosestHitCollector<RaycastHit>(1.0f);
+            if (CastRay(input, ref collector, out metrics))
+            {
+                closestHit = collector.ClosestHit;
+                return true;
+            }
+            closestHit = new RaycastHit();
+            return false;
+        }
+#endif
+
         /// <summary>   Cast ray. </summary>
         ///
         /// <param name="input">    The input. </param>
@@ -186,6 +200,14 @@ namespace Unity.Physics
         {
             return CollisionWorld.CastRay(input, ref collector);
         }
+
+#if BVH_COLLECT_METRICS
+        internal bool CastRay<T>(RaycastInput input, ref T collector, out BVHTraversalMetrics metrics)
+            where T : struct, ICollector<RaycastHit>
+        {
+            return CollisionWorld.CastRay(input, ref collector, out metrics);
+        }
+#endif
 
         /// <summary>   Cast collider. </summary>
         ///
@@ -222,6 +244,14 @@ namespace Unity.Physics
             return CollisionWorld.CastCollider(input, ref collector);
         }
 
+#if BVH_COLLECT_METRICS
+        internal bool CastCollider<T>(ColliderCastInput input, ref T collector, out BVHTraversalMetrics metrics)
+            where T : struct, ICollector<ColliderCastHit>
+        {
+            return CollisionWorld.CastCollider(input, ref collector, out metrics);
+        }
+#endif
+
         /// <summary>   Calculates the distance. </summary>
         ///
         /// <param name="input">    The input. </param>
@@ -257,6 +287,14 @@ namespace Unity.Physics
             return CollisionWorld.CalculateDistance(input, ref collector);
         }
 
+#if BVH_COLLECT_METRICS
+        internal bool CalculateDistance<T>(PointDistanceInput input, ref T collector, out BVHTraversalMetrics metrics)
+            where T : struct, ICollector<DistanceHit>
+        {
+            return CollisionWorld.CalculateDistance(input, ref collector, out metrics);
+        }
+#endif
+
         /// <summary>   Calculates the distance. </summary>
         ///
         /// <param name="input">    The input. </param>
@@ -291,6 +329,14 @@ namespace Unity.Physics
         {
             return CollisionWorld.CalculateDistance(input, ref collector);
         }
+
+#if BVH_COLLECT_METRICS
+        internal bool CalculateDistance<T>(ColliderDistanceInput input, ref T collector, out BVHTraversalMetrics metrics)
+            where T : struct, ICollector<DistanceHit>
+        {
+            return CollisionWorld.CalculateDistance(input, ref collector, out metrics);
+        }
+#endif
 
         #region GO API Queries
 

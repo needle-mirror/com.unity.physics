@@ -3,9 +3,9 @@
   "category": "Unity",
   "description": "Unity's C# stateless physics library.\n\nBuilt on top of the Unity C# ECS framework, Unity Physics is network-ready, completely customizable, and built for performance out of the box. Whether you're building the next mobile hit or a new networked multiplayer console experience, Unity Physics leverages the Burst compiler and Job system to scale across a range of hardware.",
   "dependencies": {
-    "com.unity.burst": "1.8.28",
-    "com.unity.collections": "2.6.6",
-    "com.unity.entities": "1.4.6",
+    "com.unity.burst": "1.8.29",
+    "com.unity.collections": "2.6.8",
+    "com.unity.entities": "1.4.8",
     "com.unity.mathematics": "1.3.2",
     "com.unity.test-framework": "1.4.6",
     "com.unity.modules.imgui": "1.0.0",
@@ -18,7 +18,7 @@
   "name": "com.unity.physics",
   "unity": "2022.3",
   "unityRelease": "20f1",
-  "version": "1.4.6",
+  "version": "1.4.7",
   "samples": [
     {
       "displayName": "Custom Physics Authoring",
@@ -28,15 +28,15 @@
     }
   ],
   "_upm": {
-    "changelog": "### Changed\n\n* Updated the `com.unity.burst` dependency to version `1.8.27`\n* Updated the `com.unity.burst` dependency to version `1.8.28`\n* Updated the `com.unity.entities` dependency to version `1.4.6`"
+    "changelog": "### Changed\n\n* Updated the `com.unity.burst` dependency to version `1.8.29`\n* Improved query performance for Collector Types (Any, Closest, All) for query types: Raycast, ColliderCast, Point Distance and Collider Distance, when casting against a MeshCollider. Improvement is particularly observable with Burst enabled.\n\n### Fixed\n\n* Fixed a bug when the incremental broadphase was enabled for static and dynamic bodies when a scene was reloaded which resulted in stale data being used\n* Sample `PhysicsShapeAuthoring` baker was collapsing vertices for big Meshes, leading to very poor performances."
   },
   "upmCi": {
-    "footprint": "319a1c62c81c49bbc4ed87e48284a93897a5bea2"
+    "footprint": "e5eaf68a63375e14b1e36fc7fc3cd6989257d7cd"
   },
   "documentationUrl": "https://docs.unity3d.com/Packages/com.unity.physics@1.4/manual/index.html",
   "repository": {
     "url": "https://github.cds.internal.unity3d.com/unity/dots.git",
     "type": "git",
-    "revision": "233b7df164f9829fad832775f3875c0379155347"
+    "revision": "4a34d600ff4a191ed22ac899ab955d96d7c683f7"
   }
 }

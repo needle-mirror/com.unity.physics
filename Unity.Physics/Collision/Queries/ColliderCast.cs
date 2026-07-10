@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Collections.LowLevel.Unsafe;
@@ -484,22 +485,71 @@ namespace Unity.Physics
         {
             private readonly Mesh* m_Mesh;
             private readonly uint m_NumColliderKeyBits;
+            private int m_CachedSectionIndex;
+            private Mesh.PrimitiveFlags* m_CachedFlagsPtr;
+            private Mesh.PrimitiveVertexIndices* m_CachedVertexIndicesPtr;
+            private float3* m_CachedVerticesPtr;
+            private short* m_CachedFilterIndicesPtr;
+            private CollisionFilter* m_CachedFiltersPtr;
+            private short* m_CachedMaterialIndicesPtr;
+            private Material* m_CachedMaterialsPtr;
 
             public ColliderMeshLeafProcessor(MeshCollider* meshCollider)
             {
                 m_Mesh = &meshCollider->Mesh;
                 m_NumColliderKeyBits = meshCollider->NumColliderKeyBits;
+                m_CachedSectionIndex = -1;
+                m_CachedFlagsPtr = null;
+                m_CachedVertexIndicesPtr = null;
+                m_CachedVerticesPtr = null;
+                m_CachedFilterIndicesPtr = null;
+                m_CachedFiltersPtr = null;
+                m_CachedMaterialIndicesPtr = null;
+                m_CachedMaterialsPtr = null;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private void CacheSection(int sectionIndex)
+            {
+                m_CachedSectionIndex = sectionIndex;
+                ref var section = ref m_Mesh->Sections[sectionIndex];
+                m_CachedFlagsPtr = BlobArray.GetUnsafeReadOnlyPtr<Mesh.PrimitiveFlags>(ref section.PrimitiveFlagsBlob);
+                m_CachedVertexIndicesPtr = BlobArray.GetUnsafeReadOnlyPtr<Mesh.PrimitiveVertexIndices>(ref section.PrimitiveVertexIndicesBlob);
+                m_CachedVerticesPtr = BlobArray.GetUnsafeReadOnlyPtr<float3>(ref section.VerticesBlob);
+                m_CachedFilterIndicesPtr = BlobArray.GetUnsafeReadOnlyPtr<short>(ref section.PrimitiveFilterIndicesBlob);
+                m_CachedFiltersPtr = BlobArray.GetUnsafeReadOnlyPtr<CollisionFilter>(ref section.FiltersBlob);
+                m_CachedMaterialIndicesPtr = BlobArray.GetUnsafeReadOnlyPtr<short>(ref section.PrimitiveMaterialIndicesBlob);
+                m_CachedMaterialsPtr = BlobArray.GetUnsafeReadOnlyPtr<Material>(ref section.MaterialsBlob);
             }
 
             public bool ColliderCastLeaf<T>(ColliderCastInput input, int primitiveKey, ref T collector)
                 where T : struct, ICollector<ColliderCastHit>
             {
-                m_Mesh->GetPrimitive(primitiveKey, out float3x4 vertices, out Mesh.PrimitiveFlags flags, out CollisionFilter filter, out Material material);
+                int sectionIndex = primitiveKey >> 8;
+                int sectionPrimitiveIndex = primitiveKey & 0xFF;
+#if BVH_COLLECT_METRICS
+                BVHTraversalMetrics.MeshLeaf.Calls++;
+#endif
 
-                if (!CollisionFilter.IsCollisionEnabled(input.Collider->GetCollisionFilter(), filter)) // TODO: could do this check within GetPrimitive()
+                if (sectionIndex != m_CachedSectionIndex)
                 {
-                    return false;
+                    CacheSection(sectionIndex);
+#if BVH_COLLECT_METRICS
+                    BVHTraversalMetrics.MeshLeaf.SectionCacheMisses++;
+#endif
                 }
+
+                Mesh.PrimitiveFlags flags = m_CachedFlagsPtr[sectionPrimitiveIndex];
+
+                Mesh.PrimitiveVertexIndices vertexIndices = m_CachedVertexIndicesPtr[sectionPrimitiveIndex];
+                float3x4 vertices = new float3x4(
+                    m_CachedVerticesPtr[vertexIndices.A],
+                    m_CachedVerticesPtr[vertexIndices.B],
+                    m_CachedVerticesPtr[vertexIndices.C],
+                    m_CachedVerticesPtr[vertexIndices.D]);
+
+                CollisionFilter filter = m_CachedFiltersPtr[m_CachedFilterIndicesPtr[sectionPrimitiveIndex]];
+                Material material = m_CachedMaterialsPtr[m_CachedMaterialIndicesPtr[sectionPrimitiveIndex]];
 
                 D dispatcher = new D();
 
@@ -512,8 +562,9 @@ namespace Unity.Physics
                 polygon.InitNoVertices(filter, material);
                 for (int polygonIndex = 0; polygonIndex < numPolygons; polygonIndex++)
                 {
-                    float fraction = collector.MaxFraction;
-
+#if BVH_COLLECT_METRICS
+                    BVHTraversalMetrics.MeshLeaf.TriangleTests++;
+#endif
                     if (isQuad)
                     {
                         polygon.SetAsQuad(vertices[0], vertices[1], vertices[2], vertices[3]);
@@ -523,7 +574,11 @@ namespace Unity.Physics
                         polygon.SetAsTriangle(vertices[0], vertices[1 + polygonIndex], vertices[2 + polygonIndex]);
                     }
 
-                    acceptHit |= dispatcher.Dispatch(input, (ConvexCollider*)&polygon, ref collector, m_NumColliderKeyBits, (uint)(primitiveKey << 1 | polygonIndex));
+                    bool dispatched = dispatcher.Dispatch(input, (ConvexCollider*)&polygon, ref collector, m_NumColliderKeyBits, (uint)(primitiveKey << 1 | polygonIndex));
+#if BVH_COLLECT_METRICS
+                    if (dispatched) BVHTraversalMetrics.MeshLeaf.TriangleHits++;
+#endif
+                    acceptHit |= dispatched;
                 }
 
                 return acceptHit;
@@ -535,7 +590,16 @@ namespace Unity.Physics
             where D : struct, IColliderCastDispatcher
         {
             var leafProcessor = new ColliderMeshLeafProcessor<D>(meshCollider);
-            return meshCollider->Mesh.BoundingVolumeHierarchy.ColliderCast(input, ref leafProcessor, ref collector);
+            int startNode = meshCollider->Mesh.BoundingVolumeHierarchy.GetStartNodeForChildIndex(input.QueryContext.MeshBvhChildIndex);
+
+#if BVH_COLLECT_METRICS
+            bool hit = meshCollider->Mesh.BoundingVolumeHierarchy.ColliderCastWithMetrics(input, ref leafProcessor,
+                ref collector, out var meshMetrics, startNode);
+            BVHTraversalMetrics.MeshAccumulator.Accumulate(ref meshMetrics);
+            return hit;
+#else
+            return meshCollider->Mesh.BoundingVolumeHierarchy.ColliderCast(input, ref leafProcessor, ref collector, startNode);
+#endif
         }
 
         private static unsafe bool MeshConvex<T>(ColliderCastInput input, ConvexCollider* convexCollider, ref T collector)

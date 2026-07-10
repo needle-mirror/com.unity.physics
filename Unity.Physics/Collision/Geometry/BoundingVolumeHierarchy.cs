@@ -4,12 +4,90 @@ using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
 
 namespace Unity.Physics
 {
+    #if BVH_COLLECT_METRICS
+    /// <summary>
+    /// Metrics for BVH raycast performance analysis
+    /// </summary>
+    internal struct BVHTraversalMetrics
+    {
+        public int NodesVisited;           // Total nodes popped from stack
+        public int NodesPruned;            // Nodes skipped by early termination
+        public int LeafNodesProcessed;     // Leaf nodes that had primitives tested
+        public int SortOperations;         // Number of times sorting was performed
+        public int MaxStackDepth;          // Maximum stack depth reached
+        public int PrimitivesTestedTotal;  // Total primitives (triangles/quads) tested
+
+        private static readonly SharedStatic<BVHTraversalMetrics> s_MeshAccumulator =
+            SharedStatic<BVHTraversalMetrics>.GetOrCreate<BVHTraversalMetrics>();
+
+        public static ref BVHTraversalMetrics MeshAccumulator => ref s_MeshAccumulator.Data;
+
+        // Leaf processor counters stored via SharedStatic for Burst compatibility.
+        // The leaf processor is a struct passed by ref through generic traversal,
+        // so it can't carry mutable state — these shared counters are the alternative.
+        private static readonly SharedStatic<MeshLeafMetrics> s_MeshLeaf =
+            SharedStatic<MeshLeafMetrics>.GetOrCreate<MeshLeafMetrics>();
+
+        public static ref MeshLeafMetrics MeshLeaf => ref s_MeshLeaf.Data;
+
+        public void Accumulate(ref BVHTraversalMetrics other)
+        {
+            NodesVisited += other.NodesVisited;
+            NodesPruned += other.NodesPruned;
+            LeafNodesProcessed += other.LeafNodesProcessed;
+            SortOperations += other.SortOperations;
+            MaxStackDepth = Unity.Mathematics.math.max(MaxStackDepth, other.MaxStackDepth);
+            PrimitivesTestedTotal += other.PrimitivesTestedTotal;
+        }
+
+        public void Reset()
+        {
+            NodesVisited = 0;
+            NodesPruned = 0;
+            LeafNodesProcessed = 0;
+            SortOperations = 0;
+            MaxStackDepth = 0;
+            PrimitivesTestedTotal = 0;
+        }
+    }
+
+    /// <summary>
+    /// Metrics for mesh BVH leaf processor performance analysis.
+    /// Tracks per-primitive work inside RayLeaf/ColliderCastLeaf/DistanceLeaf.
+    /// Stored via SharedStatic for Burst compatibility.
+    /// </summary>
+    internal struct MeshLeafMetrics
+    {
+        public int Calls;              // Times the leaf processor was called (primitives dispatched by BVH)
+        public int SectionCacheMisses; // Times CacheSection was called (section changed)
+        public int TriangleTests;      // Triangle/quad intersection tests performed
+        public int TriangleHits;       // Triangle/quad tests that produced a hit
+
+        public void Accumulate(ref MeshLeafMetrics other)
+        {
+            Calls += other.Calls;
+            SectionCacheMisses += other.SectionCacheMisses;
+            TriangleTests += other.TriangleTests;
+            TriangleHits += other.TriangleHits;
+        }
+
+        public void Reset()
+        {
+            Calls = 0;
+            SectionCacheMisses = 0;
+            TriangleTests = 0;
+            TriangleHits = 0;
+        }
+    }
+    #endif // BVH_COLLECT_METRICS
+
     // A 4-way bounding volume hierarchy
     internal partial struct BoundingVolumeHierarchy
     {
@@ -91,6 +169,17 @@ namespace Unity.Physics
                 SafetyChecks.CheckIndexAndThrow(index, m_MaxNodeCount);
                 return ref *(m_Nodes + index);
             }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int GetStartNodeForChildIndex(int meshBvhChildIndex)
+        {
+            if (meshBvhChildIndex >= 0)
+            {
+                ref var rootNode = ref GetNode(1);
+                return rootNode.Data[meshBvhChildIndex];
+            }
+            return 1;
         }
 
         /// <summary> Get the AABB that includes everything in this tree (compound AABB of first valid node in the tree). </summary>
@@ -1145,11 +1234,11 @@ namespace Unity.Physics
             {
                 int* unaryStack = stackalloc int[Constants.UnaryStackSize];
                 int* stack = unaryStack;
-                *stack++ = rootA;
+                FixedStackUtil.Push(ref stack, rootA);
 
                 do
                 {
-                    int nodeIndex = *(--stack);
+                    int nodeIndex = FixedStackUtil.Pop(ref stack);
                     if (collisionFilterA == null || CollisionFilter.IsCollisionEnabled(collisionFilterA[nodeIndex], collisionFilterB[nodeIndex]))
                     {
                         ProcessAA(ref treeA[nodeIndex], compressedDataBuffer, ref stack, ref stackA, ref stackB, ref pairWriter);
@@ -1158,8 +1247,8 @@ namespace Unity.Physics
 
                     while (stackA > binaryStackA)
                     {
-                        int nodeIndexA = *(--stackA);
-                        int nodeIndexB = *(--stackB);
+                        int nodeIndexA = FixedStackUtil.Pop(ref stackA);
+                        int nodeIndexB = FixedStackUtil.Pop(ref stackB);
 
                         if (collisionFilterA == null || CollisionFilter.IsCollisionEnabled(collisionFilterA[nodeIndexA], collisionFilterB[nodeIndexB]))
                         {
@@ -1172,13 +1261,13 @@ namespace Unity.Physics
             }
             else
             {
-                *stackA++ = rootA;
-                *stackB++ = rootB;
+                FixedStackUtil.Push(ref stackA, rootA);
+                FixedStackUtil.Push(ref stackB, rootB);
 
                 do
                 {
-                    int nodeIndexA = *(--stackA);
-                    int nodeIndexB = *(--stackB);
+                    int nodeIndexA = FixedStackUtil.Pop(ref stackA);
+                    int nodeIndexB = FixedStackUtil.Pop(ref stackB);
                     if (collisionFilterA == null || CollisionFilter.IsCollisionEnabled(collisionFilterA[nodeIndexA], collisionFilterB[nodeIndexB]))
                     {
                         ProcessAB(&treeA[nodeIndexA], &treeB[nodeIndexB], treeA, treeB, compressedDataBuffer, ref stackA, ref stackB, ref pairWriter);
@@ -1222,15 +1311,12 @@ namespace Unity.Physics
             {
                 int4 internalNodes;
                 int numInternals = math.compress((int*)&internalNodes, 0, nodeData, node.AreInternalsValid);
-                *((int4*)stack) = internalNodes;
-                stack += numInternals;
+                FixedStackUtil.BulkPush(ref stack, internalNodes, numInternals);
 
                 for (int i = 0; i < 3; i++)
                 {
-                    *((int4*)stackA) = new int4(nodeData[i]);
-                    *((int4*)stackB) = compressedData[i];
-                    stackA += compressedCounts[i];
-                    stackB += compressedCounts[i];
+                    FixedStackUtil.BulkPush(ref stackA, new int4(nodeData[i]), compressedCounts[i]);
+                    FixedStackUtil.BulkPush(ref stackB, compressedData[i], compressedCounts[i]);
                 }
             }
         }
@@ -1282,10 +1368,8 @@ namespace Unity.Physics
             {
                 for (int i = 0; i < 4; i++)
                 {
-                    *((int4*)stackA) = new int4(nodeA->Data[i]);
-                    *((int4*)stackB) = compressedData[i];
-                    stackA += compressedCount[i];
-                    stackB += compressedCount[i];
+                    FixedStackUtil.BulkPush(ref stackA, new int4(nodeA->Data[i]), compressedCount[i]);
+                    FixedStackUtil.BulkPush(ref stackB, compressedData[i], compressedCount[i]);
                 }
             }
             else
@@ -1301,7 +1385,9 @@ namespace Unity.Physics
 
                         do
                         {
-                            Node* internalNode = treeB + *(--internalStack);
+                            int index = FixedStackUtil.Pop(ref internalStack);
+                            Node* internalNode = treeB + index;
+
                             int4 internalCompressedData;
                             int internalCount = math.compress((int*)&internalCompressedData, 0, internalNode->Data, aabbT.Overlap1Vs4(ref internalNode->Bounds));
                             if (internalCount > 0)
@@ -1313,8 +1399,7 @@ namespace Unity.Physics
                                 }
                                 else
                                 {
-                                    *((int4*)internalStack) = internalCompressedData;
-                                    internalStack += internalCount;
+                                    FixedStackUtil.BulkPush(ref internalStack, internalCompressedData, internalCount);
                                 }
                             }
                         }
@@ -1340,13 +1425,13 @@ namespace Unity.Physics
         {
             int* binaryStack = stackalloc int[Constants.BinaryStackSize];
             int* stack = binaryStack;
-            *stack++ = root;
+            FixedStackUtil.Push(ref stack, root);
 
             FourTransposedAabbs aabbT;
             (&aabbT)->SetAllAabbs(input.Aabb);
             do
             {
-                int nodeIndex = *(--stack);
+                int nodeIndex = FixedStackUtil.Pop(ref stack);
                 Node* node = m_Nodes + nodeIndex;
                 bool4 overlap = aabbT.Overlap1Vs4(ref node->Bounds);
                 int4 compressedValues;
@@ -1361,8 +1446,7 @@ namespace Unity.Physics
                 }
                 else
                 {
-                    *((int4*)stack) = compressedValues;
-                    stack += compressedCount;
+                    FixedStackUtil.BulkPush(ref stack, compressedValues, compressedCount);
                 }
             }
             while (stack > binaryStack);
@@ -1375,25 +1459,64 @@ namespace Unity.Physics
         public interface IRaycastLeafProcessor
         {
             // Called when the query hits a leaf node of the bounding volume hierarchy
-            bool RayLeaf<T>(RaycastInput input, int leafData, ref T collector) where T : struct, ICollector<RaycastHit>;
+            bool RayLeaf<T>(RaycastInput input, int leafData, ref T collector)
+                where T : struct, ICollector<RaycastHit>;
         }
 
-        public unsafe bool Raycast<TProcessor, TCollector>(RaycastInput input, ref TProcessor leafProcessor, ref TCollector collector)
+        public unsafe bool Raycast<TProcessor, TCollector>(RaycastInput input,
+            ref TProcessor leafProcessor, ref TCollector collector, int startNode = 1)
             where TProcessor : struct, IRaycastLeafProcessor
             where TCollector : struct, ICollector<RaycastHit>
         {
+#if BVH_COLLECT_METRICS
+            return RaycastWithMetrics(input, ref leafProcessor, ref collector, out _, startNode);
+        }
+
+        public unsafe bool RaycastWithMetrics<TProcessor, TCollector>(RaycastInput input,
+            ref TProcessor leafProcessor, ref TCollector collector,
+            out BVHTraversalMetrics metrics, int startNode = 1)
+            where TProcessor : struct, IRaycastLeafProcessor
+            where TCollector : struct, ICollector<RaycastHit>
+        {
+            metrics = default;
+#endif
             bool hadHit = false;
             int* stack = stackalloc int[Constants.UnaryStackSize], top = stack;
-            *top++ = 1;
+            FixedStackUtil.Push(ref top, startNode);
             do
             {
-                Node* node = m_Nodes + *(--top);
+                int nodeIndex = FixedStackUtil.Pop(ref top);
+                Node* node = m_Nodes + nodeIndex;
+
+#if BVH_COLLECT_METRICS
+                metrics.NodesVisited++;
+                int currentStackDepth = (int)(top - stack);
+                if (currentStackDepth > metrics.MaxStackDepth)
+                {
+                    metrics.MaxStackDepth = currentStackDepth;
+                }
+#endif
+                // Re-test the node's bounds since MaxFraction may have shrunk since this node was pushed
                 bool4 hitMask = node->Bounds.Raycast(input.Ray, collector.MaxFraction, out float4 hitFractions);
+
+                // Early out if node is completely beyond MaxFraction
+                if (!math.any(hitMask))
+                {
+#if BVH_COLLECT_METRICS
+                    metrics.NodesPruned++;
+#endif
+                    continue;
+                }
+
                 int4 hitData;
                 int hitCount = math.compress((int*)(&hitData), 0, node->Data, hitMask);
 
                 if (node->IsLeaf)
                 {
+#if BVH_COLLECT_METRICS
+                    metrics.LeafNodesProcessed++;
+                    metrics.PrimitivesTestedTotal += hitCount;
+#endif
                     for (int i = 0; i < hitCount; i++)
                     {
                         hadHit |= leafProcessor.RayLeaf(input, hitData[i], ref collector);
@@ -1403,10 +1526,31 @@ namespace Unity.Physics
                         }
                     }
                 }
-                else
+                else // not a leaf
                 {
-                    *((int4*)top) = hitData;
-                    top += hitCount;
+                    // For any-hit queries, skip sorted traversal since we don't need the closest hit
+                    if (collector.EarlyOutOnFirstHit)
+                    {
+                        FixedStackUtil.BulkPush(ref top, hitData, hitCount);
+                    }
+                    else
+                    {
+#if BVH_COLLECT_METRICS
+                        if (hitCount >= 2) metrics.SortOperations++;
+#endif
+                        // Extract fractions for hit children
+                        float4 compressedFractions = float4.zero;
+                        math.compress(&compressedFractions.x, 0, hitFractions, hitMask);
+
+                        SortByAscendingFraction(hitCount, ref compressedFractions, ref hitData);
+
+                        // Push sorted children (hitData) onto stack in reverse order (furthest first)
+                        // so that the closest nodes will be on top and processed first
+                        for (int i = hitCount - 1; i >= 0; i--)
+                        {
+                            FixedStackUtil.Push(ref top, hitData[i]);
+                        }
+                    }
                 }
             }
             while (top > stack);
@@ -1421,13 +1565,26 @@ namespace Unity.Physics
         public interface IColliderCastLeafProcessor
         {
             // Called when the query hits a leaf node of the bounding volume hierarchy
-            bool ColliderCastLeaf<T>(ColliderCastInput input, int leafData, ref T collector) where T : struct, ICollector<ColliderCastHit>;
+            bool ColliderCastLeaf<T>(ColliderCastInput input, int leafData, ref T collector)
+                where T : struct, ICollector<ColliderCastHit>;
         }
 
-        public unsafe bool ColliderCast<TProcessor, TCollector>(ColliderCastInput input, ref TProcessor leafProcessor, ref TCollector collector)
+        public unsafe bool ColliderCast<TProcessor, TCollector>(ColliderCastInput input,
+            ref TProcessor leafProcessor, ref TCollector collector, int startNode = 1)
             where TProcessor : struct, IColliderCastLeafProcessor
             where TCollector : struct, ICollector<ColliderCastHit>
         {
+#if BVH_COLLECT_METRICS
+            return ColliderCastWithMetrics(input, ref leafProcessor, ref collector, out _, startNode);
+        }
+
+        public unsafe bool ColliderCastWithMetrics<TProcessor, TCollector>(ColliderCastInput input,
+            ref TProcessor leafProcessor, ref TCollector collector, out BVHTraversalMetrics metrics, int startNode = 1)
+            where TProcessor : struct, IColliderCastLeafProcessor
+            where TCollector : struct, ICollector<ColliderCastHit>
+        {
+            metrics = default;
+#endif //BVH_COLLECT_METRICS
             float3 aabbExtents;
             Ray aabbRay;
             {
@@ -1441,20 +1598,44 @@ namespace Unity.Physics
             bool hadHit = false;
 
             int* stack = stackalloc int[Constants.UnaryStackSize], top = stack;
-            *top++ = 1;
+            FixedStackUtil.Push(ref top, startNode);
             do
             {
-                Node* node = m_Nodes + *(--top);
+                int nodeIndex = FixedStackUtil.Pop(ref top);
+                Node* node = m_Nodes + nodeIndex;
+
+#if BVH_COLLECT_METRICS
+                metrics.NodesVisited++;
+                int currentStackDepth = (int)(top - stack);
+                if (currentStackDepth > metrics.MaxStackDepth)
+                {
+                    metrics.MaxStackDepth = currentStackDepth;
+                }
+#endif
                 FourTransposedAabbs bounds = node->Bounds;
                 bounds.Lx -= aabbExtents.x;
                 bounds.Ly -= aabbExtents.y;
                 bounds.Lz -= aabbExtents.z;
                 bool4 hitMask = bounds.Raycast(aabbRay, collector.MaxFraction, out float4 hitFractions);
+
+                // Early out if node is completely beyond MaxFraction
+                if (!math.any(hitMask))
+                {
+#if BVH_COLLECT_METRICS
+                    metrics.NodesPruned++;
+#endif
+                    continue;
+                }
+
                 int4 hitData;
                 int hitCount = math.compress((int*)(&hitData), 0, node->Data, hitMask);
 
                 if (node->IsLeaf)
                 {
+#if BVH_COLLECT_METRICS
+                    metrics.LeafNodesProcessed++;
+                    metrics.PrimitivesTestedTotal += hitCount;
+#endif
                     for (int i = 0; i < hitCount; i++)
                     {
                         hadHit |= leafProcessor.ColliderCastLeaf(input, hitData[i], ref collector);
@@ -1464,17 +1645,37 @@ namespace Unity.Physics
                         }
                     }
                 }
-                else
+                else // not a leaf
                 {
-                    *((int4*)top) = hitData;
-                    top += hitCount;
+                    // For any-hit queries, skip sorted traversal since we don't need the closest hit
+                    if (collector.EarlyOutOnFirstHit)
+                    {
+                        FixedStackUtil.BulkPush(ref top, hitData, hitCount);
+                    }
+                    else
+                    {
+#if BVH_COLLECT_METRICS
+                        if (hitCount >= 2) metrics.SortOperations++;
+#endif
+                        // Extract fractions for hit children
+                        float4 compressedFractions = float4.zero;
+                        math.compress(&compressedFractions.x, 0, hitFractions, hitMask);
+
+                        SortByAscendingFraction(hitCount, ref compressedFractions, ref hitData);
+
+                        // Push sorted children (hitData) onto stack in reverse order (furthest first)
+                        // so that the closest nodes will be on top and processed first
+                        for (int i = hitCount - 1; i >= 0; i--)
+                        {
+                            FixedStackUtil.Push(ref top, hitData[i]);
+                        }
+                    }
                 }
             }
             while (top > stack);
 
             return hadHit;
         }
-
         #endregion
 
         #region Point distance query
@@ -1482,20 +1683,32 @@ namespace Unity.Physics
         public interface IPointDistanceLeafProcessor
         {
             // Called when the query hits a leaf node of the bounding volume hierarchy
-            bool DistanceLeaf<T>(PointDistanceInput input, int leafData, ref T collector) where T : struct, ICollector<DistanceHit>;
+            bool DistanceLeaf<T>(PointDistanceInput input, int leafData, ref T collector)
+                where T : struct, ICollector<DistanceHit>;
         }
 
-        public unsafe bool Distance<TProcessor, TCollector>(PointDistanceInput input, ref TProcessor leafProcessor, ref TCollector collector)
+        public unsafe bool Distance<TProcessor, TCollector>(PointDistanceInput input,
+            ref TProcessor leafProcessor, ref TCollector collector, int startNode = 1)
             where TProcessor : struct, IPointDistanceLeafProcessor
             where TCollector : struct, ICollector<DistanceHit>
         {
             UnityEngine.Assertions.Assert.IsTrue(collector.MaxFraction <= input.MaxDistance);
+#if BVH_COLLECT_METRICS
+            return DistanceWithMetrics(input, ref leafProcessor, ref collector, out _, startNode);
+        }
 
+        public unsafe bool DistanceWithMetrics<TProcessor, TCollector>(PointDistanceInput input,
+            ref TProcessor leafProcessor, ref TCollector collector, out BVHTraversalMetrics metrics, int startNode = 1)
+            where TProcessor : struct, IPointDistanceLeafProcessor
+            where TCollector : struct, ICollector<DistanceHit>
+        {
+            metrics = default;
+#endif //BVH_COLLECT_METRICS
             bool hadHit = false;
 
             int* binaryStack = stackalloc int[Constants.BinaryStackSize];
             int* stack = binaryStack;
-            *stack++ = 1;
+            FixedStackUtil.Push(ref stack, startNode);
 
             var pointT = new Math.FourTransposedPoints(input.Position);
             var invScaleSq = input.QueryContext.InvTargetScale;
@@ -1504,19 +1717,41 @@ namespace Unity.Physics
 
             do
             {
-                int nodeIndex = *(--stack);
+                int nodeIndex = FixedStackUtil.Pop(ref stack);
                 Node* node = m_Nodes + nodeIndex;
+
+#if BVH_COLLECT_METRICS
+                metrics.NodesVisited++;
+                int currentStackDepth = (int)(stack - binaryStack);
+                if (currentStackDepth > metrics.MaxStackDepth)
+                {
+                    metrics.MaxStackDepth = currentStackDepth;
+                }
+#endif
                 float4 distanceToNodesSquared = node->Bounds.DistanceFromPointSquared(ref pointT);
                 bool4 overlap = (node->Bounds.Lx <= node->Bounds.Hx) & (distanceToNodesSquared <= maxDistanceSquared);
+
+                // Early out if node is beyond MaxDistance
+                if (!math.any(overlap)) // overlap called hitMask in other similar methods
+                {
+#if BVH_COLLECT_METRICS
+                    metrics.NodesPruned++;
+#endif
+                    continue;
+                }
+
                 int4 hitData;
                 int hitCount = math.compress((int*)(&hitData), 0, node->Data, overlap);
 
                 if (node->IsLeaf)
                 {
+#if BVH_COLLECT_METRICS
+                    metrics.LeafNodesProcessed++;
+                    metrics.PrimitivesTestedTotal += hitCount;
+#endif
                     for (int i = 0; i < hitCount; i++)
                     {
                         hadHit |= leafProcessor.DistanceLeaf(input, hitData[i], ref collector);
-
                         if (collector.EarlyOutOnFirstHit && hadHit)
                         {
                             return true;
@@ -1525,10 +1760,31 @@ namespace Unity.Physics
 
                     maxDistanceSquared = new float4(collector.MaxFraction * collector.MaxFraction * invScaleSq);
                 }
-                else
+                else // not a leaf
                 {
-                    *((int4*)stack) = hitData;
-                    stack += hitCount;
+                    // For any-hit queries, skip sorted traversal since we don't need the closest hit
+                    if (collector.EarlyOutOnFirstHit)
+                    {
+                        FixedStackUtil.BulkPush(ref stack, hitData, hitCount);
+                    }
+                    else
+                    {
+#if BVH_COLLECT_METRICS
+                        if (hitCount >= 2) metrics.SortOperations++;
+#endif
+                        // Extract fractions for hit children
+                        float4 compressedFractions = float4.zero;
+                        math.compress(&compressedFractions.x, 0, distanceToNodesSquared, overlap);
+
+                        SortByAscendingFraction(hitCount, ref compressedFractions, ref hitData);
+
+                        // Push sorted children (hitData) onto stack in reverse order (furthest first)
+                        // so that the closest nodes will be on top and processed first
+                        for (int i = hitCount - 1; i >= 0; i--)
+                        {
+                            FixedStackUtil.Push(ref stack, hitData[i]);
+                        }
+                    }
                 }
             }
             while (stack > binaryStack);
@@ -1536,27 +1792,39 @@ namespace Unity.Physics
             return hadHit;
         }
 
-        #endregion
+        #endregion // Point distance query
 
         #region Collider distance query
 
         public interface IColliderDistanceLeafProcessor
         {
             // Called when the query hits a leaf node of the bounding volume hierarchy
-            bool DistanceLeaf<T>(ColliderDistanceInput input, int leafData, ref T collector) where T : struct, ICollector<DistanceHit>;
+            bool DistanceLeaf<T>(ColliderDistanceInput input, int leafData, ref T collector)
+                where T : struct, ICollector<DistanceHit>;
         }
 
-        public unsafe bool Distance<TProcessor, TCollector>(ColliderDistanceInput input, ref TProcessor leafProcessor, ref TCollector collector)
+        public unsafe bool Distance<TProcessor, TCollector>(ColliderDistanceInput input,
+            ref TProcessor leafProcessor, ref TCollector collector, int startNode = 1)
             where TProcessor : struct, IColliderDistanceLeafProcessor
             where TCollector : struct, ICollector<DistanceHit>
         {
             UnityEngine.Assertions.Assert.IsTrue(collector.MaxFraction <= input.MaxDistance);
+#if BVH_COLLECT_METRICS
+            return DistanceWithMetrics(input, ref leafProcessor, ref collector, out _, startNode);
+        }
 
+        public unsafe bool DistanceWithMetrics<TProcessor, TCollector>(ColliderDistanceInput input,
+            ref TProcessor leafProcessor, ref TCollector collector, out BVHTraversalMetrics metrics, int startNode = 1)
+            where TProcessor : struct, IColliderDistanceLeafProcessor
+            where TCollector : struct, ICollector<DistanceHit>
+        {
+            metrics = default;
+#endif //BVH_COLLECT_METRICS
             bool hadHit = false;
 
             int* binaryStack = stackalloc int[Constants.BinaryStackSize];
             int* stack = binaryStack;
-            *stack++ = 1;
+            FixedStackUtil.Push(ref stack, startNode);
 
             var invScaleSq = input.QueryContext.InvTargetScale;
             invScaleSq *= invScaleSq;
@@ -1570,15 +1838,37 @@ namespace Unity.Physics
 
             do
             {
-                int nodeIndex = *(--stack);
+                int nodeIndex = FixedStackUtil.Pop(ref stack);
                 Node* node = m_Nodes + nodeIndex;
+#if BVH_COLLECT_METRICS
+                metrics.NodesVisited++;
+                int currentStackDepth = (int)(stack - binaryStack);
+                if (currentStackDepth > metrics.MaxStackDepth)
+                {
+                    metrics.MaxStackDepth = currentStackDepth;
+                }
+#endif
                 float4 distanceToNodesSquared = node->Bounds.DistanceFromAabbSquared(ref aabbT);
                 bool4 overlap = (node->Bounds.Lx <= node->Bounds.Hx) & (distanceToNodesSquared <= maxDistanceSquared);
+
+                // Early out if node is completely beyond MaxDistance
+                if (!math.any(overlap))
+                {
+#if BVH_COLLECT_METRICS
+                    metrics.NodesPruned++;
+#endif
+                    continue;
+                }
+
                 int4 hitData;
                 int hitCount = math.compress((int*)(&hitData), 0, node->Data, overlap);
 
                 if (node->IsLeaf)
                 {
+#if BVH_COLLECT_METRICS
+                    metrics.LeafNodesProcessed++;
+                    metrics.PrimitivesTestedTotal += hitCount;
+#endif
                     for (int i = 0; i < hitCount; i++)
                     {
                         hadHit |= leafProcessor.DistanceLeaf(input, hitData[i], ref collector);
@@ -1586,14 +1876,35 @@ namespace Unity.Physics
                         {
                             return true;
                         }
-
-                        maxDistanceSquared = new float4(collector.MaxFraction * collector.MaxFraction * invScaleSq);
                     }
+
+                    maxDistanceSquared = new float4(collector.MaxFraction * collector.MaxFraction * invScaleSq);
                 }
-                else
+                else // not a leaf
                 {
-                    *((int4*)stack) = hitData;
-                    stack += hitCount;
+                    // For any-hit queries, skip sorted traversal since we don't need the closest hit
+                    if (collector.EarlyOutOnFirstHit)
+                    {
+                        FixedStackUtil.BulkPush(ref stack, hitData, hitCount);
+                    }
+                    else
+                    {
+#if BVH_COLLECT_METRICS
+                        if (hitCount >= 2) metrics.SortOperations++;
+#endif
+                        // Extract fractions for hit children
+                        float4 compressedFractions = float4.zero;
+                        math.compress(&compressedFractions.x, 0, distanceToNodesSquared, overlap);
+
+                        SortByAscendingFraction(hitCount, ref compressedFractions, ref hitData);
+
+                        // Push sorted children (hitData) onto stack in reverse order (furthest first)
+                        // so that the closest nodes will be on top and processed first
+                        for (int i = hitCount - 1; i >= 0; i--)
+                        {
+                            FixedStackUtil.Push(ref stack, hitData[i]);
+                        }
+                    }
                 }
             }
             while (stack > binaryStack);
@@ -1601,6 +1912,114 @@ namespace Unity.Physics
             return hadHit;
         }
 
-        #endregion
+        #endregion // Collider distance query
+
+        #region Utilities
+        /// <summary>
+        /// Use a sorting network to sort a fixed-size array (of max size 4) in ascending order based on
+        /// the values in compressedFractions. Both compressedFractions and hitData are sorted.
+        /// This sorting method is optimal for small fixed-size arrays
+        /// </summary>
+        void SortByAscendingFraction(int hitCount, ref float4 compressedFractions, ref int4 hitData)
+        {
+            switch (hitCount)
+            {
+                case 2:
+                    if (compressedFractions[1] < compressedFractions[0])
+                    {
+                        (compressedFractions[0],compressedFractions[1]) = (compressedFractions[1], compressedFractions[0]);
+                        (hitData[0], hitData[1]) = (hitData[1], hitData[0]);
+                    }
+                    break;
+
+                case 3:
+                    if (compressedFractions[1] < compressedFractions[0])
+                    {
+                        (compressedFractions[0],compressedFractions[1]) = (compressedFractions[1], compressedFractions[0]);
+                        (hitData[0], hitData[1]) = (hitData[1], hitData[0]);
+                    }
+
+                    if (compressedFractions[2] < compressedFractions[1])
+                    {
+                        (compressedFractions[1],compressedFractions[2]) = (compressedFractions[2], compressedFractions[1]);
+                        (hitData[1], hitData[2]) = (hitData[2], hitData[1]);
+                    }
+                    if (compressedFractions[1] < compressedFractions[0])
+                    {
+                        (compressedFractions[0],compressedFractions[1]) = (compressedFractions[1], compressedFractions[0]);
+                        (hitData[0], hitData[1]) = (hitData[1], hitData[0]);
+                    }
+                    break;
+
+                case 4:
+                    if (compressedFractions[1] < compressedFractions[0])
+                    {
+                        (compressedFractions[0],compressedFractions[1]) = (compressedFractions[1], compressedFractions[0]);
+                        (hitData[0], hitData[1]) = (hitData[1], hitData[0]);
+                    }
+
+                    if (compressedFractions[2] < compressedFractions[1])
+                    {
+                        (compressedFractions[1],compressedFractions[2]) = (compressedFractions[2], compressedFractions[1]);
+                        (hitData[1], hitData[2]) = (hitData[2], hitData[1]);
+                    }
+                    if (compressedFractions[1] < compressedFractions[0])
+                    {
+                        (compressedFractions[0],compressedFractions[1]) = (compressedFractions[1], compressedFractions[0]);
+                        (hitData[0], hitData[1]) = (hitData[1], hitData[0]);
+                    }
+
+                    if (compressedFractions[3] < compressedFractions[2])
+                    {
+                        (compressedFractions[2],compressedFractions[3]) = (compressedFractions[3], compressedFractions[2]);
+                        (hitData[2], hitData[3]) = (hitData[3], hitData[2]);
+                    }
+                    if (compressedFractions[2] < compressedFractions[0])
+                    {
+                        (compressedFractions[0],compressedFractions[2]) = (compressedFractions[2], compressedFractions[0]);
+                        (hitData[0], hitData[2]) = (hitData[2], hitData[0]);
+                    }
+                    if (compressedFractions[3] < compressedFractions[1])
+                    {
+                        (compressedFractions[1],compressedFractions[3]) = (compressedFractions[3], compressedFractions[1]);
+                        (hitData[1], hitData[3]) = (hitData[3], hitData[1]);
+                    }
+                    if (compressedFractions[2] < compressedFractions[1])
+                    {
+                        (compressedFractions[1],compressedFractions[2]) = (compressedFractions[2], compressedFractions[1]);
+                        (hitData[1], hitData[2]) = (hitData[2], hitData[1]);
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        struct FixedStackUtil
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static unsafe void Push(ref int* ptr, int value)
+            {
+                *ptr = value;
+                ++ptr;
+            }
+
+            // Writes all 4 elements in one 16-byte store regardless of hitCount, and only advances ptr by count.
+            // The extra writes beyond hitCount are harmless since the stack has capacity.
+            // Single instruction likely more performant that the overhead from a Memcpy with only data that is needed
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static unsafe void BulkPush(ref int* ptr, int4 values, int count)
+            {
+                *((int4*)ptr) = values;
+                ptr += count;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public static unsafe int Pop(ref int* ptr)
+            {
+               return *(--ptr);
+            }
+        }
+        #endregion //Utilities
     }
 }

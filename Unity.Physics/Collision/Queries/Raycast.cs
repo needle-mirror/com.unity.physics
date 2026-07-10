@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Unity.Assertions;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -243,7 +244,7 @@ namespace Unity.Physics
 
         public static bool RayTriangle(
             float3 rayOrigin, float3 rayDisplacement,
-            float3 a, float3 b, float3 c, // TODO: float3x3?
+            float3 a, float3 b, float3 c,
             ref float fraction, out float3 unnormalizedNormal)
         {
             float3 vAb = b - a;
@@ -287,15 +288,16 @@ namespace Unity.Physics
             return math.all(dots <= 0) || math.all(dots >= 0);
         }
 
-        public static bool RayQuad(
-            float3 rayOrigin, float3 rayDisplacement,
-            float3 a, float3 b, float3 c, float3 d, // TODO: float3x4?
+        public static bool RayQuad(float3 rayOrigin, float3 rayDisplacement, ref float3x4 vertices,
             ref float fraction, out float3 unnormalizedNormal)
         {
-            float3 vAb = b - a;
-            float3 vCa = a - c;
+            float3 a = vertices.c0;
+            float3 b = vertices.c1;
+            float3 c = vertices.c2;
+            float3 d = vertices.c3;
 
-            float3 vN = math.cross(vAb, vCa);
+            float3 vAb = b - a;
+            float3 vN = math.cross(vAb, a - c);
             float3 vAp = rayOrigin - a;
             float3 end0 = vAp + rayDisplacement * fraction;
 
@@ -308,17 +310,14 @@ namespace Unity.Physics
                 return false;
             }
 
-            float3 vBc = c - b;
-            float3 vDa = a - d;
-            float3 vCd = d - c;
             fraction *= nDotAp / (nDotAp - e);
             unnormalizedNormal = vN * math.sign(nDotAp);
 
             // edge normals
             float3 c0 = math.cross(vAb, rayDisplacement);
-            float3 c1 = math.cross(vBc, rayDisplacement);
-            float3 c2 = math.cross(vCd, rayDisplacement);
-            float3 c3 = math.cross(vDa, rayDisplacement);
+            float3 c1 = math.cross(c - b, rayDisplacement); // vBc = c - b;
+            float3 c2 = math.cross(d - c, rayDisplacement); // vCd = d - c
+            float3 c3 = math.cross(a - d, rayDisplacement); // vDa = a - d
 
             float4 dots;
             {
@@ -436,7 +435,8 @@ namespace Unity.Physics
                 case ColliderType.Quad:
                 {
                     var quad = (PolygonCollider*)collider;
-                    hadHit = RayQuad(input.Ray.Origin, input.Ray.Displacement, quad->Vertices[0], quad->Vertices[1], quad->Vertices[2], quad->Vertices[3], ref fraction, out float3 unnormalizedNormal);
+                    hadHit = RayQuad(input.Ray.Origin, input.Ray.Displacement, ref *(float3x4*)quad->ConvexHull.VerticesPtr,
+                        ref fraction, out float3 unnormalizedNormal);
                     normal = hadHit ? math.normalize(unnormalizedNormal) : float3.zero;
                     material = quad->Material;
                     break;
@@ -477,74 +477,180 @@ namespace Unity.Physics
             return false;
         }
 
-        // Mesh
         private unsafe struct RayMeshLeafProcessor : BoundingVolumeHierarchy.IRaycastLeafProcessor
         {
             private readonly Mesh* m_Mesh;
             private readonly uint m_NumColliderKeyBits;
+            private int m_CachedSectionIndex;
+            private Mesh.PrimitiveFlags* m_CachedFlagsPtr;
+            private Mesh.PrimitiveVertexIndices* m_CachedVertexIndicesPtr;
+            private float3* m_CachedVerticesPtr;
+            private short* m_CachedMaterialIndicesPtr;
+            private Material* m_CachedMaterialsPtr;
 
             public RayMeshLeafProcessor(MeshCollider* meshCollider)
             {
                 m_Mesh = &meshCollider->Mesh;
                 m_NumColliderKeyBits = meshCollider->NumColliderKeyBits;
+                m_CachedSectionIndex = -1;
+                m_CachedFlagsPtr = null;
+                m_CachedVertexIndicesPtr = null;
+                m_CachedVerticesPtr = null;
+                m_CachedMaterialIndicesPtr = null;
+                m_CachedMaterialsPtr = null;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private void CacheSection(int sectionIndex)
+            {
+                m_CachedSectionIndex = sectionIndex;
+                ref var section = ref m_Mesh->Sections[sectionIndex];
+                m_CachedFlagsPtr = BlobArray.GetUnsafeReadOnlyPtr<Mesh.PrimitiveFlags>(ref section.PrimitiveFlagsBlob);
+                m_CachedVertexIndicesPtr = BlobArray.GetUnsafeReadOnlyPtr<Mesh.PrimitiveVertexIndices>(ref section.PrimitiveVertexIndicesBlob);
+                m_CachedVerticesPtr = BlobArray.GetUnsafeReadOnlyPtr<float3>(ref section.VerticesBlob);
+                m_CachedMaterialIndicesPtr = BlobArray.GetUnsafeReadOnlyPtr<short>(ref section.PrimitiveMaterialIndicesBlob);
+                m_CachedMaterialsPtr = BlobArray.GetUnsafeReadOnlyPtr<Material>(ref section.MaterialsBlob);
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private bool SubmitHit<T>(RaycastInput input, int primitiveKey, int polygonIndex, int sectionPrimitiveIndex,
+                float fraction, float3 unnormalizedNormal, ref T collector) where T : struct, ICollector<RaycastHit>
+            {
+                var normalizedNormal = math.normalize(unnormalizedNormal);
+                normalizedNormal = math.select(normalizedNormal, -normalizedNormal, input.QueryContext.TargetScale < 0.0f);
+
+                var hit = new RaycastHit
+                {
+                    Fraction = fraction,
+                    Position = Mul(input.QueryContext.WorldFromLocalTransform, input.Ray.Origin + input.Ray.Displacement * fraction),
+                    SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, normalizedNormal),
+                    RigidBodyIndex = input.QueryContext.RigidBodyIndex,
+                    ColliderKey = input.QueryContext.SetSubKey(m_NumColliderKeyBits, (uint)(primitiveKey << 1 | polygonIndex)),
+                    Material = m_CachedMaterialsPtr[m_CachedMaterialIndicesPtr[sectionPrimitiveIndex]],
+                    Entity = input.QueryContext.Entity
+                };
+
+                return collector.AddHit(hit);
             }
 
             public bool RayLeaf<T>(RaycastInput input, int primitiveKey, ref T collector) where T : struct, ICollector<RaycastHit>
             {
-                m_Mesh->GetPrimitive(primitiveKey, out float3x4 vertices, out Mesh.PrimitiveFlags flags, out CollisionFilter filter, out Material material);
+                int sectionIndex = primitiveKey >> 8;
+                int sectionPrimitiveIndex = primitiveKey & 0xFF;
 
-                if (!CollisionFilter.IsCollisionEnabled(input.Filter, filter)) // TODO: could do this check within GetPrimitive()
+#if BVH_COLLECT_METRICS
+                BVHTraversalMetrics.MeshLeaf.Calls++;
+#endif
+
+                if (sectionIndex != m_CachedSectionIndex)
                 {
+                    CacheSection(sectionIndex);
+#if BVH_COLLECT_METRICS
+                    BVHTraversalMetrics.MeshLeaf.SectionCacheMisses++;
+#endif
+                }
+
+                Mesh.PrimitiveFlags flags = m_CachedFlagsPtr[sectionPrimitiveIndex];
+
+                Mesh.PrimitiveVertexIndices vertexIndices = m_CachedVertexIndicesPtr[sectionPrimitiveIndex];
+                float3x4 vertices = new float3x4(
+                    m_CachedVerticesPtr[vertexIndices.A],
+                    m_CachedVerticesPtr[vertexIndices.B],
+                    m_CachedVerticesPtr[vertexIndices.C],
+                    m_CachedVerticesPtr[vertexIndices.D]);
+
+                bool isQuad = Mesh.IsPrimitiveFlagSet(flags, Mesh.PrimitiveFlags.IsQuad);
+                if (isQuad)
+                {
+#if BVH_COLLECT_METRICS
+                    BVHTraversalMetrics.MeshLeaf.TriangleTests++;
+#endif
+                    float fraction = collector.MaxFraction;
+                    if (RayQuad(input.Ray.Origin, input.Ray.Displacement, ref vertices, ref fraction, out float3 normal)
+                        && fraction < collector.MaxFraction)
+                    {
+#if BVH_COLLECT_METRICS
+                        BVHTraversalMetrics.MeshLeaf.TriangleHits++;
+#endif
+                        return SubmitHit(input, primitiveKey, 0, sectionPrimitiveIndex, fraction, normal, ref collector);
+                    }
                     return false;
                 }
 
-                int numPolygons = Mesh.GetNumPolygonsInPrimitive(flags);
-                bool isQuad = Mesh.IsPrimitiveFlagSet(flags, Mesh.PrimitiveFlags.IsQuad);
-
-                bool acceptHit = false;
-                float3 unnormalizedNormal;
-
-                for (int polygonIndex = 0; polygonIndex < numPolygons; polygonIndex++)
+                if (Mesh.IsPrimitiveFlagSet(flags, Mesh.PrimitiveFlags.IsTriangle))
                 {
+#if BVH_COLLECT_METRICS
+                    BVHTraversalMetrics.MeshLeaf.TriangleTests++;
+#endif
                     float fraction = collector.MaxFraction;
-                    bool hadHit;
-                    if (isQuad)
+                    if (RayTriangle(input.Ray.Origin, input.Ray.Displacement,
+                            vertices[0], vertices[1], vertices[2], ref fraction, out float3 normal)
+                        && fraction < collector.MaxFraction)
                     {
-                        hadHit = RayQuad(input.Ray.Origin, input.Ray.Displacement, vertices[0], vertices[1], vertices[2], vertices[3], ref fraction, out unnormalizedNormal);
+#if BVH_COLLECT_METRICS
+                        BVHTraversalMetrics.MeshLeaf.TriangleHits++;
+#endif
+                        return SubmitHit(input, primitiveKey, 0, sectionPrimitiveIndex, fraction, normal, ref collector);
                     }
-                    else
-                    {
-                        hadHit = RayTriangle(input.Ray.Origin, input.Ray.Displacement, vertices[0], vertices[polygonIndex + 1], vertices[polygonIndex + 2], ref fraction, out unnormalizedNormal);
-                    }
+                    return false;
+                }
 
-                    if (hadHit && fraction < collector.MaxFraction)
-                    {
-                        var normalizedNormal = math.normalize(unnormalizedNormal);
+                // Triangle pair: test both, submit closer first to tighten MaxFraction
+#if BVH_COLLECT_METRICS
+                BVHTraversalMetrics.MeshLeaf.TriangleTests += 2;
+#endif
+                float fraction0 = collector.MaxFraction;
+                bool hit0 = RayTriangle(input.Ray.Origin, input.Ray.Displacement,
+                              vertices[0], vertices[1], vertices[2], ref fraction0, out float3 normal0)
+                    && fraction0 < collector.MaxFraction;
 
-                        normalizedNormal = math.select(normalizedNormal, -normalizedNormal, input.QueryContext.TargetScale < 0.0f);
+                float fraction1 = collector.MaxFraction;
+                bool hit1 = RayTriangle(input.Ray.Origin, input.Ray.Displacement,
+                              vertices[0], vertices[2], vertices[3], ref fraction1, out float3 normal1)
+                    && fraction1 < collector.MaxFraction;
 
-                        var hit = new RaycastHit
-                        {
-                            Fraction = fraction,
-                            Position = Mul(input.QueryContext.WorldFromLocalTransform, input.Ray.Origin + input.Ray.Displacement * fraction),
-                            SurfaceNormal = math.mul(input.QueryContext.WorldFromLocalTransform.Rotation, normalizedNormal),
-                            RigidBodyIndex = input.QueryContext.RigidBodyIndex,
-                            ColliderKey = input.QueryContext.SetSubKey(m_NumColliderKeyBits, (uint)(primitiveKey << 1 | polygonIndex)),
-                            Material = material,
-                            Entity = input.QueryContext.Entity
-                        };
+                if (!hit0 && !hit1)
+                    return false;
+#if BVH_COLLECT_METRICS
+                if (hit0) BVHTraversalMetrics.MeshLeaf.TriangleHits++;
+                if (hit1) BVHTraversalMetrics.MeshLeaf.TriangleHits++;
+#endif
 
-                        acceptHit |= collector.AddHit(hit);
-                    }
+                bool acceptHit;
+                // hit found on triangle 0 AND [either no hit on triangle 1 OR triangle 0 is closer than triangle 1]
+                if (hit0 && (!hit1 || fraction0 <= fraction1))
+                {
+                    // Pass hit info because triangle 0 is closer
+                    acceptHit = SubmitHit(input, primitiveKey, 0, sectionPrimitiveIndex, fraction0, normal0, ref collector);
+                    if (hit1 && fraction1 < collector.MaxFraction)
+                        acceptHit |= SubmitHit(input, primitiveKey, 1, sectionPrimitiveIndex, fraction1, normal1, ref collector);
+                }
+                else
+                {
+                    // Pass hit info for triangle 1
+                    acceptHit = SubmitHit(input, primitiveKey, 1, sectionPrimitiveIndex, fraction1, normal1, ref collector);
+                    if (hit0 && fraction0 < collector.MaxFraction)
+                        acceptHit |= SubmitHit(input, primitiveKey, 0, sectionPrimitiveIndex, fraction0, normal0, ref collector);
                 }
                 return acceptHit;
             }
         }
 
-        private static unsafe bool RayMesh<T>(RaycastInput input, MeshCollider* meshCollider, ref T collector) where T : struct, ICollector<RaycastHit>
+        private static unsafe bool RayMesh<T>(RaycastInput input, MeshCollider* meshCollider, ref T collector)
+            where T : struct, ICollector<RaycastHit>
         {
             var leafProcessor = new RayMeshLeafProcessor(meshCollider);
-            return meshCollider->Mesh.BoundingVolumeHierarchy.Raycast(input, ref leafProcessor, ref collector);
+
+            int startNode = meshCollider->Mesh.BoundingVolumeHierarchy.GetStartNodeForChildIndex(input.QueryContext.MeshBvhChildIndex);
+
+#if BVH_COLLECT_METRICS
+            bool hit = meshCollider->Mesh.BoundingVolumeHierarchy.RaycastWithMetrics(input, ref leafProcessor, ref collector,
+                out var meshMetrics, startNode);
+            BVHTraversalMetrics.MeshAccumulator.Accumulate(ref meshMetrics);
+            return hit;
+#else
+            return meshCollider->Mesh.BoundingVolumeHierarchy.Raycast(input, ref leafProcessor, ref collector, startNode);
+#endif
         }
 
         // Compound

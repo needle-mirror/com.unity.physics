@@ -6,3 +6,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("Unity.Physics.Editor.Tests")]
 [assembly: InternalsVisibleTo("Havok.Physics")]
 [assembly: InternalsVisibleTo("Unity.Physics.Custom")]
+[assembly: InternalsVisibleTo("Unity.Physics.Performance")]

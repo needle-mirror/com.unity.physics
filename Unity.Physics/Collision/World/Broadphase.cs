@@ -112,6 +112,12 @@ namespace Unity.Physics
 
             if (incremental)
             {
+                if (StaticTree.InsertBodyDataStream.IsCreated && (StaticTree.InsertBodyDataStream.Count() == staticBodies.Length-1))
+                {
+                    // Trigger a full rebuild when everything has changed. This might be a scene reload
+                    StaticTree.Incremental = false;
+                }
+
                 StaticTree.BuildIncremental();
 #if BVH_CHECK_INTEGRITY
                 unsafe
@@ -133,7 +139,9 @@ namespace Unity.Physics
             var points = new NativeArray<PointAndIndex>(staticBodies.Length, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
             for (int i = 0; i < staticBodies.Length; i++)
             {
-                PrepareStaticBodyDataJob.ExecuteImpl(i, aabbMargin, staticBodies, aabbs, points, StaticTree.BodyFilters.AsArray(), StaticTree.RespondsToCollision.AsArray());
+                PrepareStaticBodyDataJob.ExecuteImpl(i, aabbMargin, staticBodies, aabbs, points,
+                    StaticTree.BodyFilters.AsArray(), StaticTree.RespondsToCollision.AsArray(),
+                    StaticTree.MeshSubAabbs.AsArray());
             }
 
             // Build tree
@@ -142,6 +150,9 @@ namespace Unity.Physics
 
             // Build node filters
             bvh.BuildCombinedCollisionFilter(StaticTree.BodyFilters.AsArray(), 1, nodeCount - 1);
+
+            points.Dispose();
+            aabbs.Dispose();
         }
 
 #if ENABLE_PROFILER
@@ -166,6 +177,12 @@ namespace Unity.Physics
 
             if (incremental)
             {
+                if (DynamicTree.InsertBodyDataStream.IsCreated && (DynamicTree.InsertBodyDataStream.Count() == dynamicBodies.Length))
+                {
+                    // Trigger a full rebuild when everything has changed. This might be a scene reload
+                    DynamicTree.Incremental = false;
+                }
+
                 DynamicTree.BuildIncremental();
 #if BVH_CHECK_INTEGRITY
                 unsafe
@@ -193,6 +210,9 @@ namespace Unity.Physics
 
             bvh.Build(points, aabbs, out var nodeCount);
             bvh.BuildCombinedCollisionFilter(DynamicTree.BodyFilters.AsArray(), 1, nodeCount - 1);
+
+            points.Dispose();
+            aabbs.Dispose();
         }
 
         /// <summary>
@@ -244,7 +264,11 @@ namespace Unity.Physics
 
             if (incremental)
             {
-                return new BuildIncrementalTreeJob { Tree = StaticTree }.Schedule(inputDeps);
+                return new BuildIncrementalTreeJob
+                {
+                    Tree = StaticTree,
+                    IsStaticTree = true
+                }.Schedule(inputDeps);
             }
             // else:
 
@@ -266,6 +290,7 @@ namespace Unity.Physics
                 Points = points,
                 FiltersOut = StaticTree.BodyFilters.AsArray(),
                 RespondsToCollisionOut = StaticTree.RespondsToCollision.AsArray(),
+                MeshSubAabbsOut = StaticTree.MeshSubAabbs.AsArray(),
                 AabbMargin = world.CollisionWorld.CollisionTolerance * 0.5f, // each body contributes half
             }.ScheduleUnsafe(numStaticBodiesArray, 32, handle);
 
@@ -292,7 +317,11 @@ namespace Unity.Physics
 
             if (incremental)
             {
-                return new BuildIncrementalTreeJob { Tree = DynamicTree }.Schedule(inputDeps);
+                return new BuildIncrementalTreeJob
+                {
+                    Tree = DynamicTree,
+                    IsStaticTree =  false
+                }.Schedule(inputDeps);
             }
             // else:
 
@@ -467,6 +496,8 @@ namespace Unity.Physics
             [NoAlias] public NativeList<CollisionFilter> BodyFilters;  // A copy of the collision filter of each body; used when finding overlap pairs.
             [NativeDisableContainerSafetyRestriction]
             [NoAlias] public NativeList<bool> RespondsToCollision; // A copy of the RespondsToCollision flag of each body
+            [NoAlias] public NativeList<FourTransposedAabbs> MeshSubAabbs; // Cached world-space sub-AABBs of mesh BVH root children, for raycast pre-filtering
+            [NativeDisableContainerSafetyRestriction]
             [NoAlias] internal NativeArray<Builder.Range> Ranges;   // Element ranges used during building; Root node index of the ranges is used as input
                                                                     // to parallel implementation of finding the overlap pairs. See Broadphase.ScheduleFindOverlapsJobs.
             [NoAlias] internal NativeArray<int> BranchCount; // Number of branches built processed in parallel in multi-threaded implementation of bvh building.
@@ -624,6 +655,12 @@ namespace Unity.Physics
                     RespondsToCollision = new NativeList<bool>(numBodies, Allocator);
                 }
                 RespondsToCollision.ResizeUninitialized(numBodies);
+
+                if (!MeshSubAabbs.IsCreated)
+                {
+                    MeshSubAabbs = new NativeList<FourTransposedAabbs>(numBodies, Allocator);
+                }
+                MeshSubAabbs.ResizeUninitialized(numBodies);
             }
 
             public Tree Clone()
@@ -635,6 +672,7 @@ namespace Unity.Physics
                     NodeFilters = new NativeList<CollisionFilter>(NodeFilters.Length, Allocator),
                     BodyFilters = new NativeList<CollisionFilter>(BodyFilters.Length, Allocator),
                     RespondsToCollision = new NativeList<bool>(RespondsToCollision.Length, Allocator),
+                    MeshSubAabbs = new NativeList<FourTransposedAabbs>(MeshSubAabbs.Length, Allocator),
                     Ranges = new NativeArray<BoundingVolumeHierarchy.Builder.Range>(Ranges, Allocator),
                     BranchCount = new NativeArray<int>(BranchCount, Allocator),
                     m_RemoveBodyDataStream = default,
@@ -648,6 +686,7 @@ namespace Unity.Physics
                 clone.NodeFilters.CopyFrom(NodeFilters);
                 clone.BodyFilters.CopyFrom(BodyFilters);
                 clone.RespondsToCollision.CopyFrom(RespondsToCollision);
+                clone.MeshSubAabbs.CopyFrom(MeshSubAabbs);
                 clone.Incremental = Incremental;
 
                 return clone;
@@ -667,6 +706,9 @@ namespace Unity.Physics
                 if (RespondsToCollision.IsCreated)
                     RespondsToCollision.Dispose();
 
+                if (MeshSubAabbs.IsCreated)
+                    MeshSubAabbs.Dispose();
+
                 if (Ranges.IsCreated)
                     Ranges.Dispose();
 
@@ -684,20 +726,26 @@ namespace Unity.Physics
             public void BuildIncremental()
             {
                 var bvh = BoundingVolumeHierarchy;
-                if (bvh.NodeCount == 0 || // Tree has not yet been initialized. First two nodes in an empty tree are 0: invalid node, 1: root node.
-                    !Incremental) // Tree was previously not built incrementally. We need to clear out any previous content to make sure we don't retain any leftover, untracked bodies.
-                {
-                    bvh.Clear();
-                }
+
+                // NodeCount=0 for when Tree has not yet been initialized. First two nodes in an empty tree are
+                //    0: invalid node, 1: root node.
+                // Incremental=false for if Tree was previously not built incrementally. We need to clear out any
+                //   previous content to make sure we don't retain any leftover, untracked bodies.
+                bool requiresTreeClear = (bvh.NodeCount == 0 || !Incremental);
+                if (requiresTreeClear) bvh.Clear();
 
                 Incremental = true;
 
                 var removalsRequested = RemoveBodyDataStream.IsCreated && !RemoveBodyDataStream.IsEmpty();
                 var updatesRequested = UpdateBodyDataStream.IsCreated && !UpdateBodyDataStream.IsEmpty();
-                if (removalsRequested || updatesRequested)
+                if (!requiresTreeClear && // don't want to try to remove or update if the tree was cleared
+                    (removalsRequested || updatesRequested))
                 {
-                    var removals = removalsRequested ? RemoveBodyDataStream.ToNativeArray<RemovalData>(Allocator.Temp) : new NativeArray<RemovalData>();
-                    var updates = updatesRequested ? UpdateBodyDataStream.ToNativeArray<UpdateData>(Allocator.Temp) : new NativeArray<UpdateData>();
+                    var removals = removalsRequested ?
+                        RemoveBodyDataStream.ToNativeArray<RemovalData>(Allocator.Temp) : new NativeArray<RemovalData>();
+                    var updates = updatesRequested ?
+                        UpdateBodyDataStream.ToNativeArray<UpdateData>(Allocator.Temp) : new NativeArray<UpdateData>();
+
                     // remove and update bodies
                     if (removals.Length + updates.Length != 0)
                     {
@@ -709,6 +757,9 @@ namespace Unity.Physics
                         s_RemovalsMarker.End();
 #endif
                     }
+
+                    if (removals.IsCreated) removals.Dispose();
+                    if (updates.IsCreated) updates.Dispose();
                 }
 
                 var insertionsRequested = InsertBodyDataStream.IsCreated && !InsertBodyDataStream.IsEmpty();
@@ -787,12 +838,13 @@ namespace Unity.Physics
         {
             if (input.Filter.IsEmpty)
                 return;
-            var leafProcessor = new BvhLeafProcessor(rigidBodies);
+            var leafProcessor = new BvhLeafProcessor(rigidBodies, StaticTree.MeshSubAabbs.AsArray());
             var leafCollector = new RigidBodyOverlapsCollector { RigidBodyIndices = rigidBodyIndices };
 
             leafProcessor.BaseRigidBodyIndex = DynamicTree.NumBodies;
             StaticTree.BoundingVolumeHierarchy.AabbOverlap(input, ref leafProcessor, ref leafCollector);
 
+            leafProcessor = new BvhLeafProcessor(rigidBodies);
             leafProcessor.BaseRigidBodyIndex = 0;
             DynamicTree.BoundingVolumeHierarchy.AabbOverlap(input, ref leafProcessor, ref leafCollector);
         }
@@ -803,16 +855,51 @@ namespace Unity.Physics
             if (input.Filter.IsEmpty)
                 return false;
 
-            var leafProcessor = new BvhLeafProcessor(rigidBodies);
+            var leafProcessor = new BvhLeafProcessor(rigidBodies, StaticTree.MeshSubAabbs.AsArray());
 
             leafProcessor.BaseRigidBodyIndex = DynamicTree.NumBodies;
             bool hasHit = StaticTree.BoundingVolumeHierarchy.Raycast(input, ref leafProcessor, ref collector);
 
+            leafProcessor = new BvhLeafProcessor(rigidBodies);
             leafProcessor.BaseRigidBodyIndex = 0;
             hasHit |= DynamicTree.BoundingVolumeHierarchy.Raycast(input, ref leafProcessor, ref collector);
 
             return hasHit;
         }
+
+#if BVH_COLLECT_METRICS
+        // An overload for gathering performance BVH Metrics of the Static BVH Tree
+        internal bool CastRay<T>(RaycastInput input, NativeArray<RigidBody> rigidBodies, ref T collector,
+            out BVHTraversalMetrics metrics)
+            where T : struct, ICollector<RaycastHit>
+        {
+            metrics = default;
+            if (input.Filter.IsEmpty)
+                return false;
+
+            var leafProcessor = new BvhLeafProcessor(rigidBodies, StaticTree.MeshSubAabbs.AsArray());
+
+            leafProcessor.BaseRigidBodyIndex = DynamicTree.NumBodies;
+
+            bool hasHit = StaticTree.BoundingVolumeHierarchy.RaycastWithMetrics(input, ref leafProcessor, ref collector,
+                out var staticMetrics);
+
+            metrics.NodesVisited = staticMetrics.NodesVisited;
+            metrics.NodesPruned = staticMetrics.NodesPruned;
+            metrics.LeafNodesProcessed = staticMetrics.LeafNodesProcessed;
+            metrics.SortOperations = staticMetrics.SortOperations;
+            metrics.MaxStackDepth = staticMetrics.MaxStackDepth;
+            metrics.PrimitivesTestedTotal = staticMetrics.PrimitivesTestedTotal;
+
+            // Dynamic leafProcessor is not using pre-fitlered MeshSubAabbs. This is because dynamic bodies require
+            // updated AABBs each frame and this data would need to be recomputed. Cost/benefit would need analysis
+            leafProcessor = new BvhLeafProcessor(rigidBodies);
+            leafProcessor.BaseRigidBodyIndex = 0;
+            hasHit |= DynamicTree.BoundingVolumeHierarchy.Raycast(input, ref leafProcessor, ref collector);
+
+            return hasHit;
+        }
+#endif
 
         public unsafe bool CastCollider<T>(ColliderCastInput input, NativeArray<RigidBody> rigidBodies, ref T collector)
             where T : struct, ICollector<ColliderCastHit>
@@ -821,32 +908,97 @@ namespace Unity.Physics
             if (input.Collider->GetCollisionFilter().IsEmpty)
                 return false;
 
-            var leafProcessor = new BvhLeafProcessor(rigidBodies);
+            var leafProcessor = new BvhLeafProcessor(rigidBodies, StaticTree.MeshSubAabbs.AsArray());
 
             leafProcessor.BaseRigidBodyIndex = DynamicTree.NumBodies;
             bool hasHit = StaticTree.BoundingVolumeHierarchy.ColliderCast(input, ref leafProcessor, ref collector);
 
+            leafProcessor = new BvhLeafProcessor(rigidBodies);
             leafProcessor.BaseRigidBodyIndex = 0;
             hasHit |= DynamicTree.BoundingVolumeHierarchy.ColliderCast(input, ref leafProcessor, ref collector);
 
             return hasHit;
         }
 
+#if BVH_COLLECT_METRICS
+        // An overload for gathering performance BVH Metrics of the Static BVH Tree
+        public unsafe bool CastCollider<T>(ColliderCastInput input, NativeArray<RigidBody> rigidBodies, ref T collector,
+            out BVHTraversalMetrics metrics)
+            where T : struct, ICollector<ColliderCastHit>
+        {
+            metrics = default;
+            Assert.IsTrue(input.Collider != null);
+            if (input.Collider->GetCollisionFilter().IsEmpty)
+                return false;
+
+            var leafProcessor = new BvhLeafProcessor(rigidBodies, StaticTree.MeshSubAabbs.AsArray());
+
+            leafProcessor.BaseRigidBodyIndex = DynamicTree.NumBodies;
+
+            bool hasHit = StaticTree.BoundingVolumeHierarchy.ColliderCastWithMetrics(input, ref leafProcessor, ref collector,
+                out var staticMetrics);
+
+            metrics.NodesVisited = staticMetrics.NodesVisited;
+            metrics.NodesPruned = staticMetrics.NodesPruned;
+            metrics.LeafNodesProcessed = staticMetrics.LeafNodesProcessed;
+            metrics.SortOperations = staticMetrics.SortOperations;
+            metrics.MaxStackDepth = staticMetrics.MaxStackDepth;
+            metrics.PrimitivesTestedTotal = staticMetrics.PrimitivesTestedTotal;
+
+            leafProcessor = new BvhLeafProcessor(rigidBodies);
+            leafProcessor.BaseRigidBodyIndex = 0;
+            hasHit |= DynamicTree.BoundingVolumeHierarchy.ColliderCast(input, ref leafProcessor, ref collector);
+
+            return hasHit;
+        }
+#endif
+
         public bool CalculateDistance<T>(PointDistanceInput input, NativeArray<RigidBody> rigidBodies, ref T collector)
             where T : struct, ICollector<DistanceHit>
         {
             if (input.Filter.IsEmpty)
                 return false;
-            var leafProcessor = new BvhLeafProcessor(rigidBodies);
+            var leafProcessor = new BvhLeafProcessor(rigidBodies, StaticTree.MeshSubAabbs.AsArray());
 
             leafProcessor.BaseRigidBodyIndex = DynamicTree.NumBodies;
             bool hasHit = StaticTree.BoundingVolumeHierarchy.Distance(input, ref leafProcessor, ref collector);
 
+            leafProcessor = new BvhLeafProcessor(rigidBodies);
             leafProcessor.BaseRigidBodyIndex = 0;
             hasHit |= DynamicTree.BoundingVolumeHierarchy.Distance(input, ref leafProcessor, ref collector);
 
             return hasHit;
         }
+
+#if BVH_COLLECT_METRICS
+        // An overload for gathering performance BVH Metrics of the Static BVH Tree
+        public bool CalculateDistance<T>(PointDistanceInput input, NativeArray<RigidBody> rigidBodies, ref T collector,
+            out BVHTraversalMetrics metrics)
+            where T : struct, ICollector<DistanceHit>
+        {
+            metrics = default;
+            if (input.Filter.IsEmpty)
+                return false;
+            var leafProcessor = new BvhLeafProcessor(rigidBodies, StaticTree.MeshSubAabbs.AsArray());
+
+            leafProcessor.BaseRigidBodyIndex = DynamicTree.NumBodies;
+
+            bool hasHit = StaticTree.BoundingVolumeHierarchy.DistanceWithMetrics(input, ref leafProcessor, ref collector, out var staticMetrics);
+
+            metrics.NodesVisited = staticMetrics.NodesVisited;
+            metrics.NodesPruned = staticMetrics.NodesPruned;
+            metrics.LeafNodesProcessed = staticMetrics.LeafNodesProcessed;
+            metrics.SortOperations = staticMetrics.SortOperations;
+            metrics.MaxStackDepth = staticMetrics.MaxStackDepth;
+            metrics.PrimitivesTestedTotal = staticMetrics.PrimitivesTestedTotal;
+
+            leafProcessor = new BvhLeafProcessor(rigidBodies);
+            leafProcessor.BaseRigidBodyIndex = 0;
+            hasHit |= DynamicTree.BoundingVolumeHierarchy.Distance(input, ref leafProcessor, ref collector);
+
+            return hasHit;
+        }
+#endif
 
         public unsafe bool CalculateDistance<T>(ColliderDistanceInput input, NativeArray<RigidBody> rigidBodies, ref T collector)
             where T : struct, ICollector<DistanceHit>
@@ -854,16 +1006,49 @@ namespace Unity.Physics
             Assert.IsTrue(input.Collider != null);
             if (input.Collider->GetCollisionFilter().IsEmpty)
                 return false;
-            var leafProcessor = new BvhLeafProcessor(rigidBodies);
+            var leafProcessor = new BvhLeafProcessor(rigidBodies, StaticTree.MeshSubAabbs.AsArray());
 
             leafProcessor.BaseRigidBodyIndex = DynamicTree.NumBodies;
             bool hasHit = StaticTree.BoundingVolumeHierarchy.Distance(input, ref leafProcessor, ref collector);
 
+            leafProcessor = new BvhLeafProcessor(rigidBodies);
             leafProcessor.BaseRigidBodyIndex = 0;
             hasHit |= DynamicTree.BoundingVolumeHierarchy.Distance(input, ref leafProcessor, ref collector);
 
             return hasHit;
         }
+
+#if BVH_COLLECT_METRICS
+        // An overload for gathering performance BVH Metrics of the Static BVH Tree
+        public unsafe bool CalculateDistance<T>(ColliderDistanceInput input, NativeArray<RigidBody> rigidBodies, ref T collector,
+            out BVHTraversalMetrics metrics)
+            where T : struct, ICollector<DistanceHit>
+        {
+            metrics = default;
+            Assert.IsTrue(input.Collider != null);
+            if (input.Collider->GetCollisionFilter().IsEmpty)
+                return false;
+            var leafProcessor = new BvhLeafProcessor(rigidBodies, StaticTree.MeshSubAabbs.AsArray());
+
+            leafProcessor.BaseRigidBodyIndex = DynamicTree.NumBodies;
+
+            bool hasHit = StaticTree.BoundingVolumeHierarchy.DistanceWithMetrics(input, ref leafProcessor, ref collector,
+                out var staticMetrics);
+
+            metrics.NodesVisited = staticMetrics.NodesVisited;
+            metrics.NodesPruned = staticMetrics.NodesPruned;
+            metrics.LeafNodesProcessed = staticMetrics.LeafNodesProcessed;
+            metrics.SortOperations = staticMetrics.SortOperations;
+            metrics.MaxStackDepth = staticMetrics.MaxStackDepth;
+            metrics.PrimitivesTestedTotal = staticMetrics.PrimitivesTestedTotal;
+
+            leafProcessor = new BvhLeafProcessor(rigidBodies);
+            leafProcessor.BaseRigidBodyIndex = 0;
+            hasHit |= DynamicTree.BoundingVolumeHierarchy.Distance(input, ref leafProcessor, ref collector);
+
+            return hasHit;
+        }
+    #endif
 
         internal struct BvhLeafProcessor :
             BoundingVolumeHierarchy.IRaycastLeafProcessor,
@@ -873,11 +1058,13 @@ namespace Unity.Physics
                 BoundingVolumeHierarchy.IAabbOverlapLeafProcessor
         {
             private readonly NativeArray<RigidBody> m_Bodies;
+            private readonly NativeArray<FourTransposedAabbs> m_MeshSubAabbs;
             public int BaseRigidBodyIndex;
 
-            public BvhLeafProcessor(NativeArray<RigidBody> bodies)
+            public BvhLeafProcessor(NativeArray<RigidBody> bodies, NativeArray<FourTransposedAabbs> meshSubAabbs = default)
             {
                 m_Bodies = bodies;
+                m_MeshSubAabbs = meshSubAabbs;
                 BaseRigidBodyIndex = 0;
             }
 
@@ -890,11 +1077,26 @@ namespace Unity.Physics
             public bool RayLeaf<T>(RaycastInput input, int rigidBodyIndex, ref T collector) where T : struct, ICollector<RaycastHit>
             {
                 rigidBodyIndex += BaseRigidBodyIndex;
+                RigidBody body = m_Bodies[rigidBodyIndex];
+
+                if (m_MeshSubAabbs.IsCreated &&
+                    body.Collider.IsCreated && body.Collider.Value.Type == ColliderType.Mesh)
+                {
+                    int localIndex = rigidBodyIndex - BaseRigidBodyIndex;
+
+                    bool4 hits = m_MeshSubAabbs[localIndex].Raycast(input.Ray, collector.MaxFraction, out _);
+                    if (!math.any(hits))
+                        return false;
+
+                    input.QueryContext.MeshBvhChildIndex = QueryContext.SingleHitChildIndex(hits);
+                }
+                else
+                {
+                    input.QueryContext.MeshBvhChildIndex = -1;
+                }
 
                 input.QueryContext.IsInitialized = true;
                 input.QueryContext.RigidBodyIndex = rigidBodyIndex;
-
-                RigidBody body = m_Bodies[rigidBodyIndex];
 
                 return body.CastRay(input, ref collector);
             }
@@ -904,10 +1106,36 @@ namespace Unity.Physics
             {
                 rigidBodyIndex += BaseRigidBodyIndex;
 
+                RigidBody body = m_Bodies[rigidBodyIndex];
+
+                // Pre-filter: for mesh colliders, test swept collider AABB against cached mesh sub-AABBs
+                if (m_MeshSubAabbs.IsCreated &&
+                    body.Collider.IsCreated && body.Collider.Value.Type == ColliderType.Mesh)
+                {
+                    int localIndex = rigidBodyIndex - BaseRigidBodyIndex;
+                    Aabb castAabb = input.Collider->CalculateAabb(
+                        new RigidTransform { pos = input.Start, rot = input.Orientation },
+                        input.QueryContext.InvTargetScale * input.QueryColliderScale);
+                    FourTransposedAabbs expanded = m_MeshSubAabbs[localIndex];
+                    expanded.Lx -= castAabb.Extents.x;
+                    expanded.Ly -= castAabb.Extents.y;
+                    expanded.Lz -= castAabb.Extents.z;
+                    Ray aabbRay = input.Ray;
+                    aabbRay.Origin = castAabb.Min;
+
+                    bool4 hits = expanded.Raycast(aabbRay, collector.MaxFraction, out _);
+                    if (!math.any(hits))
+                        return false;
+
+                    input.QueryContext.MeshBvhChildIndex = QueryContext.SingleHitChildIndex(hits);
+                }
+                else
+                {
+                    input.QueryContext.MeshBvhChildIndex = -1;
+                }
+
                 input.QueryContext.IsInitialized = true;
                 input.QueryContext.RigidBodyIndex = rigidBodyIndex;
-
-                RigidBody body = m_Bodies[rigidBodyIndex];
 
                 return body.CastCollider(input, ref collector);
             }
@@ -917,10 +1145,30 @@ namespace Unity.Physics
             {
                 rigidBodyIndex += BaseRigidBodyIndex;
 
+                RigidBody body = m_Bodies[rigidBodyIndex];
+
+                // Pre-filter: for mesh colliders, test point distance against cached mesh sub-AABBs
+                if (m_MeshSubAabbs.IsCreated &&
+                    body.Collider.IsCreated && body.Collider.Value.Type == ColliderType.Mesh)
+                {
+                    int localIndex = rigidBodyIndex - BaseRigidBodyIndex;
+                    var pointT = new Math.FourTransposedPoints(input.Position);
+                    float4 distSq = m_MeshSubAabbs[localIndex].DistanceFromPointSquared(ref pointT);
+                    float maxDistSq = collector.MaxFraction * collector.MaxFraction;
+
+                    bool4 hits = distSq <= new float4(maxDistSq);
+                    if (!math.any(hits))
+                        return false;
+
+                    input.QueryContext.MeshBvhChildIndex = QueryContext.SingleHitChildIndex(hits);
+                }
+                else
+                {
+                    input.QueryContext.MeshBvhChildIndex = -1;
+                }
+
                 input.QueryContext.IsInitialized = true;
                 input.QueryContext.RigidBodyIndex = rigidBodyIndex;
-
-                RigidBody body = m_Bodies[rigidBodyIndex];
 
                 return body.CalculateDistance(input, ref collector);
             }
@@ -930,10 +1178,33 @@ namespace Unity.Physics
             {
                 rigidBodyIndex += BaseRigidBodyIndex;
 
+                RigidBody body = m_Bodies[rigidBodyIndex];
+
+                // Pre-filter: for mesh colliders, test collider AABB distance against cached mesh sub-AABBs
+                if (m_MeshSubAabbs.IsCreated &&
+                    body.Collider.IsCreated && body.Collider.Value.Type == ColliderType.Mesh)
+                {
+                    int localIndex = rigidBodyIndex - BaseRigidBodyIndex;
+                    Aabb queryAabb = input.Collider->CalculateAabb(input.Transform,
+                        input.QueryContext.InvTargetScale * input.Scale);
+                    FourTransposedAabbs queryAabbT;
+                    (&queryAabbT)->SetAllAabbs(queryAabb);
+                    float4 distSq = m_MeshSubAabbs[localIndex].DistanceFromAabbSquared(ref queryAabbT);
+                    float maxDistSq = collector.MaxFraction * collector.MaxFraction;
+
+                    bool4 hits = distSq <= new float4(maxDistSq);
+                    if (!math.any(hits))
+                        return false;
+
+                    input.QueryContext.MeshBvhChildIndex = QueryContext.SingleHitChildIndex(hits);
+                }
+                else
+                {
+                    input.QueryContext.MeshBvhChildIndex = -1;
+                }
+
                 input.QueryContext.IsInitialized = true;
                 input.QueryContext.RigidBodyIndex = rigidBodyIndex;
-
-                RigidBody body = m_Bodies[rigidBodyIndex];
 
                 return body.CalculateDistance(input, ref collector);
             }
@@ -982,9 +1253,17 @@ namespace Unity.Physics
         struct BuildIncrementalTreeJob : IJob
         {
             public Tree Tree;
+            public bool IsStaticTree;
 
             public void Execute()
             {
+                int numBodies = IsStaticTree ? Tree.NumBodies - 1 : Tree.NumBodies; // manage default static body
+                if (Tree.InsertBodyDataStream.IsCreated && (Tree.InsertBodyDataStream.Count() == numBodies))
+                {
+                    // Trigger a full rebuild when everything has changed. This might be a scene reload
+                    Tree.Incremental = false;
+                }
+
                 Tree.BuildIncremental();
             }
         }
@@ -1139,10 +1418,13 @@ namespace Unity.Physics
             public NativeArray<CollisionFilter> FiltersOut;
             [NativeDisableContainerSafetyRestriction]
             public NativeArray<bool> RespondsToCollisionOut;
+            [WriteOnly, NativeDisableContainerSafetyRestriction]
+            public NativeArray<FourTransposedAabbs> MeshSubAabbsOut;
 
             public void Execute(int index)
             {
-                ExecuteImpl(index, AabbMargin, RigidBodies, Aabbs, Points, FiltersOut, RespondsToCollisionOut);
+                ExecuteImpl(index, AabbMargin, RigidBodies, Aabbs, Points, FiltersOut, RespondsToCollisionOut,
+                    MeshSubAabbsOut);
             }
 
             internal static Aabb CalculateAabb(ref RigidBody body, float aabbMargin)
@@ -1153,9 +1435,32 @@ namespace Unity.Physics
                 return aabb;
             }
 
+            internal static unsafe FourTransposedAabbs ComputeMeshSubAabbs(ref RigidBody body)
+            {
+                if (!body.Collider.IsCreated || body.Collider.Value.Type != ColliderType.Mesh)
+                    return FourTransposedAabbs.Empty;
+
+                var meshCollider = (MeshCollider*)body.Collider.GetUnsafePtr();
+                ref var rootNode = ref meshCollider->Mesh.BoundingVolumeHierarchy.GetNode(1);
+
+                var worldSubAabbs = FourTransposedAabbs.Empty;
+                for (int i = 0; i < 4; i++)
+                {
+                    if (rootNode.IsChildValid(i))
+                    {
+                        Aabb localAabb = rootNode.Bounds.GetAabb(i);
+                        Aabb worldAabb = Math.TransformAabb(localAabb, body.WorldFromBody, body.Scale);
+                        worldSubAabbs.SetAabb(i, worldAabb);
+                    }
+                }
+
+                return worldSubAabbs;
+            }
+
             internal static void ExecuteImpl(int index, float aabbMargin,
                 NativeArray<RigidBody> rigidBodies, NativeArray<Aabb> aabbs, NativeArray<PointAndIndex> points,
-                NativeArray<CollisionFilter> filtersOut, NativeArray<bool> respondsToCollisionOut)
+                NativeArray<CollisionFilter> filtersOut, NativeArray<bool> respondsToCollisionOut,
+                NativeArray<FourTransposedAabbs> meshSubAabbsOut)
             {
                 RigidBody body = rigidBodies[index];
 
@@ -1178,6 +1483,7 @@ namespace Unity.Physics
                     Position = aabb.Center,
                     Index = index
                 };
+                meshSubAabbsOut[index] = ComputeMeshSubAabbs(ref body);
             }
         }
 

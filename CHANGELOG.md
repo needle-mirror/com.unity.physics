@@ -4,15 +4,24 @@ uid: unity-physics-changelog
 
 # Changelog
 
-## [1.4.6] - 2026-04-13
-
+## [1.4.7] - 2026-07-10
 
 ### Changed
 
-* Updated the `com.unity.burst` dependency to version `1.8.27`
+* Updated the `com.unity.burst` dependency to version `1.8.29`
+* Improved query performance for Collector Types (Any, Closest, All) for query types: Raycast, ColliderCast, Point Distance and Collider Distance, when casting against a MeshCollider. Improvement is particularly observable with Burst enabled.
+
+### Fixed
+
+* Fixed a bug when the incremental broadphase was enabled for static and dynamic bodies when a scene was reloaded which resulted in stale data being used
+* Sample `PhysicsShapeAuthoring` baker was collapsing vertices for big Meshes, leading to very poor performances.
+
+
+## [1.4.6] - 2026-04-13
+
+### Changed
 * Updated the `com.unity.burst` dependency to version `1.8.28`
 * Updated the `com.unity.entities` dependency to version `1.4.6`
-
 
 ## [1.4.5] - 2026-02-16
 

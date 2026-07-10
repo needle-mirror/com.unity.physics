@@ -227,6 +227,8 @@ namespace Unity.Physics.Authoring
                 // Combine submeshes manually
                 numVertices += meshes[i].vertexCount;
                 var combinedSubmeshes = new UnityEngine.Mesh();
+				if (currentMesh.vertexCount > UInt16.MaxValue)
+					combinedSubmeshes.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
                 combinedSubmeshes.vertices = currentMesh.vertices;
 
                 var combinedIndices = new List<int>();
