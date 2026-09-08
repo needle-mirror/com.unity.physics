@@ -293,6 +293,9 @@ namespace Unity.Physics
         /// <summary>   Last frame's collider version </summary>
         public byte LastColliderVersion;
 
+        /// <summary> Last Frame's collider blob hash </summary>
+        public int LastColliderHash;
+
         /// <summary>   Last frame's bounding volume hierarchy type. </summary>
         public bool StaticBvh;
 

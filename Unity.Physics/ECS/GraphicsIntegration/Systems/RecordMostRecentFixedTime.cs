@@ -60,11 +60,20 @@ namespace Unity.Physics.GraphicsIntegration
                 m_initializedWorlds.Add(worldIndex);
             }
             var mostRecentTimeBuffer = SystemAPI.GetBuffer<MostRecentFixedTime>(SystemAPI.GetSingletonEntity<MostRecentFixedTime>());
-            mostRecentTimeBuffer[(int)worldIndex.Value] = new MostRecentFixedTime
+            if (mostRecentTimeBuffer.Length > 0)
             {
-                ElapsedTime = SystemAPI.Time.ElapsedTime,
-                DeltaTime = SystemAPI.Time.DeltaTime
-            };
+                mostRecentTimeBuffer[(int)worldIndex.Value] = new MostRecentFixedTime
+                {
+                    ElapsedTime = SystemAPI.Time.ElapsedTime, DeltaTime = SystemAPI.Time.DeltaTime
+                };
+            }
+            else
+            {
+                // If the DynamicBuffer is removed or cleared during runtime, remove the entity so other systems that use
+                // it can be disabled
+                state.EntityManager.RemoveComponent<MostRecentFixedTime>(SystemAPI.GetSingletonEntity<MostRecentFixedTime>());
+            }
+
         }
     }
 }

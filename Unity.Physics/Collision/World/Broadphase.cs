@@ -118,6 +118,7 @@ namespace Unity.Physics
                     StaticTree.Incremental = false;
                 }
 
+                StaticTree.BuiltMultiThreaded = false;
                 StaticTree.BuildIncremental();
 #if BVH_CHECK_INTEGRITY
                 unsafe
@@ -133,6 +134,7 @@ namespace Unity.Physics
 
             // flag tree as not built incrementally, since we rebuild it from scratch
             StaticTree.Incremental = false;
+            StaticTree.BuiltMultiThreaded = false;
 
             // Read bodies
             var aabbs = new NativeArray<Aabb>(staticBodies.Length, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
@@ -280,7 +282,8 @@ namespace Unity.Physics
             {
                 NumStaticBodies = world.NumStaticBodies,
                 BuildStaticTree = shouldDoWork,
-                NumStaticBodiesArray = numStaticBodiesArray
+                NumStaticBodiesArray = numStaticBodiesArray,
+                BuiltMultiThreaded = StaticTree.BuiltMultiThreadedRef
             }.Schedule(inputDeps);
 
             handle = new PrepareStaticBodyDataJob
@@ -496,6 +499,7 @@ namespace Unity.Physics
             [NoAlias] public NativeList<CollisionFilter> BodyFilters;  // A copy of the collision filter of each body; used when finding overlap pairs.
             [NativeDisableContainerSafetyRestriction]
             [NoAlias] public NativeList<bool> RespondsToCollision; // A copy of the RespondsToCollision flag of each body
+            [NativeDisableContainerSafetyRestriction]
             [NoAlias] public NativeList<FourTransposedAabbs> MeshSubAabbs; // Cached world-space sub-AABBs of mesh BVH root children, for raycast pre-filtering
             [NativeDisableContainerSafetyRestriction]
             [NoAlias] internal NativeArray<Builder.Range> Ranges;   // Element ranges used during building; Root node index of the ranges is used as input
@@ -519,6 +523,8 @@ namespace Unity.Physics
             IncrementalInsertionContext m_IncrementalInsertionContext;
             [NoAlias]
             NativeReference<bool> m_Incremental;
+            [NoAlias]
+            NativeReference<bool> m_BuiltMultiThreaded;
 
             // Data stream representing rigid bodies that need to be removed from the tree, e.g., due to their deletion.
             // Used as part of the incremental broadphase.
@@ -569,6 +575,14 @@ namespace Unity.Physics
                 set => m_Incremental.Value = value;
             }
 
+            internal bool BuiltMultiThreaded
+            {
+                get => m_BuiltMultiThreaded.Value;
+                set => m_BuiltMultiThreaded.Value = value;
+            }
+
+            internal NativeReference<bool> BuiltMultiThreadedRef => m_BuiltMultiThreaded;
+
             public BoundingVolumeHierarchy BoundingVolumeHierarchy
             {
                 [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -600,6 +614,8 @@ namespace Unity.Physics
 
                 m_Incremental = new NativeReference<bool>(allocator);
                 m_Incremental.Value = false;
+                m_BuiltMultiThreaded = new NativeReference<bool>(allocator);
+                m_BuiltMultiThreaded.Value = false;
             }
 
             public void Reset(int numBodies)
@@ -680,7 +696,8 @@ namespace Unity.Physics
                     m_InsertBodyDataStream = default,
                     m_UpdatedElementLocationDataList = default,
                     m_IncrementalInsertionContext = new IncrementalInsertionContext(128, Allocator.Persistent),
-                    m_Incremental = new NativeReference<bool>(Allocator.Persistent)
+                    m_Incremental = new NativeReference<bool>(Allocator.Persistent),
+                    m_BuiltMultiThreaded = new NativeReference<bool>(Allocator.Persistent)
                 };
                 clone.Nodes.CopyFrom(Nodes);
                 clone.NodeFilters.CopyFrom(NodeFilters);
@@ -688,6 +705,7 @@ namespace Unity.Physics
                 clone.RespondsToCollision.CopyFrom(RespondsToCollision);
                 clone.MeshSubAabbs.CopyFrom(MeshSubAabbs);
                 clone.Incremental = Incremental;
+                clone.BuiltMultiThreaded = BuiltMultiThreaded;
 
                 return clone;
             }
@@ -720,6 +738,9 @@ namespace Unity.Physics
 
                 if (m_Incremental.IsCreated)
                     m_Incremental.Dispose();
+
+                if (m_BuiltMultiThreaded.IsCreated)
+                    m_BuiltMultiThreaded.Dispose();
             }
 
             [GenerateTestsForBurstCompatibility]
@@ -1265,6 +1286,7 @@ namespace Unity.Physics
                 }
 
                 Tree.BuildIncremental();
+                Tree.BuiltMultiThreaded = true;
             }
         }
 
@@ -1391,12 +1413,14 @@ namespace Unity.Physics
             public int NumStaticBodies;
             public NativeReference<int>.ReadOnly BuildStaticTree;
             public NativeReference<int> NumStaticBodiesArray;
+            public NativeReference<bool> BuiltMultiThreaded;
 
             public void Execute()
             {
                 if (BuildStaticTree.Value == 1)
                 {
                     NumStaticBodiesArray.Value = NumStaticBodies;
+                    BuiltMultiThreaded.Value = true;
                 }
                 else
                 {

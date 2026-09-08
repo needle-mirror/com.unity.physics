@@ -16,8 +16,8 @@ The `PhysicsBody` component has the following properties:
 | Mass                               | The mass of the body (default is 1.0f)                                                                                                                              |
 | Linear Damping                     | This is applied to a body's linear velocity reducing it over time (default is 0.01f)                                                                                |
 | Angular Damping                    | This is applied to a body's angular velocity, reducing it over time (default is 0.01f)                                                                              |
-| Initial Linear Damping             | The initial linear velocity of the body in world space (default is {0.0f, 0.0f, 0.0f})                                                                              |
-| Initial Angular Damping            | This represents the initial rotation speed around each axis in the local motion space of the body i.e. around the center of mass default is {0.0f, 0.0f, 0.0f}      |
+| Initial Linear velocity             | The initial linear velocity of the body in world space (default is {0.0f, 0.0f, 0.0f})                                                                              |
+| Initial Angular velocity            | This represents the initial rotation speed around each axis in the local motion space of the body i.e. around the center of mass default is {0.0f, 0.0f, 0.0f}      |
 | Gravity Factor                     | Scales the amount of gravity to apply to this body, where 1.0f is the default value for -9.8m/s^2                                                                   |
 | Advanced                           |                                                                                                                                                                     |
 | World Index                        | The index of the physics world this body belongs to. Default physics world has index 0                                                                              |

@@ -1072,5 +1072,106 @@ namespace Unity.Physics.Tests.Collision.Queries
             var hit = collider.Value.CheckCapsule(bounds.Center - axis, bounds.Center + axis, math.cmax(bounds.Extents), CollisionFilter.Default, queryInteraction);
             Assert.IsTrue(hit);
         }
+
+        [Test]
+        public unsafe void ColliderCastTest_MovingAwayFromConvexSurface_ReturnsNoHit()
+        {
+            // Target: unit box at the origin
+            using var targetCollider = BoxCollider.Create(new BoxGeometry
+            {
+                Center = float3.zero,
+                Orientation = quaternion.identity,
+                Size = new float3(1.0f),
+                BevelRadius = 0.0f
+            });
+
+            // Query: unit box positioned just outside the target's +X face.
+            // keepDistance (1e-4) < tolerance (1e-3), so this starting distance
+            // is within the hit-tolerance threshold of ConvexConvex.
+            using var queryCollider = BoxCollider.Create(new BoxGeometry
+            {
+                Center = float3.zero,
+                Orientation = quaternion.identity,
+                Size = new float3(1.0f),
+                BevelRadius = 0.0f
+            });
+
+            var rigidbody = Unity.Physics.RigidBody.Zero;
+            rigidbody.Collider = targetCollider;
+
+            float gap = 1e-4f; // keepDistance — just within tolerance
+            float3 startPos = new float3(1.0f + gap, 0.0f, 0.0f);
+
+            // Cast moving AWAY from the target (+X direction).
+            // Before the fix this falsely returned a hit at fraction=0.
+            var inputAway = new ColliderCastInput
+            {
+                Collider = (Collider*)queryCollider.GetUnsafePtr(),
+                Orientation = quaternion.identity,
+                Start = startPos,
+                End = startPos + new float3(1.0f, 0.0f, 0.0f)
+            };
+
+            bool hitAway = rigidbody.CastCollider(inputAway, out ColliderCastHit closestHitAway);
+            Assert.IsFalse(hitAway, "Cast moving away from surface should not report a hit");
+
+            // Sanity check: cast moving TOWARD the target (-X direction) should hit.
+            var inputToward = new ColliderCastInput
+            {
+                Collider = (Collider*)queryCollider.GetUnsafePtr(),
+                Orientation = quaternion.identity,
+                Start = startPos,
+                End = startPos + new float3(-1.0f, 0.0f, 0.0f)
+            };
+
+            bool hitToward = rigidbody.CastCollider(inputToward, out ColliderCastHit closestHitToward);
+            Assert.IsTrue(hitToward, "Cast moving toward surface should report a hit");
+            Assert.IsTrue(closestHitToward.Fraction < tolerance, "Hit fraction should be near zero for shapes within tolerance");
+        }
+
+        [Test]
+        public unsafe void ColliderCastTest_InitialOverlapCastingOutward_ReportsHit()
+        {
+            // Target: unit box at the origin
+            using var targetCollider = BoxCollider.Create(new BoxGeometry
+            {
+                Center = float3.zero,
+                Orientation = quaternion.identity,
+                Size = new float3(1.0f),
+                BevelRadius = 0.0f
+            });
+
+            // Query: unit box overlapping the target (penetrating).
+            using var queryCollider = BoxCollider.Create(new BoxGeometry
+            {
+                Center = float3.zero,
+                Orientation = quaternion.identity,
+                Size = new float3(1.0f),
+                BevelRadius = 0.0f
+            });
+
+            var rigidbody = Unity.Physics.RigidBody.Zero;
+            rigidbody.Collider = targetCollider;
+
+            // Start overlapping: query box center at x=0.5, so the two boxes
+            // overlap in the range x=[0, 1]. Distance is negative (penetration).
+            float3 startPos = new float3(0.5f, 0.0f, 0.0f);
+
+            // Cast moving outward (+X, away from target center).
+            // This must still report a hit at fraction=0 because the shapes
+            // are genuinely penetrating, not merely within tolerance.
+            var inputOutward = new ColliderCastInput
+            {
+                Collider = (Collider*)queryCollider.GetUnsafePtr(),
+                Orientation = quaternion.identity,
+                Start = startPos,
+                End = startPos + new float3(2.0f, 0.0f, 0.0f)
+            };
+
+            bool hitOutward = rigidbody.CastCollider(inputOutward, out ColliderCastHit closestHit);
+            Assert.IsTrue(hitOutward, "Initial penetration cast outward should still report a hit");
+            Assert.IsTrue(closestHit.Fraction == 0.0f, "Initial penetration hit should have fraction zero");
+        }
     }
 }
+

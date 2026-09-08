@@ -117,7 +117,7 @@ namespace Unity.Physics.Authoring
                     {
                         Entity = entity
                     });
-                    AddSharedComponentManaged(jointEntity, new ModifyJointLimits());
+                    AddSharedComponent(jointEntity, new ModifyJointLimits());
                 }
             }
 

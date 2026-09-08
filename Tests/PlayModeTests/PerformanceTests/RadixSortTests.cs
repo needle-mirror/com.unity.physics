@@ -86,6 +86,7 @@ namespace Unity.Physics.Tests.PerformanceTests
             {
                 job.Run();
             })
+                .WarmupCount(0)
                 .MeasurementCount(1)
                 .Run();
 
@@ -143,6 +144,7 @@ namespace Unity.Physics.Tests.PerformanceTests
             {
                 job.Run(tempCount.Length);
             })
+                .WarmupCount(0)
                 .MeasurementCount(1)
                 .Run();
 

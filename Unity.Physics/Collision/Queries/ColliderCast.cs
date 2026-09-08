@@ -382,6 +382,16 @@ namespace Unity.Physics
                 // Check for a hit
                 if (distanceResult.Distance < toleranceScaled || --iterations == 0)
                 {
+                    // If we haven't advanced (fraction == 0) and the cast direction points away
+                    // from the target surface, this is not a real hit — the shapes are merely
+                    // close from a prior frame. Without this guard the later dot-product miss
+                    // check (below the hit block) is unreachable and shapes that start within
+                    // tolerance of a convex target get a false hit every frame.
+                    if (fraction == 0.0f && distanceResult.Distance >= 0.0f && math.dot(distanceResult.NormalInA, input.Ray.Displacement) <= 0.0f)
+                    {
+                        return false;
+                    }
+
                     // In case of penetration (fraction == 0) and non convex input (IsFlipped),
                     // hit position needs to be switched from the surface of the shape B to the surface of the shape A
                     if (input.QueryContext.IsFlipped && fraction == 0)

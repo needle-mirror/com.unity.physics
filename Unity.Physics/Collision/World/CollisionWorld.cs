@@ -486,6 +486,7 @@ namespace Unity.Physics
                             CollisionTolerance = world.CollisionWorld.CollisionTolerance,
                             TimeStep = timeStep,
                             Gravity = gravity,
+                            Static = false,
 
                             LastSystemVersion = lastSystemVersion,
                         }.ScheduleParallel(dynamicEntityQuery, inputDeps);
@@ -524,6 +525,7 @@ namespace Unity.Physics
                     {
                         var bodyFilters = world.CollisionWorld.Broadphase.StaticTree.BodyFilters.AsArray();
                         var respondsToCollision = world.CollisionWorld.Broadphase.StaticTree.RespondsToCollision.AsArray();
+                        var meshSubAabbs = world.CollisionWorld.Broadphase.StaticTree.MeshSubAabbs.AsArray();
 
                         collectStaticCoherenceInfoHandle = new CollectTemporalCoherenceInfoJob
                         {
@@ -544,8 +546,11 @@ namespace Unity.Physics
                             Nodes = world.CollisionWorld.Broadphase.StaticTree.Nodes,
                             BodyFilters = bodyFilters,
                             RespondsToCollision = respondsToCollision,
+                            MeshSubAabbs = meshSubAabbs,
+
                             BodyFiltersLastFrame = CreateArrayCopy(bodyFilters, worldUpdateAllocator),
                             RespondsToCollisionLastFrame = CreateArrayCopy(respondsToCollision, worldUpdateAllocator),
+                            MeshSubAabbsLastFrame = CreateArrayCopy(meshSubAabbs, worldUpdateAllocator),
                             RigidBodies = world.CollisionWorld.StaticBodies,
                             Static = true,
 
@@ -908,6 +913,8 @@ namespace Unity.Physics
             public NativeArray<CollisionFilter> BodyFilters;
             [NativeDisableContainerSafetyRestriction]
             public NativeArray<bool> RespondsToCollision;
+            [NativeDisableContainerSafetyRestriction]
+            public NativeArray<FourTransposedAabbs> MeshSubAabbs;
 
             [ReadOnly]
             [NativeDisableContainerSafetyRestriction]
@@ -915,6 +922,9 @@ namespace Unity.Physics
             [ReadOnly]
             [NativeDisableContainerSafetyRestriction]
             public NativeArray<bool> RespondsToCollisionLastFrame;
+            [ReadOnly]
+            [NativeDisableContainerSafetyRestriction]
+            public NativeArray<FourTransposedAabbs> MeshSubAabbsLastFrame;
 
             [ReadOnly] public NativeArray<RigidBody> RigidBodies;
             [NativeDisableContainerSafetyRestriction]
@@ -1036,13 +1046,21 @@ namespace Unity.Physics
                             // See assertion that useEnabledMask is false above.
                             UnsafeUtility.MemCpy(
                                 (CollisionFilter*)BodyFilters.GetUnsafePtr() + firstBodyIndex,
-                                (CollisionFilter*)BodyFiltersLastFrame.GetUnsafePtr() + firstBodyIndexLastFrame,
+                                (CollisionFilter*)BodyFiltersLastFrame.GetUnsafeReadOnlyPtr() + firstBodyIndexLastFrame,
                                 sizeof(CollisionFilter) * chunk.Count);
 
                             UnsafeUtility.MemCpy(
                                 (bool*)RespondsToCollision.GetUnsafePtr() + firstBodyIndex,
-                                (bool*)RespondsToCollisionLastFrame.GetUnsafePtr() + firstBodyIndexLastFrame,
+                                (bool*)RespondsToCollisionLastFrame.GetUnsafeReadOnlyPtr() + firstBodyIndexLastFrame,
                                 sizeof(bool) * chunk.Count);
+
+                            if (Static)
+                            {
+                                UnsafeUtility.MemCpy(
+                                    (FourTransposedAabbs*)MeshSubAabbs.GetUnsafePtr() + firstBodyIndex,
+                                    (FourTransposedAabbs*)MeshSubAabbsLastFrame.GetUnsafeReadOnlyPtr() + firstBodyIndexLastFrame,
+                                    sizeof(FourTransposedAabbs) * chunk.Count);
+                            }
                         }
 
                         return;
@@ -1080,6 +1098,8 @@ namespace Unity.Physics
                             // If not, we need to insert it for the first time.
                             if (previouslyInTree)
                             {
+                                var lastBodyIndex = coherenceInfo.LastRigidBodyIndex;
+
                                 // last known node index of the body
                                 // If > 0, the body has already been in the tree. Otherwise, it needs to be newly inserted.
                                 var nodeIndex = coherenceInfo.LastBvhNodeIndex;
@@ -1109,10 +1129,19 @@ namespace Unity.Physics
                                 if (colliderChangedInChunk)
                                 {
                                     // check if the collider version changed for this entity
-                                    var colliderVersion = body.Collider.Value.Version;
-                                    colliderChanged = colliderVersion != coherenceInfo.LastColliderVersion;
+                                    byte colliderVersion = 0;
+                                    int colliderHash = 0;
+
+                                    if (body.Collider.IsCreated)
+                                    {
+                                        colliderVersion = body.Collider.Value.Version;
+                                        colliderHash = body.Collider.GetHashCode();
+                                    }
+
+                                    colliderChanged = colliderVersion != coherenceInfo.LastColliderVersion || colliderHash != coherenceInfo.LastColliderHash;
                                     // update collider version in coherence info
                                     coherenceInfo.LastColliderVersion = colliderVersion;
+                                    coherenceInfo.LastColliderHash = colliderHash;
                                 }
 
                                 // update coherence info if required
@@ -1243,6 +1272,11 @@ namespace Unity.Physics
                                         });
                                     }
                                 }
+
+                                if (Static && (transformChangedInChunk || colliderChanged || bodyIndexChanged))
+                                {
+                                    MeshSubAabbs[bodyIndex] = Broadphase.PrepareStaticBodyDataJob.ComputeMeshSubAabbs(ref body);
+                                }
                             }
                             else // body was not yet in this tree and needs to be newly inserted.
                             {
@@ -1281,6 +1315,11 @@ namespace Unity.Physics
                                 BodyFilters[bodyIndex] = collisionFilter;
                                 RespondsToCollision[bodyIndex] = respondsToCollision;
 
+                                if (Static)
+                                {
+                                    MeshSubAabbs[bodyIndex] = Broadphase.PrepareStaticBodyDataJob.ComputeMeshSubAabbs(ref body);
+                                }
+
                                 InsertBodyDataWriter.Write(new Broadphase.InsertionData
                                 {
                                     Aabb = aabb, PointAndIndex = point, Filter = collisionFilter
@@ -1317,13 +1356,21 @@ namespace Unity.Physics
             {
                 var data = TemporalCoherenceDataList[index];
                 var rigidBody = RigidBodies[data.ElementIndex];
-                var colliderVersion = rigidBody.Collider.IsCreated ? rigidBody.Collider.Value.Version : (byte)0;
+                byte colliderVersion = 0;
+                int colliderHash = 0;
+                if (rigidBody.Collider.IsCreated)
+                {
+                    colliderVersion = rigidBody.Collider.Value.Version;
+                    colliderHash = rigidBody.Collider.GetHashCode();
+                }
+
                 PhysicsTemporalCoherenceInfoLookupRW[rigidBody.Entity] = new PhysicsTemporalCoherenceInfo
                 {
                     LastRigidBodyIndex = data.ElementIndex,
                     LastBvhNodeIndex = data.NodeIndex,
                     LastBvhLeafSlotIndex = data.LeafSlotIndex,
                     LastColliderVersion = colliderVersion,
+                    LastColliderHash = colliderHash,
                     StaticBvh = Static
                 };
             }

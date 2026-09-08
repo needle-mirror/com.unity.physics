@@ -128,6 +128,8 @@ namespace Unity.Physics.GraphicsIntegration
         public void OnUpdate(ref SystemState state)
         {
             var mostRecentTimes = SystemAPI.GetBuffer<MostRecentFixedTime>(m_MostRecentTimeEntity);
+            if (mostRecentTimes.Length == 0) return;
+
             var mostRecentTimeToUpdate = SystemAPI.GetBuffer<RigidBodySmoothingWorldIndex>(m_MostRecentTimeEntity);
             foreach (var worldIndex in mostRecentTimeToUpdate)
             {

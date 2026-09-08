@@ -4,6 +4,26 @@ uid: unity-physics-changelog
 
 # Changelog
 
+## [1.5.0] - 2026-09-08
+
+### Changed
+
+* Updated the com.unity.entities dependency to version 1.5.0
+* Updated the minimum editor version to 6000.0
+
+### Fixed
+
+* ScheduleUpdateBroadphase previously overwrote the dynamic-tree update's JobHandle with the static-body change-check handle before scheduling the static-tree update, dropping the dynamic-tree job from the dependency chain, which can cause job safety errors when invoking Unity.Physics systems manually (for example; as is done by Netcode for Entities).
+* Added a check for the MostRecentFixedTime entity in the physics GraphicsIntegration code to remove the entity if its DynamicBuffer is zero. The CameraSmoothTrack system now has an dependency on MostRecentFixedTime
+* Fixed an issue where replacing a PhysicsCollider's BlobAsset reference in place would not get picked up when using the incremental static broadphase feature. Thus causing queries such as raycasts to report incorrect data.
+* an issue where a mesh collider on a static body, would not have it's sub-aabbs recalculated when using incremental static broadphase. This lead to the collider being ignored by queries such as raycasts.
+* Fixed an issue where casting a collider away form another one could return the wrong hit
+* Fixed runtime errors in ModifyJointLimitsAuthoring.
+* Fixed an issue where the BVH static tree wouldn't be updated correctly when swapping from multi-threaded to single threaded setups
+* Prevented manual edits to the SimulationSingleton value in Unity.Physics. Change the physics simulation type from the PhysicsSimulationStep component instead.
+
+
+
 ## [1.4.7] - 2026-07-10
 
 ### Changed
@@ -11,10 +31,11 @@ uid: unity-physics-changelog
 * Updated the `com.unity.burst` dependency to version `1.8.29`
 * Improved query performance for Collector Types (Any, Closest, All) for query types: Raycast, ColliderCast, Point Distance and Collider Distance, when casting against a MeshCollider. Improvement is particularly observable with Burst enabled.
 
+
 ### Fixed
 
 * Fixed a bug when the incremental broadphase was enabled for static and dynamic bodies when a scene was reloaded which resulted in stale data being used
-* Sample `PhysicsShapeAuthoring` baker was collapsing vertices for big Meshes, leading to very poor performances.
+* Sample PhysicsShapeAuthoring baker was collapsing vertices for big Meshes, leading to very poor performances.
 
 
 ## [1.4.6] - 2026-04-13

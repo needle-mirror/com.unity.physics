@@ -97,6 +97,15 @@ namespace Unity.Physics.Systems
 
                 SystemAPI.SetSingleton<SimulationSingleton>(simulationSingleton);
             }
+            else
+            {
+                var currentSingleton = SystemAPI.GetSingleton<SimulationSingleton>();
+                if (currentSingleton.Type != m_SimulationType)
+                {
+                    currentSingleton.Type = m_SimulationType;
+                    SystemAPI.SetSingleton(currentSingleton);
+                }
+            }
         }
     }
 

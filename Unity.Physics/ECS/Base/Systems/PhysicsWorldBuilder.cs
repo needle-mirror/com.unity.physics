@@ -116,7 +116,9 @@ namespace Unity.Physics.Systems
             haveStaticBodiesChanged.Value = 0;
             {
                 if (world.NumStaticBodies != previousStaticBodyCount ||
-                    isStaticBroadphaseIncremental)
+                    isStaticBroadphaseIncremental ||
+                    (numStaticBodies > 0 &&
+                     isBroadphaseBuildMultiThreaded != world.CollisionWorld.Broadphase.StaticTree.BuiltMultiThreaded))
                 {
                     haveStaticBodiesChanged.Value = 1;
                 }
@@ -294,9 +296,9 @@ namespace Unity.Physics.Systems
             float timeStep, float3 gravity, uint lastSystemVersion, in JobHandle inputDep, bool isBroadphaseUpdatedMultiThreaded)
         {
             physicsWorldData.HaveStaticBodiesChanged.Value = 0;
-            var jobHandle = physicsWorldData.PhysicsWorld.CollisionWorld.ScheduleUpdateDynamicTree(
+            var dynamicTreeHandle = physicsWorldData.PhysicsWorld.CollisionWorld.ScheduleUpdateDynamicTree(
                 ref physicsWorldData.PhysicsWorld, timeStep, gravity, inputDep, isBroadphaseUpdatedMultiThreaded);
-            jobHandle = new Jobs.CheckStaticBodyChangesJob
+            var staticBodiesCheckHandle = new Jobs.CheckStaticBodyChangesJob
             {
                 LocalToWorldType = physicsWorldData.ComponentHandles.LocalToWorldType,
                 LocalTransformType = physicsWorldData.ComponentHandles.LocalTransformType,
@@ -304,6 +306,7 @@ namespace Unity.Physics.Systems
                 m_LastSystemVersion = lastSystemVersion,
                 Result = physicsWorldData.HaveStaticBodiesChanged
             }.ScheduleParallel(physicsWorldData.StaticEntityGroup, inputDep);
+            var jobHandle = JobHandle.CombineDependencies(dynamicTreeHandle, staticBodiesCheckHandle);
             jobHandle = physicsWorldData.PhysicsWorld.CollisionWorld.ScheduleUpdateStaticTree(
                 ref physicsWorldData.PhysicsWorld, physicsWorldData.HaveStaticBodiesChanged.AsReadOnly(), jobHandle, isBroadphaseUpdatedMultiThreaded);
             return jobHandle;

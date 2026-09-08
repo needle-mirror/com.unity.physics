@@ -784,7 +784,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
             {
                 bvh.Clear();
                 DoBuildBvhIncrementally(ref bvh, ref aabbs, ref points, ref filters);
-            }).MeasurementCount(2).Run();
+            }).WarmupCount(1).MeasurementCount(2).Run();
 
             aabbs.Dispose();
             points.Dispose();
@@ -818,7 +818,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
                 RemoveElementsFromBvh(ref bvh, ref filters, ref insertionContext, removeCount);
 
                 insertionContext.Dispose();
-            }).MeasurementCount(2).Run();
+            }).WarmupCount(1).MeasurementCount(2).Run();
 
             aabbs.Dispose();
             points.Dispose();
@@ -898,7 +898,7 @@ namespace Unity.Physics.Tests.Collision.Geometry
             Measure.Method(() =>
             {
                 job.Run();
-            }).MeasurementCount(1)
+            }).WarmupCount(0).MeasurementCount(1)
                 .Run();
 
             points.Dispose();
